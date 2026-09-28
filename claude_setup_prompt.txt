@@ -1,0 +1,394 @@
+I want to modify the TrainControlSystem solution architecture to add a central WPF launcher application.
+
+The purpose of this launcher is to serve as the entry point for the overall train-control system while preserving the fact that each subsystem WPF project is its own independently runnable executable.
+
+IMPORTANT ARCHITECTURAL RULE:
+
+The launcher must NOT absorb the other subsystem UIs into itself.
+
+TrainModel.Wpf, TrackModel.Wpf, TrainController.Wpf, TrackController.Wpf, and CTC.Wpf must remain independent WPF executable projects.
+
+The launcher should launch those applications as separate operating-system processes.
+
+Do not convert the subsystem applications into UserControls inside the launcher.
+
+Do not create project references from the launcher to the subsystem WPF projects merely for launching them.
+
+--------------------------------------------------
+SOLUTION STRUCTURE
+--------------------------------------------------
+
+Add the following solution folder and WPF application project:
+
+Launcher
+└── TrainControlSystem.Launcher.Wpf
+
+The overall Visual Studio solution should now conceptually look like:
+
+TrainControlSystem.sln
+│
+├── Shared
+│   ├── TrainControl.Contracts
+│   └── TrainControl.Common
+│
+├── Launcher
+│   └── TrainControlSystem.Launcher.Wpf
+│
+├── TrainModel
+│   ├── TrainModel.Core
+│   └── TrainModel.Wpf
+│
+├── TrackModel
+│   ├── TrackModel.Core
+│   └── TrackModel.Wpf
+│
+├── TrainController
+│   ├── TrainController.Core
+│   └── TrainController.Wpf
+│
+├── TrackController
+│   ├── TrackController.Core
+│   └── TrackController.Wpf
+│
+├── CTC
+│   ├── CTC.Core
+│   └── CTC.Wpf
+│
+└── Tests
+    └── TrainControl.Tests
+
+Physically place the launcher project at:
+
+src/Launcher/TrainControlSystem.Launcher.Wpf
+
+--------------------------------------------------
+LAUNCHER PROJECT STRUCTURE
+--------------------------------------------------
+
+Structure the launcher approximately as:
+
+TrainControlSystem.Launcher.Wpf
+│
+├── Models
+│   └── ModuleInfo.cs
+│
+├── Services
+│   └── ModuleLauncherService.cs
+│
+├── ViewModels
+│   ├── ViewModelBase.cs
+│   └── MainWindowViewModel.cs
+│
+├── Commands
+│   └── RelayCommand.cs
+│
+├── Views
+│
+├── App.xaml
+├── App.xaml.cs
+├── MainWindow.xaml
+└── MainWindow.xaml.cs
+
+Do NOT create a separate Launcher.Core project at this time.
+The launcher is intentionally simple.
+
+--------------------------------------------------
+RESPONSIBILITIES
+--------------------------------------------------
+
+The launcher should be responsible only for:
+
+1. Displaying the available subsystem applications.
+2. Allowing the user to launch an individual module.
+3. Allowing the user to launch all available modules.
+4. Displaying basic module status such as Running or Stopped.
+5. Providing placeholder controls for future shared simulation timing:
+   - System Time
+   - Simulation Speed
+   - Pause
+   - Resume
+
+Do NOT implement actual inter-process synchronization of simulation time yet.
+
+Do NOT implement networking, named pipes, sockets, message buses, or other IPC yet.
+
+The simulation timing controls should be clearly marked in the code as future integration points.
+
+--------------------------------------------------
+MODULES TO DISPLAY
+--------------------------------------------------
+
+The launcher UI should include entries for:
+
+- Train Model
+- Track Model
+- Train Controller
+- Track Controller
+- CTC Office
+
+Do not add MBO yet.
+
+Represent the available modules using a model such as ModuleInfo rather than hard-coding all visual elements independently.
+
+A ModuleInfo can contain simple properties such as:
+
+- Name
+- ExecutableName
+- IsRunning
+
+Add additional simple properties only if clearly useful.
+
+--------------------------------------------------
+PROCESS LAUNCHING
+--------------------------------------------------
+
+Create a small ModuleLauncherService responsible for launching module executables using System.Diagnostics.Process.
+
+Use Process.Start with ProcessStartInfo rather than attempting to instantiate subsystem Window classes.
+
+Conceptually:
+
+Launcher.exe
+    |
+    +-- Process.Start --> TrainModel.Wpf.exe
+    |
+    +-- Process.Start --> TrackModel.Wpf.exe
+    |
+    +-- Process.Start --> TrainController.Wpf.exe
+    |
+    +-- Process.Start --> TrackController.Wpf.exe
+    |
+    +-- Process.Start --> CTC.Wpf.exe
+
+Keep this service simple.
+
+It should expose operations approximately like:
+
+LaunchModule(ModuleInfo module)
+LaunchAll(...)
+IsModuleRunning(...)
+
+If executable path resolution cannot yet be made fully robust because Visual Studio places each project into its own bin directory, implement the cleanest development-time approach and clearly document it.
+
+Do not add deployment/install tooling yet.
+
+Do not introduce complicated configuration systems yet.
+
+--------------------------------------------------
+IMPORTANT DEPENDENCY RULE
+--------------------------------------------------
+
+The launcher should NOT reference:
+
+TrainModel.Wpf
+TrackModel.Wpf
+TrainController.Wpf
+TrackController.Wpf
+CTC.Wpf
+
+as C# project dependencies simply to launch them.
+
+The launcher treats them as separate applications/processes.
+
+It may reference TrainControl.Common if genuinely useful, but avoid unnecessary references.
+
+The architecture should remain:
+
+Launcher.exe
+     |
+     | launches processes
+     v
+
+Subsystem executables
+
+while subsystem code dependencies remain:
+
+Subsystem.Wpf
+     |
+     v
+Subsystem.Core
+     |
+     v
+TrainControl.Contracts / Common
+
+--------------------------------------------------
+MVVM
+--------------------------------------------------
+
+Use normal MVVM structure.
+
+MainWindow.xaml should bind to MainWindowViewModel.
+
+MainWindowViewModel should expose:
+
+- collection of ModuleInfo objects
+- LaunchModuleCommand
+- LaunchAllCommand
+- placeholder PauseCommand
+- placeholder ResumeCommand
+- SimulationSpeed
+- SystemTime
+
+Use ObservableCollection<ModuleInfo> if appropriate.
+
+Use INotifyPropertyChanged through ViewModelBase.
+
+Use RelayCommand for ICommand bindings.
+
+Do not place process-launching logic directly inside MainWindow.xaml.cs.
+
+MainWindow.xaml.cs should remain essentially:
+
+public MainWindow()
+{
+    InitializeComponent();
+}
+
+except for minimal DataContext setup if necessary.
+
+--------------------------------------------------
+USER INTERFACE
+--------------------------------------------------
+
+Create a clean but simple architecture-prototype UI.
+
+The window title should be:
+
+Train Control System
+
+Include a heading such as:
+
+Train Control System
+
+Then a "Modules" section displaying approximately:
+
+Train Model             Stopped       [ Launch ]
+Track Model             Stopped       [ Launch ]
+Train Controller        Stopped       [ Launch ]
+Track Controller        Stopped       [ Launch ]
+CTC Office              Stopped       [ Launch ]
+
+                          [ Launch All ]
+
+Then include a "Simulation" section containing:
+
+System Time:        00:00:00
+Simulation Speed:   1.0x
+
+[ Pause ]   [ Resume ]
+
+The UI does not need to be polished production design.
+It should mainly help the team understand that the solution consists of multiple independently runnable modules.
+
+Use data binding for the module list rather than manually creating five unrelated buttons if practical.
+
+--------------------------------------------------
+MODULE STATUS
+--------------------------------------------------
+
+Implement only basic process status tracking.
+
+If the launcher itself launched a process, it may track that Process instance and show the module as Running until the process exits.
+
+Do not create complex process discovery or monitoring infrastructure yet.
+
+It is acceptable if applications launched manually outside the launcher are not detected at this stage.
+
+--------------------------------------------------
+VISUAL STUDIO STARTUP
+--------------------------------------------------
+
+If reasonably possible without modifying developer-specific Visual Studio settings, document that:
+
+TrainControlSystem.Launcher.Wpf
+
+should be set as the solution Startup Project.
+
+Do not modify user-specific .vs files.
+
+Add this instruction to the root README.
+
+Explain:
+
+- Pressing F5 with the launcher set as Startup Project launches the central system launcher.
+- Each subsystem WPF project can still be independently selected as the Startup Project and run by itself.
+- Visual Studio's Multiple Startup Projects feature can also be used later during integration/debugging.
+
+--------------------------------------------------
+README UPDATE
+--------------------------------------------------
+
+Update the root README to describe the launcher architecture.
+
+Include a diagram similar to:
+
+TrainControlSystem.Launcher.Wpf
+          |
+          | Process.Start
+          |
+     +----+---------------------------+
+     |            |          |         |
+     v            v          v         v
+ TrainModel   TrackModel  TrainCtrl  TrackCtrl  CTC
+    .Wpf        .Wpf       .Wpf      .Wpf     .Wpf
+     |            |          |         |
+     v            v          v         v
+   .Core         .Core      .Core     .Core
+
+Explain specifically that:
+
+- The launcher is the entry point for the overall system.
+- The launcher is not a train-control subsystem itself.
+- Subsystem WPF applications remain independent executables.
+- The launcher starts subsystem executables as separate processes.
+- Subsystem communication will eventually occur through shared contracts and an inter-process communication mechanism that has not yet been selected.
+- Process launching and subsystem communication are two separate architectural concerns.
+- Shared simulation timing will be implemented later.
+
+--------------------------------------------------
+DO NOT IMPLEMENT YET
+--------------------------------------------------
+
+Do NOT:
+
+- combine modules into the launcher window
+- create networking
+- create named pipes
+- create sockets
+- create a message bus
+- implement real simulation synchronization
+- implement train physics
+- implement controller algorithms
+- implement database storage
+- implement installers
+- add dependency injection frameworks
+- add third-party MVVM frameworks
+- add MBO
+- add hardware communication
+
+The goal is to establish the launcher/orchestration architecture and make the project relationships obvious to the team.
+
+--------------------------------------------------
+VALIDATION
+--------------------------------------------------
+
+After making the changes:
+
+1. Build the entire solution.
+2. Fix all compilation errors.
+3. Run the unit tests.
+4. Verify TrainControlSystem.Launcher.Wpf launches.
+5. Verify the individual subsystem WPF applications still build independently.
+6. If practical, verify at least one module can be launched from the launcher.
+7. Do not make unrelated architectural changes.
+
+Then report:
+
+- files created
+- files modified
+- project added
+- project references added or intentionally not added
+- how executable paths are currently resolved
+- whether the full solution builds
+- whether tests pass
+- any limitations of launching sibling projects directly from Visual Studio build folders

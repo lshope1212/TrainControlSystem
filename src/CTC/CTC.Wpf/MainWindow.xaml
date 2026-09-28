@@ -1,0 +1,1079 @@
+<Window x:Class="CTC.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="CTC Office"
+        Width="1600"
+        Height="900"
+        MinWidth="1250"
+        MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Background="#F3F4F6">
+
+    <!-- ==========================================================
+         GLOBAL RESOURCES
+         Keeps the same visual language as the earlier CTC design:
+         dark header, white cards, light borders, compact controls.
+         ========================================================== -->
+    <Window.Resources>
+
+        <Style x:Key="SectionHeaderStyle"
+               TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#1F2937"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <Style x:Key="SubHeaderStyle"
+               TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#6B7280"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style x:Key="FieldLabelStyle"
+               TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#6B7280"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="ValueStyle"
+               TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#111827"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="CardStyle"
+               TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D1D5DB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="12"/>
+        </Style>
+
+        <Style x:Key="InsetPanelStyle"
+               TargetType="Border">
+            <Setter Property="Background" Value="#F9FAFB"/>
+            <Setter Property="BorderBrush" Value="#E5E7EB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="10"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding" Value="12,4"/>
+            <Setter Property="Margin" Value="2"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="28"/>
+        </Style>
+
+    </Window.Resources>
+
+
+    <!-- ==========================================================
+         MAIN WINDOW
+         ========================================================== -->
+    <Grid>
+
+        <Grid.RowDefinitions>
+            <!-- Header -->
+            <RowDefinition Height="64"/>
+
+            <!-- Territory / selected block -->
+            <RowDefinition Height="*"/>
+
+            <!-- Schedule / queue / dispatched trains -->
+            <RowDefinition Height="315"/>
+
+            <!-- Status bar -->
+            <RowDefinition Height="28"/>
+        </Grid.RowDefinitions>
+
+
+        <!-- ======================================================
+             TOP BAR
+             The selected line scopes:
+               - Territory display
+               - Station choices
+               - Train queue
+               - Dispatched trains
+               - Ticket sales/hour
+             ====================================================== -->
+        <Border Grid.Row="0"
+                Background="#1F2937"
+                Padding="16,8">
+
+            <Grid>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="35"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Application title -->
+                <StackPanel Grid.Column="0"
+                            VerticalAlignment="Center">
+
+                    <TextBlock Text="CTC OFFICE"
+                               Foreground="White"
+                               FontSize="20"
+                               FontWeight="SemiBold"/>
+
+                    <TextBlock Text="Centralized Traffic Control"
+                               Foreground="#D1D5DB"
+                               FontSize="11"/>
+
+                </StackPanel>
+
+                <!-- Line selector -->
+                <StackPanel Grid.Column="2"
+                            VerticalAlignment="Center">
+
+                    <TextBlock Text="Current Line"
+                               Foreground="#D1D5DB"
+                               FontSize="10"/>
+
+                    <ComboBox Width="165"
+                              ItemsSource="{Binding AvailableLines}"
+                              SelectedItem="{Binding SelectedLine}"/>
+
+                </StackPanel>
+
+                <!-- Global/system time -->
+                <StackPanel Grid.Column="4"
+                            VerticalAlignment="Center"
+                            Margin="18,0,0,0">
+
+                    <TextBlock Text="System Time"
+                               Foreground="#D1D5DB"
+                               FontSize="10"
+                               HorizontalAlignment="Right"/>
+
+                    <TextBlock Text="{Binding SystemTimeDisplay}"
+                               Foreground="White"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Right"/>
+
+                </StackPanel>
+
+            </Grid>
+
+        </Border>
+
+
+        <!-- ======================================================
+             MAIN TERRITORY WORKSPACE
+             ====================================================== -->
+        <Grid Grid.Row="1"
+              Margin="8">
+
+            <Grid.ColumnDefinitions>
+                <!-- Visual track area -->
+                <ColumnDefinition Width="*"/>
+
+                <!-- Cohesive line/block inspector -->
+                <ColumnDefinition Width="330"/>
+            </Grid.ColumnDefinitions>
+
+
+            <!-- ==================================================
+                 TERRITORY DISPLAY
+                 ================================================== -->
+            <Border Grid.Column="0"
+                    Style="{StaticResource CardStyle}"
+                    Padding="0"
+                    Margin="0,0,8,0">
+
+                <Grid>
+
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="52"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="38"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Territory toolbar -->
+                    <Border Grid.Row="0"
+                            Background="#F9FAFB"
+                            BorderBrush="#E5E7EB"
+                            BorderThickness="0,0,0,1"
+                            Padding="10,6">
+
+                        <Grid>
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center">
+
+                                <TextBlock Text="Territory Overview"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"/>
+
+                                <TextBlock Text="{Binding SelectedLine.Name,
+                                                         StringFormat={}{0} Track Layout}"
+                                           Foreground="#6B7280"
+                                           FontSize="10"/>
+
+                            </StackPanel>
+
+                            <!-- Legend -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+
+                                <TextBlock Text="●"
+                                           Foreground="Green"
+                                           Margin="6,0,2,0"/>
+
+                                <TextBlock Text="Clear"/>
+
+                                <TextBlock Text="●"
+                                           Foreground="Red"
+                                           Margin="12,0,2,0"/>
+
+                                <TextBlock Text="Occupied"/>
+
+                                <TextBlock Text="●"
+                                           Foreground="Orange"
+                                           Margin="12,0,2,0"/>
+
+                                <TextBlock Text="Maintenance"/>
+
+                                <TextBlock Text="◆"
+                                           Foreground="#2563EB"
+                                           Margin="12,0,2,0"/>
+
+                                <TextBlock Text="Switch"/>
+
+                            </StackPanel>
+
+                            <!-- Map controls -->
+                            <StackPanel Grid.Column="2"
+                                        Orientation="Horizontal">
+
+                                <Button Content="Fit"
+                                        Command="{Binding FitTerritoryCommand}"/>
+
+                                <Button Content="+"
+                                        Width="34"
+                                        Command="{Binding ZoomInCommand}"/>
+
+                                <Button Content="-"
+                                        Width="34"
+                                        Command="{Binding ZoomOutCommand}"/>
+
+                            </StackPanel>
+
+                        </Grid>
+
+                    </Border>
+
+
+                    <!-- Track viewport -->
+                    <ScrollViewer Grid.Row="1"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Background="#FAFAFA">
+
+                        <Canvas Width="{Binding TerritoryWidth}"
+                                Height="{Binding TerritoryHeight}"
+                                Background="White">
+
+                            <!--
+                                Replace this placeholder with the actual
+                                territory/track UserControl.
+
+                                Clicking a rendered block should set:
+                                    SelectedBlock
+
+                                Changing SelectedLine should load:
+                                    the line-specific track layout.
+                            -->
+
+                            <TextBlock Canvas.Left="30"
+                                       Canvas.Top="30"
+                                       Text="Track Layout / Territory Display"
+                                       Foreground="#9CA3AF"
+                                       FontSize="24"/>
+
+                            <TextBlock Canvas.Left="32"
+                                       Canvas.Top="72"
+                                       Text="Select a block to inspect occupancy, maintenance, switch, signal, and crossing status."
+                                       Foreground="#6B7280"
+                                       FontSize="12"/>
+
+                        </Canvas>
+
+                    </ScrollViewer>
+
+
+                    <!-- Territory footer -->
+                    <Border Grid.Row="2"
+                            Background="#F9FAFB"
+                            BorderBrush="#E5E7EB"
+                            BorderThickness="0,1,0,0"
+                            Padding="10,5">
+
+                        <Grid>
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="25"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="Selected Block:"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding SelectedBlock.Number,
+                                                      TargetNullValue=None}"
+                                       FontWeight="SemiBold"
+                                       Margin="6,0,0,0"/>
+
+                            <TextBlock Grid.Column="3"
+                                       Text="Occupied Blocks:"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+
+                            <TextBlock Grid.Column="4"
+                                       Text="{Binding OccupiedBlockCount}"
+                                       FontWeight="SemiBold"
+                                       Margin="6,0,0,0"/>
+
+                            <TextBlock Grid.Column="6"
+                                       Text="{Binding LastTerritoryUpdate,
+                                                      StringFormat=Last Update: {0}}"
+                                       Foreground="#6B7280"
+                                       FontSize="10"
+                                       VerticalAlignment="Center"/>
+
+                        </Grid>
+
+                    </Border>
+
+                </Grid>
+
+            </Border>
+
+
+            <!-- ==================================================
+                 RIGHT: LINE STATUS + SELECTED BLOCK
+                 Everything related to the selected block is kept in
+                 one cohesive panel, similar to the example UI.
+                 ================================================== -->
+            <Border Grid.Column="1"
+                    Style="{StaticResource CardStyle}">
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+
+                    <StackPanel>
+
+                        <TextBlock Text="Line Status"
+                                   FontSize="17"
+                                   FontWeight="SemiBold"
+                                   Foreground="#1F2937"
+                                   Margin="0,0,0,2"/>
+
+                        <TextBlock Text="{Binding SelectedLine.Name,
+                                                 StringFormat={}{0}}"
+                                   Foreground="#6B7280"
+                                   Margin="0,0,0,12"/>
+
+
+                        <!-- ======================================
+                             SELECTED BLOCK STATUS
+                             ====================================== -->
+                        <Border Style="{StaticResource InsetPanelStyle}"
+                                Margin="0,0,0,10">
+
+                            <StackPanel>
+
+                                <TextBlock Text="Selected Block"
+                                           Style="{StaticResource SectionHeaderStyle}"/>
+
+                                <Grid>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0"
+                                               Text="Block"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="0"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.Number,
+                                                              TargetNullValue=--}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <TextBlock Grid.Row="1"
+                                               Text="Occupancy"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="1"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.Occupancy,
+                                                              TargetNullValue=--}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <TextBlock Grid.Row="2"
+                                               Text="Maintenance"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="2"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.MaintenanceStatus,
+                                                              TargetNullValue=--}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <TextBlock Grid.Row="3"
+                                               Text="Switch"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="3"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.SwitchStatus,
+                                                              TargetNullValue=N/A}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <TextBlock Grid.Row="4"
+                                               Text="Signal"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="4"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.SignalStatus,
+                                                              TargetNullValue=N/A}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <TextBlock Grid.Row="5"
+                                               Text="Crossing"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="5"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.CrossingStatus,
+                                                              TargetNullValue=N/A}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                </Grid>
+
+                            </StackPanel>
+
+                        </Border>
+
+
+                        <!-- ======================================
+                             BLOCK CONTROLS
+                             ====================================== -->
+                        <Border Style="{StaticResource InsetPanelStyle}"
+                                Margin="0,0,0,10">
+
+                            <StackPanel>
+
+                                <TextBlock Text="Block Controls"
+                                           Style="{StaticResource SectionHeaderStyle}"/>
+
+                                <TextBlock Text="Maintenance is controlled per block."
+                                           Style="{StaticResource SubHeaderStyle}"
+                                           Margin="0,0,0,8"/>
+
+                                <Grid Margin="0,0,0,8">
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Button Grid.Column="0"
+                                            Content="Close Block"
+                                            Command="{Binding CloseSelectedBlockCommand}"/>
+
+                                    <Button Grid.Column="1"
+                                            Content="Reopen Block"
+                                            Command="{Binding ReopenSelectedBlockCommand}"/>
+
+                                </Grid>
+
+                                <Separator Margin="0,4,0,8"/>
+
+                                <Grid>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel>
+
+                                        <TextBlock Text="Track Switch"
+                                                   FontWeight="SemiBold"/>
+
+                                        <TextBlock Text="Available only when the selected block contains a switch."
+                                                   Foreground="#6B7280"
+                                                   FontSize="10"
+                                                   TextWrapping="Wrap"/>
+
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            Content="Toggle Switch"
+                                            Width="110"
+                                            IsEnabled="{Binding SelectedBlock.HasSwitch}"
+                                            Command="{Binding ToggleSelectedBlockSwitchCommand}"/>
+
+                                </Grid>
+
+                            </StackPanel>
+
+                        </Border>
+
+
+                        <!-- ======================================
+                             LINE SUMMARY
+                             ====================================== -->
+                        <Border Style="{StaticResource InsetPanelStyle}">
+
+                            <StackPanel>
+
+                                <TextBlock Text="Line Summary"
+                                           Style="{StaticResource SectionHeaderStyle}"/>
+
+                                <Grid>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0"
+                                               Text="Queued Trains"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="0"
+                                               Grid.Column="1"
+                                               Text="{Binding QueuedTrainCount}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <TextBlock Grid.Row="1"
+                                               Text="Dispatched Trains"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="1"
+                                               Grid.Column="1"
+                                               Text="{Binding DispatchedTrainCount}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <TextBlock Grid.Row="2"
+                                               Text="Tickets Sold / Hour"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="2"
+                                               Grid.Column="1"
+                                               Text="{Binding CurrentLineTicketSalesPerHour}"
+                                               FontSize="18"
+                                               FontWeight="Bold"
+                                               Foreground="#111827"/>
+
+                                </Grid>
+
+                                <TextBlock Text="Ticket sales automatically change when the Current Line selection changes."
+                                           Foreground="#6B7280"
+                                           FontSize="10"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,0"/>
+
+                            </StackPanel>
+
+                        </Border>
+
+                    </StackPanel>
+
+                </ScrollViewer>
+
+            </Border>
+
+        </Grid>
+
+
+        <!-- ======================================================
+             BOTTOM OPERATIONS AREA
+
+             Schedule Builder:
+               create/upload schedules
+
+             Dispatch Queue:
+               trains waiting for their departure time
+
+             Dispatched Trains:
+               trains already released to the system
+             ====================================================== -->
+        <Border Grid.Row="2"
+                Margin="8,0,8,8"
+                Style="{StaticResource CardStyle}"
+                Padding="0">
+
+            <TabControl>
+
+
+                <!-- ==============================================
+                     SCHEDULE BUILDER
+                     ============================================== -->
+                <TabItem Header="Schedule Builder">
+
+                    <Grid Margin="10">
+
+                        <Grid.ColumnDefinitions>
+                            <!-- Train list -->
+                            <ColumnDefinition Width="360"/>
+
+                            <!-- Stops for selected train -->
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+
+                        <!-- ======================================
+                             LEFT: SCHEDULED TRAINS
+                             ====================================== -->
+                        <Border Grid.Column="0"
+                                Style="{StaticResource InsetPanelStyle}"
+                                Margin="0,0,10,0">
+
+                            <Grid>
+
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel>
+
+                                        <TextBlock Text="Scheduled Trains"
+                                                   Style="{StaticResource SectionHeaderStyle}"/>
+
+                                        <TextBlock Text="Build a schedule manually or upload an existing schedule."
+                                                   Style="{StaticResource SubHeaderStyle}"/>
+
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            Content="Upload Schedule"
+                                            VerticalAlignment="Top"
+                                            Command="{Binding UploadScheduleCommand}"/>
+
+                                </Grid>
+
+
+                                <!-- Add a train to the schedule -->
+                                <Grid Grid.Row="1"
+                                      Margin="0,8,0,8">
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="120"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+
+                                        <TextBlock Text="Train"
+                                                   Style="{StaticResource FieldLabelStyle}"/>
+
+                                        <ComboBox ItemsSource="{Binding AvailableTrains}"
+                                                  SelectedItem="{Binding NewScheduleTrain}"/>
+
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+
+                                        <TextBlock Text="Departure Time"
+                                                   Style="{StaticResource FieldLabelStyle}"/>
+
+                                        <TextBox Text="{Binding NewScheduleDepartureTime,
+                                                                UpdateSourceTrigger=PropertyChanged}"/>
+
+                                    </StackPanel>
+
+                                </Grid>
+
+
+                                <DataGrid Grid.Row="2"
+                                          ItemsSource="{Binding ScheduledTrains}"
+                                          SelectedItem="{Binding SelectedScheduledTrain}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False">
+
+                                    <DataGrid.Columns>
+
+                                        <DataGridTextColumn Header="Train ID"
+                                                            Binding="{Binding TrainId}"
+                                                            Width="*"/>
+
+                                        <DataGridTextColumn Header="Departure"
+                                                            Binding="{Binding DepartureTime}"
+                                                            Width="120"/>
+
+                                    </DataGrid.Columns>
+
+                                </DataGrid>
+
+
+                                <Grid Grid.Row="3"
+                                      Margin="0,8,0,0">
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Button Grid.Column="0"
+                                            Content="Add Train"
+                                            Command="{Binding AddScheduledTrainCommand}"/>
+
+                                    <Button Grid.Column="1"
+                                            Content="Delete Selected"
+                                            Command="{Binding DeleteScheduledTrainCommand}"/>
+
+                                </Grid>
+
+                            </Grid>
+
+                        </Border>
+
+
+                        <!-- ======================================
+                             RIGHT: SELECTED TRAIN'S STOPS
+                             ====================================== -->
+                        <Border Grid.Column="1"
+                                Style="{StaticResource InsetPanelStyle}">
+
+                            <Grid>
+
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel>
+
+                                    <TextBlock Text="Selected Train Schedule"
+                                               Style="{StaticResource SectionHeaderStyle}"/>
+
+                                    <TextBlock Text="Add station stops and arrival times for the selected scheduled train."
+                                               Style="{StaticResource SubHeaderStyle}"/>
+
+                                </StackPanel>
+
+
+                                <!-- Manual stop entry -->
+                                <Grid Grid.Row="1"
+                                      Margin="0,8,0,8">
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+
+                                        <TextBlock Text="Station"
+                                                   Style="{StaticResource FieldLabelStyle}"/>
+
+                                        <ComboBox ItemsSource="{Binding AvailableStationsForSelectedLine}"
+                                                  SelectedItem="{Binding NewStopStation}"/>
+
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+
+                                        <TextBlock Text="Arrival Time"
+                                                   Style="{StaticResource FieldLabelStyle}"/>
+
+                                        <TextBox Text="{Binding NewStopArrivalTime,
+                                                                UpdateSourceTrigger=PropertyChanged}"/>
+
+                                    </StackPanel>
+
+                                    <Button Grid.Column="4"
+                                            Content="Add Stop"
+                                            Width="90"
+                                            VerticalAlignment="Bottom"
+                                            Command="{Binding AddStopCommand}"/>
+
+                                </Grid>
+
+
+                                <DataGrid Grid.Row="2"
+                                          ItemsSource="{Binding SelectedScheduledTrain.Stops}"
+                                          SelectedItem="{Binding SelectedScheduleStop}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False">
+
+                                    <DataGrid.Columns>
+
+                                        <DataGridTextColumn Header="Station"
+                                                            Binding="{Binding StationName}"
+                                                            Width="*"/>
+
+                                        <DataGridTextColumn Header="Arrival Time"
+                                                            Binding="{Binding ArrivalTime}"
+                                                            Width="160"/>
+
+                                    </DataGrid.Columns>
+
+                                </DataGrid>
+
+
+                                <Grid Grid.Row="3"
+                                      Margin="0,8,0,0">
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Button Grid.Column="0"
+                                            Content="Delete Selected Stop"
+                                            Command="{Binding DeleteStopCommand}"/>
+
+                                    <Button Grid.Column="1"
+                                            Content="Clear Stops"
+                                            Command="{Binding ClearStopsCommand}"/>
+
+                                    <Button Grid.Column="3"
+                                            Content="Queue Schedule"
+                                            FontWeight="SemiBold"
+                                            Command="{Binding QueueScheduleCommand}"/>
+
+                                </Grid>
+
+                            </Grid>
+
+                        </Border>
+
+                    </Grid>
+
+                </TabItem>
+
+
+                <!-- ==============================================
+                     DISPATCH QUEUE
+                     No manual dispatch button is provided.
+                     The backend/global clock dispatches trains when
+                     System Time reaches Departure Time.
+                     ============================================== -->
+                <TabItem Header="Dispatch Queue">
+
+                    <Grid Margin="10">
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Background="#EFF6FF"
+                                BorderBrush="#BFDBFE"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="8"
+                                Margin="0,0,0,8">
+
+                            <TextBlock Text="Trains in this queue are automatically dispatched when System Time reaches their scheduled departure time."
+                                       Foreground="#1E3A8A"
+                                       TextWrapping="Wrap"/>
+
+                        </Border>
+
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding DispatchQueue}"
+                                  SelectedItem="{Binding SelectedQueuedTrain}"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  IsReadOnly="True">
+
+                            <DataGrid.Columns>
+
+                                <DataGridTextColumn Header="Train ID"
+                                                    Binding="{Binding TrainId}"
+                                                    Width="120"/>
+
+                                <DataGridTextColumn Header="Departure Time"
+                                                    Binding="{Binding DepartureTime}"
+                                                    Width="160"/>
+
+                                <DataGridTextColumn Header="First Station"
+                                                    Binding="{Binding FirstStation}"
+                                                    Width="*"/>
+
+                                <DataGridTextColumn Header="Status"
+                                                    Binding="{Binding QueueStatus}"
+                                                    Width="160"/>
+
+                            </DataGrid.Columns>
+
+                        </DataGrid>
+
+                    </Grid>
+
+                </TabItem>
+
+
+                <!-- ==============================================
+                     DISPATCHED TRAINS
+                     Speed/authority are displayed as read-only data.
+                     The CTC operator does not set them here.
+                     ============================================== -->
+                <TabItem Header="Dispatched Trains">
+
+                    <Grid Margin="10">
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="Trains already released from the queue. Speed and authority are monitoring values, not dispatcher inputs."
+                                   Foreground="#6B7280"
+                                   FontSize="11"
+                                   Margin="0,0,0,8"/>
+
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding DispatchedTrains}"
+                                  SelectedItem="{Binding SelectedDispatchedTrain}"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  IsReadOnly="True">
+
+                            <DataGrid.Columns>
+
+                                <DataGridTextColumn Header="Train ID"
+                                                    Binding="{Binding TrainId}"
+                                                    Width="120"/>
+
+                                <DataGridTextColumn Header="Authorized Speed"
+                                                    Binding="{Binding AuthorizedSpeed,
+                                                                      StringFormat={}{0:F1} mph}"
+                                                    Width="160"/>
+
+                                <DataGridTextColumn Header="Authority"
+                                                    Binding="{Binding Authority,
+                                                                      StringFormat={}{0:F0} ft}"
+                                                    Width="150"/>
+
+                                <DataGridTextColumn Header="Current Block"
+                                                    Binding="{Binding CurrentBlock}"
+                                                    Width="150"/>
+
+                                <DataGridTextColumn Header="Next Station"
+                                                    Binding="{Binding NextStation}"
+                                                    Width="*"/>
+
+                            </DataGrid.Columns>
+
+                        </DataGrid>
+
+                    </Grid>
+
+                </TabItem>
+
+            </TabControl>
+
+        </Border>
+
+
+        <!-- ======================================================
+             STATUS BAR
+             ====================================================== -->
+        <StatusBar Grid.Row="3">
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding SelectedLine.Name,
+                                         StringFormat=Line: {0}}"/>
+            </StatusBarItem>
+
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding DispatchQueue.Count,
+                                         StringFormat=Queued: {0}}"/>
+            </StatusBarItem>
+
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding DispatchedTrains.Count,
+                                         StringFormat=Dispatched: {0}}"/>
+            </StatusBarItem>
+
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="Auto-dispatch follows the global system clock."/>
+            </StatusBarItem>
+
+        </StatusBar>
+
+    </Grid>
+
+</Window>

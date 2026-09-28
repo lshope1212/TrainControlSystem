@@ -1,0 +1,26 @@
+<Window x:Class="TrainController.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Train Controller" Height="360" Width="560">
+    <StackPanel Margin="24">
+        <TextBlock Text="{Binding Title}" FontSize="24" FontWeight="Bold" />
+        <TextBlock Text="{Binding Status}" Margin="0,4,0,20" TextWrapping="Wrap" Foreground="Gray" />
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Commanded speed (m/s):" Margin="0,0,12,6" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CommandedSpeedMetersPerSecond}" Margin="0,0,0,6" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Authority (m):" Margin="0,0,12,6" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AuthorityMeters}" Margin="0,0,0,6" />
+        </Grid>
+    </StackPanel>
+</Window>
