@@ -1072,6 +1072,12 @@
                 <TextBlock Text="Auto-dispatch follows the global system clock."/>
             </StatusBarItem>
 
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding CommunicationStatus}"/>
+            </StatusBarItem>
+
         </StatusBar>
 
     </Grid>

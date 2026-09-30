@@ -1,13 +1,41 @@
 using CTC.Core.Models;
+using TrainControl.Contracts.Enums;
+using TrainControl.Contracts.Messages;
 
 namespace CTC.Core.Interfaces;
 
 /// <summary>
-/// Placeholder contract for the centralized traffic control office.
+/// Boundary between shared contract messages and CTC's own domain state.
+/// Outgoing messages are transmitted only through an injected <see cref="IMessageSender"/>.
 /// </summary>
 public interface ICTCService
 {
-    SystemState SystemState { get; }
+    CtcSystemState State { get; }
 
-    DispatcherState DispatcherState { get; }
+    // Inbound: map shared contracts into CTC state.
+
+    void ApplyTrackLayout(TrackLayoutMessage message);
+
+    void ApplyBlockStatus(BlockStatusMessage message);
+
+    void ApplyTrainAuthorization(TrainAuthorizationStatusMessage message);
+
+    void ApplyTicketSales(TicketSalesMessage message);
+
+    void SetSystemTime(TimeSpan systemTime);
+
+    // Outbound: build shared contracts for dispatcher actions (not sent).
+
+    MaintenanceRequestMessage CreateMaintenanceRequest(string blockId, MaintenanceState requestedState);
+
+    SwitchPositionRequestMessage CreateSwitchPositionRequest(string blockId, SwitchPosition requestedPosition);
+
+    MovementRequestMessage CreateMovementRequest(string trainId);
+
+    // Dispatcher actions that are actually sent to the Track Controller.
+
+    /// <summary>
+    /// Requests that the Track Controller close <paramref name="blockId"/> for maintenance.
+    /// </summary>
+    Task CloseBlockAsync(string blockId, CancellationToken cancellationToken = default);
 }

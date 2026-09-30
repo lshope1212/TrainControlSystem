@@ -1,394 +1,663 @@
-I want to modify the TrainControlSystem solution architecture to add a central WPF launcher application.
+I want you to fully implement the CTC "Close Block" action in the existing
+TrainControlSystem repository.
 
-The purpose of this launcher is to serve as the entry point for the overall train-control system while preserving the fact that each subsystem WPF project is its own independently runnable executable.
+IMPORTANT: Before changing anything, inspect the CURRENT state of the repository.
+Some CTC.Core models, contracts, interfaces, or service methods may already have
+been added since the original skeleton was created.
 
-IMPORTANT ARCHITECTURAL RULE:
+Do not blindly recreate classes that already exist. Reuse and extend the current
+implementation where appropriate.
 
-The launcher must NOT absorb the other subsystem UIs into itself.
+Inspect at minimum:
 
-TrainModel.Wpf, TrackModel.Wpf, TrainController.Wpf, TrackController.Wpf, and CTC.Wpf must remain independent WPF executable projects.
+- TrainControlSystem.sln
+- README.md
+- src/Shared/TrainControl.Contracts
+- src/CTC/CTC.Core
+- src/CTC/CTC.Wpf
+- src/CTC/CTC.Wpf/MainWindow.xaml
+- src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs
+- src/CTC/CTC.Wpf/Commands
+- tests/TrainControl.Tests/CTC
 
-The launcher should launch those applications as separate operating-system processes.
+----------------------------------------------------------------------
+GOAL
+----------------------------------------------------------------------
 
-Do not convert the subsystem applications into UserControls inside the launcher.
+Fully implement ONLY the CTC side of this scenario:
 
-Do not create project references from the launcher to the subsystem WPF projects merely for launching them.
+1. The CTC user selects a block.
+2. The user presses the existing "Close Block" button.
+3. The MainWindowViewModel invokes the CTC Core service.
+4. CTCService validates the selected block.
+5. CTCService creates a MaintenanceRequestMessage.
+6. CTCService passes that message to an abstract message sender.
+7. The concrete CTC-side sender serializes the outgoing message as JSON.
+8. The sender attempts to send the JSON to the Track Controller executable
+   using a Windows named pipe.
+9. CTC reports whether the request was sent successfully or failed.
 
---------------------------------------------------
-SOLUTION STRUCTURE
---------------------------------------------------
+DO NOT implement the Track Controller receiver in this task.
 
-Add the following solution folder and WPF application project:
+This task is specifically about making the OUTGOING CTC request real.
 
-Launcher
-└── TrainControlSystem.Launcher.Wpf
+----------------------------------------------------------------------
+ARCHITECTURE
+----------------------------------------------------------------------
 
-The overall Visual Studio solution should now conceptually look like:
+Preserve the existing dependency direction:
 
-TrainControlSystem.sln
-│
-├── Shared
-│   ├── TrainControl.Contracts
-│   └── TrainControl.Common
-│
-├── Launcher
-│   └── TrainControlSystem.Launcher.Wpf
-│
-├── TrainModel
-│   ├── TrainModel.Core
-│   └── TrainModel.Wpf
-│
-├── TrackModel
-│   ├── TrackModel.Core
-│   └── TrackModel.Wpf
-│
-├── TrainController
-│   ├── TrainController.Core
-│   └── TrainController.Wpf
-│
-├── TrackController
-│   ├── TrackController.Core
-│   └── TrackController.Wpf
-│
-├── CTC
-│   ├── CTC.Core
-│   └── CTC.Wpf
-│
-└── Tests
-    └── TrainControl.Tests
+    CTC.Wpf
+       |
+       v
+    CTC.Core
+       |
+       v
+    TrainControl.Contracts / TrainControl.Common
 
-Physically place the launcher project at:
+Do NOT make CTC.Core depend on WPF.
 
-src/Launcher/TrainControlSystem.Launcher.Wpf
+Do NOT make CTC.Core directly use:
 
---------------------------------------------------
-LAUNCHER PROJECT STRUCTURE
---------------------------------------------------
+- NamedPipeClientStream
+- System.Windows
+- WPF controls
+- JSON serialization
+- pipe names
+- network/socket infrastructure
 
-Structure the launcher approximately as:
+CTC.Core should know WHAT needs to be sent.
 
-TrainControlSystem.Launcher.Wpf
-│
-├── Models
-│   └── ModuleInfo.cs
-│
-├── Services
-│   └── ModuleLauncherService.cs
-│
-├── ViewModels
-│   ├── ViewModelBase.cs
-│   └── MainWindowViewModel.cs
-│
-├── Commands
-│   └── RelayCommand.cs
-│
-├── Views
-│
-├── App.xaml
-├── App.xaml.cs
-├── MainWindow.xaml
-└── MainWindow.xaml.cs
+CTC.Wpf/infrastructure should know HOW it is physically sent.
 
-Do NOT create a separate Launcher.Core project at this time.
-The launcher is intentionally simple.
+The intended flow is:
 
---------------------------------------------------
-RESPONSIBILITIES
---------------------------------------------------
+    MainWindow.xaml
+           |
+           | CloseSelectedBlockCommand
+           v
+    MainWindowViewModel
+           |
+           | CloseBlockAsync(blockId)
+           v
+       ICTCService
+           |
+           v
+        CTCService
+           |
+           | creates
+           v
+    MaintenanceRequestMessage
+           |
+           v
+      IMessageSender
+           |
+           v
+    NamedPipeMessageSender
+           |
+           | JSON through named pipe
+           v
+    Track Controller process
 
-The launcher should be responsible only for:
+Do not bypass these layers.
 
-1. Displaying the available subsystem applications.
-2. Allowing the user to launch an individual module.
-3. Allowing the user to launch all available modules.
-4. Displaying basic module status such as Running or Stopped.
-5. Providing placeholder controls for future shared simulation timing:
-   - System Time
-   - Simulation Speed
-   - Pause
-   - Resume
+----------------------------------------------------------------------
+SHARED CONTRACT
+----------------------------------------------------------------------
 
-Do NOT implement actual inter-process synchronization of simulation time yet.
+Reuse an existing MaintenanceRequestMessage and MaintenanceState enum if they
+already exist.
 
-Do NOT implement networking, named pipes, sockets, message buses, or other IPC yet.
+If they do not exist, add them to TrainControl.Contracts.
 
-The simulation timing controls should be clearly marked in the code as future integration points.
+Suggested definitions:
 
---------------------------------------------------
-MODULES TO DISPLAY
---------------------------------------------------
+namespace TrainControl.Contracts.Enums;
 
-The launcher UI should include entries for:
+public enum MaintenanceState
+{
+    Open,
+    Closed
+}
 
-- Train Model
-- Track Model
-- Train Controller
-- Track Controller
-- CTC Office
+and:
 
-Do not add MBO yet.
+namespace TrainControl.Contracts.Messages;
 
-Represent the available modules using a model such as ModuleInfo rather than hard-coding all visual elements independently.
+public class MaintenanceRequestMessage
+{
+    public string BlockId { get; set; } = string.Empty;
 
-A ModuleInfo can contain simple properties such as:
+    public MaintenanceState RequestedState { get; set; }
+}
 
-- Name
-- ExecutableName
-- IsRunning
+This class is only a plain transport DTO.
 
-Add additional simple properties only if clearly useful.
+It must contain:
+- no WPF code
+- no named-pipe code
+- no business logic
 
---------------------------------------------------
-PROCESS LAUNCHING
---------------------------------------------------
+----------------------------------------------------------------------
+MESSAGE-SENDER ABSTRACTION
+----------------------------------------------------------------------
 
-Create a small ModuleLauncherService responsible for launching module executables using System.Diagnostics.Process.
+Create an abstraction that CTC.Core can depend on.
 
-Use Process.Start with ProcessStartInfo rather than attempting to instantiate subsystem Window classes.
+Prefer something like:
 
-Conceptually:
+    IMessageSender
 
-Launcher.exe
-    |
-    +-- Process.Start --> TrainModel.Wpf.exe
-    |
-    +-- Process.Start --> TrackModel.Wpf.exe
-    |
-    +-- Process.Start --> TrainController.Wpf.exe
-    |
-    +-- Process.Start --> TrackController.Wpf.exe
-    |
-    +-- Process.Start --> CTC.Wpf.exe
+with a method conceptually similar to:
 
-Keep this service simple.
+    Task SendAsync<TMessage>(
+        TMessage message,
+        CancellationToken cancellationToken = default);
 
-It should expose operations approximately like:
+Put this interface somewhere appropriate in CTC.Core, such as:
 
-LaunchModule(ModuleInfo module)
-LaunchAll(...)
-IsModuleRunning(...)
+    src/CTC/CTC.Core/Interfaces/IMessageSender.cs
 
-If executable path resolution cannot yet be made fully robust because Visual Studio places each project into its own bin directory, implement the cleanest development-time approach and clearly document it.
+Do not put named-pipe implementation details in this interface.
 
-Do not add deployment/install tooling yet.
+CTCService should depend on this abstraction through constructor injection.
 
-Do not introduce complicated configuration systems yet.
+For example, conceptually:
 
---------------------------------------------------
-IMPORTANT DEPENDENCY RULE
---------------------------------------------------
+    public CTCService(IMessageSender messageSender)
+    {
+        _messageSender = messageSender;
+    }
 
-The launcher should NOT reference:
+Do not make CTCService instantiate NamedPipeMessageSender itself.
 
-TrainModel.Wpf
-TrackModel.Wpf
-TrainController.Wpf
-TrackController.Wpf
-CTC.Wpf
+----------------------------------------------------------------------
+CTC SERVICE
+----------------------------------------------------------------------
 
-as C# project dependencies simply to launch them.
+Reuse the existing ICTCService and CTCService structure.
 
-The launcher treats them as separate applications/processes.
+Add a CTC operation for closing a block.
 
-It may reference TrainControl.Common if genuinely useful, but avoid unnecessary references.
+Prefer:
 
-The architecture should remain:
+    Task CloseBlockAsync(
+        string blockId,
+        CancellationToken cancellationToken = default);
 
-Launcher.exe
-     |
-     | launches processes
-     v
+or an equivalent name that fits the existing service design.
 
-Subsystem executables
+The method should:
 
-while subsystem code dependencies remain:
+1. Reject null/empty/whitespace BlockId.
 
-Subsystem.Wpf
-     |
-     v
-Subsystem.Core
-     |
-     v
-TrainControl.Contracts / Common
+2. Locate the corresponding CTC block in the current CTC system state.
 
---------------------------------------------------
-MVVM
---------------------------------------------------
+3. Throw an appropriate exception if the block does not exist.
 
-Use normal MVVM structure.
+4. Create:
 
-MainWindow.xaml should bind to MainWindowViewModel.
+       new MaintenanceRequestMessage
+       {
+           BlockId = blockId,
+           RequestedState = MaintenanceState.Closed
+       }
+
+5. Send that message using the injected IMessageSender.
+
+6. Only after the send completes successfully, update CTC's LOCAL/REQUESTED
+   maintenance state for that block to Closed, if such a property currently
+   exists.
+
+IMPORTANT:
+
+This local maintenance state is NOT confirmation that Track Controller actually
+closed the block.
+
+It only means:
+
+    "CTC successfully issued a request for this block to be closed."
+
+Document this clearly in the code.
+
+If the current model already uses a property such as:
+
+    RequestedMaintenanceState
+
+reuse it.
+
+If the model uses another sensible name, do not rename things unnecessarily.
+
+Do not invent Track Controller acknowledgement behavior.
+
+----------------------------------------------------------------------
+NAMED PIPE IMPLEMENTATION
+----------------------------------------------------------------------
+
+For this task, use Windows Named Pipes as the concrete outgoing transport.
+
+Implement the sender in the CTC WPF project, NOT CTC.Core.
+
+Suggested location:
+
+    src/CTC/CTC.Wpf/Services/NamedPipeMessageSender.cs
+
+Use only .NET built-in libraries:
+
+- System.IO.Pipes
+- System.Text.Json
+
+Do not add third-party packages.
+
+Use this pipe name as a single constant:
+
+    TrainControl.TrackController
+
+Do not scatter this string throughout the application.
+
+The sender should:
+
+1. Create a NamedPipeClientStream targeting the local machine:
+
+       serverName = "."
+       pipeName = "TrainControl.TrackController"
+
+2. Open it for output.
+
+3. Use asynchronous mode.
+
+4. Attempt to connect with a reasonable timeout, approximately 2-3 seconds.
+
+5. Serialize the outgoing message to JSON.
+
+6. Write one complete newline-delimited JSON message to the pipe.
+
+7. Flush the writer.
+
+8. Dispose the pipe cleanly.
+
+Do NOT keep a permanent background pipe connection yet.
+
+For now, one connection per outgoing request is acceptable and easier to reason
+about.
+
+----------------------------------------------------------------------
+MESSAGE ENVELOPE
+----------------------------------------------------------------------
+
+Do not send anonymous JSON that provides no indication of what type of message it
+contains.
+
+Use a small transport envelope.
+
+For example, the JSON transmitted for this operation should conceptually resemble:
+
+{
+    "messageType": "MaintenanceRequestMessage",
+    "payload": {
+        "blockId": "12",
+        "requestedState": "Closed"
+    }
+}
+
+The exact C# implementation can be a private/internal transport class inside the
+CTC.Wpf sender infrastructure.
+
+Do NOT put named-pipe framing concepts into CTC.Core domain models.
+
+Configure System.Text.Json so enums serialize as readable strings rather than
+integers.
+
+For example:
+
+    "requestedState": "Closed"
+
+rather than:
+
+    "requestedState": 1
+
+This will make later Track Controller integration much easier to inspect/debug.
+
+----------------------------------------------------------------------
+ERROR HANDLING
+----------------------------------------------------------------------
+
+The Track Controller receiver is NOT being implemented in this task.
+
+Therefore, when running CTC by itself, attempting to close a block will often fail
+because no named-pipe server exists yet.
+
+This must be handled cleanly.
+
+Do NOT crash the application.
+
+NamedPipeMessageSender may throw an appropriate exception describing that it could
+not connect/send.
+
+The ViewModel should catch the failure and expose a user-readable communication
+status.
+
+For example:
+
+    "Maintenance request sent for Block 12."
+
+or:
+
+    "Unable to send maintenance request: Track Controller is not connected."
+
+Do not use MessageBox directly from CTC.Core.
+
+Prefer a bindable ViewModel status property.
+
+If there is already a general Status property appropriate for this, reuse it.
+
+Otherwise add something like:
+
+    CommunicationStatus
+
+and notify the UI using INotifyPropertyChanged.
+
+Do not pretend that the request succeeded if the pipe connection failed.
+
+----------------------------------------------------------------------
+VIEWMODEL
+----------------------------------------------------------------------
+
+The existing MainWindow.xaml already contains:
+
+    <Button Content="Close Block"
+            Command="{Binding CloseSelectedBlockCommand}"/>
+
+Make this binding functional.
+
+Reuse the project's existing RelayCommand infrastructure where sensible.
+
+Because this operation is asynchronous, prefer adding a small AsyncRelayCommand
+implementation if the existing RelayCommand only accepts synchronous Action
+delegates.
+
+Do not use an unsafe fire-and-forget pattern if a clean AsyncRelayCommand can be
+implemented easily.
 
 MainWindowViewModel should expose:
 
-- collection of ModuleInfo objects
-- LaunchModuleCommand
-- LaunchAllCommand
-- placeholder PauseCommand
-- placeholder ResumeCommand
-- SimulationSpeed
-- SystemTime
+    CloseSelectedBlockCommand
 
-Use ObservableCollection<ModuleInfo> if appropriate.
+The command should only execute if:
 
-Use INotifyPropertyChanged through ViewModelBase.
+- SelectedBlock is not null
 
-Use RelayCommand for ICommand bindings.
+and optionally if:
+- the block is not already locally marked as closed
 
-Do not place process-launching logic directly inside MainWindow.xaml.cs.
+The command handler should conceptually do:
 
-MainWindow.xaml.cs should remain essentially:
+    if (SelectedBlock == null)
+        return;
 
-public MainWindow()
-{
-    InitializeComponent();
-}
+    try
+    {
+        await _ctcService.CloseBlockAsync(
+            SelectedBlock.BlockId);
 
-except for minimal DataContext setup if necessary.
+        CommunicationStatus =
+            $"Maintenance request sent for Block {SelectedBlock.BlockId}.";
+    }
+    catch (Exception ex)
+    {
+        CommunicationStatus =
+            $"Unable to send maintenance request: {friendly reason}";
+    }
 
---------------------------------------------------
-USER INTERFACE
---------------------------------------------------
+Do not construct MaintenanceRequestMessage inside MainWindowViewModel.
 
-Create a clean but simple architecture-prototype UI.
+That belongs to CTCService.
 
-The window title should be:
+The ViewModel says:
 
-Train Control System
+    "The user wants this block closed."
 
-Include a heading such as:
+The service decides:
 
-Train Control System
+    "That action requires a MaintenanceRequestMessage."
 
-Then a "Modules" section displaying approximately:
+----------------------------------------------------------------------
+SELECTED BLOCK
+----------------------------------------------------------------------
 
-Train Model             Stopped       [ Launch ]
-Track Model             Stopped       [ Launch ]
-Train Controller        Stopped       [ Launch ]
-Track Controller        Stopped       [ Launch ]
-CTC Office              Stopped       [ Launch ]
+Inspect the current CTC ViewModel and models.
 
-                          [ Launch All ]
+If SelectedBlock is already implemented, use it.
 
-Then include a "Simulation" section containing:
+If the XAML expects SelectedBlock but the ViewModel still lacks it, add the
+minimum model/ViewModel plumbing needed for CloseSelectedBlockCommand to operate.
 
-System Time:        00:00:00
-Simulation Speed:   1.0x
+Do NOT redesign the territory UI.
 
-[ Pause ]   [ Resume ]
+Do NOT implement the full track rendering system.
 
-The UI does not need to be polished production design.
-It should mainly help the team understand that the solution consists of multiple independently runnable modules.
+The command only needs to work correctly once a valid CTC block has been selected.
 
-Use data binding for the module list rather than manually creating five unrelated buttons if practical.
+Do not hard-code Block 12 or any other block ID.
 
---------------------------------------------------
-MODULE STATUS
---------------------------------------------------
+----------------------------------------------------------------------
+DEPENDENCY COMPOSITION
+----------------------------------------------------------------------
 
-Implement only basic process status tracking.
+The current repository may construct:
 
-If the launcher itself launched a process, it may track that Process instance and show the module as Running until the process exits.
+    new MainWindowViewModel()
 
-Do not create complex process discovery or monitoring infrastructure yet.
+and MainWindowViewModel may currently construct:
 
-It is acceptable if applications launched manually outside the launcher are not detected at this stage.
+    new CTCService()
 
---------------------------------------------------
-VISUAL STUDIO STARTUP
---------------------------------------------------
+That is no longer sufficient because CTCService requires IMessageSender.
 
-If reasonably possible without modifying developer-specific Visual Studio settings, document that:
+Update composition so the concrete dependencies are created at the WPF application
+boundary.
 
-TrainControlSystem.Launcher.Wpf
+For example, conceptually:
 
-should be set as the solution Startup Project.
+    IMessageSender sender =
+        new NamedPipeMessageSender();
 
-Do not modify user-specific .vs files.
+    ICTCService ctcService =
+        new CTCService(sender);
 
-Add this instruction to the root README.
+    DataContext =
+        new MainWindowViewModel(ctcService);
 
-Explain:
+It is acceptable to perform this simple composition in MainWindow.xaml.cs for now.
 
-- Pressing F5 with the launcher set as Startup Project launches the central system launcher.
-- Each subsystem WPF project can still be independently selected as the Startup Project and run by itself.
-- Visual Studio's Multiple Startup Projects feature can also be used later during integration/debugging.
+Keep code-behind limited to dependency composition.
 
---------------------------------------------------
-README UPDATE
---------------------------------------------------
+Do NOT put Close Block business logic in MainWindow.xaml.cs.
 
-Update the root README to describe the launcher architecture.
+If there is already a better composition root in the application, use it instead.
 
-Include a diagram similar to:
+----------------------------------------------------------------------
+IMPORTANT: CTC MODULE ONLY
+----------------------------------------------------------------------
 
-TrainControlSystem.Launcher.Wpf
-          |
-          | Process.Start
-          |
-     +----+---------------------------+
-     |            |          |         |
-     v            v          v         v
- TrainModel   TrackModel  TrainCtrl  TrackCtrl  CTC
-    .Wpf        .Wpf       .Wpf      .Wpf     .Wpf
-     |            |          |         |
-     v            v          v         v
-   .Core         .Core      .Core     .Core
+Do NOT modify implementation code in:
 
-Explain specifically that:
+- TrackController.Core
+- TrackController.Wpf
+- TrainModel
+- TrackModel
+- TrainController
 
-- The launcher is the entry point for the overall system.
-- The launcher is not a train-control subsystem itself.
-- Subsystem WPF applications remain independent executables.
-- The launcher starts subsystem executables as separate processes.
-- Subsystem communication will eventually occur through shared contracts and an inter-process communication mechanism that has not yet been selected.
-- Process launching and subsystem communication are two separate architectural concerns.
-- Shared simulation timing will be implemented later.
+Do NOT create the named-pipe server.
 
---------------------------------------------------
-DO NOT IMPLEMENT YET
---------------------------------------------------
+Do NOT implement incoming Track Controller communication.
+
+The only non-CTC project that may be changed is:
+
+    TrainControl.Contracts
+
+and only if MaintenanceRequestMessage / MaintenanceState or another absolutely
+necessary shared contract does not already exist.
+
+----------------------------------------------------------------------
+UNIT TESTS
+----------------------------------------------------------------------
+
+Do not attempt to require a real named-pipe server for CTC.Core unit tests.
+
+Create a fake/test IMessageSender in the CTC tests.
+
+For example, the fake sender should record the last message passed to it.
+
+Add tests for at least:
+
+1. CloseBlockAsync creates a MaintenanceRequestMessage.
+
+2. The message contains the correct BlockId.
+
+3. RequestedState is MaintenanceState.Closed.
+
+4. IMessageSender.SendAsync is called exactly once.
+
+5. Closing a nonexistent block fails appropriately.
+
+6. Empty/whitespace block IDs fail validation.
+
+7. If IMessageSender throws, CloseBlockAsync propagates/fails and CTC does NOT
+   mark the request as successfully issued.
+
+8. If sending succeeds, CTC updates its local RequestedMaintenanceState to Closed,
+   if the current domain model supports that property.
+
+The tests should verify CTC behavior without knowing anything about NamedPipeClientStream.
+
+If useful, add focused serialization tests for NamedPipeMessageSender's envelope,
+but do not make the test suite depend on a running Track Controller.
+
+----------------------------------------------------------------------
+COMMENTS / DOCUMENTATION
+----------------------------------------------------------------------
+
+Use comments to explain architectural intent, not obvious C# syntax.
+
+In particular document this distinction:
+
+    CTC RequestedMaintenanceState == Closed
+
+means:
+
+    "CTC issued a Close request."
+
+It does NOT mean:
+
+    "Track Controller confirmed that the physical/logical block is closed."
+
+A future Track Controller -> CTC maintenance status/acknowledgement message will be
+needed to represent authoritative status.
+
+----------------------------------------------------------------------
+DO NOT DO
+----------------------------------------------------------------------
 
 Do NOT:
 
-- combine modules into the launcher window
-- create networking
-- create named pipes
-- create sockets
-- create a message bus
-- implement real simulation synchronization
-- implement train physics
-- implement controller algorithms
-- implement database storage
-- implement installers
-- add dependency injection frameworks
-- add third-party MVVM frameworks
-- add MBO
-- add hardware communication
+- redesign the whole repository
+- add new projects
+- implement the Track Controller receiver
+- add TCP or sockets in addition to named pipes
+- put NamedPipeClientStream in CTC.Core
+- serialize messages inside CTCService
+- put business logic in MainWindow.xaml.cs
+- construct MaintenanceRequestMessage in the ViewModel
+- hard-code a selected block
+- implement unrelated schedule/dispatch functionality
+- modify unrelated modules
+- add third-party packages
+- silently mark a block closed when sending failed
+- treat successful pipe transmission as Track Controller acknowledgement
 
-The goal is to establish the launcher/orchestration architecture and make the project relationships obvious to the team.
+----------------------------------------------------------------------
+EXPECTED FLOW AFTER IMPLEMENTATION
+----------------------------------------------------------------------
 
---------------------------------------------------
-VALIDATION
---------------------------------------------------
+The finished implementation should behave conceptually like this:
+
+User selects Block 12
+        |
+        v
+Clicks "Close Block"
+        |
+        v
+CloseSelectedBlockCommand
+        |
+        v
+MainWindowViewModel
+        |
+        | await _ctcService.CloseBlockAsync("12")
+        v
+CTCService
+        |
+        | validate/find block
+        |
+        | create:
+        v
+MaintenanceRequestMessage
+{
+    BlockId = "12",
+    RequestedState = Closed
+}
+        |
+        v
+IMessageSender.SendAsync(...)
+        |
+        v
+NamedPipeMessageSender
+        |
+        | JSON envelope
+        |
+        | connect to:
+        | TrainControl.TrackController
+        v
+named-pipe write
+
+If the pipe write succeeds:
+
+    CTC records RequestedMaintenanceState = Closed
+    ViewModel reports that the request was sent.
+
+If the Track Controller pipe is unavailable:
+
+    send fails cleanly
+    CTC does not claim success
+    ViewModel reports that Track Controller is unavailable
+
+----------------------------------------------------------------------
+FINAL VERIFICATION
+----------------------------------------------------------------------
 
 After making the changes:
 
-1. Build the entire solution.
-2. Fix all compilation errors.
-3. Run the unit tests.
-4. Verify TrainControlSystem.Launcher.Wpf launches.
-5. Verify the individual subsystem WPF applications still build independently.
-6. If practical, verify at least one module can be launched from the launcher.
-7. Do not make unrelated architectural changes.
+1. Run:
 
-Then report:
+       dotnet build TrainControlSystem.sln
+
+2. Run:
+
+       dotnet test TrainControlSystem.sln
+
+Fix all compilation errors and failed tests.
+
+Then give me a concise summary containing:
 
 - files created
 - files modified
-- project added
-- project references added or intentionally not added
-- how executable paths are currently resolved
-- whether the full solution builds
-- whether tests pass
-- any limitations of launching sibling projects directly from Visual Studio build folders
+- how CloseSelectedBlockCommand now works
+- how CTCService creates the outgoing message
+- where IMessageSender lives
+- where NamedPipeMessageSender lives
+- the exact named-pipe name
+- an example of the JSON that will be transmitted
+- tests added
+- any remaining TODO required on the Track Controller side
+- confirmation that the solution builds
+- confirmation that all tests pass

@@ -1,0 +1,46 @@
+# CTC.Core
+
+Domain model and service for the Centralized Traffic Control office. No WPF and no
+transport code.
+
+```
+Track Controller / Track Model
+        |  shared contract messages (TrainControl.Contracts)
+        v
+    CTCService  -- maps into -->  CtcSystemState (Models/)
+        |
+        v  builds outgoing messages
+  MaintenanceRequest / SwitchPositionRequest / MovementRequest
+        |
+        v  CloseBlockAsync sends via
+  IMessageSender  (Interfaces/; implemented in CTC.Wpf by NamedPipeMessageSender)
+```
+
+CTC.Core decides *what* to send; the injected `IMessageSender` decides *how*.
+Serialization, pipe names and framing live only in the WPF/infrastructure layer.
+
+- `Models/` holds CTC's own state (`CtcSystemState`, `CtcLineState`, `CtcBlockState`,
+  `ScheduledTrain`, `ScheduleStop`, `DispatchQueueEntry`, `DispatchedTrainState`).
+  Contract messages are never stored as domain state.
+- `Services/CTCService` is the boundary between contracts and the domain model.
+- `Dispatching/` holds placeholders for future routing and authority algorithms.
+
+All quantities are SI (meters, meters/second); the WPF layer converts to mph/feet.
+UI-only state such as the selected line or block belongs in the view model.
+
+## Known I/O gaps
+
+1. **No train ID in block occupancy.** `BlockStatusMessage` reports only
+   clear/occupied/unknown, so CTC cannot authoritatively determine
+   `DispatchedTrainState.CurrentBlockId`. It is left empty rather than guessed.
+2. **No maintenance acknowledgement.** There is no Track Controller -> CTC
+   maintenance status. `CtcBlockState.RequestedMaintenanceState == Closed` means
+   "CTC successfully issued a Close request", not "Track Controller closed the block".
+   It is set only after the send succeeds.
+3. **Switch terminology.** Requirements use both Left/Right and Normal/Reverse. The
+   shared `SwitchPosition` enum stays Normal/Reverse until the teams decide.
+4. **System time.** Time is meant to come from a shared simulation clock that is
+   not implemented yet. CTC only exposes `SetSystemTime` and has no timer of its own.
+5. **Movement request vs. switch request.** The documented "movement request" could
+   overlap with switch requests. Here `MovementRequestMessage` means releasing a
+   train; switch changes use `SwitchPositionRequestMessage`.
