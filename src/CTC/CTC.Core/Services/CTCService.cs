@@ -70,7 +70,7 @@ public class CTCService : ICTCService
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        var block = GetBlock(message.BlockId);
+        CtcBlockState block = GetBlock(message.BlockId);
         block.Occupancy = message.Occupancy;
         block.Signal = message.Signal;
         block.Switch = message.Switch;
@@ -87,7 +87,7 @@ public class CTCService : ICTCService
         ArgumentNullException.ThrowIfNull(message);
         Guard.NotNullOrWhiteSpace(message.TrainId, nameof(message));
 
-        var train = State.FindDispatchedTrain(message.TrainId);
+        DispatchedTrainState train = State.FindDispatchedTrain(message.TrainId);
         if (train is null)
         {
             train = new DispatchedTrainState { TrainId = message.TrainId };

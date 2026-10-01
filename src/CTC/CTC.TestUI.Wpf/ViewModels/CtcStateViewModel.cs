@@ -37,6 +37,7 @@ public class CtcStateViewModel : ViewModelBase
     public void Refresh()
     {
         Blocks.Clear();
+
         foreach (var line in _state.Lines)
         {
             foreach (var block in line.Blocks)

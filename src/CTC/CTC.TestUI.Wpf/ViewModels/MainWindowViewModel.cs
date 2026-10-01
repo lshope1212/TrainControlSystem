@@ -25,6 +25,7 @@ public class MainWindowViewModel : ViewModelBase
 
         // Simulated inputs (other modules -> CTC).
         TrackLayoutInput = new TrackLayoutInputViewModel(ctc, State.Refresh);
+        BlockStatusInput = new BlockStatusInputViewModel(ctc, State.Refresh);
         SystemTimeInput = new SystemTimeInputViewModel(ctc, State.Refresh);
 
         // Dispatcher / CTC actions (CTC -> other modules).
@@ -33,11 +34,15 @@ public class MainWindowViewModel : ViewModelBase
 
     public string Title => "CTC Module Test UI";
 
+    //This design breaks up the TestUI into sections based on the function
+
     public TrackLayoutInputViewModel TrackLayoutInput { get; }
 
     public SystemTimeInputViewModel SystemTimeInput { get; }
 
     public BlockMaintenanceActionViewModel BlockMaintenanceAction { get; }
+
+    public BlockStatusInputViewModel BlockStatusInput { get; }
 
     public CtcStateViewModel State { get; }
 

@@ -37,11 +37,126 @@
 
                     <GroupBox Header="Track Controller Inputs">
                         <StackPanel>
-                            <TextBlock Text="Block Status (BlockStatusMessage): not implemented yet"
-                                       Style="{StaticResource PlaceholderTextStyle}"/>
+
+                            <!-- ============================
+             BLOCK STATUS INPUT
+             ============================ -->
+
+                            <TextBlock Text="Block Status"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,8"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="160"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Block ID -->
+
+                                <TextBlock Grid.Row="0"
+                       Grid.Column="0"
+                       Text="Block ID:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,6"/>
+
+                                <TextBox Grid.Row="0"
+                     Grid.Column="1"
+                     Text="{Binding BlockStatusInput.BlockId,
+                                    UpdateSourceTrigger=PropertyChanged}"
+                     Margin="0,0,0,6"/>
+
+
+                                <!-- Occupancy -->
+
+                                <TextBlock Grid.Row="1"
+                       Grid.Column="0"
+                       Text="Occupancy:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,6"/>
+
+                                <ComboBox Grid.Row="1"
+                      Grid.Column="1"
+                      ItemsSource="{Binding BlockStatusInput.OccupancyOptions}"
+                      SelectedItem="{Binding BlockStatusInput.SelectedOccupancy}"
+                      Margin="0,0,0,6"/>
+
+
+                                <!-- Signal -->
+
+                                <TextBlock Grid.Row="2"
+                       Grid.Column="0"
+                       Text="Signal:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,6"/>
+
+                                <ComboBox Grid.Row="2"
+                      Grid.Column="1"
+                      ItemsSource="{Binding BlockStatusInput.SignalOptions}"
+                      SelectedItem="{Binding BlockStatusInput.SelectedSignal}"
+                      Margin="0,0,0,6"/>
+
+
+                                <!-- Switch -->
+
+                                <TextBlock Grid.Row="3"
+                       Grid.Column="0"
+                       Text="Switch:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,6"/>
+
+                                <ComboBox Grid.Row="3"
+                      Grid.Column="1"
+                      ItemsSource="{Binding BlockStatusInput.SwitchOptions}"
+                      SelectedItem="{Binding BlockStatusInput.SelectedSwitch}"
+                      Margin="0,0,0,6"/>
+
+
+                                <!-- Crossing -->
+
+                                <TextBlock Grid.Row="4"
+                       Grid.Column="0"
+                       Text="Crossing:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,0"/>
+
+                                <ComboBox Grid.Row="4"
+                      Grid.Column="1"
+                      ItemsSource="{Binding BlockStatusInput.CrossingOptions}"
+                      SelectedItem="{Binding BlockStatusInput.SelectedCrossing}"/>
+
+                            </Grid>
+
+
+                            <!-- Apply -->
+
+                            <Button Content="Apply Block Status"
+                Command="{Binding BlockStatusInput.ApplyCommand}"
+                HorizontalAlignment="Left"
+                Margin="0,10,0,0"/>
+
+                            <TextBlock Text="{Binding BlockStatusInput.Result}"
+                   Style="{StaticResource ResultTextStyle}"
+                   TextWrapping="Wrap"/>
+
+
+                            <!-- ============================
+             FUTURE INPUT
+             ============================ -->
+
+                            <Separator Margin="0,12,0,10"/>
+
                             <TextBlock Text="Train Authorization Status (TrainAuthorizationStatusMessage): not implemented yet"
-                                       Style="{StaticResource PlaceholderTextStyle}"
-                                       Margin="0,4,0,0"/>
+                   Style="{StaticResource PlaceholderTextStyle}"/>
+
                         </StackPanel>
                     </GroupBox>
 
