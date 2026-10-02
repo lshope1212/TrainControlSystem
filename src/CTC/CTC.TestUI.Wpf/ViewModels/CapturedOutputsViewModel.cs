@@ -19,21 +19,37 @@ public class CapturedOutputsViewModel : ViewModelBase
     {
         ArgumentNullException.ThrowIfNull(receiver);
 
-        // The receiver raises its events on the UI thread, so the collection is safe to modify.
+        // Listen for messages and errors from the fake Track Controller.
         receiver.MessageReceived += OnMessageReceived;
         receiver.ErrorOccurred += OnErrorOccurred;
 
-        // Sequence numbers keep increasing across a clear so rows are never confused.
+        // Command used by the UI to clear captured messages.
         ClearCommand = new RelayCommand(_ => Messages.Clear(), _ => Messages.Count > 0);
     }
 
+    /// <summary>
+    /// All messages/errors captured by the TestUI.
+    /// </summary>
     public ObservableCollection<RecordedMessage> Messages { get; } = new ObservableCollection<RecordedMessage>();
 
     public ICommand ClearCommand { get; }
 
-    private void OnMessageReceived(object? sender, MessageEnvelope envelope) =>
-        Messages.Add(RecordedMessage.FromEnvelope(_nextSequenceNumber++, envelope));
+    // Event Handlers
+    private void OnMessageReceived(object? sender, MessageEnvelope envelope)
+    {
+        RecordedMessage message = RecordedMessage.FromEnvelope(_nextSequenceNumber, envelope);
 
-    private void OnErrorOccurred(object? sender, string error) =>
-        Messages.Add(RecordedMessage.FromError(_nextSequenceNumber++, error));
+        _nextSequenceNumber++;
+
+        Messages.Add(message);
+    }
+
+    private void OnErrorOccurred(object? sender, string error)
+    {
+        RecordedMessage message = RecordedMessage.FromError(_nextSequenceNumber, error);
+
+        _nextSequenceNumber++;
+
+        Messages.Add(message);
+    }
 }

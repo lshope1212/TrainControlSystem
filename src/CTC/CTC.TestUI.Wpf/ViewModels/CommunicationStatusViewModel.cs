@@ -17,10 +17,8 @@ public class CommunicationStatusViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(receiver);
 
         _trackControllerListenerStatus = $"Listening on {receiver.PipeName}.";
-        receiver.MessageReceived += (_, envelope) =>
-            TrackControllerListenerStatus = $"Listening on {receiver.PipeName}. Last received: {envelope.MessageType} at {DateTime.Now:HH:mm:ss}.";
-        receiver.ErrorOccurred += (_, error) =>
-            TrackControllerListenerStatus = $"Listening on {receiver.PipeName}. Last error at {DateTime.Now:HH:mm:ss}: {error}";
+        receiver.MessageReceived += (_, envelope) => TrackControllerListenerStatus = $"Listening on {receiver.PipeName}. Last received: {envelope.MessageType} at {DateTime.Now:HH:mm:ss}.";
+        receiver.ErrorOccurred += (_, error) => TrackControllerListenerStatus = $"Listening on {receiver.PipeName}. Last error at {DateTime.Now:HH:mm:ss}: {error}";
     }
 
     public string CtcPipeName => NamedPipeNames.Ctc;

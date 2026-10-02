@@ -30,12 +30,14 @@ public class MainWindowViewModel : ViewModelBase
 
     public string Title => "CTC Module Test UI";
 
+    // Simulated Input ViewModels
     public TrackLayoutInputViewModel TrackLayoutInput { get; }
 
     public SystemTimeInputViewModel SystemTimeInput { get; }
 
     public BlockStatusInputViewModel BlockStatusInput { get; }
 
+    // Other
     public CapturedOutputsViewModel Outputs { get; }
 
     public CommunicationStatusViewModel Communication { get; }
