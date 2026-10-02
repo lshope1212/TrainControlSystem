@@ -26,6 +26,8 @@ public class BlockViewModel : ViewModelBase
 
     public string Occupancy => _block.Occupancy.ToString();
 
+    public bool IsOccupied => _block.Occupancy == OccupancyState.Occupied;
+
     // Worded as a request: CTC has no Track Controller confirmation of maintenance state.
     public string MaintenanceStatus =>
         _block.RequestedMaintenanceState == MaintenanceState.Closed ? "Close requested" : "Open";

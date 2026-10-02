@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    External-module simulator for the running CTC process. Talks to CTC only through the
+    shared contracts and named-pipe transport, exactly as the real modules will.
+    Must NOT reference CTC.Core or CTC.Wpf (and CTC.Wpf must not reference this project).
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

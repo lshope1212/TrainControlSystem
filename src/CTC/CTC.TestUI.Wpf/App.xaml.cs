@@ -1,14 +1,12 @@
 using System.Windows;
-using CTC.Core.Interfaces;
-using CTC.Core.Services;
-using CTC.Wpf.Services;
-using CTC.Wpf.ViewModels;
+using CTC.TestUI.Wpf.Services;
+using CTC.TestUI.Wpf.ViewModels;
 
-namespace CTC.Wpf;
+namespace CTC.TestUI.Wpf;
 
 /// <summary>
-/// Composition root of the CTC process. Builds exactly ONE <see cref="CTCService"/> and
-/// shares it between the dispatcher UI and the inbound named-pipe receiver.
+/// Composition root of the TestUI process: a sender into CTC's pipe and a fake Track
+/// Controller listener. It never hosts CTC itself.
 /// </summary>
 public partial class App : Application
 {
@@ -18,14 +16,11 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        IMessageSender sender = new NamedPipeMessageSender();
-        ICTCService ctcService = new CTCService(sender);
+        ICtcMessageSender sender = new NamedPipeCtcMessageSender();
+        var receiver = new FakeTrackControllerReceiver(Dispatcher);
 
-        var viewModel = new MainWindowViewModel(ctcService);
+        var viewModel = new MainWindowViewModel(sender, receiver);
         var window = new MainWindow(viewModel);
-
-        var receiver = new CtcNamedPipeReceiver(ctcService, Dispatcher);
-        receiver.StatusReported += (_, status) => viewModel.InboundStatus = status;
 
         // Runs until OnExit cancels it; the receive loop never throws for bad messages.
         _ = receiver.RunAsync(_shutdown.Token);

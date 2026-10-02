@@ -419,6 +419,13 @@
                                 <TextBlock Text="Selected Block"
                                            Style="{StaticResource SectionHeaderStyle}"/>
 
+                                <!-- Interim block picker until the territory display
+                                     renders clickable blocks. -->
+                                <ComboBox ItemsSource="{Binding Blocks}"
+                                          SelectedItem="{Binding SelectedBlock}"
+                                          DisplayMemberPath="BlockId"
+                                          Margin="0,0,0,8"/>
+
                                 <Grid>
 
                                     <Grid.ColumnDefinitions>
@@ -441,7 +448,7 @@
 
                                     <TextBlock Grid.Row="0"
                                                Grid.Column="1"
-                                               Text="{Binding SelectedBlock.Number,
+                                               Text="{Binding SelectedBlock.BlockId,
                                                               TargetNullValue=--}"
                                                Style="{StaticResource ValueStyle}"/>
 
@@ -1076,6 +1083,13 @@
 
             <StatusBarItem>
                 <TextBlock Text="{Binding CommunicationStatus}"/>
+            </StatusBarItem>
+
+            <Separator/>
+
+            <StatusBarItem>
+                <TextBlock Text="{Binding InboundStatus,
+                                         StringFormat=Inbound: {0}}"/>
             </StatusBarItem>
 
         </StatusBar>

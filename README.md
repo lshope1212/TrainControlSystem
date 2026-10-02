@@ -39,9 +39,10 @@ What this means:
   project reference** to any of them.
 - **The launcher starts subsystem executables as separate OS processes**, using
   `System.Diagnostics.Process.Start`.
-- **Subsystem communication will eventually happen through shared contracts** plus an
-  inter-process communication mechanism that **has not been selected yet**. No
-  networking, named pipes, sockets, or message bus exists in this repository.
+- **Subsystem communication happens through shared contracts** sent over local
+  Windows named pipes: one newline-delimited JSON envelope (`messageType` + `payload`)
+  per connection. The envelope format, transport and endpoint names live in
+  `TrainControl.Common/Communication`. No networking, sockets, or message bus.
 - **Process launching and subsystem communication are two separate concerns.**
   Starting an executable says nothing about how the running programs will talk to
   each other. Do not let the launcher grow into a message broker.
@@ -161,7 +162,8 @@ TrainControlSystem
 │
 ├── CTC
 │   ├── CTC.Core
-│   └── CTC.Wpf
+│   ├── CTC.Wpf
+│   └── CTC.TestUI.Wpf   (development-only external-module simulator)
 │
 └── Tests
     └── TrainControl.Tests

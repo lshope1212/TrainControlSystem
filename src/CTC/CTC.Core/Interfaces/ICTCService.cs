@@ -12,6 +12,12 @@ public interface ICTCService
 {
     CtcSystemState State { get; }
 
+    /// <summary>
+    /// Raised synchronously, on the calling thread, after any method changes <see cref="State"/>.
+    /// Lets presentation layers refresh without the domain models knowing about UI.
+    /// </summary>
+    event EventHandler<CtcStateChangedEventArgs>? StateChanged;
+
     // Inbound: map shared contracts into CTC state.
 
     void ApplyTrackLayout(TrackLayoutMessage message);

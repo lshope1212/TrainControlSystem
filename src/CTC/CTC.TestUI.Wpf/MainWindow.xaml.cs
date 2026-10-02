@@ -1,11 +1,10 @@
 using System.Windows;
-using CTC.Wpf.ViewModels;
+using CTC.TestUI.Wpf.ViewModels;
 
-namespace CTC.Wpf;
+namespace CTC.TestUI.Wpf;
 
 /// <summary>
-/// Interaction logic for MainWindow.xaml. Dependencies are composed in <see cref="App"/>;
-/// all behavior lives in the view model and CTC.Core.
+/// Interaction logic for MainWindow.xaml. Dependencies are composed in <see cref="App"/>.
 /// </summary>
 public partial class MainWindow : Window
 {
