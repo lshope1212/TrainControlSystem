@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Developer test harness for CTC.Core. Must never reference CTC.Wpf (or vice versa),
-    and must never use real inter-process communication.
+    External-module simulator for the running CTC process. Talks to CTC only through the
+    shared contracts and named-pipe transport, exactly as the real modules will.
+    Must NOT reference CTC.Core or CTC.Wpf (and CTC.Wpf must not reference this project).
   -->
 
   <ItemGroup>
-    <ProjectReference Include="..\CTC.Core\CTC.Core.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

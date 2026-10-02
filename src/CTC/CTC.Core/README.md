@@ -18,6 +18,11 @@ Track Controller / Track Model
 
 CTC.Core decides *what* to send; the injected `IMessageSender` decides *how*.
 Serialization, pipe names and framing live only in the WPF/infrastructure layer.
+Inbound messages are received by `CtcNamedPipeReceiver` in CTC.Wpf, which simply
+calls the matching `ICTCService` method.
+
+`ICTCService.StateChanged` is raised after every state change (plain .NET event, no
+WPF types) so the UI can refresh when messages arrive from other modules.
 
 - `Models/` holds CTC's own state (`CtcSystemState`, `CtcLineState`, `CtcBlockState`,
   `ScheduledTrain`, `ScheduleStop`, `DispatchQueueEntry`, `DispatchedTrainState`).

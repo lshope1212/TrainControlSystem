@@ -1,50 +1,42 @@
-using CTC.Core.Interfaces;
 using CTC.TestUI.Wpf.Services;
 
 namespace CTC.TestUI.Wpf.ViewModels;
 
 /// <summary>
-/// Root view model of the CTC Test UI. Composes one small view model per area:
-/// simulated inputs, dispatcher actions, internal CTC state and captured outputs.
-/// New input simulators / actions should be added as their own view models here.
+/// Root view model of the CTC Test UI, which stands in for the modules external to CTC.
+/// Composes one small view model per area: simulated inputs, captured CTC outputs and
+/// communication status. New input simulators should be added as their own view models.
 /// </summary>
 /// <remarks>
-/// Every child talks to the real CTC.Core through <see cref="ICTCService"/>. None of
-/// them may re-implement CTC behavior; they only build contract messages, call the
-/// service and display results.
+/// The TestUI has no access to CTC.Core. Inputs reach the running CTC only as shared
+/// contract messages over its named pipe; outputs are only what CTC actually sends to the
+/// fake Track Controller endpoint. Dispatcher actions belong to the real CTC window.
 /// </remarks>
 public class MainWindowViewModel : ViewModelBase
 {
-    public MainWindowViewModel(ICTCService ctc, RecordingMessageSender sender)
+    public MainWindowViewModel(ICtcMessageSender sender, FakeTrackControllerReceiver receiver)
     {
-        ArgumentNullException.ThrowIfNull(ctc);
         ArgumentNullException.ThrowIfNull(sender);
+        ArgumentNullException.ThrowIfNull(receiver);
 
-        State = new CtcStateViewModel(ctc.State);
-        Outputs = new CapturedOutputsViewModel(sender);
+        Communication = new CommunicationStatusViewModel(receiver);
+        Outputs = new CapturedOutputsViewModel(receiver);
 
         // Simulated inputs (other modules -> CTC).
-        TrackLayoutInput = new TrackLayoutInputViewModel(ctc, State.Refresh);
-        BlockStatusInput = new BlockStatusInputViewModel(ctc, State.Refresh);
-        SystemTimeInput = new SystemTimeInputViewModel(ctc, State.Refresh);
-
-        // Dispatcher / CTC actions (CTC -> other modules).
-        BlockMaintenanceAction = new BlockMaintenanceActionViewModel(ctc, State.Refresh);
+        TrackLayoutInput = new TrackLayoutInputViewModel(sender, Communication);
+        BlockStatusInput = new BlockStatusInputViewModel(sender, Communication);
+        SystemTimeInput = new SystemTimeInputViewModel(sender, Communication);
     }
 
     public string Title => "CTC Module Test UI";
-
-    //This design breaks up the TestUI into sections based on the function
 
     public TrackLayoutInputViewModel TrackLayoutInput { get; }
 
     public SystemTimeInputViewModel SystemTimeInput { get; }
 
-    public BlockMaintenanceActionViewModel BlockMaintenanceAction { get; }
-
     public BlockStatusInputViewModel BlockStatusInput { get; }
 
-    public CtcStateViewModel State { get; }
-
     public CapturedOutputsViewModel Outputs { get; }
+
+    public CommunicationStatusViewModel Communication { get; }
 }

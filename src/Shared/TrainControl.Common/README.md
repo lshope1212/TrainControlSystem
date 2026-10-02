@@ -7,6 +7,7 @@ Generic, reusable helpers that are **not specific to any subsystem**.
 | `Utilities/`  | Small general-purpose helpers (unit conversion, ...). |
 | `Timing/`     | Shared timing abstractions for the simulation.        |
 | `Validation/` | Argument / input guard helpers.                       |
+| `Communication/` | Inter-process message envelope, JSON serializer, local named-pipe transport and endpoint names. |
 
 ## Rules
 

@@ -12,7 +12,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <Grid.ColumnDefinitions>
@@ -23,28 +23,29 @@
         <!-- Header -->
         <StackPanel Grid.ColumnSpan="2" Margin="4,0,4,6">
             <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold"/>
-            <TextBlock Text="Developer harness: real CTC.Core, simulated module inputs, captured outputs (no inter-process communication)."
-                       Foreground="#6B7280"/>
+            <TextBlock Text="External Module Simulator: runs beside CTC.Wpf, sends shared contract messages into the real CTC and captures what CTC sends to the Track Controller."
+                       Foreground="#6B7280"
+                       TextWrapping="Wrap"/>
         </StackPanel>
 
 
         <!-- ==================================================
              1. SIMULATED INPUTS (other modules -> CTC)
              ================================================== -->
-        <GroupBox Grid.Row="1" Grid.Column="0" Header="Simulated Inputs">
+        <GroupBox Grid.Row="1" Grid.Column="0" Header="Simulated Inputs to CTC">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
 
-                    <GroupBox Header="Track Controller Inputs">
+                    <GroupBox Header="Track Controller -> CTC">
                         <StackPanel>
 
                             <!-- ============================
-             BLOCK STATUS INPUT
-             ============================ -->
+                                 BLOCK STATUS INPUT
+                                 ============================ -->
 
-                            <TextBlock Text="Block Status"
-                   FontWeight="SemiBold"
-                   Margin="0,0,0,8"/>
+                            <TextBlock Text="Block Status (BlockStatusMessage)"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,8"/>
 
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -63,109 +64,106 @@
                                 <!-- Block ID -->
 
                                 <TextBlock Grid.Row="0"
-                       Grid.Column="0"
-                       Text="Block ID:"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,6"/>
+                                           Grid.Column="0"
+                                           Text="Block ID:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,6"/>
 
                                 <TextBox Grid.Row="0"
-                     Grid.Column="1"
-                     Text="{Binding BlockStatusInput.BlockId,
-                                    UpdateSourceTrigger=PropertyChanged}"
-                     Margin="0,0,0,6"/>
+                                         Grid.Column="1"
+                                         Text="{Binding BlockStatusInput.BlockId,
+                                                        UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6"/>
 
 
                                 <!-- Occupancy -->
 
                                 <TextBlock Grid.Row="1"
-                       Grid.Column="0"
-                       Text="Occupancy:"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,6"/>
+                                           Grid.Column="0"
+                                           Text="Occupancy:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,6"/>
 
                                 <ComboBox Grid.Row="1"
-                      Grid.Column="1"
-                      ItemsSource="{Binding BlockStatusInput.OccupancyOptions}"
-                      SelectedItem="{Binding BlockStatusInput.SelectedOccupancy}"
-                      Margin="0,0,0,6"/>
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding BlockStatusInput.OccupancyOptions}"
+                                          SelectedItem="{Binding BlockStatusInput.SelectedOccupancy}"
+                                          Margin="0,0,0,6"/>
 
 
                                 <!-- Signal -->
 
                                 <TextBlock Grid.Row="2"
-                       Grid.Column="0"
-                       Text="Signal:"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,6"/>
+                                           Grid.Column="0"
+                                           Text="Signal:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,6"/>
 
                                 <ComboBox Grid.Row="2"
-                      Grid.Column="1"
-                      ItemsSource="{Binding BlockStatusInput.SignalOptions}"
-                      SelectedItem="{Binding BlockStatusInput.SelectedSignal}"
-                      Margin="0,0,0,6"/>
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding BlockStatusInput.SignalOptions}"
+                                          SelectedItem="{Binding BlockStatusInput.SelectedSignal}"
+                                          Margin="0,0,0,6"/>
 
 
                                 <!-- Switch -->
 
                                 <TextBlock Grid.Row="3"
-                       Grid.Column="0"
-                       Text="Switch:"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,6"/>
+                                           Grid.Column="0"
+                                           Text="Switch:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,6"/>
 
                                 <ComboBox Grid.Row="3"
-                      Grid.Column="1"
-                      ItemsSource="{Binding BlockStatusInput.SwitchOptions}"
-                      SelectedItem="{Binding BlockStatusInput.SelectedSwitch}"
-                      Margin="0,0,0,6"/>
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding BlockStatusInput.SwitchOptions}"
+                                          SelectedItem="{Binding BlockStatusInput.SelectedSwitch}"
+                                          Margin="0,0,0,6"/>
 
 
                                 <!-- Crossing -->
 
                                 <TextBlock Grid.Row="4"
-                       Grid.Column="0"
-                       Text="Crossing:"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0"/>
+                                           Grid.Column="0"
+                                           Text="Crossing:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
 
                                 <ComboBox Grid.Row="4"
-                      Grid.Column="1"
-                      ItemsSource="{Binding BlockStatusInput.CrossingOptions}"
-                      SelectedItem="{Binding BlockStatusInput.SelectedCrossing}"/>
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding BlockStatusInput.CrossingOptions}"
+                                          SelectedItem="{Binding BlockStatusInput.SelectedCrossing}"/>
 
                             </Grid>
 
-
-                            <!-- Apply -->
-
-                            <Button Content="Apply Block Status"
-                Command="{Binding BlockStatusInput.ApplyCommand}"
-                HorizontalAlignment="Left"
-                Margin="0,10,0,0"/>
+                            <Button Content="Send Block Status"
+                                    Command="{Binding BlockStatusInput.SendCommand}"
+                                    HorizontalAlignment="Left"
+                                    Margin="0,10,0,0"/>
 
                             <TextBlock Text="{Binding BlockStatusInput.Result}"
-                   Style="{StaticResource ResultTextStyle}"
-                   TextWrapping="Wrap"/>
+                                       Style="{StaticResource ResultTextStyle}"/>
 
 
                             <!-- ============================
-             FUTURE INPUT
-             ============================ -->
+                                 FUTURE INPUT
+                                 ============================ -->
 
                             <Separator Margin="0,12,0,10"/>
 
                             <TextBlock Text="Train Authorization Status (TrainAuthorizationStatusMessage): not implemented yet"
-                   Style="{StaticResource PlaceholderTextStyle}"/>
+                                       Style="{StaticResource PlaceholderTextStyle}"
+                                       TextWrapping="Wrap"/>
 
                         </StackPanel>
                     </GroupBox>
 
-                    <GroupBox Header="Track Model Inputs">
+                    <GroupBox Header="Track Model -> CTC">
                         <StackPanel>
                             <TextBlock Text="Track Layout (TrackLayoutMessage)" FontWeight="SemiBold"/>
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                <Button Content="Apply Sample Layout"
-                                        Command="{Binding TrackLayoutInput.ApplySampleLayoutCommand}"/>
+                                <Button Content="Send Sample Layout"
+                                        Command="{Binding TrackLayoutInput.SendSampleLayoutCommand}"/>
                             </StackPanel>
                             <TextBlock Text="{Binding TrackLayoutInput.Result}"
                                        Style="{StaticResource ResultTextStyle}"/>
@@ -176,16 +174,16 @@
                         </StackPanel>
                     </GroupBox>
 
-                    <GroupBox Header="System Inputs">
+                    <GroupBox Header="System -> CTC">
                         <StackPanel>
-                            <TextBlock Text="System Time (simulated shared clock)" FontWeight="SemiBold"/>
+                            <TextBlock Text="System Time (SystemTimeMessage, simulated shared clock)" FontWeight="SemiBold"/>
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                 <TextBox Text="{Binding SystemTimeInput.TimeText, UpdateSourceTrigger=PropertyChanged}"
                                          Width="90"
                                          Margin="0,0,6,0"
                                          VerticalContentAlignment="Center"/>
-                                <Button Content="Set Time"
-                                        Command="{Binding SystemTimeInput.ApplyCommand}"/>
+                                <Button Content="Send Time"
+                                        Command="{Binding SystemTimeInput.SendCommand}"/>
                             </StackPanel>
                             <TextBlock Text="{Binding SystemTimeInput.Result}"
                                        Style="{StaticResource ResultTextStyle}"/>
@@ -198,9 +196,9 @@
 
 
         <!-- ==================================================
-             2. CAPTURED CTC OUTPUTS (CTC -> other modules)
+             2. CAPTURED CTC OUTPUTS (CTC -> fake Track Controller)
              ================================================== -->
-        <GroupBox Grid.Row="1" Grid.Column="1" Header="Captured CTC Outputs (RecordingMessageSender)">
+        <GroupBox Grid.Row="1" Grid.Column="1" Header="Captured CTC Outputs (received on the Track Controller pipe)">
             <DockPanel>
 
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
@@ -218,9 +216,9 @@
                           GridLinesVisibility="Horizontal">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="#" Binding="{Binding SequenceNumber}" Width="40"/>
-                        <DataGridTextColumn Header="Captured" Binding="{Binding CapturedAt, StringFormat=HH:mm:ss.fff}" Width="90"/>
+                        <DataGridTextColumn Header="Captured At" Binding="{Binding CapturedAt, StringFormat=HH:mm:ss.fff}" Width="90"/>
                         <DataGridTextColumn Header="Message Type" Binding="{Binding MessageType}" Width="210"/>
-                        <DataGridTextColumn Header="Contents" Binding="{Binding Description}" Width="*"/>
+                        <DataGridTextColumn Header="Payload" Binding="{Binding Description}" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
 
@@ -229,71 +227,36 @@
 
 
         <!-- ==================================================
-             3. DISPATCHER / CTC ACTIONS
+             3. COMMUNICATION STATUS
              ================================================== -->
-        <GroupBox Grid.Row="2" Grid.Column="0" Header="Dispatcher / CTC Actions">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel>
+        <GroupBox Grid.Row="2" Grid.ColumnSpan="2" Header="Communication Status">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                    <GroupBox Header="Block Maintenance">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Block ID:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Text="{Binding BlockMaintenanceAction.BlockId, UpdateSourceTrigger=PropertyChanged}"
-                                         Width="90"
-                                         Margin="0,0,6,0"
-                                         VerticalContentAlignment="Center"/>
-                                <Button Content="Close Block"
-                                        Command="{Binding BlockMaintenanceAction.CloseBlockCommand}"/>
-                            </StackPanel>
-                            <TextBlock Text="{Binding BlockMaintenanceAction.Result}"
-                                       Style="{StaticResource ResultTextStyle}"/>
-                        </StackPanel>
-                    </GroupBox>
+                <TextBlock Text="{Binding Communication.CtcPipeName, StringFormat=CTC endpoint ({0}):}"
+                           FontWeight="SemiBold"
+                           Margin="0,0,8,4"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Communication.CtcEndpointStatus}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,4"/>
 
-                    <GroupBox Header="Future Actions">
-                        <TextBlock Text="Reopen block, switch position request, movement request, dispatching, routing and suggested speed/authority will be added as CTC.Core implements them."
-                                   Style="{StaticResource PlaceholderTextStyle}"
-                                   TextWrapping="Wrap"/>
-                    </GroupBox>
-
-                </StackPanel>
-            </ScrollViewer>
-        </GroupBox>
-
-
-        <!-- ==================================================
-             4. INTERNAL CTC STATE (CtcSystemState)
-             ================================================== -->
-        <GroupBox Grid.Row="2" Grid.Column="1" Header="Internal CTC State (CtcSystemState)">
-            <DockPanel>
-
-                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                    <TextBlock Text="{Binding State.SystemTime, StringFormat=System Time: {0}}" Margin="0,0,16,0"/>
-                    <TextBlock Text="{Binding State.LineCount, StringFormat=Lines: {0}}" Margin="0,0,16,0"/>
-                    <TextBlock Text="{Binding State.BlockCount, StringFormat=Blocks: {0}}" Margin="0,0,16,0"/>
-                    <TextBlock Text="{Binding State.ScheduledTrainCount, StringFormat=Scheduled: {0}}" Margin="0,0,16,0"/>
-                    <TextBlock Text="{Binding State.DispatchQueueCount, StringFormat=Queued: {0}}" Margin="0,0,16,0"/>
-                    <TextBlock Text="{Binding State.DispatchedTrainCount, StringFormat=Dispatched: {0}}"/>
-                </WrapPanel>
-
-                <DataGrid ItemsSource="{Binding State.Blocks}"
-                          AutoGenerateColumns="False"
-                          IsReadOnly="True"
-                          HeadersVisibility="Column"
-                          GridLinesVisibility="Horizontal">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Line" Binding="{Binding LineId}" Width="70"/>
-                        <DataGridTextColumn Header="Block" Binding="{Binding BlockId}" Width="60"/>
-                        <DataGridTextColumn Header="Occupancy" Binding="{Binding Occupancy}" Width="90"/>
-                        <DataGridTextColumn Header="Requested Maint." Binding="{Binding RequestedMaintenance}" Width="120"/>
-                        <DataGridTextColumn Header="Switch" Binding="{Binding Switch}" Width="80"/>
-                        <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="80"/>
-                        <DataGridTextColumn Header="Crossing" Binding="{Binding Crossing}" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-
-            </DockPanel>
+                <TextBlock Grid.Row="1"
+                           Text="Fake Track Controller listener:"
+                           FontWeight="SemiBold"
+                           Margin="0,0,8,0"/>
+                <TextBlock Grid.Row="1"
+                           Grid.Column="1"
+                           Text="{Binding Communication.TrackControllerListenerStatus}"
+                           TextWrapping="Wrap"/>
+            </Grid>
         </GroupBox>
 
     </Grid>

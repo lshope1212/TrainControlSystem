@@ -23,6 +23,8 @@ public class CTCService : ICTCService
 
     public CtcSystemState State { get; } = new CtcSystemState();
 
+    public event EventHandler<CtcStateChangedEventArgs>? StateChanged;
+
     /// <summary>
     /// Replaces CTC's territory with the lines and blocks in the layout.
     /// </summary>
@@ -64,6 +66,8 @@ public class CTCService : ICTCService
 
             State.Lines.Add(line);
         }
+
+        OnStateChanged(CtcStateChangeKind.TrackLayout);
     }
 
     public void ApplyBlockStatus(BlockStatusMessage message)
@@ -75,6 +79,8 @@ public class CTCService : ICTCService
         block.Signal = message.Signal;
         block.Switch = message.Switch;
         block.Crossing = message.Crossing;
+
+        OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
     }
 
     /// <summary>
@@ -96,6 +102,8 @@ public class CTCService : ICTCService
 
         train.AuthorizedSpeedMetersPerSecond = message.AuthorizedSpeedMetersPerSecond;
         train.AuthorizedAuthorityMeters = message.AuthorizedAuthorityMeters;
+
+        OnStateChanged(CtcStateChangeKind.TrainAuthorization);
     }
 
     public void ApplyTicketSales(TicketSalesMessage message)
@@ -107,6 +115,8 @@ public class CTCService : ICTCService
             ?? throw new ArgumentException($"Unknown line '{message.LineId}'.", nameof(message));
 
         line.TicketSalesPerHour = message.TicketsPerHour;
+
+        OnStateChanged(CtcStateChangeKind.TicketSales);
     }
 
     /// <summary>
@@ -116,6 +126,8 @@ public class CTCService : ICTCService
     public void SetSystemTime(TimeSpan systemTime)
     {
         State.SystemTime = systemTime;
+
+        OnStateChanged(CtcStateChangeKind.SystemTime);
     }
 
     /// <summary>
@@ -187,7 +199,12 @@ public class CTCService : ICTCService
         // request". It does NOT mean the Track Controller confirmed the block is closed;
         // that needs a future Track Controller -> CTC maintenance status message.
         block.RequestedMaintenanceState = MaintenanceState.Closed;
+
+        OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
     }
+
+    private void OnStateChanged(CtcStateChangeKind kind, string? blockId = null) =>
+        StateChanged?.Invoke(this, new CtcStateChangedEventArgs(kind, blockId));
 
     private CtcBlockState GetBlock(string blockId)
     {

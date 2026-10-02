@@ -3,7 +3,7 @@ using TrainControl.Contracts.Messages;
 namespace CTC.TestUI.Wpf.SampleData;
 
 /// <summary>
-/// Small, hand-made layout for exercising CTC.Core in the Test UI, expressed with the
+/// Small, hand-made layout the Test UI sends to the running CTC, expressed with the
 /// real shared contracts. Illustrative only; it is NOT the real Green/Red line data
 /// that the Track Model will eventually provide.
 /// </summary>

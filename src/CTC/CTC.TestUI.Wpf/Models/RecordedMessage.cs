@@ -1,42 +1,52 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using TrainControl.Common.Communication;
 
 namespace CTC.TestUI.Wpf.Models;
 
 /// <summary>
-/// One outgoing message that CTC.Core handed to the <see cref="Services.RecordingMessageSender"/>.
-/// Keeps the actual strongly typed contract object alongside a readable description.
+/// One row of the Captured CTC Outputs list: a message the running CTC actually sent over
+/// the Track Controller pipe, or a receive error.
 /// </summary>
 public sealed class RecordedMessage
 {
-    // Display-only formatting; this is not a transport format.
-    private static readonly JsonSerializerOptions DescriptionOptions = new JsonSerializerOptions
+    private RecordedMessage(int sequenceNumber, string messageType, string description)
     {
-        Converters = { new JsonStringEnumConverter() },
-    };
-
-    public RecordedMessage(int sequenceNumber, DateTime capturedAt, object payload)
-    {
-        ArgumentNullException.ThrowIfNull(payload);
-
         SequenceNumber = sequenceNumber;
-        CapturedAt = capturedAt;
-        Payload = payload;
-        MessageType = payload.GetType().Name;
-        Description = JsonSerializer.Serialize(payload, payload.GetType(), DescriptionOptions);
+        CapturedAt = DateTime.Now;
+        MessageType = messageType;
+        Description = description;
     }
 
     public int SequenceNumber { get; }
 
-    /// <summary>Wall-clock capture time (not simulation time).</summary>
+    /// <summary>Wall-clock receive time (not simulation time).</summary>
     public DateTime CapturedAt { get; }
 
-    /// <summary>Contract type name, e.g. MaintenanceRequestMessage.</summary>
+    /// <summary>Contract type name from the envelope, e.g. MaintenanceRequestMessage.</summary>
     public string MessageType { get; }
 
-    /// <summary>The actual TrainControl.Contracts object CTC.Core tried to send.</summary>
-    public object Payload { get; }
-
-    /// <summary>Readable rendering of the payload's properties.</summary>
+    /// <summary>Readable rendering of the payload, e.g. "BlockId = G12, RequestedState = Closed".</summary>
     public string Description { get; }
+
+    public static RecordedMessage FromEnvelope(int sequenceNumber, MessageEnvelope envelope) =>
+        new RecordedMessage(sequenceNumber, envelope.MessageType, Describe(envelope.Payload));
+
+    public static RecordedMessage FromError(int sequenceNumber, string error) =>
+        new RecordedMessage(sequenceNumber, "(receive error)", error);
+
+    // Display only; the payload is shown as received rather than deserialized into a contract,
+    // so an unexpected message type is still visible.
+    private static string Describe(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return payload.GetRawText();
+        }
+
+        return string.Join(", ", payload.EnumerateObject().Select(property =>
+            $"{Capitalize(property.Name)} = {(property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() : property.Value.GetRawText())}"));
+    }
+
+    private static string Capitalize(string name) =>
+        name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
 }

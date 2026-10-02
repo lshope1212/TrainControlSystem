@@ -1,26 +1,23 @@
 using System.Globalization;
 using System.Windows.Input;
-using CTC.Core.Interfaces;
 using CTC.TestUI.Wpf.Commands;
+using CTC.TestUI.Wpf.Services;
+using TrainControl.Contracts.Messages;
 
 namespace CTC.TestUI.Wpf.ViewModels;
 
 /// <summary>
-/// Simulates the shared simulation clock by pushing a manually entered time into
-/// CTCService.SetSystemTime. CTC has no clock of its own.
+/// Simulates the shared simulation clock by sending a manually entered time to the
+/// running CTC as a <see cref="SystemTimeMessage"/>. CTC has no clock of its own.
 /// </summary>
-public class SystemTimeInputViewModel : ViewModelBase
+public class SystemTimeInputViewModel : CtcInputViewModelBase
 {
-    private readonly ICTCService _ctc;
-    private readonly Action _onCtcStateChanged;
     private string _timeText = "06:00:00";
-    private string _result = string.Empty;
 
-    public SystemTimeInputViewModel(ICTCService ctc, Action onCtcStateChanged)
+    public SystemTimeInputViewModel(ICtcMessageSender sender, CommunicationStatusViewModel communicationStatus)
+        : base(sender, communicationStatus)
     {
-        _ctc = ctc;
-        _onCtcStateChanged = onCtcStateChanged;
-        ApplyCommand = new RelayCommand(_ => Apply());
+        SendCommand = new AsyncRelayCommand(_ => SendAsync());
     }
 
     /// <summary>Time of simulation day, formatted hh:mm:ss.</summary>
@@ -30,24 +27,16 @@ public class SystemTimeInputViewModel : ViewModelBase
         set => SetProperty(ref _timeText, value);
     }
 
-    public ICommand ApplyCommand { get; }
+    public ICommand SendCommand { get; }
 
-    public string Result
-    {
-        get => _result;
-        private set => SetProperty(ref _result, value);
-    }
-
-    private void Apply()
+    private Task SendAsync()
     {
         if (!TimeSpan.TryParseExact(TimeText.Trim(), @"hh\:mm\:ss", CultureInfo.InvariantCulture, out var time))
         {
             Result = "Enter a time as hh:mm:ss.";
-            return;
+            return Task.CompletedTask;
         }
 
-        _ctc.SetSystemTime(time);
-        Result = $"SetSystemTime({time:hh\\:mm\\:ss}).";
-        _onCtcStateChanged();
+        return SendToCtcAsync(new SystemTimeMessage { SystemTime = time }, $" ({time:hh\\:mm\\:ss})");
     }
 }
