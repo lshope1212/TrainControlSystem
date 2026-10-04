@@ -12,4 +12,8 @@ public static class NamedPipeNames
 
     /// <summary>Inbound endpoint of the Track Controller process.</summary>
     public const string TrackController = "TrainControl.TrackController";
+
+    public const string TrackModel = "TrainControl.TrackModel";
+    public const string TrainModel = "TrainControl.TrainModel";
+    public const string TrainController = "TrainControl.TrainController";
 }
