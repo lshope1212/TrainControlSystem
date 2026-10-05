@@ -9,8 +9,8 @@ namespace TrackModel.Core.Services;
 /// from telemetry; this service does not simulate train physics.</summary>
 public class TrackService : ITrackService
 {
-    private readonly HashSet<string> _exchanges = [];
-    private TimeSpan _salesStart;
+    private readonly HashSet<(string TrainId, string ExchangeId)> _exchanges = [];
+    private readonly Queue<(TimeSpan Time, string LineId, int Count)> _sales = [];
     public TrackLayout Layout { get; private set; } = new();
     public TimeSpan SystemTime { get; private set; }
     public int LayoutRevision { get; private set; }
@@ -33,7 +33,7 @@ public class TrackService : ITrackService
         Layout = layout;
         LayoutRevision++;
         _exchanges.Clear();
-        _salesStart = SystemTime;
+        _sales.Clear();
         Changed();
     }
 
@@ -63,7 +63,7 @@ public class TrackService : ITrackService
         Nonnegative(message.ActualSpeedMetersPerSecond, "Actual speed");
         if (message.BoardingPassengers < 0 || message.DisembarkingPassengers < 0)
             throw new ArgumentException("Passenger counts cannot be negative.");
-        var exchangeKey = message.TrainId + ":" + message.ExchangeId;
+        var exchangeKey = (message.TrainId, message.ExchangeId);
         var hasExchange = message.BoardingPassengers != 0 || message.DisembarkingPassengers != 0;
         var applyExchange = hasExchange && !_exchanges.Contains(exchangeKey);
         TrackBlock? destination = string.IsNullOrWhiteSpace(message.CurrentBlockId) ? null : RequireBlock(message.CurrentBlockId);
@@ -100,6 +100,7 @@ public class TrackService : ITrackService
                 destination.BoardingPassengers += message.BoardingPassengers;
                 destination.DisembarkingPassengers += message.DisembarkingPassengers;
                 destination.TicketsSold += message.BoardingPassengers;
+                if (message.BoardingPassengers > 0) _sales.Enqueue((SystemTime, destination.LineId, message.BoardingPassengers));
                 _exchanges.Add(exchangeKey);
             }
         }
@@ -117,8 +118,9 @@ public class TrackService : ITrackService
     public void SetSystemTime(TimeSpan time)
     {
         if (time < TimeSpan.Zero) throw new ArgumentException("System time cannot be negative.");
-        if (time < SystemTime) _salesStart = time;
+        if (time < SystemTime) _sales.Clear();
         SystemTime = time;
+        while (_sales.TryPeek(out var sale) && sale.Time <= time - TimeSpan.FromHours(1)) _sales.Dequeue();
         Changed();
     }
 
@@ -160,7 +162,8 @@ public class TrackService : ITrackService
     {
         var b = RequireBlock(blockId);
         return new() { BlockId = b.Id, TrainId = b.TrainId,
-            CommandedSpeedMetersPerSecond = b.CommandedSpeedMetersPerSecond, AuthorityMeters = b.AuthorityMeters,
+            CommandedSpeedMetersPerSecond = b.CommandedSpeedMetersPerSecond, ActualSpeedMetersPerSecond = b.ActualSpeedMetersPerSecond,
+            AuthorityMeters = b.AuthorityMeters,
             Signal = b.EffectiveSignal, Beacon = b.StationName, ElevationMeters = b.ElevationMeters,
             GradePercent = b.GradePercent, TemperatureCelsius = b.TemperatureCelsius, WaitingPassengers = b.WaitingPassengers,
             NextBlockId = b.NextBlockId };
@@ -168,10 +171,9 @@ public class TrackService : ITrackService
 
     public TicketSalesMessage CreateTicketSales(string lineId)
     {
-        var tickets = Layout.Blocks.Where(b => b.LineId == lineId).Sum(b => (double)b.TicketsSold);
-        // Average since layout load; a one-hour minimum avoids a startup rate spike.
-        var rate = tickets / Math.Max(1, (SystemTime - _salesStart).TotalHours);
-        return new() { LineId = lineId, TicketsPerHour = (int)Math.Min(int.MaxValue, Math.Round(rate)) };
+        // Throughput is the number of tickets sold during the preceding simulation hour.
+        var tickets = _sales.Where(s => s.LineId == lineId).Sum(s => (long)s.Count);
+        return new() { LineId = lineId, TicketsPerHour = (int)Math.Min(int.MaxValue, tickets) };
     }
 
     private TrackBlock RequireBlock(string id) => FindBlock(id) ?? throw new ArgumentException($"Unknown block '{id}'.");

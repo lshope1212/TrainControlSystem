@@ -14,6 +14,7 @@ public static class NamedPipeNames
     public const string TrackController = "TrainControl.TrackController";
 
     public const string TrackModel = "TrainControl.TrackModel";
+    public const string TrackModelTestUi = "TrainControl.TrackModel.TestUI";
     public const string TrainModel = "TrainControl.TrainModel";
     public const string TrainController = "TrainControl.TrainController";
 }

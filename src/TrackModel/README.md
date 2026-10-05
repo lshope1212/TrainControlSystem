@@ -1,75 +1,152 @@
-# Track Model implementation checkpoint
+# Track Model
 
-This checkpoint implements the first pass of Track Model domain state and shared
-messages. The dashboard, separate Track Model Test UI, and application named-pipe
-wiring are **not implemented yet**. The existing Track Model window is still the
-original placeholder.
+Track Model runs independently with its own control dashboard and a separate Test
+UI. The windows follow the supplied Track Model reference images.
 
-Implemented in `TrackModel.Core`:
+- `TrackModel.Core` owns layout, block/equipment state, occupancy, failures, station
+  passenger exchange, and ticket accounting. It has no WPF or pipe dependencies.
+- `TrackModel.Wpf` hosts one Core service, draws the track map, imports/exports
+  layouts, and receives/sends shared contract messages.
+- `TrackModel.TestUI.Wpf` simulates the external modules in a separate process.
+  It references Contracts/Common only. Its output panels display messages actually
+  received from the dashboard; it never hosts a copy of Track Model.
 
-- Validated layout import through `TrackFileRepository` (JSON and CSV, SI units).
-- A 36-block Blue/Green demonstration layout and optional demo state matching the
-  supplied dashboard's two trains and block 119 circuit failure.
-- Block equipment commands, train occupancy updates, failure injection, maintenance
-  state, station passenger exchange, and ticket totals.
-- Atomic rejection of invalid moves, occupied-switch changes, and invalid layouts.
-- Passenger exchange IDs to prevent duplicate accounting on retries.
-- Factories for outgoing shared-contract layout, block, train environment, and
-  ticket-sales messages. These factories do not send messages yet.
+## Run the standalone system
 
-The Test UI will act as external modules in a separate process. It must reference
-Contracts/Common only and must observe actual outgoing messages, rather than host
-its own copy of Track Model state. The dashboard will host one `TrackService` and
-marshal inbound updates to the UI thread, following the existing CTC pattern.
+Build the solution, then start **TrackModel.Wpf** and **TrackModel.TestUI.Wpf**.
 
-## Layout format
+In Visual Studio, choose the **Track Model standalone** launch profile. Alternatively,
+right-click the solution, choose **Configure Startup Projects**, select multiple
+startup projects, and set those two projects to **Start**.
 
-JSON uses a root object containing `name` and `blocks`. Each block requires `id`,
-`lineId`, and a positive `lengthMeters`. IDs are globally unique. Optional fields:
-`number`, `section`, `elevationMeters`, `gradePercent`, `speedLimitMetersPerSecond`,
-`temperatureCelsius`, `stationName`, `initialWaitingPassengers`, `hasSwitch`,
-`hasSignal`, `hasCrossing`, `connectedBlockIds`, `normalNextBlockId`, and
-`reverseNextBlockId`.
+From two PowerShell terminals at the repository root:
 
-```json
-{
-  "name": "Small layout",
-  "blocks": [
-    { "id": "B1", "lineId": "Blue", "lengthMeters": 100,
-      "hasSignal": true, "connectedBlockIds": ["B2"] },
-    { "id": "B2", "lineId": "Blue", "lengthMeters": 120,
-      "stationName": "Station A", "initialWaitingPassengers": 24,
-      "connectedBlockIds": ["B1"] }
-  ]
-}
+```powershell
+dotnet run --project src/TrackModel/TrackModel.Wpf
 ```
 
+```powershell
+dotnet run --project src/TrackModel/TrackModel.TestUI.Wpf
+```
+
+The Test UI replaces the receiving endpoints of Track Controller, Train Model,
+Train Controller, and CTC. For standalone testing, run these two applications
+alone; close CTC.TestUI and the real external modules to avoid competing listeners.
+Track Model itself can run without any receivers; its status bar reports them
+offline and its local controls continue working. After connecting/restarting a
+receiver, click **Refresh outputs** to request a fresh layout and snapshot.
+
+## Try it
+
+1. The dashboard starts with a demonstration Blue/Green layout, train 01 on block
+   104, train 02 on 116, and a track-circuit failure on 119. Click a block to inspect
+   it. Arrow keys also change the diagram selection.
+2. In Test UI, set block 104's commanded speed to 30 mph and authority to 1,500 ft.
+   Edits send automatically after a 400 ms typing pause. Both the dashboard and
+   captured Train Model outputs update, including actual speed for train telemetry.
+3. Set train 01's current block to 105. Occupancy moves automatically from 104 to
+   105 and the output selector follows the train. **Remove train** clears its occupied block.
+   Train ID commits on leaving the field; position and actual speed update live.
+4. Select block 119 and toggle its failures; each change sends automatically.
+   Failures can also be changed directly for the selected block on the dashboard.
+5. On station block 104, enter boarding/disembarking counts, then click
+   **Apply passenger exchange** once per exchange.
+   Boarding reduces waiting passengers and increments station ticket totals.
+   Ordinary speed/position edits send zero passenger counts, so they never replay
+   the entered exchange.
+6. Edit time directly, or use **Start clock** / **Step 10 sec** to drive simulation time.
+   Pause the clock before manually changing its time.
+7. All inputs and output panels fit on a single page without vertical scrolling
+   at the minimum window size of 1180 × 720. **Captured messages** opens a separate
+   window with the latest 200 received envelopes. Command edits select their block's
+   outputs; train edits select their current block. **Output block** can also be set manually.
+8. **Restore demo** resets the demonstration; importing a layout resets train,
+   equipment, failure, passenger, and ticket state for that layout.
+
+The Test UI's status bar reports acceptance or rejection from Track Model over an
+optional feedback endpoint; captured outputs show the resulting state. Invalid
+inputs leave existing state intact. Layout refreshes suppress input sends while
+WPF rebuilds dropdown selections.
+
+## Layout import/export
+
+Use **Import layout** for JSON/CSV and **Export layout** to save the current static
+layout as JSON. Small example files are in `SampleLayouts/small-track.json` and
+`SampleLayouts/small-track.csv`; they contain a switch, a station, and a crossing.
+`SampleLayouts/demo-track.json` is the full 36-block layout exported from the
+dashboard. The demonstration is illustrative, not a surveyed class track.
+
+JSON uses a root object with `name` and `blocks`. Each block requires `id`,
+`lineId`, and positive `lengthMeters`. Block IDs are globally unique. Optional fields:
+
+`number`, `section`, `elevationMeters`, `gradePercent`,
+`speedLimitMetersPerSecond`, `temperatureCelsius`, `stationName`,
+`initialWaitingPassengers`, `hasSwitch`, `hasSignal`, `hasCrossing`,
+`connectedBlockIds`, `normalNextBlockId`, and `reverseNextBlockId`.
+
 CSV uses the same property names as headers, case-insensitively; `Id`, `LineId`,
-and `LengthMeters` are required. Connections are separated with semicolons inside
-one field. Boolean values are `true`/`false`. Quoted fields are supported. Switches
-need two distinct destinations included in their connection list. Runtime train,
-equipment, failure, and passenger-total state is reset when a layout is loaded.
+and `LengthMeters` are required. Separate connection IDs with semicolons in one
+field. Booleans use `true`/`false`. Quoted fields are supported. A switch needs two
+distinct destinations included in its connection list. JSON/CSV physical values
+use SI units. Spreadsheet-specific XLSX import is not implemented.
 
-## Domain behavior
+The dashboard uses mph, feet, and Fahrenheit. Conversion occurs in the WPF layer;
+all domain state and message quantities use SI. The schematic is a presentation
+of block connectivity, rather than a geographic or distance-scaled map.
 
-- Train telemetry chooses the occupied block; this does not implement train physics
-  or automatic travel. An empty current block removes the train.
-- Circuit and power failures report occupancy as Unknown while retaining the actual
-  train position. Power failure also makes the effective signal Unknown.
-- Boarding consumes waiting passengers and adds one ticket per boarding passenger.
-  Ticket throughput uses an average since layout load with a one-hour minimum
-  window to avoid startup spikes; the final class specification may refine this.
-- Commands and message quantities use SI units. UI conversion to mph, feet, and
-  Fahrenheit remains part of the upcoming WPF work.
+## Communication
+
+The existing Common transport sends one newline-delimited JSON envelope per
+connection, with camelCase fields and enums as strings.
+
+| Receiving endpoint | Owner in standalone mode | Messages |
+| --- | --- | --- |
+| `TrainControl.TrackModel` | Dashboard | TrackModelCommandMessage, TrackModelTrainUpdateMessage, TrackModelFailureCommandMessage, SystemTimeMessage, MaintenanceRequestMessage, TrackModelSnapshotRequestMessage |
+| `TrainControl.TrackController` | Test UI | TrackModelBlockStateMessage |
+| `TrainControl.TrainModel` | Test UI | TrackModelTrainEnvironmentMessage |
+| `TrainControl.TrainController` | Test UI | TrackModelSignalMessage |
+| `TrainControl.CTC` | Test UI | TrackLayoutMessage, TicketSalesMessage |
+| `TrainControl.TrackModel.TestUI` | Test UI | TrackModelInputResultMessage (optional input feedback) |
+
+The dashboard marshals mutations onto its UI thread. Its publisher captures
+immutable output messages, coalesces pending snapshots, and sends destinations
+independently so an offline receiver does not block the other modules. A layout is
+sent to CTC after import or an explicit snapshot request. Pipe delivery is not an
+application-level acknowledgement; the optional tester feedback reports input
+acceptance separately and does not alter the real module destinations.
+
+The new Track Model contracts define the integration boundary; the other
+subsystems must implement these messages when their placeholder services are
+developed. The Test UI can then be removed without changing Track Model's domain
+logic.
+
+## Domain behavior and limits
+
+- Train telemetry supplies a current block and actual speed. Moving a train clears
+  its old block; collisions and entry to closed blocks are rejected atomically.
+  This is manual telemetry testing, not automatic train travel or train physics.
+- An occupied switch cannot be thrown. The captured next-block output follows its
+  Normal/Reverse command. Imported connectivity is validated before replacing state.
+- Broken rail, track-circuit, and power failures are independent flags. Circuit or
+  power failure reports occupancy as Unknown without deleting actual train
+  position. Power failure makes the signal Unknown. Wayside speed/authority safety
+  decisions belong to Track Controller.
+- Passenger exchanges require a station and cannot board more than its waiting
+  demand. An ExchangeId makes retries idempotent. One ticket is counted per boarding
+  passenger. Station totals persist until layout reset; CTC throughput counts
+  tickets in the preceding simulation hour. Rewinding time resets that hourly ledger.
+- Passenger demand starts from the layout's initial value; automatic demand
+  generation and real class track-file formats can be added when specified.
+- System time comes from shared SystemTimeMessage inputs; Track Model does not own
+  another independent clock. The Test UI's clock provides those messages for testing.
 
 ## Validation
-
-From the repository root:
 
 ```powershell
 dotnet build TrainControlSystem.sln
 dotnet test TrainControlSystem.sln --no-build
 ```
 
-The checkpoint adds ten domain tests for train moves, collision rejection, failure
-reporting, idempotent passenger exchange, switch behavior, validation, and demo state.
+Tests cover train movement/removal, collision and maintenance rejection, failures,
+passenger retry accounting, switch behavior, invalid layouts, JSON/CSV import,
+runtime-state exclusion from exported layouts, and ticket throughput.

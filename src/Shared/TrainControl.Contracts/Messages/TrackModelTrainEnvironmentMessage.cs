@@ -8,6 +8,7 @@ public sealed class TrackModelTrainEnvironmentMessage
     public string BlockId { get; set; } = string.Empty;
     public string TrainId { get; set; } = string.Empty;
     public double CommandedSpeedMetersPerSecond { get; set; }
+    public double ActualSpeedMetersPerSecond { get; set; }
     public double AuthorityMeters { get; set; }
     public SignalState Signal { get; set; }
     public string Beacon { get; set; } = string.Empty;

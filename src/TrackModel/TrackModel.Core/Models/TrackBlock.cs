@@ -5,7 +5,7 @@ namespace TrackModel.Core.Models;
 public class TrackBlock
 {
     public string Id { get; set; } = string.Empty;
-    public string LineId { get; set; } = "Blue";
+    public string LineId { get; set; } = string.Empty;
     public string Section { get; set; } = "Main";
     public int Number { get; set; }
     public double LengthMeters { get; set; }
@@ -41,7 +41,7 @@ public class TrackBlock
     [JsonIgnore] public bool HasFailure => BrokenRail || TrackCircuitFailure || PowerFailure;
     [JsonIgnore] public OccupancyState ReportedOccupancy => PowerFailure || TrackCircuitFailure
         ? OccupancyState.Unknown : IsOccupied ? OccupancyState.Occupied : OccupancyState.Clear;
-    [JsonIgnore] public SignalState EffectiveSignal => PowerFailure ? SignalState.Unknown : Signal;
+    [JsonIgnore] public SignalState EffectiveSignal => !HasSignal || PowerFailure ? SignalState.Unknown : Signal;
     [JsonIgnore] public string NextBlockId => HasSwitch
         ? Switch == SwitchPosition.Reverse ? ReverseNextBlockId : NormalNextBlockId
         : ConnectedBlockIds.LastOrDefault() ?? string.Empty;

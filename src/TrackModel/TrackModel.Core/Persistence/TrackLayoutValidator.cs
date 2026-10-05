@@ -13,6 +13,9 @@ public static class TrackLayoutValidator
         {
             if (b is null || string.IsNullOrWhiteSpace(b.Id) || string.IsNullOrWhiteSpace(b.LineId) || !ids.Add(b.Id))
                 throw new ArgumentException("Block IDs must be nonempty and unique across all lines; each block needs a LineId.");
+            if (string.IsNullOrWhiteSpace(b.Section) || b.StationName is null
+                || b.NormalNextBlockId is null || b.ReverseNextBlockId is null || b.Number < 0)
+                throw new ArgumentException($"Block {b.Id} has invalid section, station, or route metadata.");
             if (!double.IsFinite(b.LengthMeters) || b.LengthMeters <= 0
                 || !double.IsFinite(b.SpeedLimitMetersPerSecond) || b.SpeedLimitMetersPerSecond < 0
                 || !double.IsFinite(b.ElevationMeters) || !double.IsFinite(b.GradePercent)
