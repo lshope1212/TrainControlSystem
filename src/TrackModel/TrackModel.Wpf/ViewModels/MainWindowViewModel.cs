@@ -16,7 +16,7 @@ public class MainWindowViewModel : ViewModelBase
     private int _layoutRevision = -1;
     private LineOption? _selectedLine;
     private BlockViewModel? _selectedBlock;
-    private string _status = "Demo layout loaded. Select a block or import a layout.";
+    private string _status = "Ready";
     private string _delivery = "Waiting for external modules.";
     private int _diagramRevision;
     public MainWindowViewModel(ITrackService track)
@@ -103,7 +103,7 @@ public class MainWindowViewModel : ViewModelBase
         try
         {
             _track.LoadLayout(new TrackFileRepository().Load(dialog.FileName));
-            Status = "Imported " + Path.GetFileName(dialog.FileName) + ". Train and failure state reset.";
+            Status = "Imported " + Path.GetFileName(dialog.FileName);
         }
         catch (Exception ex) { Status = "Import failed: " + ex.Message; }
     }
@@ -123,6 +123,6 @@ public class MainWindowViewModel : ViewModelBase
 
     private void LoadDemo()
     {
-        if (_track is TrackService service) { SampleTrackLayout.LoadDemo(service); Status = "Demo restored: trains 01/02, circuit failure on 119."; }
+        if (_track is TrackService service) { SampleTrackLayout.LoadDemo(service); Status = "Demo restored"; }
     }
 }

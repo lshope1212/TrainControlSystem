@@ -26,7 +26,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private bool _clockBusy;
     private string _blockId = "104", _currentBlock = "104", _trainId = "01";
     private CapturedBlockViewModel? _selectedOutput;
-    private string _status = "Start Track Model, then refresh outputs.";
+    private string _status = "Disconnected";
     private string _speed = "25", _authority = "1200", _actualSpeed = "22", _boarding = "0", _disembarking = "0";
     private string _time = "09:42:18", _multiplier = "1";
     private SwitchPosition _switch = SwitchPosition.Normal;
@@ -174,7 +174,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             Status = "Sending input to Track Model…";
             await _connection.SendAsync(message);
         }
-        catch (TimeoutException) { Status = "Track Model is offline. Start its dashboard, then retry."; }
+        catch (TimeoutException) { Status = "Track Model offline"; }
         catch (Exception ex) { Status = "Unable to send: " + ex.Message; }
     }
 
@@ -237,7 +237,7 @@ public sealed class MainWindowViewModel : ViewModelBase
                     _ticketRates[sales.LineId] = sales.TicketsPerHour; OnPropertyChanged(nameof(TicketSales)); break;
                 case nameof(TrackModelInputResultMessage):
                     var result = MessageSerializer.DeserializePayload<TrackModelInputResultMessage>(envelope);
-                    Status = (result.Accepted ? "Accepted: " : "Rejected: ") + result.Detail;
+                    Status = result.Accepted ? "Input accepted" : "Rejected: " + result.Detail;
                     break;
                 default: break; // Keep unfamiliar contract messages visible in the log.
             }

@@ -6,7 +6,7 @@
  <DockPanel Margin="12">
   <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
    <Button Content="Clear log" Command="{Binding ClearLogCommand}" Margin="0,0,12,0"/>
-   <TextBlock Text="Latest 200 messages received from Track Model"/>
+
   </StackPanel>
   <DataGrid ItemsSource="{Binding Messages}">
    <DataGrid.Columns>

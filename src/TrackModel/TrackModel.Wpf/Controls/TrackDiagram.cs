@@ -22,9 +22,9 @@ public sealed class TrackDiagram : FrameworkElement
     public BlockViewModel? SelectedBlock { get => (BlockViewModel?)GetValue(SelectedBlockProperty); set => SetValue(SelectedBlockProperty, value); }
     public int Revision { get => (int)GetValue(RevisionProperty); set => SetValue(RevisionProperty, value); }
     private readonly Dictionary<BlockViewModel, Rect> _hits = [];
-    private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(20, 38, 62));
-    private static readonly Brush Muted = new SolidColorBrush(Color.FromRgb(96, 118, 147));
-    private static readonly Pen TrackPen = new(Muted, 2);
+    private static readonly Brush Ink = Brushes.Black;
+    private static readonly Brush Muted = Brushes.Black;
+    private static readonly Pen TrackPen = new(new SolidColorBrush(Color.FromRgb(96, 118, 147)), 2);
 
     public TrackDiagram() { Focusable = true; Cursor = Cursors.Hand; }
     protected override void OnRender(DrawingContext dc)
@@ -33,7 +33,7 @@ public sealed class TrackDiagram : FrameworkElement
         dc.DrawRectangle(Brushes.White, null, new Rect(RenderSize));
         var blocks = Blocks?.Cast<BlockViewModel>().ToList() ?? [];
         _hits.Clear();
-        if (blocks.Count == 0) { Label(dc, "Import a layout to see the track.", new(40, 60), 20); return; }
+        if (blocks.Count == 0) { Label(dc, "No track loaded", new(40, 60), 22); return; }
         var points = Place(blocks);
         var edges = new HashSet<string>();
         foreach (var b in blocks)
@@ -67,7 +67,7 @@ public sealed class TrackDiagram : FrameworkElement
             _hits[b] = new Rect(p.X - 37, p.Y - 32, 74, 70);
             dc.DrawRoundedRectangle(b.StateBrush, new Pen(b == SelectedBlock ? Brushes.DodgerBlue : Brushes.White, b == SelectedBlock ? 3 : 1), r, 2, 2);
             if (b.HasFailure) Label(dc, "×", new(p.X - 8, p.Y - 17), 24, Brushes.White);
-            Label(dc, b.Id, new(p.X - 15, p.Y + 20), 15, Muted);
+            Label(dc, b.Id, new(p.X - 15, p.Y + 20), 18, Muted);
             if (b.HasSwitch)
             {
                 var diamond = new StreamGeometry();
@@ -77,12 +77,12 @@ public sealed class TrackDiagram : FrameworkElement
                     ctx.PolyLineTo(new[] { new Point(p.X - 30, p.Y - 9), new Point(p.X - 24, p.Y - 3), new Point(p.X - 30, p.Y + 3) }, true, false);
                 }
                 dc.DrawGeometry(Brushes.DodgerBlue, null, diamond);
-                Label(dc, b.Switch, new(p.X - 32, p.Y - 36), 11, Muted);
+                Label(dc, b.Switch, new(p.X - 32, p.Y - 36), 14, Muted);
             }
             if (b.Station.Length > 0)
             {
                 dc.DrawLine(new Pen(Brushes.SlateGray, 5), new(p.X - 35, p.Y - 52), new(p.X + 35, p.Y - 52));
-                Label(dc, b.Station, new(p.X - 40, p.Y - 78), 15);
+                Label(dc, b.Station, new(p.X - 40, p.Y - 78), 18);
             }
             if (b.HasSignal)
             {
@@ -90,13 +90,12 @@ public sealed class TrackDiagram : FrameworkElement
                     SignalState.Yellow => Brushes.DarkOrange, _ => Brushes.SlateGray };
                 dc.DrawEllipse(color, null, new(p.X + 36, p.Y - 22), 4, 7);
             }
-            if (b.HasCrossing) Label(dc, b.Crossing, new(p.X - 32, p.Y - 106), 12, Muted);
-            if (b.IsOccupied) Label(dc, "Train " + b.Train + " →", new(p.X - 34, p.Y + 45), 15);
-            if (b.HasFailure) Label(dc, b.FailureSummary, new(p.X - 40, p.Y + 65), 12, Brushes.DarkOrange);
+            if (b.HasCrossing) Label(dc, b.Crossing, new(p.X - 32, p.Y - 106), 15, Muted);
+            if (b.IsOccupied) Label(dc, "Train " + b.Train + " →", new(p.X - 34, p.Y + 45), 18);
+            if (b.HasFailure) Label(dc, b.FailureSummary, new(p.X - 40, p.Y + 65), 15, Brushes.DarkOrange);
         }
-        Label(dc, "Click a block to inspect it  •  Arrow keys change selection", new(35, 675), 14, Muted);
-        if (blocks.Any(b => b.Section == "Bypass")) Label(dc, "Bypass", new(520, 135), 16, Muted);
-        if (blocks.Any(b => b.Section == "Yard")) Label(dc, "Yard", new(40, 350), 16, Muted);
+        if (blocks.Any(b => b.Section == "Bypass")) Label(dc, "Bypass", new(520, 135), 19, Muted);
+        if (blocks.Any(b => b.Section == "Yard")) Label(dc, "Yard", new(40, 350), 19, Muted);
     }
 
     private static Dictionary<BlockViewModel, Point> Place(List<BlockViewModel> blocks)
@@ -133,7 +132,8 @@ public sealed class TrackDiagram : FrameworkElement
 
     private void Label(DrawingContext dc, string text, Point p, double size, Brush? brush = null) =>
         dc.DrawText(new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), size, brush ?? Ink, VisualTreeHelper.GetDpi(this).PixelsPerDip), p);
+            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+            size, brush ?? Ink, VisualTreeHelper.GetDpi(this).PixelsPerDip), p);
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {

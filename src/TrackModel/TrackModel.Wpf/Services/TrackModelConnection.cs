@@ -72,13 +72,13 @@ public sealed class TrackModelConnection
                         RequestSnapshot(); break;
                     default: throw new ArgumentException("Unsupported message type: " + envelope.MessageType);
                 }
-                StatusReported?.Invoke(this, "Accepted " + envelope.MessageType + " at " + DateTime.Now.ToString("HH:mm:ss"));
+                StatusReported?.Invoke(this, "Input accepted");
                 result.Accepted = true;
-                result.Detail = "Input accepted. Outputs are updating.";
+                result.Detail = "Input accepted.";
             }
             catch (Exception ex)
             {
-                StatusReported?.Invoke(this, "Rejected " + envelope.MessageType + ": " + ex.Message);
+                StatusReported?.Invoke(this, "Rejected: " + ex.Message);
                 result.Detail = ex.Message;
             }
         });
