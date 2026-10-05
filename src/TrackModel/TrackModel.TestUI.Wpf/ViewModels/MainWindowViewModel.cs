@@ -21,7 +21,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly HashSet<InputGroup> _pendingInputs = [];
     private bool _suppressInputs, _sendingInputs, _stopped;
     private Guid _layoutSnapshotId;
-    private bool _layoutInputsPending;
+    private bool _layoutInputsPending, _trainInputsPending;
     private enum InputGroup { Controller, Train, Failures, Time }
     private bool _clockBusy;
     private string _blockId = "104", _currentBlock = "104", _trainId = "01";
@@ -32,6 +32,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private SwitchPosition _switch = SwitchPosition.Normal;
     private SignalState _signal = SignalState.Green;
     private CrossingState _crossing = CrossingState.Open;
+    private OccupancyState _trainOccupancy = OccupancyState.Occupied;
     private bool _brokenRail, _circuit, _power;
     private bool _isClockRunning;
     public MainWindowViewModel(ExternalModuleSimulator connection)
@@ -40,8 +41,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _connection.MessageReceived += Receive;
         _connection.ErrorReported += error => Status = "Capture error: " + error;
         SendCommandsCommand = new AsyncRelayCommand(SendCommandsAsync);
-        SendTrainCommand = new AsyncRelayCommand(() => SendTrainAsync(false, exchange: true));
-        RemoveTrainCommand = new AsyncRelayCommand(() => SendTrainAsync(true));
+        SendTrainCommand = new AsyncRelayCommand(() => SendTrainAsync(exchange: true));
         SendFailuresCommand = new AsyncRelayCommand(SendFailuresAsync);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         SendTimeCommand = new AsyncRelayCommand(SendTimeAsync);
@@ -60,9 +60,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     public SwitchPosition[] SwitchOptions { get; } = [SwitchPosition.Normal, SwitchPosition.Reverse];
     public SignalState[] SignalOptions { get; } = [SignalState.Green, SignalState.Yellow, SignalState.Red];
     public CrossingState[] CrossingOptions { get; } = [CrossingState.Open, CrossingState.Closed];
+    public OccupancyState[] TrainOccupancyOptions { get; } = [OccupancyState.Occupied, OccupancyState.Clear];
     public ICommand SendCommandsCommand { get; }
     public ICommand SendTrainCommand { get; }
-    public ICommand RemoveTrainCommand { get; }
     public ICommand SendFailuresCommand { get; }
     public ICommand RefreshCommand { get; }
     public ICommand SendTimeCommand { get; }
@@ -98,6 +98,15 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
     public string TrainId { get => _trainId; set { if (SetProperty(ref _trainId, value)) QueueInput(InputGroup.Train); } }
+    public OccupancyState TrainOccupancy
+    {
+        get => _trainOccupancy;
+        set
+        {
+            if (value is not (OccupancyState.Occupied or OccupancyState.Clear)) return;
+            if (SetProperty(ref _trainOccupancy, value)) QueueInput(InputGroup.Train);
+        }
+    }
     public TrackBlockDefinition? SelectedCommandBlock
     {
         get => Blocks.FirstOrDefault(b => b.BlockId == BlockId);
@@ -146,8 +155,9 @@ public sealed class MainWindowViewModel : ViewModelBase
         AuthorityMeters = Number(Authority, "Authority") * 0.3048, Switch = Switch, Signal = Signal, Crossing = Crossing
     });
 
-    private async Task SendTrainAsync(bool remove, bool exchange = false)
+    private async Task SendTrainAsync(bool exchange = false)
     {
+        var remove = TrainOccupancy == OccupancyState.Clear;
         _pendingInputs.Remove(InputGroup.Train);
         SelectOutput(CurrentBlock);
         await SendSafely(() => new TrackModelTrainUpdateMessage
@@ -192,6 +202,7 @@ public sealed class MainWindowViewModel : ViewModelBase
                     var current = CurrentBlock;
                     _layoutSnapshotId = layout.SnapshotId;
                     _layoutInputsPending = true;
+                    _trainInputsPending = true;
                     _pendingInputs.Clear(); _inputDebounce.Stop();
                     Blocks.Clear(); _lineByBlock.Clear();
                     var ids = new HashSet<string>();
@@ -286,12 +297,27 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private void TrySynchronizeLayoutInputs()
     {
-        if (!_layoutInputsPending) return;
-        var captured = _captured.GetValueOrDefault(BlockId);
-        if (_layoutSnapshotId != Guid.Empty &&
-            (captured?.State?.SnapshotId != _layoutSnapshotId || captured.Environment?.SnapshotId != _layoutSnapshotId)) return;
-        LoadCapturedInputs();
-        _layoutInputsPending = false;
+        if (_layoutInputsPending)
+        {
+            var captured = _captured.GetValueOrDefault(BlockId);
+            if (_layoutSnapshotId == Guid.Empty ||
+                (captured?.State?.SnapshotId == _layoutSnapshotId && captured.Environment?.SnapshotId == _layoutSnapshotId))
+            {
+                LoadCapturedInputs();
+                _layoutInputsPending = false;
+            }
+        }
+        if (_trainInputsPending)
+        {
+            var environment = _captured.GetValueOrDefault(CurrentBlock)?.Environment;
+            if (environment is null || environment.SnapshotId != _layoutSnapshotId) return;
+            // Physical occupancy comes from the train, even when a circuit failure
+            // makes the wayside's reported occupancy Unknown.
+            TrainOccupancy = environment.TrainId.Length > 0 ? OccupancyState.Occupied : OccupancyState.Clear;
+            if (environment.TrainId.Length > 0) TrainId = environment.TrainId;
+            ActualSpeed = (environment.ActualSpeedMetersPerSecond / 0.44704).ToString("0.###", CultureInfo.CurrentCulture);
+            _trainInputsPending = false;
+        }
     }
 
     private void QueueInput(InputGroup group)
@@ -299,6 +325,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         if (_suppressInputs || _stopped) return;
         // An edit made while the fresh snapshot is arriving belongs to the user.
         if (group is InputGroup.Controller or InputGroup.Failures) _layoutInputsPending = false;
+        if (group == InputGroup.Train) _trainInputsPending = false;
         if (group is InputGroup.Controller or InputGroup.Failures) SelectOutput(BlockId);
         _pendingInputs.Add(group);
         _inputDebounce.Stop();
@@ -318,7 +345,7 @@ public sealed class MainWindowViewModel : ViewModelBase
                 switch (group)
                 {
                     case InputGroup.Controller: await SendCommandsAsync(); break;
-                    case InputGroup.Train: await SendTrainAsync(false); break;
+                    case InputGroup.Train: await SendTrainAsync(); break;
                     case InputGroup.Failures: await SendFailuresAsync(); break;
                     case InputGroup.Time: await SendTimeAsync(); break;
                 }

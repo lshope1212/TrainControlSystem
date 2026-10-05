@@ -45,7 +45,9 @@ receiver, click **Refresh outputs** to request a fresh layout and snapshot.
    Edits send automatically after a 400 ms typing pause. Both the dashboard and
    captured Train Model outputs update, including actual speed for train telemetry.
 3. Set train 01's current block to 105. Occupancy moves automatically from 104 to
-   105 and the output selector follows the train. **Remove train** clears its occupied block.
+   105 and the output selector follows the train. Under **From Train Model**, set
+   **Occupancy** to **Clear** to remove that train, or **Occupied** to place it on
+   the current block. Speed edits while Clear leave the train off the track.
    Train ID commits on leaving the field; position and actual speed update live.
 4. Select block 119 and toggle its failures; each change sends automatically.
    Failures can also be changed directly for the selected block on the dashboard.
@@ -70,8 +72,10 @@ WPF rebuilds dropdown selections.
 
 Layout, block-state, and train-environment messages carry a shared `SnapshotId`.
 After import, demo reset, or refresh, the Test UI waits for matching state and
-environment messages before reloading the controller inputs. This keeps a stale
-speed or equipment command from being carried into the newly loaded layout.
+environment messages before reloading controller inputs and the current block's
+train occupancy and speed. This keeps stale inputs from being carried into the
+newly loaded layout. Reported occupancy can be Unknown during circuit or power
+failure; the train input remains Occupied or Clear according to physical occupancy.
 
 ## Layout import/export
 

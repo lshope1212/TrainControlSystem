@@ -46,13 +46,15 @@
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="34"/><RowDefinition Height="34"/><RowDefinition Height="34"/><RowDefinition Height="34"/><RowDefinition Height="34"/></Grid.RowDefinitions>
 <TextBlock Grid.Row="0" Text="Train ID" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="0" Grid.Column="1" Margin="0,2,0,2" Text="{Binding TrainId, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Train ID" />
 <TextBlock Grid.Row="1" Text="Current block" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding Blocks}" DisplayMemberPath="BlockId" SelectedItem="{Binding SelectedTrainBlock}" AutomationProperties.Name="Train current block" />
-<TextBlock Grid.Row="2" Text="Actual speed (mph)" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,2" Text="{Binding ActualSpeed, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Actual speed mph" />
-<TextBlock Grid.Row="3" Text="Boarding" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,2" Text="{Binding Boarding, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Boarding passengers" />
-<TextBlock Grid.Row="4" Text="Disembarking" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="4" Grid.Column="1" Margin="0,2,0,2" Text="{Binding Disembarking, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Disembarking passengers" />
+<TextBlock Grid.Row="2" Text="Occupancy" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding TrainOccupancyOptions}" SelectedItem="{Binding TrainOccupancy}" AutomationProperties.Name="Train occupancy" />
+<TextBlock Grid.Row="3" Text="Actual speed (mph)" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,2" Text="{Binding ActualSpeed, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Actual speed mph" />
+<Grid Grid.Row="4" Grid.ColumnSpan="2"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+ <TextBlock Text="Boarding" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/><TextBox Grid.Column="1" Margin="0,2,8,2" Text="{Binding Boarding, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Boarding passengers" />
+ <TextBlock Grid.Column="2" Text="Disembarking" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/><TextBox Grid.Column="3" Margin="0,2,0,2" Text="{Binding Disembarking, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Disembarking passengers" />
+</Grid>
 </Grid>
     <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
      <Button Content="Apply passenger exchange" Command="{Binding SendTrainCommand}" AutomationProperties.Name="Apply passenger exchange" Margin="0,0,6,0"/>
-     <Button Content="Remove train" Command="{Binding RemoveTrainCommand}" AutomationProperties.Name="Remove train"/>
     </StackPanel>
 
    </StackPanel></Border>

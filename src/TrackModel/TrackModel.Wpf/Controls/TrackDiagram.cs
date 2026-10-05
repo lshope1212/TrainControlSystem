@@ -35,6 +35,7 @@ public sealed class TrackDiagram : FrameworkElement
         _hits.Clear();
         if (blocks.Count == 0) { Label(dc, "No track loaded", new(40, 60), 22); return; }
         var points = Place(blocks);
+        var hasReturn = blocks.Any(b => b.Section == "Return");
         var edges = new HashSet<string>();
         foreach (var b in blocks)
         {
@@ -45,19 +46,7 @@ public sealed class TrackDiagram : FrameworkElement
                 var key = string.CompareOrdinal(b.Id, id) < 0 ? b.Id + ":" + id : id + ":" + b.Id;
                 if (!edges.Add(key)) continue;
                 var a = points[b]; var z = points[target];
-                // Route the ends of the loop around the main and return rows.
-                if (Math.Abs(a.Y - z.Y) > 150 && Math.Abs(a.X - z.X) < 10)
-                {
-                    var outside = a.X > 600 ? a.X + 70 : a.X - 70;
-                    var geometry = new StreamGeometry();
-                    using (var ctx = geometry.Open())
-                    {
-                        ctx.BeginFigure(a, false, false);
-                        ctx.BezierTo(new(outside, a.Y), new(outside, z.Y), z, true, false);
-                    }
-                    dc.DrawGeometry(null, TrackPen, geometry);
-                }
-                else dc.DrawLine(TrackPen, a, z);
+                DrawConnection(dc, b, target, a, z, hasReturn);
             }
         }
         foreach (var b in blocks)
@@ -77,7 +66,7 @@ public sealed class TrackDiagram : FrameworkElement
                     ctx.PolyLineTo(new[] { new Point(p.X - 30, p.Y - 9), new Point(p.X - 24, p.Y - 3), new Point(p.X - 30, p.Y + 3) }, true, false);
                 }
                 dc.DrawGeometry(Brushes.DodgerBlue, null, diamond);
-                Label(dc, b.Switch, new(p.X - 32, p.Y - 36), 14, Muted);
+                Label(dc, b.Switch, new(p.X - 32, p.Y + (b.IsOccupied || b.HasFailure ? 90 : 45)), 14, Muted);
             }
             if (b.Station.Length > 0)
             {
@@ -90,12 +79,72 @@ public sealed class TrackDiagram : FrameworkElement
                     SignalState.Yellow => Brushes.DarkOrange, _ => Brushes.SlateGray };
                 dc.DrawEllipse(color, null, new(p.X + 36, p.Y - 22), 4, 7);
             }
-            if (b.HasCrossing) Label(dc, b.Crossing, new(p.X - 32, p.Y - 106), 15, Muted);
-            if (b.IsOccupied) Label(dc, "Train " + b.Train + " →", new(p.X - 34, p.Y + 45), 18);
-            if (b.HasFailure) Label(dc, b.FailureSummary, new(p.X - 40, p.Y + 65), 15, Brushes.DarkOrange);
+            if (b.HasCrossing) Label(dc, b.Crossing, new(p.X - 32, p.Y + (b.IsOccupied || b.HasFailure ? 90 : 45)), 15, Muted);
+            if (b.IsOccupied) Label(dc, "Train " + b.Train + " →", new(p.X - 34, p.Y + 45), 18,
+                maxWidth: b.Section == "Yard" ? 120 : null);
+            if (b.HasFailure) Label(dc, b.FailureSummary, new(p.X - 40, p.Y + 65), 15, Brushes.DarkOrange,
+                maxWidth: b.Section == "Yard" ? 130 : null);
         }
-        if (blocks.Any(b => b.Section == "Bypass")) Label(dc, "Bypass", new(520, 135), 19, Muted);
-        if (blocks.Any(b => b.Section == "Yard")) Label(dc, "Yard", new(40, 350), 19, Muted);
+        if (blocks.Any(b => b.Section == "Bypass")) Label(dc, "Bypass", new(600, 135), 19, Muted);
+        if (blocks.Any(b => b.Section == "Yard")) Label(dc, "Yard", new(70, 75), 19, Muted);
+    }
+
+    private static void DrawConnection(DrawingContext dc, BlockViewModel source, BlockViewModel target,
+        Point a, Point z, bool hasReturn)
+    {
+        if (!hasReturn) { dc.DrawLine(TrackPen, a, z); return; }
+        var geometry = new StreamGeometry();
+        using (var ctx = geometry.Open())
+        {
+            if ((source.Section == "Main" && target.Section == "Return" ||
+                 source.Section == "Return" && target.Section == "Main") && Math.Abs(a.X - z.X) < 10)
+            {
+                // Equal offsets from the block side ports give mirrored loop ends.
+                var direction = a.X > 600 ? 1 : -1;
+                a.X += direction * 31; z.X += direction * 31;
+                var outside = a.X + direction * 90;
+                ctx.BeginFigure(a, false, false);
+                ctx.BezierTo(new(outside, a.Y), new(outside, z.Y), z, true, false);
+            }
+            else if (source.Section == "Main" && target.Section == "Bypass" ||
+                     source.Section == "Bypass" && target.Section == "Main")
+            {
+                var main = source.Section == "Main" ? a : z;
+                var bypass = source.Section == "Bypass" ? a : z;
+                var direction = bypass.X > main.X ? 1 : -1;
+                const double radius = 40, control = radius * 0.5522847498;
+                ctx.BeginFigure(new(main.X, main.Y - 14), false, false);
+                ctx.LineTo(new(main.X, bypass.Y + radius), true, false);
+                ctx.BezierTo(new(main.X, bypass.Y + radius - control),
+                    new(main.X + direction * (radius - control), bypass.Y),
+                    new(main.X + direction * radius, bypass.Y), true, false);
+                ctx.LineTo(new(bypass.X - direction * 31, bypass.Y), true, false);
+            }
+            else if (source.Section == "Main" && target.Section == "Yard" ||
+                     source.Section == "Yard" && target.Section == "Main")
+            {
+                var main = source.Section == "Main" ? a : z;
+                var yard = source.Section == "Yard" ? a : z;
+                main.X -= 31; yard.X -= 31;
+                var outside = Math.Min(main.X, yard.X) - 30;
+                ctx.BeginFigure(main, false, false);
+                ctx.BezierTo(new(outside, main.Y), new(outside, yard.Y), yard, true, false);
+            }
+            else if (source.Section == "Yard" && target.Section == "Yard")
+            {
+                if (a.X > z.X) (a, z) = (z, a);
+                a.X += 31; z.X -= 31;
+                var middle = (a.X + z.X) / 2;
+                ctx.BeginFigure(a, false, false);
+                ctx.BezierTo(new(middle, a.Y), new(middle, z.Y), z, true, false);
+            }
+            else
+            {
+                ctx.BeginFigure(a, false, false);
+                ctx.LineTo(z, true, false);
+            }
+        }
+        dc.DrawGeometry(null, TrackPen, geometry);
     }
 
     private static Dictionary<BlockViewModel, Point> Place(List<BlockViewModel> blocks)
@@ -109,9 +158,9 @@ public sealed class TrackDiagram : FrameworkElement
                 var list = section.OrderBy(b => b.Number).ToList();
                 for (var i = 0; i < list.Count; i++)
                 {
-                    var x = section.Key switch { "Bypass" => 395 + i * 85, "Yard" => i == 2 ? 145 : 65,
+                    var x = section.Key switch { "Bypass" => 420 + i * (list.Count > 1 ? 425d / (list.Count - 1) : 0), "Yard" => i == 0 ? 105 : 245,
                         "Return" => 930 - i * 85, _ => 165 + i * 85 };
-                    var y = section.Key switch { "Bypass" => 190, "Yard" => i == 0 ? 405 : 465, "Return" => 550, _ => 320 };
+                    var y = section.Key switch { "Bypass" => 190, "Yard" => i == 0 ? 150 : 100 + (i - 1) * 100, "Return" => 550, _ => 320 };
                     result[list[i]] = new(x, y);
                 }
             }
@@ -130,10 +179,19 @@ public sealed class TrackDiagram : FrameworkElement
         return result;
     }
 
-    private void Label(DrawingContext dc, string text, Point p, double size, Brush? brush = null) =>
-        dc.DrawText(new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+    private void Label(DrawingContext dc, string text, Point p, double size, Brush? brush = null, double? maxWidth = null)
+    {
+        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-            size, brush ?? Ink, VisualTreeHelper.GetDpi(this).PixelsPerDip), p);
+            size, brush ?? Ink, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        if (maxWidth is double width)
+        {
+            label.MaxTextWidth = width;
+            label.MaxLineCount = 1;
+            label.Trimming = TextTrimming.CharacterEllipsis;
+        }
+        dc.DrawText(label, p);
+    }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
