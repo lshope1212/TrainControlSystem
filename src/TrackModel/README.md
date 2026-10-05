@@ -68,6 +68,11 @@ optional feedback endpoint; captured outputs show the resulting state. Invalid
 inputs leave existing state intact. Layout refreshes suppress input sends while
 WPF rebuilds dropdown selections.
 
+Layout, block-state, and train-environment messages carry a shared `SnapshotId`.
+After import, demo reset, or refresh, the Test UI waits for matching state and
+environment messages before reloading the controller inputs. This keeps a stale
+speed or equipment command from being carried into the newly loaded layout.
+
 ## Layout import/export
 
 Use **Import layout** for JSON/CSV and **Export layout** to save the current static

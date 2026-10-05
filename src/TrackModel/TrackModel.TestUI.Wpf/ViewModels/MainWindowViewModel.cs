@@ -20,6 +20,8 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly DispatcherTimer _inputDebounce;
     private readonly HashSet<InputGroup> _pendingInputs = [];
     private bool _suppressInputs, _sendingInputs, _stopped;
+    private Guid _layoutSnapshotId;
+    private bool _layoutInputsPending;
     private enum InputGroup { Controller, Train, Failures, Time }
     private bool _clockBusy;
     private string _blockId = "104", _currentBlock = "104", _trainId = "01";
@@ -73,7 +75,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         get => _blockId;
         set
         {
-            // WPF temporarily clears SelectedValue when the layout collection is rebuilt.
+            // WPF temporarily clears selections when the layout collection is rebuilt.
             if (string.IsNullOrWhiteSpace(value)) return;
             if (!SetProperty(ref _blockId, value)) return;
             _pendingInputs.Remove(InputGroup.Controller);
@@ -188,6 +190,8 @@ public sealed class MainWindowViewModel : ViewModelBase
                     var layout = MessageSerializer.DeserializePayload<TrackLayoutMessage>(envelope);
                     var selection = BlockId;
                     var current = CurrentBlock;
+                    _layoutSnapshotId = layout.SnapshotId;
+                    _layoutInputsPending = true;
                     _pendingInputs.Clear(); _inputDebounce.Stop();
                     Blocks.Clear(); _lineByBlock.Clear();
                     var ids = new HashSet<string>();
@@ -209,19 +213,21 @@ public sealed class MainWindowViewModel : ViewModelBase
                     }));
                     SelectOutput(BlockId);
                     OnPropertyChanged(nameof(HasSwitch)); OnPropertyChanged(nameof(HasSignal)); OnPropertyChanged(nameof(HasCrossing)); OnPropertyChanged(nameof(TicketSales));
-                    LoadCapturedInputs();
+                    TrySynchronizeLayoutInputs();
                     break;
                 case nameof(TrackModelBlockStateMessage):
                     var state = MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(envelope);
                     var initialState = GetCaptured(state.BlockId).State is null;
                     GetCaptured(state.BlockId).Apply(state);
-                    if (initialState && state.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
+                    TrySynchronizeLayoutInputs();
+                    if (_layoutSnapshotId == Guid.Empty && initialState && state.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
                     break;
                 case nameof(TrackModelTrainEnvironmentMessage):
                     var environment = MessageSerializer.DeserializePayload<TrackModelTrainEnvironmentMessage>(envelope);
                     var initialEnvironment = GetCaptured(environment.BlockId).Environment is null;
                     GetCaptured(environment.BlockId).Apply(environment);
-                    if (initialEnvironment && environment.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
+                    TrySynchronizeLayoutInputs();
+                    if (_layoutSnapshotId == Guid.Empty && initialEnvironment && environment.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
                     break;
                 case nameof(TrackModelSignalMessage):
                     var signal = MessageSerializer.DeserializePayload<TrackModelSignalMessage>(envelope);
@@ -278,9 +284,21 @@ public sealed class MainWindowViewModel : ViewModelBase
         finally { _suppressInputs = wasSuppressed; }
     }
 
+    private void TrySynchronizeLayoutInputs()
+    {
+        if (!_layoutInputsPending) return;
+        var captured = _captured.GetValueOrDefault(BlockId);
+        if (_layoutSnapshotId != Guid.Empty &&
+            (captured?.State?.SnapshotId != _layoutSnapshotId || captured.Environment?.SnapshotId != _layoutSnapshotId)) return;
+        LoadCapturedInputs();
+        _layoutInputsPending = false;
+    }
+
     private void QueueInput(InputGroup group)
     {
         if (_suppressInputs || _stopped) return;
+        // An edit made while the fresh snapshot is arriving belongs to the user.
+        if (group is InputGroup.Controller or InputGroup.Failures) _layoutInputsPending = false;
         if (group is InputGroup.Controller or InputGroup.Failures) SelectOutput(BlockId);
         _pendingInputs.Add(group);
         _inputDebounce.Stop();

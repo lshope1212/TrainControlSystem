@@ -91,12 +91,17 @@ public sealed class TrackModelConnection
     private void QueueSnapshot()
     {
         // Capture before leaving the UI thread; background sends never read mutable domain state.
+        var snapshotId = Guid.NewGuid();
+        var layout = _track.CreateLayoutMessage();
+        layout.SnapshotId = snapshotId;
         var states = _track.Layout.Blocks.Select(b => _track.CreateBlockState(b.Id)).ToList();
         var environments = _track.Layout.Blocks.Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
+        foreach (var state in states) state.SnapshotId = snapshotId;
+        foreach (var environment in environments) environment.SnapshotId = snapshotId;
         var signals = environments.Select(e => new TrackModelSignalMessage
             { BlockId = e.BlockId, TrainId = e.TrainId, Signal = e.Signal }).ToList();
         var sales = _track.Layout.Blocks.Select(b => b.LineId).Distinct().Select(_track.CreateTicketSales).ToList();
-        _pending.Writer.TryWrite(new(_track.LayoutRevision, _layoutRequestVersion, _track.CreateLayoutMessage(),
+        _pending.Writer.TryWrite(new(_track.LayoutRevision, _layoutRequestVersion, layout,
             states, environments, signals, sales));
     }
 

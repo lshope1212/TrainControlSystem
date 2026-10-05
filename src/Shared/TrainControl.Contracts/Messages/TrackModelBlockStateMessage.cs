@@ -5,6 +5,7 @@ namespace TrainControl.Contracts.Messages;
 /// <summary>Track Model -> Track Controller. Occupancy becomes Unknown for circuit/power failure.</summary>
 public sealed class TrackModelBlockStateMessage
 {
+    public Guid SnapshotId { get; set; }
     public string BlockId { get; set; } = string.Empty;
     public OccupancyState Occupancy { get; set; }
     public bool BrokenRail { get; set; }

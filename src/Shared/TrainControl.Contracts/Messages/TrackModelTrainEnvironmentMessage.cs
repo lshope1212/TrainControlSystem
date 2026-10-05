@@ -5,6 +5,7 @@ namespace TrainControl.Contracts.Messages;
 /// <summary>Track-derived inputs for a train. A block with no train has an empty TrainId.</summary>
 public sealed class TrackModelTrainEnvironmentMessage
 {
+    public Guid SnapshotId { get; set; }
     public string BlockId { get; set; } = string.Empty;
     public string TrainId { get; set; } = string.Empty;
     public double CommandedSpeedMetersPerSecond { get; set; }
