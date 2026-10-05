@@ -12,7 +12,9 @@ public static class SampleTrackLayout
             layout.Blocks.Add(new TrackBlock { Id = n.ToString(), Number = n, LineId = "Blue",
                 Section = n <= 110 ? "Main" : n <= 120 ? "Return" : n <= 125 ? "Bypass" : "Yard",
                 LengthMeters = 121.92, ElevationMeters = 219.456, GradePercent = 1.5,
-                HasSignal = true, HasSwitch = n is 103 or 110 or 126, HasCrossing = n == 109,
+                // Signals at yard/bypass junctions and the return/bypass approaches.
+                HasSignal = n is 101 or 103 or 110 or 120 or 125 or 126,
+                HasSwitch = n is 103 or 110 or 126, HasCrossing = n == 109,
                 StationName = n == 104 ? "Station A" : n == 108 ? "Station B" : n == 115 ? "Station C" : "",
                 InitialWaitingPassengers = n == 104 ? 24 : n is 108 or 115 ? 12 : 0 });
         var main = Enumerable.Range(101, 20).Select(n => n.ToString()).ToArray();
@@ -26,7 +28,8 @@ public static class SampleTrackLayout
         ConfigureSwitch(layout, "126", "127", "128");
         for (var n = 1; n <= 8; n++)
             layout.Blocks.Add(new TrackBlock { Id = "G" + n, Number = n, LineId = "Green", LengthMeters = 100,
-                HasSignal = true, StationName = n == 4 ? "Park Station" : "", InitialWaitingPassengers = n == 4 ? 30 : 0 });
+                // A loop entry signal and a station departure signal on the small line.
+                HasSignal = n is 1 or 4, StationName = n == 4 ? "Park Station" : "", InitialWaitingPassengers = n == 4 ? 30 : 0 });
         for (var n = 1; n <= 8; n++) Connect(layout, "G" + n, "G" + (n % 8 + 1));
         return layout;
     }

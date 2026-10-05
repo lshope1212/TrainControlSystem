@@ -30,7 +30,7 @@ public sealed class BlockViewModel : ViewModelBase
     public string Elevation => $"{_block.ElevationMeters / 0.3048:N0} ft";
     public string Grade => $"{_block.GradePercent:0.##}%";
     public string Temperature => $"{_block.TemperatureCelsius * 1.8 + 32:0.#} °F";
-    public string Signal => !HasSignal ? "—" : _block.EffectiveSignal switch
+    public string Signal => !HasSignal ? "No signal" : _block.EffectiveSignal switch
         { SignalState.Green => "Proceed", SignalState.Yellow => "Caution", SignalState.Red => "Stop", _ => "Unknown" };
     public SignalState SignalState => _block.EffectiveSignal;
     public string Switch => HasSwitch ? _block.Switch.ToString() : "—";

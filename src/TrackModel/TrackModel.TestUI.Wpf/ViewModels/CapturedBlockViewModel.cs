@@ -7,6 +7,7 @@ namespace TrackModel.TestUI.Wpf.ViewModels;
 public sealed class CapturedBlockViewModel(string id) : ViewModelBase
 {
     public string Id { get; } = id;
+    public bool? HasSignal { get; private set; }
     public TrackModelBlockStateMessage? State { get; private set; }
     public TrackModelTrainEnvironmentMessage? Environment { get; private set; }
     public TrackModelSignalMessage? Signal { get; private set; }
@@ -19,8 +20,8 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     public string Speed => Environment is null ? "—" : $"{Environment.CommandedSpeedMetersPerSecond / 0.44704:0.#} mph";
     public string ActualSpeed => Environment is null ? "—" : $"{Environment.ActualSpeedMetersPerSecond / 0.44704:0.#} mph";
     public string Authority => Environment is null ? "—" : $"{Environment.AuthorityMeters / 0.3048:N0} ft";
-    public string TrackSignal => Environment is null ? "—" : Describe(Environment.Signal);
-    public string TrafficLight => Signal?.Signal.ToString().ToUpperInvariant() ?? "—";
+    public string TrackSignal => HasSignal == false ? "No signal" : Environment is null ? "—" : Describe(Environment.Signal);
+    public string TrafficLight => HasSignal == false ? "No signal" : Signal?.Signal.ToString().ToUpperInvariant() ?? "—";
     public string Beacon => Environment is null ? "—" : Environment.Beacon.Length == 0 ? "No station" : Environment.Beacon;
     public string ElevationGrade => Environment is null ? "—" : $"{Environment.ElevationMeters:0.#} m / {Environment.GradePercent:0.##}%";
     public string Demand => Environment is null ? "—" : $"{Environment.WaitingPassengers} waiting";
@@ -32,6 +33,7 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     public void Apply(TrackModelBlockStateMessage state) { State = state; Changed(); }
     public void Apply(TrackModelTrainEnvironmentMessage environment) { Environment = environment; Changed(); }
     public void Apply(TrackModelSignalMessage signal) { Signal = signal; Changed(); }
+    public void ApplyDefinition(TrackBlockDefinition block) { HasSignal = block.HasSignal; OnPropertyChanged(string.Empty); }
     private void Changed() { LastReceived = DateTime.Now.ToString("HH:mm:ss"); OnPropertyChanged(string.Empty); }
     private static string Describe(SignalState state) => state switch
         { SignalState.Green => "PROCEED", SignalState.Yellow => "CAUTION", SignalState.Red => "STOP", _ => "UNKNOWN" };

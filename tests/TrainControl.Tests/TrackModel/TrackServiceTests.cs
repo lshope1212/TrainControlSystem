@@ -161,9 +161,24 @@ public class TrackServiceTests
     public void PowerFailure_ReportsUnknownSignal()
     {
         var service = CreateService();
-        service.ApplyCommand(new() { BlockId = "104", Signal = SignalState.Green });
-        service.ApplyFailures(new() { BlockId = "104", PowerFailure = true });
+        service.ApplyCommand(new() { BlockId = "103", Signal = SignalState.Green });
+        Assert.AreEqual(SignalState.Green, service.CreateTrainEnvironment("103").Signal);
+        service.ApplyFailures(new() { BlockId = "103", PowerFailure = true });
+        Assert.AreEqual(SignalState.Unknown, service.CreateTrainEnvironment("103").Signal);
+        Assert.AreEqual(OccupancyState.Unknown, service.CreateBlockState("103").Occupancy);
+    }
+
+    [TestMethod]
+    public void BlockWithoutSignal_DoesNotAcquireOneFromACommand()
+    {
+        var service = CreateService();
+        service.ApplyCommand(new() { BlockId = "104", Signal = SignalState.Green, CommandedSpeedMetersPerSecond = 10 });
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104" });
+        var definition = service.CreateLayoutMessage().Lines.SelectMany(line => line.Blocks).Single(b => b.BlockId == "104");
+        Assert.IsFalse(definition.HasSignal);
+        Assert.AreEqual(SignalState.Unknown, service.CreateBlockState("104").Signal);
         Assert.AreEqual(SignalState.Unknown, service.CreateTrainEnvironment("104").Signal);
-        Assert.AreEqual(OccupancyState.Unknown, service.CreateBlockState("104").Occupancy);
+        Assert.AreEqual(10d, service.CreateTrainEnvironment("104").CommandedSpeedMetersPerSecond);
+        Assert.AreEqual(OccupancyState.Occupied, service.CreateBlockState("104").Occupancy);
     }
 }

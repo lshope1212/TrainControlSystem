@@ -210,7 +210,7 @@ public sealed class MainWindowViewModel : ViewModelBase
                         foreach (var block in line.Blocks)
                         {
                             Blocks.Add(block); ids.Add(block.BlockId); _lineByBlock[block.BlockId] = line.LineId;
-                            GetCaptured(block.BlockId);
+                            GetCaptured(block.BlockId).ApplyDefinition(block);
                         }
                     foreach (var stale in _captured.Keys.Where(id => !ids.Contains(id)).ToList())
                     { OutputBlocks.Remove(_captured[stale]); _captured.Remove(stale); }

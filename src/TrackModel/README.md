@@ -136,6 +136,12 @@ logic.
   This is manual telemetry testing, not automatic train travel or train physics.
 - An occupied switch cannot be thrown. The captured next-block output follows its
   Normal/Reverse command. Imported connectivity is validated before replacing state.
+- Signals are installed equipment, independent of occupancy detection. The demo
+  places them at Blue blocks 101, 103, 110, 120, 125, and 126 for junctions and
+  their approaches, and Green blocks G1 and G4 for loop entry/station departure.
+  Other blocks show no signal dot and show **No signal** in place of a command.
+  Imported layouts use each block's `HasSignal` setting; these demo locations
+  are illustrative and can be replaced by the actual track equipment data.
 - Broken rail, track-circuit, and power failures are independent flags. Circuit or
   power failure reports occupancy as Unknown without deleting actual train
   position. Power failure makes the signal Unknown. Wayside speed/authority safety
