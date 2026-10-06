@@ -8,10 +8,10 @@ namespace TrackController.Core.Models;
 public class ControllerState
 {
     public string WaysideId { get; set; } = string.Empty;
-
     public SwitchPosition CommandedSwitchPosition { get; set; } = SwitchPosition.Unknown;
-
     public SignalState CommandedSignalState { get; set; } = SignalState.Unknown;
-
-    public bool CrossingActive { get; set; }
+    public bool IsCrossingActive
+    {
+        get; set;
+    }
 }

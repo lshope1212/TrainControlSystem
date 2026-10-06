@@ -1,6 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\TrackController.Contracts\TrackController.Contracts.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
   </ItemGroup>

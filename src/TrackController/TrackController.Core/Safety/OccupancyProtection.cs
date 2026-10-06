@@ -1,3 +1,5 @@
+
+
 namespace TrackController.Core.Safety;
 
 /// <summary>

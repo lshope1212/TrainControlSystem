@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+    <ProjectReference Include="../../src/TrackController/TrackController.Wpf/TrackController.Wpf.csproj" />
+    <None Include="../../src/TrackController/TrackController.Wpf/Samples/**/*" Link="PiSamples/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../TrackController.Tests/DeploymentFiles.cs" Link="DeploymentFiles.cs" />
+  </ItemGroup>
+</Project>

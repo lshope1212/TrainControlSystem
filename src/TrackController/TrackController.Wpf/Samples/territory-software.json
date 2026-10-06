@@ -1,0 +1,57 @@
+{
+  "waysideId": "SW-TC01",
+  "lineName": "Green Line",
+  "feedbackTimeoutSeconds": 5,
+  "requestTimeoutSeconds": 10,
+  "blocks": [
+    {
+      "blockId": "1",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 15,
+      "nextBlockIds": [
+        "2"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 60
+    },
+    {
+      "blockId": "2",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 15,
+      "nextBlockIds": [
+        "3"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 60
+    },
+    {
+      "blockId": "3",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 15,
+      "nextBlockIds": [],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 60
+    }
+  ]
+}

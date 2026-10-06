@@ -1,3 +1,5 @@
+
+
 namespace TrackController.Core.Models;
 
 /// <summary>
@@ -7,6 +9,5 @@ namespace TrackController.Core.Models;
 public class ControllerConfiguration
 {
     public string WaysideId { get; set; } = string.Empty;
-
     public IList<string> OwnedBlockIds { get; } = new List<string>();
 }
