@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:CTC.Wpf.Behaviors"
         mc:Ignorable="d"
         Title="CTC Office"
         Width="1600"
@@ -671,254 +672,127 @@
 
                 <!-- ==============================================
                      SCHEDULE BUILDER
+                     Spreadsheet-shaped template for the Current Line:
+                     one row per block, one time column per train.
+                     Train columns are added at run time by
+                     behaviors:DataGridTrainColumns.
                      ============================================== -->
                 <TabItem Header="Schedule Builder">
 
-                    <Grid Margin="10">
-
-                        <Grid.ColumnDefinitions>
-                            <!-- Train list -->
-                            <ColumnDefinition Width="360"/>
-
-                            <!-- Stops for selected train -->
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-
-                        <!-- ======================================
-                             LEFT: SCHEDULED TRAINS
-                             ====================================== -->
-                        <Border Grid.Column="0"
-                                Style="{StaticResource InsetPanelStyle}"
-                                Margin="0,0,10,0">
-
-                            <Grid>
-
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-
-                                <Grid>
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel>
-
-                                        <TextBlock Text="Scheduled Trains"
-                                                   Style="{StaticResource SectionHeaderStyle}"/>
-
-                                        <TextBlock Text="Build a schedule manually or upload an existing schedule."
-                                                   Style="{StaticResource SubHeaderStyle}"/>
-
-                                    </StackPanel>
-
-                                    <Button Grid.Column="1"
-                                            Content="Upload Schedule"
-                                            VerticalAlignment="Top"
-                                            Command="{Binding UploadScheduleCommand}"/>
-
-                                </Grid>
-
-
-                                <!-- Add a train to the schedule -->
-                                <Grid Grid.Row="1"
-                                      Margin="0,8,0,8">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition Width="120"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0">
-
-                                        <TextBlock Text="Train"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <ComboBox ItemsSource="{Binding AvailableTrains}"
-                                                  SelectedItem="{Binding NewScheduleTrain}"/>
-
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="2">
-
-                                        <TextBlock Text="Departure Time"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <TextBox Text="{Binding NewScheduleDepartureTime,
-                                                                UpdateSourceTrigger=PropertyChanged}"/>
-
-                                    </StackPanel>
-
-                                </Grid>
-
-
-                                <DataGrid Grid.Row="2"
-                                          ItemsSource="{Binding ScheduledTrains}"
-                                          SelectedItem="{Binding SelectedScheduledTrain}"
-                                          AutoGenerateColumns="False"
-                                          CanUserAddRows="False">
-
-                                    <DataGrid.Columns>
-
-                                        <DataGridTextColumn Header="Train ID"
-                                                            Binding="{Binding TrainId}"
-                                                            Width="*"/>
-
-                                        <DataGridTextColumn Header="Departure"
-                                                            Binding="{Binding DepartureTime}"
-                                                            Width="120"/>
-
-                                    </DataGrid.Columns>
-
-                                </DataGrid>
-
-
-                                <Grid Grid.Row="3"
-                                      Margin="0,8,0,0">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0"
-                                            Content="Add Train"
-                                            Command="{Binding AddScheduledTrainCommand}"/>
-
-                                    <Button Grid.Column="1"
-                                            Content="Delete Selected"
-                                            Command="{Binding DeleteScheduledTrainCommand}"/>
-
-                                </Grid>
-
-                            </Grid>
-
-                        </Border>
-
-
-                        <!-- ======================================
-                             RIGHT: SELECTED TRAIN'S STOPS
-                             ====================================== -->
-                        <Border Grid.Column="1"
-                                Style="{StaticResource InsetPanelStyle}">
-
-                            <Grid>
-
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-
-                                <StackPanel>
-
-                                    <TextBlock Text="Selected Train Schedule"
-                                               Style="{StaticResource SectionHeaderStyle}"/>
-
-                                    <TextBlock Text="Add station stops and arrival times for the selected scheduled train."
-                                               Style="{StaticResource SubHeaderStyle}"/>
-
-                                </StackPanel>
-
-
-                                <!-- Manual stop entry -->
-                                <Grid Grid.Row="1"
-                                      Margin="0,8,0,8">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition Width="150"/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0">
-
-                                        <TextBlock Text="Station"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <ComboBox ItemsSource="{Binding AvailableStationsForSelectedLine}"
-                                                  SelectedItem="{Binding NewStopStation}"/>
-
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="2">
-
-                                        <TextBlock Text="Arrival Time"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <TextBox Text="{Binding NewStopArrivalTime,
-                                                                UpdateSourceTrigger=PropertyChanged}"/>
-
-                                    </StackPanel>
-
-                                    <Button Grid.Column="4"
-                                            Content="Add Stop"
-                                            Width="90"
-                                            VerticalAlignment="Bottom"
-                                            Command="{Binding AddStopCommand}"/>
-
-                                </Grid>
-
-
-                                <DataGrid Grid.Row="2"
-                                          ItemsSource="{Binding SelectedScheduledTrain.Stops}"
-                                          SelectedItem="{Binding SelectedScheduleStop}"
-                                          AutoGenerateColumns="False"
-                                          CanUserAddRows="False">
-
-                                    <DataGrid.Columns>
-
-                                        <DataGridTextColumn Header="Station"
-                                                            Binding="{Binding StationName}"
-                                                            Width="*"/>
-
-                                        <DataGridTextColumn Header="Arrival Time"
-                                                            Binding="{Binding ArrivalTime}"
-                                                            Width="160"/>
-
-                                    </DataGrid.Columns>
-
-                                </DataGrid>
-
-
-                                <Grid Grid.Row="3"
-                                      Margin="0,8,0,0">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0"
-                                            Content="Delete Selected Stop"
-                                            Command="{Binding DeleteStopCommand}"/>
-
-                                    <Button Grid.Column="1"
-                                            Content="Clear Stops"
-                                            Command="{Binding ClearStopsCommand}"/>
-
-                                    <Button Grid.Column="3"
-                                            Content="Queue Schedule"
-                                            FontWeight="SemiBold"
-                                            Command="{Binding QueueScheduleCommand}"/>
-
-                                </Grid>
-
-                            </Grid>
-
-                        </Border>
+                    <Grid Margin="10"
+                          DataContext="{Binding ScheduleBuilder}">
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+
+                        <!-- Template controls -->
+                        <Grid Margin="0,0,0,8">
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="24"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="24"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="Current Line:"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding LineName}"
+                                       Style="{StaticResource ValueStyle}"
+                                       Margin="6,0,0,0"/>
+
+                            <TextBlock Grid.Column="3"
+                                       Text="Number of Trains:"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+
+                            <TextBox Grid.Column="4"
+                                     Width="60"
+                                     Margin="6,0,0,0"
+                                     Text="{Binding NumberOfTrainsText,
+                                                    UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <Button Grid.Column="6"
+                                    Content="Generate Schedule Template"
+                                    Command="{Binding GenerateTemplateCommand}"/>
+
+                            <Button Grid.Column="8"
+                                    Content="Upload Schedule"
+                                    Command="{Binding UploadScheduleCommand}"/>
+
+                        </Grid>
+
+
+                        <!-- Schedule matrix. Only route-start and station
+                             cells accept times (HH:mm:ss). -->
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding Rows}"
+                                  behaviors:DataGridTrainColumns.Source="{Binding TrainColumns}"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  CanUserSortColumns="False"
+                                  CanUserReorderColumns="False"
+                                  SelectionUnit="Cell"
+                                  FrozenColumnCount="4">
+
+                            <DataGrid.Columns>
+
+                                <DataGridTextColumn Header="Line"
+                                                    Binding="{Binding LineId}"
+                                                    IsReadOnly="True"
+                                                    Width="60"/>
+
+                                <DataGridTextColumn Header="Section"
+                                                    Binding="{Binding Section}"
+                                                    IsReadOnly="True"
+                                                    Width="60"/>
+
+                                <DataGridTextColumn Header="Block"
+                                                    Binding="{Binding BlockNumber}"
+                                                    IsReadOnly="True"
+                                                    Width="55"/>
+
+                                <DataGridTextColumn Header="Infrastructure"
+                                                    Binding="{Binding Infrastructure}"
+                                                    IsReadOnly="True"
+                                                    Width="200"/>
+
+                            </DataGrid.Columns>
+
+                        </DataGrid>
+
+
+                        <!-- Status / queue -->
+                        <Grid Grid.Row="2"
+                              Margin="0,8,0,0">
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{Binding StatusMessage}"
+                                       Style="{StaticResource SubHeaderStyle}"
+                                       VerticalAlignment="Center"/>
+
+                            <Button Grid.Column="1"
+                                    Content="Queue Schedule"
+                                    FontWeight="SemiBold"
+                                    Command="{Binding QueueScheduleCommand}"/>
+
+                        </Grid>
 
                     </Grid>
 
@@ -927,9 +801,9 @@
 
                 <!-- ==============================================
                      DISPATCH QUEUE
-                     No manual dispatch button is provided.
-                     The backend/global clock dispatches trains when
-                     System Time reaches Departure Time.
+                     Read-only, ordered by departure time. No manual
+                     dispatch button is provided; automatic dispatch
+                     is not implemented yet.
                      ============================================== -->
                 <TabItem Header="Dispatch Queue">
 
@@ -947,7 +821,7 @@
                                 Padding="8"
                                 Margin="0,0,0,8">
 
-                            <TextBlock Text="Trains in this queue are automatically dispatched when System Time reaches their scheduled departure time."
+                            <TextBlock Text="Queued trains are awaiting dispatch at their scheduled route-start time. Automatic dispatch will be handled by the dispatching logic."
                                        Foreground="#1E3A8A"
                                        TextWrapping="Wrap"/>
 
@@ -955,28 +829,20 @@
 
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding DispatchQueue}"
-                                  SelectedItem="{Binding SelectedQueuedTrain}"
                                   AutoGenerateColumns="False"
                                   CanUserAddRows="False"
+                                  CanUserSortColumns="False"
                                   IsReadOnly="True">
 
                             <DataGrid.Columns>
 
                                 <DataGridTextColumn Header="Train ID"
                                                     Binding="{Binding TrainId}"
-                                                    Width="120"/>
+                                                    Width="160"/>
 
                                 <DataGridTextColumn Header="Departure Time"
                                                     Binding="{Binding DepartureTime}"
-                                                    Width="160"/>
-
-                                <DataGridTextColumn Header="First Station"
-                                                    Binding="{Binding FirstStation}"
                                                     Width="*"/>
-
-                                <DataGridTextColumn Header="Status"
-                                                    Binding="{Binding QueueStatus}"
-                                                    Width="160"/>
 
                             </DataGrid.Columns>
 
@@ -1031,10 +897,6 @@
 
                                 <DataGridTextColumn Header="Current Block"
                                                     Binding="{Binding CurrentBlock}"
-                                                    Width="150"/>
-
-                                <DataGridTextColumn Header="Next Station"
-                                                    Binding="{Binding NextStation}"
                                                     Width="*"/>
 
                             </DataGrid.Columns>
@@ -1077,7 +939,7 @@
             <Separator/>
 
             <StatusBarItem>
-                <TextBlock Text="Auto-dispatch follows the global system clock."/>
+                <TextBlock Text="Automatic dispatch not yet implemented."/>
             </StatusBarItem>
 
             <Separator/>

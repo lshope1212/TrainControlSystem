@@ -30,6 +30,14 @@ public interface ICTCService
 
     void SetSystemTime(TimeSpan systemTime);
 
+    // Scheduling.
+
+    /// <summary>
+    /// Replaces the schedule for every line in <paramref name="scheduledTrains"/> and
+    /// rebuilds the dispatch queue from it, ordered by departure time. Does not dispatch.
+    /// </summary>
+    void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains);
+
     // Outbound: build shared contracts for dispatcher actions (not sent).
 
     MaintenanceRequestMessage CreateMaintenanceRequest(string blockId, MaintenanceState requestedState);

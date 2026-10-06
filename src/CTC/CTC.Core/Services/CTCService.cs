@@ -131,6 +131,64 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
+    /// Stores a validated schedule and queues its trains for dispatch. Trains already
+    /// scheduled on the same line(s) are replaced; other lines' schedules are kept.
+    /// Everything is checked before any state changes, so a bad schedule is never partially queued.
+    /// </summary>
+    /// <exception cref="ArgumentException">A train is blank, duplicated, or on an unknown line.</exception>
+    public void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains)
+    {
+        ArgumentNullException.ThrowIfNull(scheduledTrains);
+
+        var trains = scheduledTrains.ToList();
+        var trainIds = new HashSet<string>();
+        foreach (var train in trains)
+        {
+            if (train is null || string.IsNullOrWhiteSpace(train.TrainId))
+            {
+                throw new ArgumentException("Every scheduled train needs a train ID.", nameof(scheduledTrains));
+            }
+
+            if (!trainIds.Add(train.TrainId))
+            {
+                throw new ArgumentException($"Train '{train.TrainId}' is scheduled more than once.", nameof(scheduledTrains));
+            }
+
+            if (State.FindLine(train.LineId) is null)
+            {
+                throw new ArgumentException($"Unknown line '{train.LineId}'.", nameof(scheduledTrains));
+            }
+        }
+
+        var lineIds = trains.Select(train => train.LineId).ToHashSet();
+        foreach (var replaced in State.ScheduledTrains.Where(train => lineIds.Contains(train.LineId)).ToList())
+        {
+            State.ScheduledTrains.Remove(replaced);
+        }
+
+        foreach (var train in trains)
+        {
+            State.ScheduledTrains.Add(train);
+        }
+
+        // Nothing has been released yet, so the queue is simply rebuilt from the schedule.
+        // TODO: once dispatching exists, preserve entries that have already been released.
+        State.DispatchQueue.Clear();
+        foreach (var train in State.ScheduledTrains.OrderBy(train => train.DepartureTime))
+        {
+            State.DispatchQueue.Add(new DispatchQueueEntry
+            {
+                TrainId = train.TrainId,
+                LineId = train.LineId,
+                DepartureTime = train.DepartureTime,
+            });
+        }
+
+        OnStateChanged(CtcStateChangeKind.Schedule);
+        OnStateChanged(CtcStateChangeKind.DispatchQueue);
+    }
+
+    /// <summary>
     /// Builds a maintenance request for a known block. Does not change CTC state; the
     /// requested state is recorded only once a request has actually been sent
     /// (see <see cref="CloseBlockAsync"/>).

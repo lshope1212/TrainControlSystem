@@ -19,6 +19,4 @@ public class DispatchedTrainState
     /// this cannot yet be populated authoritatively. CTC must not guess it.
     /// </summary>
     public string CurrentBlockId { get; set; } = string.Empty;
-
-    public string NextStation { get; set; } = string.Empty;
 }

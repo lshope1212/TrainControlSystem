@@ -33,10 +33,21 @@ public class MainWindowViewModel : ViewModelBase
 
         //TODO other command implementations
 
+        ScheduleBuilder = new ScheduleBuilderViewModel(_ctc);
+
         RebuildLines();
         RebuildBlocks();
+        RebuildDispatchQueue();
         _ctc.StateChanged += OnCtcStateChanged;
     }
+
+    /// <summary>Schedule Builder tab, scoped to <see cref="SelectedLine"/>.</summary>
+    public ScheduleBuilderViewModel ScheduleBuilder { get; }
+
+    /// <summary>Queued trains on the selected line, ordered by departure time.</summary>
+    public ObservableCollection<DispatchQueueEntryViewModel> DispatchQueue { get; } = new ObservableCollection<DispatchQueueEntryViewModel>();
+
+    public int QueuedTrainCount => DispatchQueue.Count;
 
     public string Title => "CTC Office";
 
@@ -92,6 +103,8 @@ public class MainWindowViewModel : ViewModelBase
             if (SetProperty(ref _selectedLine, value))
             {
                 // Later this can rebuild/filter the territory display for only the selected line. TODO
+                ScheduleBuilder.Line = value;
+                RebuildDispatchQueue();
             }
         }
     }
@@ -136,6 +149,10 @@ public class MainWindowViewModel : ViewModelBase
             RebuildLines();
             RebuildBlocks();
         }
+        else if (e.Kind is CtcStateChangeKind.Schedule or CtcStateChangeKind.DispatchQueue)
+        {
+            RebuildDispatchQueue();
+        }
         else
         {
             foreach (var block in Blocks)
@@ -165,6 +182,22 @@ public class MainWindowViewModel : ViewModelBase
 
         // Keep the dispatcher's selection when the new layout still has that block.
         SelectedBlock = Blocks.FirstOrDefault(block => block.BlockId == selectedBlockId);
+    }
+
+    private void RebuildDispatchQueue()
+    {
+        DispatchQueue.Clear();
+
+        if (SelectedLine is not null)
+        {
+            // CTC keeps the queue ordered by departure time.
+            foreach (var entry in _ctc.State.DispatchQueue.Where(entry => entry.LineId == SelectedLine.LineId))
+            {
+                DispatchQueue.Add(new DispatchQueueEntryViewModel(entry));
+            }
+        }
+
+        OnPropertyChanged(nameof(QueuedTrainCount));
     }
 
     private void RebuildLines()

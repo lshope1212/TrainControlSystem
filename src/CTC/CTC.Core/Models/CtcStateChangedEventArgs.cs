@@ -15,6 +15,12 @@ public enum CtcStateChangeKind
     SystemTime,
 
     MaintenanceRequest,
+
+    /// <summary>The scheduled trains were replaced.</summary>
+    Schedule,
+
+    /// <summary>The dispatch queue changed.</summary>
+    DispatchQueue,
 }
 
 /// <summary>
