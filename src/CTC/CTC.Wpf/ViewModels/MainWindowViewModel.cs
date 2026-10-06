@@ -20,6 +20,7 @@ public class MainWindowViewModel : ViewModelBase
 {
     private readonly ICTCService _ctc;
     private BlockViewModel? _selectedBlock;
+    private CtcLineState? _selectedLine;
     private string _communicationStatus = "No requests sent.";
     private string _inboundStatus = "No messages received.";
     private string _lastTerritoryUpdate = "--";
@@ -32,6 +33,7 @@ public class MainWindowViewModel : ViewModelBase
 
         //TODO other command implementations
 
+        RebuildLines();
         RebuildBlocks();
         _ctc.StateChanged += OnCtcStateChanged;
     }
@@ -46,6 +48,8 @@ public class MainWindowViewModel : ViewModelBase
 
     /// <summary>Every block in the current layout, across all lines.</summary>
     public ObservableCollection<BlockViewModel> Blocks { get; } = new ObservableCollection<BlockViewModel>();
+
+    public ObservableCollection<CtcLineState> AvailableLines { get; } = new ObservableCollection<CtcLineState>();
 
     public int OccupiedBlockCount => Blocks.Count(block => block.IsOccupied);
 
@@ -78,6 +82,18 @@ public class MainWindowViewModel : ViewModelBase
     {
         get => _inboundStatus;
         set => SetProperty(ref _inboundStatus, value);
+    }
+
+    public CtcLineState? SelectedLine
+    {
+        get => _selectedLine;
+        set
+        {
+            if (SetProperty(ref _selectedLine, value))
+            {
+                // Later this can rebuild/filter the territory display for only the selected line. TODO
+            }
+        }
     }
 
     public ICommand CloseSelectedBlockCommand { get; }
@@ -117,6 +133,7 @@ public class MainWindowViewModel : ViewModelBase
         if (e.Kind == CtcStateChangeKind.TrackLayout)
         {
             // The old CtcBlockState objects were discarded, so the adapters must be rebuilt.
+            RebuildLines();
             RebuildBlocks();
         }
         else
@@ -128,9 +145,11 @@ public class MainWindowViewModel : ViewModelBase
         }
 
         LastTerritoryUpdate = DateTime.Now.ToString("HH:mm:ss");
+
         OnPropertyChanged(nameof(SystemTimeDisplay));
         OnPropertyChanged(nameof(OccupiedBlockCount));
         OnPropertyChanged(nameof(TrainCount));
+
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -146,5 +165,23 @@ public class MainWindowViewModel : ViewModelBase
 
         // Keep the dispatcher's selection when the new layout still has that block.
         SelectedBlock = Blocks.FirstOrDefault(block => block.BlockId == selectedBlockId);
+    }
+
+    private void RebuildLines()
+    {
+        string? selectedLineId = SelectedLine?.LineId;
+
+        AvailableLines.Clear();
+
+        foreach (var line in _ctc.State.Lines)
+        {
+            AvailableLines.Add(line);
+        }
+
+        // Try to preserve the currently selected line.
+        SelectedLine = AvailableLines.FirstOrDefault(line => line.LineId == selectedLineId);
+
+        // If there was no previous selection, automatically select the first imported line.
+        SelectedLine ??= AvailableLines.FirstOrDefault();
     }
 }

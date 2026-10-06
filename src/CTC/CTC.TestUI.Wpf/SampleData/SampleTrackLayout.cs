@@ -15,30 +15,47 @@ public static class SampleTrackLayout
         {
             new TrackLineDefinition
             {
-                LineId = "GREEN",
-                Name = "Green Line (sample)",
+                LineId = "BLUE",
+                Name = "Blue Line",
                 Blocks =
                 {
-                    Block("G1", 1, "A", 100, connectedTo: ["G2"], hasSignal: true),
-                    Block("G2", 2, "A", 100, connectedTo: ["G1", "G3"], hasCrossing: true),
-                    Block("G3", 3, "B", 150, connectedTo: ["G2", "G4"], station: "Pioneer"),
-                    Block("G4", 4, "B", 100, connectedTo: ["G3", "G5", "G6"], hasSwitch: true, hasSignal: true),
-                    Block("G5", 5, "C", 120, connectedTo: ["G4"], station: "Edgebrook"),
-                    Block("G6", 6, "D", 120, connectedTo: ["G4"]),
-                },
-            },
-            new TrackLineDefinition
-            {
-                LineId = "RED",
-                Name = "Red Line (sample)",
-                Blocks =
-                {
-                    Block("R1", 1, "A", 80, connectedTo: ["R2"], hasSignal: true),
-                    Block("R2", 2, "A", 80, connectedTo: ["R1", "R3"], station: "Shadyside"),
-                    Block("R3", 3, "B", 90, connectedTo: ["R2"]),
-                },
-            },
-        },
+                    Block("B1",  1, "A", 50, connectedTo: ["B2"]),
+                    Block("B2",  2, "A", 50, connectedTo: ["B1", "B3"]),
+                    Block("B3",  3, "A", 50, connectedTo: ["B2", "B4"],
+                        hasCrossing: true),
+
+                    Block("B4",  4, "A", 50, connectedTo: ["B3", "B5"]),
+
+                    Block("B5",  5, "A", 50,
+                        connectedTo: ["B4", "B6", "B11"],
+                        hasSwitch: true),
+
+                    Block("B6",  6, "B", 50,
+                        connectedTo: ["B5", "B7"],
+                        hasSignal: true),
+
+                    Block("B7",  7, "B", 50, connectedTo: ["B6", "B8"]),
+                    Block("B8",  8, "B", 50, connectedTo: ["B7", "B9"]),
+                    Block("B9",  9, "B", 50, connectedTo: ["B8", "B10"]),
+
+                    Block("B10", 10, "B", 50,
+                        connectedTo: ["B9"],
+                        station: "Station B"),
+
+                    Block("B11", 11, "C", 50,
+                        connectedTo: ["B5", "B12"],
+                        hasSignal: true),
+
+                    Block("B12", 12, "C", 50, connectedTo: ["B11", "B13"]),
+                    Block("B13", 13, "C", 50, connectedTo: ["B12", "B14"]),
+                    Block("B14", 14, "C", 50, connectedTo: ["B13", "B15"]),
+
+                    Block("B15", 15, "C", 50,
+                        connectedTo: ["B14"],
+                        station: "Station C"),
+                }
+            }
+        }
     };
 
     private static TrackBlockDefinition Block(

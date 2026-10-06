@@ -153,7 +153,8 @@
 
                     <ComboBox Width="165"
                               ItemsSource="{Binding AvailableLines}"
-                              SelectedItem="{Binding SelectedLine}"/>
+                              SelectedItem="{Binding SelectedLine}"
+                              DisplayMemberPath="Name"/>
 
                 </StackPanel>
 
