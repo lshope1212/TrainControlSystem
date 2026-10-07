@@ -13,7 +13,7 @@ public static class TrackLayoutValidator
         {
             if (b is null || string.IsNullOrWhiteSpace(b.Id) || string.IsNullOrWhiteSpace(b.LineId) || !ids.Add(b.Id))
                 throw new ArgumentException("Block IDs must be nonempty and unique across all lines; each block needs a LineId.");
-            if (string.IsNullOrWhiteSpace(b.Section) || b.StationName is null
+            if (string.IsNullOrWhiteSpace(b.Section) || b.StationName is null || b.Beacon is null || b.BeaconTargetBlockId is null
                 || b.NormalNextBlockId is null || b.ReverseNextBlockId is null || b.Number < 0
                 || b.TravelDirection is not ("Forward" or "Reverse" or "Bidirectional"))
                 throw new ArgumentException($"Block {b.Id} has invalid section, station, or route metadata.");
@@ -28,6 +28,10 @@ public static class TrackLayoutValidator
         }
         foreach (var b in layout.Blocks)
         {
+            if (b.BeaconTargetBlockId.Length > 0 && (!b.HasBeacon || !ids.Contains(b.BeaconTargetBlockId)
+                || layout.Blocks.First(x => x.Id == b.BeaconTargetBlockId).LineId != b.LineId
+                || string.IsNullOrWhiteSpace(layout.Blocks.First(x => x.Id == b.BeaconTargetBlockId).StationName)))
+                throw new ArgumentException($"Beacon {b.Id} needs a station target on the same line.");
             foreach (var id in b.ConnectedBlockIds)
                 if (!ids.Contains(id) || id == b.Id || layout.Blocks.First(x => x.Id == id).LineId != b.LineId)
                     throw new ArgumentException($"Block {b.Id} has an invalid connection '{id}'.");

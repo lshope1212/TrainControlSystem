@@ -12,7 +12,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var track = new TrackService();
-        SampleTrackLayout.LoadDemo(track);
+        BlueLineTrackLayout.LoadDemonstration(track);
         var vm = new MainWindowViewModel(track);
         _connection = new TrackModelConnection(track, Dispatcher);
         _connection.StatusReported += (_, status) => vm.Status = status;

@@ -35,6 +35,7 @@ public sealed class TrackDiagram : FrameworkElement
         _hits.Clear();
         if (blocks.Count == 0) { Label(dc, "No track loaded", new(40, 60), 22); return; }
         var points = Place(blocks);
+        var courseBlue = IsCourseBlue(blocks);
         var hasReturn = blocks.Any(b => b.Section == "Return");
         var edges = new HashSet<string>();
         foreach (var b in blocks)
@@ -46,7 +47,14 @@ public sealed class TrackDiagram : FrameworkElement
                 var key = string.CompareOrdinal(b.Id, id) < 0 ? b.Id + ":" + id : id + ":" + b.Id;
                 if (!edges.Add(key)) continue;
                 var a = points[b]; var z = points[target];
-                DrawConnection(dc, b, target, a, z, hasReturn);
+                if (courseBlue && (b.Number == 5 && target.Number is 6 or 11 || target.Number == 5 && b.Number is 6 or 11))
+                {
+                    var junction = b.Number == 5 ? b : target;
+                    var branch = b.Number == 5 ? target : b;
+                    dc.DrawLine(new Pen(branch.Id == junction.NextBlock ? Brushes.DodgerBlue : Brushes.LightSlateGray,
+                        branch.Id == junction.NextBlock ? 4 : 2), a, z);
+                }
+                else DrawConnection(dc, b, target, a, z, hasReturn);
             }
         }
         foreach (var b in blocks)
@@ -80,6 +88,11 @@ public sealed class TrackDiagram : FrameworkElement
                 dc.DrawEllipse(color, null, new(p.X + 36, p.Y - 22), 4, 7);
             }
             if (b.HasCrossing) Label(dc, b.Crossing, new(p.X - 32, p.Y + (b.IsOccupied || b.HasFailure ? 90 : 45)), 15, Muted);
+            if (b.HasBeacon)
+            {
+                dc.DrawEllipse(Brushes.DarkViolet, null, new(p.X, p.Y - 29), 5, 5);
+                Label(dc, "Beacon", new(p.X - 28, p.Y - 58), 14, Brushes.DarkViolet);
+            }
             if (b.IsOccupied) Label(dc, "Train " + b.Train + " →", new(p.X - 34, p.Y + 45), 18,
                 maxWidth: b.Section == "Yard" ? 120 : null);
             if (b.HasFailure) Label(dc, b.FailureSummary, new(p.X - 40, p.Y + 65), 15, Brushes.DarkOrange,
@@ -87,6 +100,13 @@ public sealed class TrackDiagram : FrameworkElement
         }
         if (blocks.Any(b => b.Section == "Bypass")) Label(dc, "Bypass", new(600, 135), 19, Muted);
         if (blocks.Any(b => b.Section == "Yard")) Label(dc, "Yard", new(70, 75), 19, Muted);
+        if (courseBlue)
+        {
+            dc.DrawRoundedRectangle(Brushes.WhiteSmoke, new Pen(Brushes.SlateGray, 2), new Rect(25, 318, 75, 65), 12, 12);
+            Label(dc, "Yard", new(40, 337), 20);
+            dc.DrawLine(TrackPen, new(100, 350), new(109, 350));
+            Label(dc, "Blue Line · 15 blocks · Yard to Station B / Station C", new(35, 675), 20);
+        }
     }
 
     private static void DrawConnection(DrawingContext dc, BlockViewModel source, BlockViewModel target,
@@ -150,6 +170,14 @@ public sealed class TrackDiagram : FrameworkElement
     private static Dictionary<BlockViewModel, Point> Place(List<BlockViewModel> blocks)
     {
         var result = new Dictionary<BlockViewModel, Point>();
+        if (IsCourseBlue(blocks))
+        {
+            foreach (var b in blocks)
+                result[b] = b.Number <= 5 ? new Point(140 + (b.Number - 1) * 95, 350)
+                    : b.Number <= 10 ? new Point(625 + (b.Number - 6) * 100, 270 - (b.Number - 6) * 40)
+                    : new Point(625 + (b.Number - 11) * 100, 430 + (b.Number - 11) * 40);
+            return result;
+        }
         var hasReturn = blocks.Any(b => b.Section == "Return");
         if (hasReturn)
         {
@@ -178,6 +206,9 @@ public sealed class TrackDiagram : FrameworkElement
         }
         return result;
     }
+
+    private static bool IsCourseBlue(List<BlockViewModel> blocks) => blocks.Count == 15
+        && blocks.All(b => b.LineId == "Blue") && blocks.Select(b => b.Number).Order().SequenceEqual(Enumerable.Range(1, 15));
 
     private void Label(DrawingContext dc, string text, Point p, double size, Brush? brush = null, double? maxWidth = null)
     {

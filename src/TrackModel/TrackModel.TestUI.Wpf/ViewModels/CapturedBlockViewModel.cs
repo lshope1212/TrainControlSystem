@@ -13,6 +13,10 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     public TrackModelBlockStateMessage? State { get; private set; }
     public TrackModelTrainEnvironmentMessage? Environment { get; private set; }
     public TrackModelSignalMessage? Signal { get; private set; }
+    public TrackBlockDefinition? Definition { get; private set; }
+    public string Connections => Definition is null ? "—" : string.Join(", ", Definition.ConnectedBlockIds);
+    public string Maintenance => State is null ? "—" : State.IsClosed ? "CLOSED" : "OPEN";
+    public string StateSignal => HasSignal == false ? "N/A" : State?.Signal.ToString().ToUpperInvariant() ?? "—";
     public string Occupancy => State?.Occupancy.ToString().ToUpperInvariant() ?? "—";
     public string BrokenRail => State is null ? "—" : State.BrokenRail ? "FAILURE" : "NORMAL";
     public string TrackCircuit => State is null ? "—" : State.TrackCircuitFailure ? "FAILURE" : "NORMAL";
@@ -24,7 +28,7 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     public string Authority => Environment is null ? "—" : $"{Environment.AuthorityMeters / 0.3048:N0} ft";
     public string TrackSignal => HasSignal == false ? "No signal" : Environment is null ? "—" : Describe(Environment.Signal);
     public string TrafficLight => HasSignal == false ? "No signal" : Signal?.Signal.ToString().ToUpperInvariant() ?? "—";
-    public string Beacon => Environment is null ? "—" : Environment.Beacon.Length == 0 ? "No station" : Environment.Beacon;
+    public string Beacon => Environment is null ? "—" : Environment.Beacon.Length == 0 ? "No beacon" : Environment.Beacon;
     public string ElevationGrade => Environment is null ? "—" : $"{Environment.ElevationMeters / 0.3048:0.#} ft / {Environment.GradePercent:0.##}%";
     public string Demand => Environment is null ? "—" : $"{Environment.WaitingPassengers} waiting";
     public string PassengerTotals => Environment is null ? "—" : $"{Environment.BoardingPassengers} / {Environment.DisembarkingPassengers}";
@@ -42,6 +46,7 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     public void ApplyDefinition(TrackBlockDefinition block)
     {
         HasSignal = block.HasSignal; HasSwitch = block.HasSwitch; HasCrossing = block.HasCrossing;
+        Definition = block;
         OnPropertyChanged(string.Empty);
     }
     private void Changed() { LastReceived = DateTime.Now.ToString("HH:mm:ss"); OnPropertyChanged(string.Empty); }

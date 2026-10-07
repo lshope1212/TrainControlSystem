@@ -136,6 +136,16 @@ public class TrackService : ITrackService
         Changed();
     }
 
+    public void ApplyPassengerDemand(TrackModelPassengerDemandMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        var block = RequireBlock(message.BlockId);
+        if (string.IsNullOrWhiteSpace(block.StationName)) throw new ArgumentException("Passenger demand requires a station block.");
+        if (message.WaitingPassengers < 0) throw new ArgumentException("Waiting passengers cannot be negative.");
+        block.WaitingPassengers = message.WaitingPassengers;
+        Changed();
+    }
+
     public void SetMaintenance(string blockId, MaintenanceState state)
     {
         if (!Enum.IsDefined(state)) throw new ArgumentException("Invalid maintenance state.");
@@ -155,7 +165,11 @@ public class TrackService : ITrackService
             {
                 BlockId = b.Id, BlockNumber = b.Number, Section = b.Section, LengthMeters = b.LengthMeters,
                 StationName = b.StationName, HasSwitch = b.HasSwitch, HasSignal = b.HasSignal,
-                HasCrossing = b.HasCrossing, ConnectedBlockIds = [.. b.ConnectedBlockIds]
+                HasCrossing = b.HasCrossing, ConnectedBlockIds = [.. b.ConnectedBlockIds],
+                ElevationMeters = b.ElevationMeters, GradePercent = b.GradePercent,
+                SpeedLimitMetersPerSecond = b.SpeedLimitMetersPerSecond, TravelDirection = b.TravelDirection,
+                HasHeater = b.HasHeater, Beacon = b.Beacon, BeaconTargetBlockId = b.BeaconTargetBlockId,
+                NormalNextBlockId = b.NormalNextBlockId, ReverseNextBlockId = b.ReverseNextBlockId
             }).ToList()
         }).ToList()
     };
@@ -176,7 +190,7 @@ public class TrackService : ITrackService
         return new() { BlockId = b.Id, TrainId = b.TrainId,
             CommandedSpeedMetersPerSecond = b.CommandedSpeedMetersPerSecond, ActualSpeedMetersPerSecond = b.ActualSpeedMetersPerSecond,
             AuthorityMeters = b.AuthorityMeters,
-            Signal = b.EffectiveSignal, Beacon = b.StationName, ElevationMeters = b.ElevationMeters,
+            Signal = b.EffectiveSignal, Beacon = b.Beacon, BeaconTargetBlockId = b.BeaconTargetBlockId, ElevationMeters = b.ElevationMeters,
             GradePercent = b.GradePercent, TemperatureCelsius = b.TemperatureCelsius, WaitingPassengers = b.WaitingPassengers,
             BoardingPassengers = b.BoardingPassengers, DisembarkingPassengers = b.DisembarkingPassengers, TicketsSold = b.TicketsSold,
             HasHeater = b.HasHeater, HeaterOn = b.HeaterOn, SpeedLimitMetersPerSecond = b.SpeedLimitMetersPerSecond,

@@ -14,6 +14,8 @@ public class TrackBlock
     public double SpeedLimitMetersPerSecond { get; set; } = 19.444444;
     public double TemperatureCelsius { get; set; } = 20;
     public string StationName { get; set; } = string.Empty;
+    public string Beacon { get; set; } = string.Empty;
+    public string BeaconTargetBlockId { get; set; } = string.Empty;
     public int InitialWaitingPassengers { get; set; }
     public bool HasSwitch { get; set; }
     public bool HasSignal { get; set; }
@@ -41,6 +43,7 @@ public class TrackBlock
     [JsonIgnore] public int DisembarkingPassengers { get; set; }
     [JsonIgnore] public int TicketsSold { get; set; }
     [JsonIgnore] public bool HasFailure => BrokenRail || TrackCircuitFailure || PowerFailure;
+    [JsonIgnore] public bool HasBeacon => Beacon.Length > 0;
     // Demonstration policy: installed heaters run at/below freezing when powered.
     [JsonIgnore] public bool HeaterOn => HasHeater && TemperatureCelsius <= 0 && !PowerFailure;
     [JsonIgnore] public OccupancyState ReportedOccupancy => PowerFailure || TrackCircuitFailure

@@ -31,7 +31,9 @@ public sealed class BlockViewModel : ViewModelBase
     public string Grade => $"{_block.GradePercent:0.##}%";
     public string SpeedLimit => $"{_block.SpeedLimitMetersPerSecond / 0.44704:0.#} mph";
     public string TravelDirection => _block.TravelDirection;
-    public string Beacon => string.IsNullOrWhiteSpace(_block.StationName) ? "No station" : _block.StationName;
+    public string Beacon => _block.HasBeacon ? _block.Beacon : "None";
+    public bool HasBeacon => _block.HasBeacon;
+    public string BeaconTarget => _block.BeaconTargetBlockId;
     public string Heater => !_block.HasHeater ? "N/A" : _block.HeaterOn ? "On" : "Off";
     public string Temperature => $"{_block.TemperatureCelsius * 1.8 + 32:0.#} °F";
     public string Signal => !HasSignal ? "No signal" : _block.EffectiveSignal switch

@@ -15,6 +15,7 @@ public interface ITrackService
     void ApplyTrainUpdate(TrackModelTrainUpdateMessage message);
     void ApplyFailures(TrackModelFailureCommandMessage message);
     void ApplyTemperature(TrackModelTemperatureCommandMessage message);
+    void ApplyPassengerDemand(TrackModelPassengerDemandMessage message);
     void SetSystemTime(TimeSpan time);
     void SetMaintenance(string blockId, MaintenanceState state);
     TrackLayoutMessage CreateLayoutMessage();

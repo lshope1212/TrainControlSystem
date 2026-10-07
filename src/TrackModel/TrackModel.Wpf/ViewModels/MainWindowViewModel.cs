@@ -99,7 +99,7 @@ public class MainWindowViewModel : ViewModelBase
             if (b.HasFailure) Failures.Add(adapter);
         }
         SelectedBlock = Blocks.FirstOrDefault(b => b.Id == previous)
-            ?? Blocks.FirstOrDefault(b => b.Id == "104") ?? Blocks.FirstOrDefault();
+            ?? Blocks.FirstOrDefault();
         DiagramRevision++;
         OnPropertyChanged(nameof(DiagramHeight));
         OnPropertyChanged(nameof(BlockCount));
@@ -108,7 +108,7 @@ public class MainWindowViewModel : ViewModelBase
 
     private void Import()
     {
-        var dialog = new OpenFileDialog { Title = "Import track layout", Filter = "Track layouts (*.json;*.csv)|*.json;*.csv" };
+        var dialog = new OpenFileDialog { Title = "Import track layout (XLSX imports the course Blue Line)", Filter = "Track layouts (*.json;*.csv;*.xlsx)|*.json;*.csv;*.xlsx" };
         if (dialog.ShowDialog() != true) return;
         try
         {
@@ -133,7 +133,7 @@ public class MainWindowViewModel : ViewModelBase
 
     private void LoadDemo()
     {
-        if (_track is TrackService service) { SampleTrackLayout.LoadDemo(service); Status = "Demo restored"; }
+        if (_track is TrackService service) { BlueLineTrackLayout.LoadDemonstration(service); Status = "Course Blue Line restored"; }
     }
 
     private void SetTemperature()

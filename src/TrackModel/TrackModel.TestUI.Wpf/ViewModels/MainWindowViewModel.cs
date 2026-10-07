@@ -25,7 +25,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly List<object> _stagedInputs = [];
     private Guid _layoutSnapshotId;
     private bool _layoutInputsPending, _trainInputsPending;
-    private enum InputGroup { Controller, Train, Failures, Time, Temperature }
+    private enum InputGroup { Controller, Train, Failures, Time, Temperature, Maintenance }
     private bool _clockBusy;
     private readonly Stopwatch _elapsed = new();
     private TimeSpan? _clockValue;
@@ -35,6 +35,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     private string _speed = "25", _authority = "1200", _actualSpeed = "22", _boarding = "0", _disembarking = "0";
     private string _time = "09:42:18", _multiplier = "1";
     private string _temperature = "68";
+    private string _waitingPassengers = "24";
+    private TrackBlockDefinition? _selectedDemandBlock;
+    private MaintenanceState _maintenance;
     private SwitchPosition _switch = SwitchPosition.Normal;
     private SignalState _signal = SignalState.Green;
     private CrossingState _crossing = CrossingState.Open;
@@ -59,6 +62,13 @@ public sealed class MainWindowViewModel : ViewModelBase
         StepClockCommand = new AsyncRelayCommand(() => AdvanceClockAsync(10, scale: false));
         ToggleClockCommand = new RelayCommand(ToggleClock);
         ClearLogCommand = new RelayCommand(() => Messages.Clear());
+        SetDemandCommand = new AsyncRelayCommand(async () =>
+        {
+            await FlushInputsAsync();
+            await SendSafely(() => new TrackModelPassengerDemandMessage
+                { BlockId = Required(SelectedDemandBlock?.BlockId ?? "", "Station block"), WaitingPassengers = Count(WaitingPassengers, "Waiting passengers") });
+            SelectOutput(SelectedDemandBlock?.BlockId);
+        });
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _clock.Tick += async (_, _) =>
         {
@@ -78,6 +88,19 @@ public sealed class MainWindowViewModel : ViewModelBase
     public SignalState[] SignalOptions { get; } = [SignalState.Green, SignalState.Yellow, SignalState.Red];
     public CrossingState[] CrossingOptions { get; } = [CrossingState.Open, CrossingState.Closed];
     public OccupancyState[] TrainOccupancyOptions { get; } = [OccupancyState.Occupied, OccupancyState.Clear];
+    public MaintenanceState[] MaintenanceOptions { get; } = [MaintenanceState.Open, MaintenanceState.Closed];
+    public IEnumerable<TrackBlockDefinition> StationBlocks => Blocks.Where(b => !string.IsNullOrWhiteSpace(b.StationName));
+    public TrackBlockDefinition? SelectedDemandBlock
+    {
+        get => _selectedDemandBlock;
+        set
+        {
+            if (SetProperty(ref _selectedDemandBlock, value) && value is not null)
+                WaitingPassengers = (_captured.GetValueOrDefault(value.BlockId)?.Environment?.WaitingPassengers ?? 24).ToString(CultureInfo.CurrentCulture);
+        }
+    }
+    public string WaitingPassengers { get => _waitingPassengers; set => SetProperty(ref _waitingPassengers, value); }
+    public MaintenanceState Maintenance { get => _maintenance; set { if (SetProperty(ref _maintenance, value)) QueueInput(InputGroup.Maintenance); } }
     public ICommand SendCommandsCommand { get; }
     public ICommand SendTrainCommand { get; }
     public ICommand RemoveTrainCommand { get; }
@@ -87,6 +110,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public ICommand StepClockCommand { get; }
     public ICommand ToggleClockCommand { get; }
     public ICommand ClearLogCommand { get; }
+    public ICommand SetDemandCommand { get; }
     public string Status { get => _status; set => SetProperty(ref _status, value); }
     public string BlockId
     {
@@ -99,6 +123,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             StagePendingInput(InputGroup.Controller);
             StagePendingInput(InputGroup.Failures);
             StagePendingInput(InputGroup.Temperature);
+            StagePendingInput(InputGroup.Maintenance);
             SetProperty(ref _blockId, value);
             SelectOutput(value);
             LoadCapturedInputs();
@@ -237,8 +262,9 @@ public sealed class MainWindowViewModel : ViewModelBase
                     var selection = BlockId;
                     var current = CurrentBlock;
                     var outputSelection = SelectedOutput?.Id;
+                    var demandSelection = SelectedDemandBlock?.BlockId;
                     _layoutSnapshotId = layout.SnapshotId;
-                    _layoutInputsPending = !_pendingInputs.Contains(InputGroup.Controller) && !_pendingInputs.Contains(InputGroup.Failures) && !_pendingInputs.Contains(InputGroup.Temperature);
+                    _layoutInputsPending = !_pendingInputs.Contains(InputGroup.Controller) && !_pendingInputs.Contains(InputGroup.Failures) && !_pendingInputs.Contains(InputGroup.Temperature) && !_pendingInputs.Contains(InputGroup.Maintenance);
                     _trainInputsPending = !_pendingInputs.Contains(InputGroup.Train);
                     Blocks.Clear(); _lineByBlock.Clear();
                     var ids = new HashSet<string>();
@@ -252,6 +278,10 @@ public sealed class MainWindowViewModel : ViewModelBase
                     { OutputBlocks.Remove(_captured[stale]); _captured.Remove(stale); }
                     BlockId = ids.Contains(selection) ? selection : Blocks.FirstOrDefault()?.BlockId ?? "";
                     CurrentBlock = ids.Contains(current) ? current : Blocks.FirstOrDefault()?.BlockId ?? "";
+                    OnPropertyChanged(nameof(StationBlocks));
+                    var demandBlock = StationBlocks.FirstOrDefault(b => b.BlockId == demandSelection) ?? StationBlocks.FirstOrDefault();
+                    if (demandBlock?.BlockId != demandSelection) SelectedDemandBlock = demandBlock;
+                    else { _selectedDemandBlock = demandBlock; OnPropertyChanged(nameof(SelectedDemandBlock)); }
                     // WPF finishes its collection-change selection work after this callback.
                     // Restore the source selections then, rather than during that update.
                     _dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
@@ -282,6 +312,14 @@ public sealed class MainWindowViewModel : ViewModelBase
                 case nameof(TicketSalesMessage):
                     var sales = MessageSerializer.DeserializePayload<TicketSalesMessage>(envelope);
                     _ticketRates[sales.LineId] = sales.TicketsPerHour; OnPropertyChanged(nameof(TicketSales)); break;
+                case nameof(SystemTimeMessage):
+                    if (!_isClockRunning && !_clockBusy && !_pendingInputs.Contains(InputGroup.Time))
+                    {
+                        _clockValue = MessageSerializer.DeserializePayload<SystemTimeMessage>(envelope).SystemTime;
+                        _time = _clockValue.Value.ToString(@"hh\:mm\:ss");
+                        OnPropertyChanged(nameof(Time));
+                    }
+                    break;
                 case nameof(TrackModelInputResultMessage):
                     var result = MessageSerializer.DeserializePayload<TrackModelInputResultMessage>(envelope);
                     // Snapshot acknowledgement must not hide input validation errors.
@@ -319,6 +357,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             if (state is not null)
             {
                 BrokenRail = state.BrokenRail; Circuit = state.TrackCircuitFailure; Power = state.PowerFailure;
+                Maintenance = state.IsClosed ? MaintenanceState.Closed : MaintenanceState.Open;
                 Switch = state.Switch == SwitchPosition.Reverse ? SwitchPosition.Reverse : SwitchPosition.Normal;
                 Signal = state.Signal is SignalState.Green or SignalState.Yellow ? state.Signal : SignalState.Red;
                 Crossing = state.Crossing == CrossingState.Closed ? CrossingState.Closed : CrossingState.Open;
@@ -363,9 +402,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         if (_suppressInputs || _stopped) return;
         // An edit made while the fresh snapshot is arriving belongs to the user.
-        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature) _layoutInputsPending = false;
+        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature or InputGroup.Maintenance) _layoutInputsPending = false;
         if (group == InputGroup.Train) _trainInputsPending = false;
-        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature) SelectOutput(BlockId);
+        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature or InputGroup.Maintenance) SelectOutput(BlockId);
         if (group == InputGroup.Train) SelectOutput(CurrentBlock);
         _pendingInputs.Add(group);
         _inputDebounce.Stop();
@@ -403,6 +442,7 @@ public sealed class MainWindowViewModel : ViewModelBase
                 InputGroup.Failures => BuildFailures(),
                 InputGroup.Time => new SystemTimeMessage { SystemTime = ParseTime() },
                 InputGroup.Temperature => BuildTemperature(),
+                InputGroup.Maintenance => new MaintenanceRequestMessage { BlockId = BlockId, RequestedState = Maintenance },
                 _ => throw new InvalidOperationException("Unknown input group.")
             });
         }

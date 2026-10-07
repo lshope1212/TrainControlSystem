@@ -67,6 +67,8 @@ public sealed class TrackModelConnection
                         _track.SetSystemTime(MessageSerializer.DeserializePayload<SystemTimeMessage>(envelope).SystemTime); break;
                     case nameof(TrackModelTemperatureCommandMessage):
                         _track.ApplyTemperature(MessageSerializer.DeserializePayload<TrackModelTemperatureCommandMessage>(envelope)); break;
+                    case nameof(TrackModelPassengerDemandMessage):
+                        _track.ApplyPassengerDemand(MessageSerializer.DeserializePayload<TrackModelPassengerDemandMessage>(envelope)); break;
                     case nameof(MaintenanceRequestMessage):
                         var maintenance = MessageSerializer.DeserializePayload<MaintenanceRequestMessage>(envelope);
                         _track.SetMaintenance(maintenance.BlockId, maintenance.RequestedState); break;
@@ -104,7 +106,7 @@ public sealed class TrackModelConnection
             { BlockId = e.BlockId, TrainId = e.TrainId, Signal = e.Signal }).ToList();
         var sales = _track.Layout.Blocks.Select(b => b.LineId).Distinct().Select(_track.CreateTicketSales).ToList();
         _pending.Writer.TryWrite(new(_track.LayoutRevision, _layoutRequestVersion, layout,
-            states, environments, signals, sales));
+            states, environments, signals, sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
     }
 
     private async Task PublishAsync(CancellationToken token)
@@ -116,6 +118,7 @@ public sealed class TrackModelConnection
                 var ctc = new List<object>();
                 if (snapshot.LayoutRequestVersion != _ctcLayoutRequestVersion || snapshot.Revision != _ctcLayoutRevision) ctc.Add(snapshot.Layout);
                 ctc.AddRange(snapshot.Sales);
+                ctc.Add(snapshot.Time);
                 var results = await Task.WhenAll(
                     SendBatchAsync(NamedPipeNames.TrackController, snapshot.Blocks.Cast<object>(), token),
                     SendBatchAsync(NamedPipeNames.TrainModel, snapshot.Environments.Cast<object>(), token),
@@ -149,5 +152,5 @@ public sealed class TrackModelConnection
     private void Report(string text) => _dispatcher.InvokeAsync(() => StatusReported?.Invoke(this, text));
     private sealed record Snapshot(int Revision, int LayoutRequestVersion, TrackLayoutMessage Layout,
         List<TrackModelBlockStateMessage> Blocks, List<TrackModelTrainEnvironmentMessage> Environments,
-        List<TrackModelSignalMessage> Signals, List<TicketSalesMessage> Sales);
+        List<TrackModelSignalMessage> Signals, List<TicketSalesMessage> Sales, SystemTimeMessage Time);
 }

@@ -1,5 +1,7 @@
 # Track Model review and executed tests
 
+> Historical review of the original illustrative layout. The current default is the workbook-based 15-block Blue Line. See [Iteration 2 readiness](ITERATION_2_READINESS.md) for the current scope, equipment IDs, 97-test result and resolved XLSX limitation, and [Blue Line manual results](MANUAL_BLUE_LINE_RESULTS.md) for the new native input/output checks and corrected layout-tab crash.
+
 Reviewed October 7, 2026 (Asia/Shanghai). Repository: `https://github.com/Caden404/ECE1140-Trains-`.
 Base: `origin/Derrick`, commit `24456ff98b7ab221d5828d816ed9cea960266a98`.
 Local review branch: `derrick-track-model-review`. Nothing was pushed.

@@ -165,7 +165,7 @@ public class TestUiWorkflowTests
         Assert.AreEqual("Station A",Output("104").Beacon);
         Assert.AreEqual("720 ft / 1.5%",Output("104").ElevationGrade);
         _vm.CurrentBlock="105"; await _vm.RefreshAsync();
-        Assert.AreEqual("No station",_vm.SelectedOutput!.Beacon);
+        Assert.AreEqual("No beacon",_vm.SelectedOutput!.Beacon);
         Assert.AreEqual("720 ft / 1.5%",_vm.SelectedOutput.ElevationGrade);
     }
 
@@ -252,6 +252,82 @@ public class TestUiWorkflowTests
         StringAssert.Contains(_vm.Status,"Boarding exceeds"); Assert.AreEqual("12",Output("104").Tickets);
     }
 
+    private async Task UseBlueLineAsync()
+    {
+        _vm.Stop();
+        _connection = new ModelConnection();
+        BlueLineTrackLayout.LoadDemonstration(_connection.Model);
+        _vm = new MainWindowViewModel(_connection);
+        await _vm.RefreshAsync();
+    }
+
+    [TestMethod]
+    public async Task BlueLine_ControllerCommandsAndAllCapturedDestinationsWork()
+    {
+        await UseBlueLineAsync();
+        Assert.HasCount(15,_vm.Blocks); Assert.AreEqual("1",_vm.CurrentBlock);
+        Assert.AreEqual("09:00:00",_vm.Time);
+        _vm.BlockId="5"; _vm.Switch=SwitchPosition.Reverse; _vm.Speed="20"; _vm.Authority="600";
+        await _vm.RefreshAsync();
+        Assert.AreEqual("11",Output("5").NextBlock); Assert.AreEqual("20 mph",Output("5").Speed);
+        Assert.AreEqual("600 ft",Output("5").Authority); Assert.AreEqual("0 mph",Output("1").ActualSpeed);
+        _vm.BlockId="6";
+        foreach(var signal in new[]{SignalState.Green,SignalState.Yellow,SignalState.Red})
+        {
+            _vm.Signal=signal; await _vm.RefreshAsync();
+            Assert.AreEqual(signal.ToString().ToUpperInvariant(),Output("6").TrafficLight);
+            Assert.AreEqual(signal.ToString().ToUpperInvariant(),Output("6").StateSignal);
+        }
+        _vm.BlockId="3"; _vm.Crossing=CrossingState.Closed; await _vm.RefreshAsync();
+        Assert.AreEqual("Closed",Output("3").Crossing);
+        _vm.SelectedOutput=Output("14"); await _vm.RefreshAsync();
+        Assert.AreEqual("Station C",_vm.SelectedOutput!.Beacon); Assert.AreEqual("14",_vm.SelectedOutput.Id);
+        Assert.AreEqual("3",_vm.BlockId); Assert.AreEqual("1",_vm.CurrentBlock);
+    }
+
+    [TestMethod]
+    public async Task BlueLine_StationDemandAndSingleExchangeAreIndependentInputs()
+    {
+        await UseBlueLineAsync();
+        _vm.WaitingPassengers="7"; _vm.SetDemandCommand.Execute(null); await _vm.RefreshAsync();
+        Assert.AreEqual("7 waiting",Output("10").Demand); Assert.AreEqual("0",Output("10").Tickets);
+        _vm.CurrentBlock="10"; _vm.Boarding="3"; _vm.Disembarking="2";
+        _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
+        Assert.AreEqual("4 waiting",Output("10").Demand); Assert.AreEqual("3 / 2",Output("10").PassengerTotals);
+        Assert.AreEqual("3",Output("10").Tickets); StringAssert.Contains(_vm.TicketSales,"3 tickets/hour");
+        await _vm.RefreshAsync(); Assert.AreEqual("3",Output("10").Tickets);
+        _vm.WaitingPassengers="-1"; _vm.SetDemandCommand.Execute(null); await _vm.RefreshAsync();
+        StringAssert.Contains(_vm.Status,"nonnegative whole number"); Assert.AreEqual("4 waiting",Output("10").Demand);
+    }
+
+    [TestMethod]
+    public async Task BlueLine_MaintenanceInputAndOutputRejectEntryAndClosingOccupiedBlock()
+    {
+        await UseBlueLineAsync();
+        _vm.BlockId="3"; _vm.Maintenance=MaintenanceState.Closed; await _vm.RefreshAsync();
+        Assert.AreEqual("CLOSED",Output("3").Maintenance);
+        _vm.CurrentBlock="3"; await _vm.RefreshAsync();
+        StringAssert.Contains(_vm.Status,"closed for maintenance");
+        Assert.AreEqual("01",_connection.Model.FindBlock("1")!.TrainId);
+        _vm.BlockId="1"; _vm.Maintenance=MaintenanceState.Closed; await _vm.RefreshAsync();
+        StringAssert.Contains(_vm.Status,"occupied block cannot be closed"); Assert.AreEqual("OPEN",Output("1").Maintenance);
+    }
+
+    [TestMethod]
+    public async Task BlueLine_LayoutCaptureAndHeaterFailureOutputsAreComplete()
+    {
+        await UseBlueLineAsync();
+        Assert.AreEqual(50d,Output("1").Definition!.LengthMeters);
+        Assert.AreEqual(50/3.6,Output("1").Definition!.SpeedLimitMetersPerSecond,1e-9);
+        Assert.AreEqual("Bidirectional",Output("1").Definition!.TravelDirection);
+        Assert.AreEqual("Station B",Output("9").Definition!.Beacon);
+        Assert.AreEqual("No beacon",Output("10").Beacon);
+        _vm.Temperature="32"; await _vm.RefreshAsync(); Assert.AreEqual("ON",Output("1").Heater);
+        _vm.Power=true; await _vm.RefreshAsync();
+        Assert.AreEqual("OFF",Output("1").Heater); Assert.AreEqual("UNKNOWN",Output("1").Occupancy);
+        Assert.AreEqual("01",Output("1").Train);
+    }
+
     private sealed class ModelConnection : IExternalModuleConnection
     {
         public TrackService Model { get; }=new();
@@ -269,6 +345,8 @@ public class TestUiWorkflowTests
                     case TrackModelFailureCommandMessage f: Model.ApplyFailures(f); break;
                     case SystemTimeMessage t: Model.SetSystemTime(t.SystemTime); break;
                     case TrackModelTemperatureCommandMessage t: Model.ApplyTemperature(t); break;
+                    case TrackModelPassengerDemandMessage p: Model.ApplyPassengerDemand(p); break;
+                    case MaintenanceRequestMessage m: Model.SetMaintenance(m.BlockId,m.RequestedState); break;
                 }
                 var snapshot=Guid.NewGuid();
                 if(message is TrackModelSnapshotRequestMessage)
@@ -280,6 +358,7 @@ public class TestUiWorkflowTests
                     Emit(new TrackModelSignalMessage{BlockId=block.Id,TrainId=environment.TrainId,Signal=environment.Signal});
                 }
                 foreach(var line in Model.Layout.Blocks.Select(b=>b.LineId).Distinct()) Emit(Model.CreateTicketSales(line));
+                Emit(new SystemTimeMessage{SystemTime=Model.SystemTime});
                 Emit(new TrackModelInputResultMessage{Accepted=true,MessageType=message.GetType().Name});
             }
             catch(ArgumentException ex) { Emit(new TrackModelInputResultMessage{Accepted=false,MessageType=message.GetType().Name,Detail=ex.Message}); }

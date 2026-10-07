@@ -16,6 +16,7 @@ public static class SampleTrackLayout
                 HasSignal = n is 101 or 103 or 110 or 120 or 125 or 126,
                 HasSwitch = n is 103 or 110 or 126, HasCrossing = n == 109, HasHeater = true,
                 StationName = n == 104 ? "Station A" : n == 108 ? "Station B" : n == 115 ? "Station C" : "",
+                Beacon = n == 104 ? "Station A" : n == 108 ? "Station B" : n == 115 ? "Station C" : "",
                 InitialWaitingPassengers = n == 104 ? 24 : n is 108 or 115 ? 12 : 0 });
         var main = Enumerable.Range(101, 20).Select(n => n.ToString()).ToArray();
         for (var i = 0; i < main.Length; i++) Connect(layout, main[i], main[(i + 1) % main.Length]);

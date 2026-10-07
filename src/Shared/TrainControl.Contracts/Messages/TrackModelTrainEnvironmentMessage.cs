@@ -13,6 +13,7 @@ public sealed class TrackModelTrainEnvironmentMessage
     public double AuthorityMeters { get; set; }
     public SignalState Signal { get; set; }
     public string Beacon { get; set; } = string.Empty;
+    public string BeaconTargetBlockId { get; set; } = string.Empty;
     public string NextBlockId { get; set; } = string.Empty;
     public double ElevationMeters { get; set; }
     public double GradePercent { get; set; }

@@ -4,7 +4,7 @@ using Microsoft.VisualBasic.FileIO;
 using TrackModel.Core.Models;
 namespace TrackModel.Core.Persistence;
 
-/// <summary>Imports JSON and quoted CSV layouts, with SI units.</summary>
+/// <summary>Imports JSON/CSV (SI units), or the course workbook's Blue Line worksheet.</summary>
 public sealed class TrackFileRepository : ITrackRepository
 {
     public TrackLayout Load(string source)
@@ -14,7 +14,8 @@ public sealed class TrackFileRepository : ITrackRepository
         else if (Path.GetExtension(source).Equals(".json", StringComparison.OrdinalIgnoreCase))
             layout = JsonSerializer.Deserialize<TrackLayout>(File.ReadAllText(source), new JsonSerializerOptions(JsonSerializerDefaults.Web))
                 ?? throw new InvalidDataException("Layout file is empty.");
-        else throw new InvalidDataException("Choose a JSON or CSV layout file.");
+        else if (Path.GetExtension(source).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)) layout = BlueLineWorkbookReader.Load(source);
+        else throw new InvalidDataException("Choose a JSON, CSV, or course Blue Line XLSX layout file.");
         TrackLayoutValidator.Validate(layout);
         return layout;
     }
@@ -42,6 +43,7 @@ public sealed class TrackFileRepository : ITrackRepository
                 LengthMeters = D("LengthMeters"), ElevationMeters = D("ElevationMeters"), GradePercent = D("GradePercent"),
                 TemperatureCelsius = D("TemperatureCelsius", 20), SpeedLimitMetersPerSecond = D("SpeedLimitMetersPerSecond", 19.444444),
                 StationName = S("StationName"), InitialWaitingPassengers = I("InitialWaitingPassengers"),
+                Beacon = S("Beacon"), BeaconTargetBlockId = S("BeaconTargetBlockId"),
                 HasSwitch = B("HasSwitch"), HasSignal = B("HasSignal"), HasCrossing = B("HasCrossing"), HasHeater = B("HasHeater"),
                 TravelDirection = S("TravelDirection", "Bidirectional"),
                 ConnectedBlockIds = S("ConnectedBlockIds").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
