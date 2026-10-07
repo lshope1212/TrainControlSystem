@@ -42,7 +42,10 @@ What this means:
 - **Subsystem communication happens through shared contracts** sent over local
   Windows named pipes: one newline-delimited JSON envelope (`messageType` + `payload`)
   per connection. The envelope format, transport and endpoint names live in
-  `TrainControl.Common/Communication`. No networking, sockets, or message bus.
+  `TrainControl.Common/Communication`. No networking, sockets, or message bus between
+  Windows modules. The single exception is the Train Controller's link to its Raspberry
+  Pi Hardware controller, which uses TCP/IP over the local network (see
+  `src/TrainController/README.md`).
 - **Process launching and subsystem communication are two separate concerns.**
   Starting an executable says nothing about how the running programs will talk to
   each other. Do not let the launcher grow into a message broker.
@@ -153,7 +156,10 @@ TrainControlSystem
 │   └── TrackModel.Wpf
 │
 ├── TrainController
+│   ├── TrainController.Abstractions
 │   ├── TrainController.Core
+│   ├── TrainController.Integration
+│   ├── TrainController.Hardware.Pi   (runs on the Raspberry Pi)
 │   └── TrainController.Wpf
 │
 ├── TrackController
@@ -166,7 +172,8 @@ TrainControlSystem
 │   └── CTC.TestUI.Wpf   (development-only external-module simulator)
 │
 └── Tests
-    └── TrainControl.Tests
+    ├── TrainControl.Tests
+    └── TrainController.Wpf.Tests   (Windows-only view-model tests)
 ```
 
 Those are Visual Studio **solution folders**. On disk the projects live under
@@ -225,7 +232,9 @@ dotnet test  TrainControlSystem.sln
 
 Each WPF application follows the same minimal pattern:
 
-- `MainWindow.xaml` is the one and only application window.
+- `MainWindow.xaml` is the one and only application window. (Exception:
+  `TrainController.Wpf` has two peer windows, a Main UI and a Test UI — see
+  `src/TrainController/README.md`.)
 - `MainWindow` sets its `DataContext` to `MainWindowViewModel`; code-behind contains
   nothing else.
 - `ViewModels/ViewModelBase.cs` provides `INotifyPropertyChanged`.

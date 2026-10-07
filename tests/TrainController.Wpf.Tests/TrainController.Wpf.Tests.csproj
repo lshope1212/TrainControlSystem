@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    View-model tests for the Train Controller Main UI and Test UI. Windows-only (WPF types),
+    so they live outside TrainControl.Tests (net10.0). No windows are created: view models
+    expose Refresh() and their timers only start when a window is shown.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TrainController\TrainController.Wpf\TrainController.Wpf.csproj" />
+    <ProjectReference Include="..\..\src\TrainController\TrainController.Integration\TrainController.Integration.csproj" />
+    <ProjectReference Include="..\..\src\TrainController\TrainController.Abstractions\TrainController.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

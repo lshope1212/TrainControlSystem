@@ -1,16 +1,19 @@
-﻿using System.Windows;
+using System.Windows;
 using TrainController.Wpf.ViewModels;
 
 namespace TrainController.Wpf;
 
 /// <summary>
-/// Interaction logic for MainWindow.xaml. Code-behind is intentionally kept empty.
+/// Main UI window (Driver / Engineer). Peer of <see cref="TestWindow"/>. Code-behind only
+/// wires the view model's live refresh to the window lifetime.
 /// </summary>
 public partial class MainWindow : Window
 {
-    public MainWindow()
+    public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
-        DataContext = new MainWindowViewModel();
+        DataContext = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        Loaded += (_, _) => viewModel.StartLiveUpdates();
+        Closed += (_, _) => viewModel.StopLiveUpdates();
     }
 }
