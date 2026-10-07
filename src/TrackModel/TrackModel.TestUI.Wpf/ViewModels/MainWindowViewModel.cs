@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -12,44 +13,60 @@ namespace TrackModel.TestUI.Wpf.ViewModels;
 
 public sealed class MainWindowViewModel : ViewModelBase
 {
-    private readonly ExternalModuleSimulator _connection;
+    private readonly IExternalModuleConnection _connection;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly Dictionary<string, CapturedBlockViewModel> _captured = [];
     private readonly Dictionary<string, int> _ticketRates = [];
     private readonly DispatcherTimer _clock;
     private readonly DispatcherTimer _inputDebounce;
     private readonly HashSet<InputGroup> _pendingInputs = [];
-    private bool _suppressInputs, _sendingInputs, _stopped;
+    private bool _suppressInputs, _stopped;
+    private readonly SemaphoreSlim _inputGate = new(1);
+    private readonly List<object> _stagedInputs = [];
     private Guid _layoutSnapshotId;
     private bool _layoutInputsPending, _trainInputsPending;
-    private enum InputGroup { Controller, Train, Failures, Time }
+    private enum InputGroup { Controller, Train, Failures, Time, Temperature }
     private bool _clockBusy;
+    private readonly Stopwatch _elapsed = new();
+    private TimeSpan? _clockValue;
     private string _blockId = "104", _currentBlock = "104", _trainId = "01";
     private CapturedBlockViewModel? _selectedOutput;
     private string _status = "Disconnected";
     private string _speed = "25", _authority = "1200", _actualSpeed = "22", _boarding = "0", _disembarking = "0";
     private string _time = "09:42:18", _multiplier = "1";
+    private string _temperature = "68";
     private SwitchPosition _switch = SwitchPosition.Normal;
     private SignalState _signal = SignalState.Green;
     private CrossingState _crossing = CrossingState.Open;
     private OccupancyState _trainOccupancy = OccupancyState.Occupied;
     private bool _brokenRail, _circuit, _power;
     private bool _isClockRunning;
-    public MainWindowViewModel(ExternalModuleSimulator connection)
+    public MainWindowViewModel(IExternalModuleConnection connection)
     {
         _connection = connection;
         _connection.MessageReceived += Receive;
         _connection.ErrorReported += error => Status = "Capture error: " + error;
         SendCommandsCommand = new AsyncRelayCommand(SendCommandsAsync);
         SendTrainCommand = new AsyncRelayCommand(() => SendTrainAsync(exchange: true));
+        RemoveTrainCommand = new AsyncRelayCommand(async () =>
+        {
+            TrainOccupancy = OccupancyState.Clear;
+            await FlushInputsAsync();
+        });
         SendFailuresCommand = new AsyncRelayCommand(SendFailuresAsync);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         SendTimeCommand = new AsyncRelayCommand(SendTimeAsync);
-        StepClockCommand = new AsyncRelayCommand(() => AdvanceClockAsync(10));
+        StepClockCommand = new AsyncRelayCommand(() => AdvanceClockAsync(10, scale: false));
         ToggleClockCommand = new RelayCommand(ToggleClock);
         ClearLogCommand = new RelayCommand(() => Messages.Clear());
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _clock.Tick += async (_, _) => await AdvanceClockAsync(1);
+        _clock.Tick += async (_, _) =>
+        {
+            if (_clockBusy) return;
+            var seconds = _elapsed.Elapsed.TotalSeconds;
+            _elapsed.Restart();
+            await AdvanceClockAsync(seconds);
+        };
         _inputDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _inputDebounce.Tick += async (_, _) => await FlushInputsAsync();
     }
@@ -63,6 +80,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public OccupancyState[] TrainOccupancyOptions { get; } = [OccupancyState.Occupied, OccupancyState.Clear];
     public ICommand SendCommandsCommand { get; }
     public ICommand SendTrainCommand { get; }
+    public ICommand RemoveTrainCommand { get; }
     public ICommand SendFailuresCommand { get; }
     public ICommand RefreshCommand { get; }
     public ICommand SendTimeCommand { get; }
@@ -77,9 +95,11 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             // WPF temporarily clears selections when the layout collection is rebuilt.
             if (string.IsNullOrWhiteSpace(value)) return;
-            if (!SetProperty(ref _blockId, value)) return;
-            _pendingInputs.Remove(InputGroup.Controller);
-            _pendingInputs.Remove(InputGroup.Failures);
+            if (value == _blockId) return;
+            StagePendingInput(InputGroup.Controller);
+            StagePendingInput(InputGroup.Failures);
+            StagePendingInput(InputGroup.Temperature);
+            SetProperty(ref _blockId, value);
             SelectOutput(value);
             LoadCapturedInputs();
             OnPropertyChanged(nameof(SelectedCommandBlock));
@@ -122,8 +142,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     public string ActualSpeed { get => _actualSpeed; set { if (SetProperty(ref _actualSpeed, value)) QueueInput(InputGroup.Train); } }
     public string Boarding { get => _boarding; set => SetProperty(ref _boarding, value); }
     public string Disembarking { get => _disembarking; set => SetProperty(ref _disembarking, value); }
-    public string Time { get => _time; set { if (SetProperty(ref _time, value)) QueueInput(InputGroup.Time); } }
+    public string Time { get => _time; set { if (SetProperty(ref _time, value)) { _clockValue = null; QueueInput(InputGroup.Time); } } }
     public string Multiplier { get => _multiplier; set => SetProperty(ref _multiplier, value); }
+    public string Temperature { get => _temperature; set { if (SetProperty(ref _temperature, value)) QueueInput(InputGroup.Temperature); } }
     public SwitchPosition Switch { get => _switch; set { if (SetProperty(ref _switch, value)) QueueInput(InputGroup.Controller); } }
     public SignalState Signal { get => _signal; set { if (SetProperty(ref _signal, value)) QueueInput(InputGroup.Controller); } }
     public CrossingState Crossing { get => _crossing; set { if (SetProperty(ref _crossing, value)) QueueInput(InputGroup.Controller); } }
@@ -149,31 +170,45 @@ public sealed class MainWindowViewModel : ViewModelBase
     }
     private readonly Dictionary<string, string> _lineByBlock = [];
 
-    private async Task SendCommandsAsync() => await SendSafely(() => new TrackModelCommandMessage
+    private TrackModelCommandMessage BuildCommand() => new()
     {
         BlockId = Required(BlockId, "Block"), CommandedSpeedMetersPerSecond = Number(Speed, "Speed") * 0.44704,
         AuthorityMeters = Number(Authority, "Authority") * 0.3048, Switch = Switch, Signal = Signal, Crossing = Crossing
-    });
+    };
+    private Task SendCommandsAsync() => SendSafely(BuildCommand);
 
     private async Task SendTrainAsync(bool exchange = false)
     {
-        var remove = TrainOccupancy == OccupancyState.Clear;
+        // Finish ordinary telemetry before the explicit, one-shot exchange.
+        if (exchange) await FlushInputsAsync();
         _pendingInputs.Remove(InputGroup.Train);
-        SelectOutput(CurrentBlock);
-        await SendSafely(() => new TrackModelTrainUpdateMessage
+        await SendSafely(() => BuildTrainUpdate(exchange));
+    }
+
+    private TrackModelTrainUpdateMessage BuildTrainUpdate(bool exchange = false)
+    {
+        var remove = TrainOccupancy == OccupancyState.Clear;
+        if (exchange && remove) throw new ArgumentException("Place the train on a station before applying an exchange.");
+        return new TrackModelTrainUpdateMessage
         {
             TrainId = Required(TrainId, "Train ID"), CurrentBlockId = remove ? "" : Required(CurrentBlock, "Current block"),
             ActualSpeedMetersPerSecond = remove ? 0 : Number(ActualSpeed, "Actual speed") * 0.44704,
             BoardingPassengers = !remove && exchange ? Count(Boarding, "Boarding") : 0,
             DisembarkingPassengers = !remove && exchange ? Count(Disembarking, "Disembarking") : 0,
             ExchangeId = Guid.NewGuid().ToString("N")
-        });
+        };
     }
 
-    private async Task SendFailuresAsync() => await SendSafely(() => new TrackModelFailureCommandMessage
-        { BlockId = Required(BlockId, "Block"), BrokenRail = BrokenRail, TrackCircuitFailure = Circuit, PowerFailure = Power });
+    private TrackModelFailureCommandMessage BuildFailures() => new()
+        { BlockId = Required(BlockId, "Block"), BrokenRail = BrokenRail, TrackCircuitFailure = Circuit, PowerFailure = Power };
+    private Task SendFailuresAsync() => SendSafely(BuildFailures);
 
-    public Task RefreshAsync() => SendSafely(() => new TrackModelSnapshotRequestMessage());
+    public async Task RefreshAsync()
+    {
+        // A refresh is a barrier: edits must reach the model before its snapshot.
+        await FlushInputsAsync();
+        await SendSafely(() => new TrackModelSnapshotRequestMessage());
+    }
     private Task SendTimeAsync() => SendSafely(() => new SystemTimeMessage { SystemTime = ParseTime() });
 
     private async Task SendSafely(Func<object> build)
@@ -181,7 +216,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         try
         {
             var message = build();
-            Status = "Sending input to Track Model…";
+            if (message is not TrackModelSnapshotRequestMessage) Status = "Sending input to Track Model…";
             await _connection.SendAsync(message);
         }
         catch (TimeoutException) { Status = "Track Model offline"; }
@@ -198,12 +233,13 @@ public sealed class MainWindowViewModel : ViewModelBase
             {
                 case nameof(TrackLayoutMessage):
                     var layout = MessageSerializer.DeserializePayload<TrackLayoutMessage>(envelope);
+                    if (Status is "Disconnected" or "Track Model offline") Status = "Connected — snapshot received";
                     var selection = BlockId;
                     var current = CurrentBlock;
+                    var outputSelection = SelectedOutput?.Id;
                     _layoutSnapshotId = layout.SnapshotId;
-                    _layoutInputsPending = true;
-                    _trainInputsPending = true;
-                    _pendingInputs.Clear(); _inputDebounce.Stop();
+                    _layoutInputsPending = !_pendingInputs.Contains(InputGroup.Controller) && !_pendingInputs.Contains(InputGroup.Failures) && !_pendingInputs.Contains(InputGroup.Temperature);
+                    _trainInputsPending = !_pendingInputs.Contains(InputGroup.Train);
                     Blocks.Clear(); _lineByBlock.Clear();
                     var ids = new HashSet<string>();
                     foreach (var line in layout.Lines)
@@ -222,7 +258,7 @@ public sealed class MainWindowViewModel : ViewModelBase
                     {
                         OnPropertyChanged(nameof(SelectedCommandBlock)); OnPropertyChanged(nameof(SelectedTrainBlock));
                     }));
-                    SelectOutput(BlockId);
+                    SelectOutput(outputSelection is not null && ids.Contains(outputSelection) ? outputSelection : BlockId);
                     OnPropertyChanged(nameof(HasSwitch)); OnPropertyChanged(nameof(HasSignal)); OnPropertyChanged(nameof(HasCrossing)); OnPropertyChanged(nameof(TicketSales));
                     TrySynchronizeLayoutInputs();
                     break;
@@ -248,7 +284,9 @@ public sealed class MainWindowViewModel : ViewModelBase
                     _ticketRates[sales.LineId] = sales.TicketsPerHour; OnPropertyChanged(nameof(TicketSales)); break;
                 case nameof(TrackModelInputResultMessage):
                     var result = MessageSerializer.DeserializePayload<TrackModelInputResultMessage>(envelope);
-                    Status = result.Accepted ? "Input accepted" : "Rejected: " + result.Detail;
+                    // Snapshot acknowledgement must not hide input validation errors.
+                    if (!result.Accepted || result.MessageType != nameof(TrackModelSnapshotRequestMessage))
+                        Status = result.Accepted ? "Input accepted" : "Rejected: " + result.Detail;
                     break;
                 default: break; // Keep unfamiliar contract messages visible in the log.
             }
@@ -290,6 +328,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             {
                 Speed = (environment.CommandedSpeedMetersPerSecond / 0.44704).ToString("0.###", CultureInfo.CurrentCulture);
                 Authority = (environment.AuthorityMeters / 0.3048).ToString("0.###", CultureInfo.CurrentCulture);
+                Temperature = (environment.TemperatureCelsius * 1.8 + 32).ToString("0.###", CultureInfo.CurrentCulture);
             }
         }
         finally { _suppressInputs = wasSuppressed; }
@@ -324,9 +363,10 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         if (_suppressInputs || _stopped) return;
         // An edit made while the fresh snapshot is arriving belongs to the user.
-        if (group is InputGroup.Controller or InputGroup.Failures) _layoutInputsPending = false;
+        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature) _layoutInputsPending = false;
         if (group == InputGroup.Train) _trainInputsPending = false;
-        if (group is InputGroup.Controller or InputGroup.Failures) SelectOutput(BlockId);
+        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature) SelectOutput(BlockId);
+        if (group == InputGroup.Train) SelectOutput(CurrentBlock);
         _pendingInputs.Add(group);
         _inputDebounce.Stop();
         _inputDebounce.Start();
@@ -335,42 +375,78 @@ public sealed class MainWindowViewModel : ViewModelBase
     private async Task FlushInputsAsync()
     {
         _inputDebounce.Stop();
-        if (_sendingInputs || _stopped) return;
-        _sendingInputs = true;
-        var groups = _pendingInputs.ToArray();
-        _pendingInputs.Clear();
+        await _inputGate.WaitAsync();
         try
         {
-            foreach (var group in groups)
-                switch (group)
-                {
-                    case InputGroup.Controller: await SendCommandsAsync(); break;
-                    case InputGroup.Train: await SendTrainAsync(); break;
-                    case InputGroup.Failures: await SendFailuresAsync(); break;
-                    case InputGroup.Time: await SendTimeAsync(); break;
-                }
+            if (_stopped) return;
+            foreach (var group in _pendingInputs.ToArray()) StagePendingInput(group);
+            var messages = _stagedInputs.ToArray();
+            _stagedInputs.Clear();
+            foreach (var message in messages) await SendSafely(() => message);
         }
         finally
         {
-            _sendingInputs = false;
+            _inputGate.Release();
             if (_pendingInputs.Count > 0 && !_stopped) _inputDebounce.Start();
         }
     }
 
+    private void StagePendingInput(InputGroup group)
+    {
+        if (!_pendingInputs.Remove(group)) return;
+        try
+        {
+            _stagedInputs.Add(group switch
+            {
+                InputGroup.Controller => BuildCommand(),
+                InputGroup.Train => BuildTrainUpdate(),
+                InputGroup.Failures => BuildFailures(),
+                InputGroup.Time => new SystemTimeMessage { SystemTime = ParseTime() },
+                InputGroup.Temperature => BuildTemperature(),
+                _ => throw new InvalidOperationException("Unknown input group.")
+            });
+        }
+        catch (ArgumentException ex) { Status = "Unable to send: " + ex.Message; }
+    }
+
+    private TrackModelTemperatureCommandMessage BuildTemperature()
+    {
+        if (!double.TryParse(Temperature, NumberStyles.Number, CultureInfo.CurrentCulture, out var value)
+            || !double.IsFinite(value) || value < -459.67)
+            throw new ArgumentException("Temperature must be a number at least -459.67 °F.");
+        return new() { BlockId = BlockId, TemperatureCelsius = (value - 32) / 1.8 };
+    }
+
     private void ToggleClock()
     {
+        if (!_isClockRunning)
+        {
+            try
+            {
+                _clockValue = ParseTime();
+                if (Number(Multiplier, "Clock multiplier") <= 0) throw new ArgumentException("Clock multiplier must be greater than zero.");
+            }
+            catch (ArgumentException ex) { Status = "Clock stopped: " + ex.Message; return; }
+        }
         _isClockRunning = !_isClockRunning;
-        if (_isClockRunning) _clock.Start(); else _clock.Stop();
+        if (_isClockRunning) { _elapsed.Restart(); _clock.Start(); }
+        else { _clock.Stop(); _elapsed.Stop(); }
         OnPropertyChanged(nameof(ClockAction));
     }
-    private async Task AdvanceClockAsync(double seconds)
+    private async Task AdvanceClockAsync(double seconds, bool scale = true)
     {
         if (_clockBusy) return;
         _clockBusy = true;
         try
         {
-            var time = ParseTime() + TimeSpan.FromSeconds(seconds * Number(Multiplier, "Clock multiplier"));
+            var parsed = ParseTime();
+            var multiplier = scale ? Number(Multiplier, "Clock multiplier") : 1;
+            if (multiplier <= 0) throw new ArgumentException("Clock multiplier must be greater than zero.");
+            var time = (_clockValue ?? parsed) + TimeSpan.FromSeconds(seconds * multiplier);
+            // Time-of-day wraps consistently at midnight in both applications.
+            time = TimeSpan.FromTicks(time.Ticks % TimeSpan.TicksPerDay);
             await _connection.SendAsync(new SystemTimeMessage { SystemTime = time });
+            _clockValue = time;
             // The clock already sent this value; do not enqueue a second manual edit.
             _time = time.ToString(@"hh\:mm\:ss");
             OnPropertyChanged(nameof(Time));
@@ -382,7 +458,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
         finally { _clockBusy = false; }
     }
-    public void Stop() { _stopped = true; _clock.Stop(); _inputDebounce.Stop(); _pendingInputs.Clear(); }
+    public void Stop() { _stopped = true; _clock.Stop(); _elapsed.Stop(); _inputDebounce.Stop(); _pendingInputs.Clear(); _stagedInputs.Clear(); }
     private TimeSpan ParseTime()
     {
         if (!TimeSpan.TryParseExact(Time, @"hh\:mm\:ss", CultureInfo.InvariantCulture, out var value))

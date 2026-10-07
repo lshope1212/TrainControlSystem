@@ -18,6 +18,8 @@ public class TrackBlock
     public bool HasSwitch { get; set; }
     public bool HasSignal { get; set; }
     public bool HasCrossing { get; set; }
+    public bool HasHeater { get; set; }
+    public string TravelDirection { get; set; } = "Bidirectional";
     public List<string> ConnectedBlockIds { get; set; } = [];
     public string NormalNextBlockId { get; set; } = string.Empty;
     public string ReverseNextBlockId { get; set; } = string.Empty;
@@ -39,6 +41,8 @@ public class TrackBlock
     [JsonIgnore] public int DisembarkingPassengers { get; set; }
     [JsonIgnore] public int TicketsSold { get; set; }
     [JsonIgnore] public bool HasFailure => BrokenRail || TrackCircuitFailure || PowerFailure;
+    // Demonstration policy: installed heaters run at/below freezing when powered.
+    [JsonIgnore] public bool HeaterOn => HasHeater && TemperatureCelsius <= 0 && !PowerFailure;
     [JsonIgnore] public OccupancyState ReportedOccupancy => PowerFailure || TrackCircuitFailure
         ? OccupancyState.Unknown : IsOccupied ? OccupancyState.Occupied : OccupancyState.Clear;
     [JsonIgnore] public SignalState EffectiveSignal => !HasSignal || PowerFailure ? SignalState.Unknown : Signal;

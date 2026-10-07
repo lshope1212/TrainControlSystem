@@ -16,6 +16,8 @@
       "hasSwitch": false,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "102",
         "120",
@@ -39,6 +41,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "101",
         "103"
@@ -61,6 +65,8 @@
       "hasSwitch": true,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "102",
         "104",
@@ -84,6 +90,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "103",
         "105"
@@ -106,6 +114,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "104",
         "106"
@@ -128,6 +138,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "105",
         "107"
@@ -150,6 +162,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "106",
         "108"
@@ -172,6 +186,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "107",
         "109"
@@ -194,6 +210,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": true,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "108",
         "110"
@@ -216,6 +234,8 @@
       "hasSwitch": true,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "109",
         "111",
@@ -239,6 +259,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "110",
         "112"
@@ -261,6 +283,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "111",
         "113"
@@ -283,6 +307,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "112",
         "114"
@@ -305,6 +331,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "113",
         "115"
@@ -327,6 +355,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "114",
         "116"
@@ -349,6 +379,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "115",
         "117"
@@ -371,6 +403,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "116",
         "118"
@@ -393,6 +427,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "117",
         "119"
@@ -415,6 +451,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "118",
         "120"
@@ -437,6 +475,8 @@
       "hasSwitch": false,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "119",
         "101"
@@ -459,6 +499,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "103",
         "122"
@@ -481,6 +523,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "121",
         "123"
@@ -503,6 +547,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "122",
         "124"
@@ -525,6 +571,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "123",
         "125"
@@ -547,6 +595,8 @@
       "hasSwitch": false,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "124",
         "110"
@@ -569,6 +619,8 @@
       "hasSwitch": true,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "101",
         "127",
@@ -592,6 +644,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "126"
       ],
@@ -613,6 +667,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "126"
       ],
@@ -634,6 +690,8 @@
       "hasSwitch": false,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G2",
         "G8"
@@ -656,6 +714,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G1",
         "G3"
@@ -678,6 +738,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G2",
         "G4"
@@ -700,6 +762,8 @@
       "hasSwitch": false,
       "hasSignal": true,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G3",
         "G5"
@@ -722,6 +786,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G4",
         "G6"
@@ -744,6 +810,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G5",
         "G7"
@@ -766,6 +834,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G6",
         "G8"
@@ -788,6 +858,8 @@
       "hasSwitch": false,
       "hasSignal": false,
       "hasCrossing": false,
+      "hasHeater": true,
+      "travelDirection": "Bidirectional",
       "connectedBlockIds": [
         "G7",
         "G1"

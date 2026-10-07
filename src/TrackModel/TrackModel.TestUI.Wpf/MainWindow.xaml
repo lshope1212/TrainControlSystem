@@ -63,7 +63,8 @@
 </Grid>
 </Grid>
     <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-     <Button Content="Apply passenger exchange" Command="{Binding SendTrainCommand}" AutomationProperties.Name="Apply passenger exchange" Margin="0,0,6,0"/>
+     <Button Content="Apply passenger exchange once" Command="{Binding SendTrainCommand}" AutomationProperties.Name="Apply passenger exchange once" Margin="0,0,6,0"/>
+     <Button Content="Remove train" Command="{Binding RemoveTrainCommand}" AutomationProperties.Name="Remove train"/>
     </StackPanel>
 
    </StackPanel></Border>
@@ -82,18 +83,22 @@
    <Border Grid.Row="2" Style="{StaticResource Card}"><StackPanel>
     <TextBlock Text="Failure Injection" Style="{StaticResource Heading}"/>
     <TextBlock Text="{Binding BlockId, StringFormat=Block {0}}" Foreground="{StaticResource Muted}"/>
-    <StackPanel Orientation="Horizontal" Margin="0,3,0,9">
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
      <CheckBox Content="Broken rail" IsChecked="{Binding BrokenRail}" Margin="0,6,12,6" AutomationProperties.Name="Inject broken rail"/>
      <CheckBox Content="Track circuit" IsChecked="{Binding Circuit}" Margin="0,6,12,6" AutomationProperties.Name="Inject track circuit"/>
      <CheckBox Content="Power" IsChecked="{Binding Power}" AutomationProperties.Name="Inject power"/>
     </StackPanel>
-    <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="0,9,0,0"><StackPanel>
-     <TextBlock Text="Shared System Clock" Style="{StaticResource Heading}"/>
+    <Grid Margin="0,0,0,4"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions>
+     <TextBlock Text="Temperature (°F)"/>
+     <TextBox Grid.Column="1" Text="{Binding Temperature, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Ambient temperature Fahrenheit"/>
+    </Grid>
+    <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="0,5,0,0"><StackPanel>
+     <TextBlock Text="Shared System Clock" Style="{StaticResource Heading}" Margin="0,0,0,3"/>
      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="34"/><RowDefinition Height="34"/></Grid.RowDefinitions>
 <TextBlock Grid.Row="0" Text="Time (HH:mm:ss)" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="0" Grid.Column="1" Margin="0,2,0,2" Text="{Binding Time, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="System time" />
 <TextBlock Grid.Row="1" Text="Speed multiplier" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" Text="{Binding Multiplier, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Clock multiplier" />
 </Grid>
-     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
       <Button Content="{Binding ClockAction}" Command="{Binding ToggleClockCommand}" Margin="0,0,8,0" AutomationProperties.Name="Toggle simulation clock"/>
       <Button Content="Step 10 sec" Command="{Binding StepClockCommand}" AutomationProperties.Name="Step 10 sec"/>
      </StackPanel>
@@ -117,8 +122,14 @@
     <TextBlock Text="To Train Controller &amp; CTC" Style="{StaticResource Heading}"/>
     <TextBlock Text="Traffic light" Foreground="{StaticResource Muted}" Margin="0,4,0,3"/>
     <TextBlock Text="{Binding SelectedOutput.TrafficLight}" Style="{StaticResource OutputValue}" FontSize="19"/>
-    <TextBlock Text="Ticket sales" Foreground="{StaticResource Muted}" Margin="0,10,0,3"/>
+    <TextBlock Text="Tickets in preceding simulation hour" Foreground="{StaticResource Muted}" Margin="0,10,0,3"/>
     <TextBlock Text="{Binding TicketSales}" Style="{StaticResource OutputValue}" FontSize="17"/>
+    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="26"/><RowDefinition Height="26"/><RowDefinition Height="26"/></Grid.RowDefinitions>
+     <TextBlock Text="Boarded / disembarked"/><TextBlock Grid.Column="1" Text="{Binding SelectedOutput.PassengerTotals}" Style="{StaticResource OutputValue}"/>
+     <TextBlock Grid.Row="1" Text="Cumulative station tickets"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedOutput.Tickets}" Style="{StaticResource OutputValue}"/>
+     <TextBlock Grid.Row="2" Text="Temperature"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedOutput.Temperature}" Style="{StaticResource OutputValue}"/>
+     <TextBlock Grid.Row="3" Text="Track heater"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedOutput.Heater}" Style="{StaticResource OutputValue}"/>
+    </Grid>
    </StackPanel></Border>
   </Grid>
  </DockPanel>

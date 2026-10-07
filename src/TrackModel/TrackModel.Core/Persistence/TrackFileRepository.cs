@@ -42,7 +42,8 @@ public sealed class TrackFileRepository : ITrackRepository
                 LengthMeters = D("LengthMeters"), ElevationMeters = D("ElevationMeters"), GradePercent = D("GradePercent"),
                 TemperatureCelsius = D("TemperatureCelsius", 20), SpeedLimitMetersPerSecond = D("SpeedLimitMetersPerSecond", 19.444444),
                 StationName = S("StationName"), InitialWaitingPassengers = I("InitialWaitingPassengers"),
-                HasSwitch = B("HasSwitch"), HasSignal = B("HasSignal"), HasCrossing = B("HasCrossing"),
+                HasSwitch = B("HasSwitch"), HasSignal = B("HasSignal"), HasCrossing = B("HasCrossing"), HasHeater = B("HasHeater"),
+                TravelDirection = S("TravelDirection", "Bidirectional"),
                 ConnectedBlockIds = S("ConnectedBlockIds").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
                 NormalNextBlockId = S("NormalNextBlockId"), ReverseNextBlockId = S("ReverseNextBlockId") });
         }

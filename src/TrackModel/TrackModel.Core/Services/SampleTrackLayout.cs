@@ -14,7 +14,7 @@ public static class SampleTrackLayout
                 LengthMeters = 121.92, ElevationMeters = 219.456, GradePercent = 1.5,
                 // Signals at yard/bypass junctions and the return/bypass approaches.
                 HasSignal = n is 101 or 103 or 110 or 120 or 125 or 126,
-                HasSwitch = n is 103 or 110 or 126, HasCrossing = n == 109,
+                HasSwitch = n is 103 or 110 or 126, HasCrossing = n == 109, HasHeater = true,
                 StationName = n == 104 ? "Station A" : n == 108 ? "Station B" : n == 115 ? "Station C" : "",
                 InitialWaitingPassengers = n == 104 ? 24 : n is 108 or 115 ? 12 : 0 });
         var main = Enumerable.Range(101, 20).Select(n => n.ToString()).ToArray();
@@ -29,7 +29,7 @@ public static class SampleTrackLayout
         for (var n = 1; n <= 8; n++)
             layout.Blocks.Add(new TrackBlock { Id = "G" + n, Number = n, LineId = "Green", LengthMeters = 100,
                 // A loop entry signal and a station departure signal on the small line.
-                HasSignal = n is 1 or 4, StationName = n == 4 ? "Park Station" : "", InitialWaitingPassengers = n == 4 ? 30 : 0 });
+                HasSignal = n is 1 or 4, HasHeater = true, StationName = n == 4 ? "Park Station" : "", InitialWaitingPassengers = n == 4 ? 30 : 0 });
         for (var n = 1; n <= 8; n++) Connect(layout, "G" + n, "G" + (n % 8 + 1));
         return layout;
     }
@@ -41,7 +41,8 @@ public static class SampleTrackLayout
         foreach (var b in service.Layout.Blocks)
             service.ApplyCommand(new TrackModelCommandMessage { BlockId = b.Id, CommandedSpeedMetersPerSecond = 11.176, AuthorityMeters = 365.76 });
         service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "104",
-            ActualSpeedMetersPerSecond = 9.83488, BoardingPassengers = 12, DisembarkingPassengers = 8, ExchangeId = "demo" });
+            BoardingPassengers = 12, DisembarkingPassengers = 8, ExchangeId = "demo" });
+        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "104", ActualSpeedMetersPerSecond = 9.83488 });
         service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "02", CurrentBlockId = "116", ActualSpeedMetersPerSecond = 9.83488 });
         service.ApplyFailures(new TrackModelFailureCommandMessage { BlockId = "119", TrackCircuitFailure = true });
     }

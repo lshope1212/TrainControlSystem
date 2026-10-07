@@ -65,6 +65,8 @@ public sealed class TrackModelConnection
                         _track.ApplyFailures(MessageSerializer.DeserializePayload<TrackModelFailureCommandMessage>(envelope)); break;
                     case nameof(SystemTimeMessage):
                         _track.SetSystemTime(MessageSerializer.DeserializePayload<SystemTimeMessage>(envelope).SystemTime); break;
+                    case nameof(TrackModelTemperatureCommandMessage):
+                        _track.ApplyTemperature(MessageSerializer.DeserializePayload<TrackModelTemperatureCommandMessage>(envelope)); break;
                     case nameof(MaintenanceRequestMessage):
                         var maintenance = MessageSerializer.DeserializePayload<MaintenanceRequestMessage>(envelope);
                         _track.SetMaintenance(maintenance.BlockId, maintenance.RequestedState); break;

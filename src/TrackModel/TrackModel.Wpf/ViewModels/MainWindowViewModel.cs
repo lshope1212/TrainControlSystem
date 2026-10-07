@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Globalization;
 using System.Text.Json;
 using System.Windows.Input;
 using Microsoft.Win32;
@@ -7,6 +8,7 @@ using TrackModel.Core.Interfaces;
 using TrackModel.Core.Persistence;
 using TrackModel.Core.Services;
 using TrackModel.Wpf.Commands;
+using TrainControl.Contracts.Messages;
 
 namespace TrackModel.Wpf.ViewModels;
 
@@ -19,12 +21,14 @@ public class MainWindowViewModel : ViewModelBase
     private string _status = "Ready";
     private string _delivery = "Waiting for external modules.";
     private int _diagramRevision;
+    private string _temperatureInput = "68";
     public MainWindowViewModel(ITrackService track)
     {
         _track = track;
         ImportCommand = new RelayCommand(_ => Import());
         ExportCommand = new RelayCommand(_ => Export());
         DemoCommand = new RelayCommand(_ => LoadDemo());
+        SetTemperatureCommand = new RelayCommand(_ => SetTemperature());
         _track.StateChanged += (_, _) => Refresh();
         Refresh();
     }
@@ -35,6 +39,8 @@ public class MainWindowViewModel : ViewModelBase
     public ICommand ImportCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand DemoCommand { get; }
+    public ICommand SetTemperatureCommand { get; }
+    public string TemperatureInput { get => _temperatureInput; set => SetProperty(ref _temperatureInput, value); }
     public string LayoutName => _track.Layout.Name;
     public string SystemTime => _track.SystemTime.ToString(@"hh\:mm\:ss");
     public int BlockCount => Blocks.Count;
@@ -51,7 +57,11 @@ public class MainWindowViewModel : ViewModelBase
     public BlockViewModel? SelectedBlock
     {
         get => _selectedBlock;
-        set => SetProperty(ref _selectedBlock, value);
+        set
+        {
+            if (SetProperty(ref _selectedBlock, value) && value is not null)
+                TemperatureInput = (_track.FindBlock(value.Id)!.TemperatureCelsius * 1.8 + 32).ToString("0.##", CultureInfo.CurrentCulture);
+        }
     }
 
     private void Refresh()
@@ -124,5 +134,19 @@ public class MainWindowViewModel : ViewModelBase
     private void LoadDemo()
     {
         if (_track is TrackService service) { SampleTrackLayout.LoadDemo(service); Status = "Demo restored"; }
+    }
+
+    private void SetTemperature()
+    {
+        try
+        {
+            if (SelectedBlock is null) throw new ArgumentException("Select a block first.");
+            if (!double.TryParse(TemperatureInput, NumberStyles.Number, CultureInfo.CurrentCulture, out var fahrenheit))
+                throw new ArgumentException("Temperature must be a number in °F.");
+            _track.ApplyTemperature(new TrackModelTemperatureCommandMessage
+                { BlockId = SelectedBlock.Id, TemperatureCelsius = (fahrenheit - 32) / 1.8 });
+            Status = "Temperature updated for block " + SelectedBlock.Id;
+        }
+        catch (ArgumentException ex) { Status = "Rejected: " + ex.Message; }
     }
 }

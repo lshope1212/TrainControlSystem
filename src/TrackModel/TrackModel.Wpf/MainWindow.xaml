@@ -65,6 +65,20 @@
        <Border Style="{StaticResource Card}" ><StackPanel><TextBlock Text="Movement" Style="{StaticResource Heading}"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/></Grid.RowDefinitions><TextBlock Grid.Row="0" Text="Train" Style="{StaticResource Label}"/><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedBlock.Train}" Style="{StaticResource Value}"/><TextBlock Grid.Row="1" Text="Actual speed" Style="{StaticResource Label}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.ActualSpeed}" Style="{StaticResource Value}"/><TextBlock Grid.Row="2" Text="Commanded speed" Style="{StaticResource Label}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.CommandedSpeed}" Style="{StaticResource Value}"/><TextBlock Grid.Row="3" Text="Authority" Style="{StaticResource Label}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.Authority}" Style="{StaticResource Value}"/></Grid></StackPanel></Border>
       </StackPanel>
      </Grid>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+      <TextBlock Text="Track properties &amp; environment" Style="{StaticResource Heading}"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/></Grid.RowDefinitions>
+       <TextBlock Text="Speed limit"/><TextBlock Grid.Column="1" Text="{Binding SelectedBlock.SpeedLimit}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="1" Text="Travel direction"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.TravelDirection}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="2" Text="Beacon"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.Beacon}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="3" Text="Track heater"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.Heater}" Style="{StaticResource Value}"/>
+      </Grid>
+      <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="90"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <TextBlock Text="Temperature (°F)"/>
+       <TextBox Grid.Column="1" Text="{Binding TemperatureInput, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Set ambient temperature Fahrenheit"/>
+       <Button Grid.Column="2" Content="Apply" Command="{Binding SetTemperatureCommand}" Margin="8,0,0,0" AutomationProperties.Name="Apply ambient temperature"/>
+      </Grid>
+     </StackPanel></Border>
      <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
       <Border Style="{StaticResource Card}" Margin="0,0,5,0"><StackPanel><TextBlock Text="Failures" Style="{StaticResource Heading}"/><CheckBox Content="Broken rail" IsChecked="{Binding SelectedBlock.BrokenRail}" AutomationProperties.Name="Broken rail failure"/><CheckBox Content="Track circuit" IsChecked="{Binding SelectedBlock.TrackCircuitFailure}" AutomationProperties.Name="Track circuit failure"/><CheckBox Content="Power" IsChecked="{Binding SelectedBlock.PowerFailure}" AutomationProperties.Name="Power failure"/></StackPanel></Border>
       <Border Style="{StaticResource Card}" Grid.Column="1" Margin="5,0,0,0"><StackPanel><TextBlock Text="Active Failures" Style="{StaticResource Heading}"/><ItemsControl ItemsSource="{Binding Failures}"><ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding Id}" FontWeight="Bold" Foreground="DarkOrange"/><TextBlock Text="{Binding FailureSummary}" TextWrapping="Wrap" Foreground="DarkOrange"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>

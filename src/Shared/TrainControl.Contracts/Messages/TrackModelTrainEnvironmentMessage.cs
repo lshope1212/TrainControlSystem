@@ -18,4 +18,11 @@ public sealed class TrackModelTrainEnvironmentMessage
     public double GradePercent { get; set; }
     public double TemperatureCelsius { get; set; }
     public int WaitingPassengers { get; set; }
+    public int BoardingPassengers { get; set; }
+    public int DisembarkingPassengers { get; set; }
+    public int TicketsSold { get; set; }
+    public bool HasHeater { get; set; }
+    public bool HeaterOn { get; set; }
+    public double SpeedLimitMetersPerSecond { get; set; }
+    public string TravelDirection { get; set; } = "Bidirectional";
 }

@@ -47,16 +47,16 @@ receiver, click **Refresh outputs** to request a fresh layout and snapshot.
 3. Set train 01's current block to 105. Occupancy moves automatically from 104 to
    105 and the output selector follows the train. Under **From Train Model**, set
    **Occupancy** to **Clear** to remove that train, or **Occupied** to place it on
-   the current block. Speed edits while Clear leave the train off the track.
+   the current block. **Remove train** is a shortcut for Clear; choose **Occupied** to place the train again. Speed edits while Clear leave the train off the track.
    Train ID commits on leaving the field; position and actual speed update live.
 4. Select block 119 and toggle its failures; each change sends automatically.
    Failures can also be changed directly for the selected block on the dashboard.
 5. On station block 104, enter boarding/disembarking counts, then click
-   **Apply passenger exchange** once per exchange.
-   Boarding reduces waiting passengers and increments station ticket totals.
+   **Apply passenger exchange once** once per exchange.
+   The train must be stopped. Boarding reduces waiting passengers and increments station ticket totals. Test UI displays cumulative boarding, disembarking, station tickets, and the rolling ticket rate separately.
    Ordinary speed/position edits send zero passenger counts, so they never replay
    the entered exchange.
-6. Edit time directly, or use **Start clock** / **Step 10 sec** to drive simulation time.
+6. Edit time directly, or use **Start clock** / **Step 10 sec** to drive simulation time. A step is exactly ten simulation seconds at any multiplier; a running clock uses elapsed wall time and preserves fractional seconds. Time-of-day wraps at midnight.
    Pause the clock before manually changing its time.
 7. All inputs and output panels fit on a single page without vertical scrolling
    at the minimum window size of 1180 × 720. **Captured messages** opens a separate
@@ -91,7 +91,7 @@ JSON uses a root object with `name` and `blocks`. Each block requires `id`,
 `number`, `section`, `elevationMeters`, `gradePercent`,
 `speedLimitMetersPerSecond`, `temperatureCelsius`, `stationName`,
 `initialWaitingPassengers`, `hasSwitch`, `hasSignal`, `hasCrossing`,
-`connectedBlockIds`, `normalNextBlockId`, and `reverseNextBlockId`.
+`connectedBlockIds`, `normalNextBlockId`, `reverseNextBlockId`, `hasHeater`, and `travelDirection` (`Forward`, `Reverse`, or `Bidirectional`; default `Bidirectional`).
 
 CSV uses the same property names as headers, case-insensitively; `Id`, `LineId`,
 and `LengthMeters` are required. Separate connection IDs with semicolons in one
@@ -146,12 +146,13 @@ logic.
   power failure reports occupancy as Unknown without deleting actual train
   position. Power failure makes the signal Unknown. Wayside speed/authority safety
   decisions belong to Track Controller.
-- Passenger exchanges require a station and cannot board more than its waiting
+- Passenger exchanges require a stopped train at a station and cannot board more than its waiting
   demand. An ExchangeId makes retries idempotent. One ticket is counted per boarding
   passenger. Station totals persist until layout reset; CTC throughput counts
   tickets in the preceding simulation hour. Rewinding time resets that hourly ledger.
 - Passenger demand starts from the layout's initial value; automatic demand
   generation and real class track-file formats can be added when specified.
+- Ambient temperature is set per block from the dashboard or Test UI (°F controls, °C contracts). Installed heaters turn on at/below 32°F and turn off above 32°F or on power failure. This is a documented demonstration policy, not a specified class heater threshold. Imported layouts without `hasHeater` show N/A. Direction metadata is displayed; train physics and enforcement belong to later integration.
 - System time comes from shared SystemTimeMessage inputs; Track Model does not own
   another independent clock. The Test UI's clock provides those messages for testing.
 
@@ -162,6 +163,10 @@ dotnet build TrainControlSystem.sln
 dotnet test TrainControlSystem.sln --no-build
 ```
 
+The solution includes a Windows-only WPF workflow suite, using the real Test UI view model, serialized contracts, and a model-backed test transport. Production Test UI still references Contracts/Common only. These tests cover all 13 supplied checklist categories; the separate core tests remain platform-neutral.
+
 Tests cover train movement/removal, collision and maintenance rejection, failures,
 passenger retry accounting, switch behavior, invalid layouts, JSON/CSV import,
 runtime-state exclusion from exported layouts, and ticket throughput.
+
+See [review and executed test results](REVIEW_RESULTS.md) for the local review, equipment IDs, defects, and remaining system integration limits.

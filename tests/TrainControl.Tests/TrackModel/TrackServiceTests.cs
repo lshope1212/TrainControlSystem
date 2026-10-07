@@ -181,4 +181,45 @@ public class TrackServiceTests
         Assert.AreEqual(10d, service.CreateTrainEnvironment("104").CommandedSpeedMetersPerSecond);
         Assert.AreEqual(OccupancyState.Occupied, service.CreateBlockState("104").Occupancy);
     }
+
+    [TestMethod]
+    public void PassengerExchange_MovingTrainRejectsAllChanges()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "105", ActualSpeedMetersPerSecond = 5 });
+        Assert.Throws<ArgumentException>(() => service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104",
+            ActualSpeedMetersPerSecond = 1, BoardingPassengers = 3, ExchangeId = "moving" }));
+        Assert.AreEqual("01", service.FindBlock("105")!.TrainId);
+        Assert.IsFalse(service.FindBlock("104")!.IsOccupied);
+        Assert.AreEqual(24, service.FindBlock("104")!.WaitingPassengers);
+    }
+
+    [TestMethod]
+    public void Temperature_HeaterFollowsFreezingThresholdAndPower()
+    {
+        var service = CreateService();
+        foreach (var (temperature, expected) in new[] { (1d, false), (0d, true), (-10d, true), (10d, false) })
+        {
+            service.ApplyTemperature(new() { BlockId = "104", TemperatureCelsius = temperature });
+            Assert.AreEqual(expected, service.CreateTrainEnvironment("104").HeaterOn);
+            Assert.AreEqual(temperature, service.CreateTrainEnvironment("104").TemperatureCelsius);
+        }
+        service.ApplyTemperature(new() { BlockId = "104", TemperatureCelsius = -5 });
+        service.ApplyFailures(new() { BlockId = "104", PowerFailure = true });
+        Assert.IsFalse(service.CreateTrainEnvironment("104").HeaterOn);
+        service.ApplyFailures(new() { BlockId = "104" });
+        Assert.IsTrue(service.CreateTrainEnvironment("104").HeaterOn);
+        service.FindBlock("104")!.HasHeater = false;
+        Assert.IsFalse(service.CreateTrainEnvironment("104").HeaterOn);
+        Assert.AreEqual(20d, service.FindBlock("105")!.TemperatureCelsius);
+    }
+
+    [TestMethod]
+    public void InvalidTemperature_PreservesPreviousTemperature()
+    {
+        var service = CreateService();
+        foreach (var temperature in new[] { -274d, double.NaN, double.PositiveInfinity })
+            Assert.Throws<ArgumentException>(() => service.ApplyTemperature(new() { BlockId = "104", TemperatureCelsius = temperature }));
+        Assert.AreEqual(20d, service.FindBlock("104")!.TemperatureCelsius);
+    }
 }

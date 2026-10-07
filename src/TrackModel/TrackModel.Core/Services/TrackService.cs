@@ -78,6 +78,8 @@ public class TrackService : ITrackService
         {
             if (destination is null || string.IsNullOrWhiteSpace(destination.StationName))
                 throw new ArgumentException("Passenger exchange requires a station block.");
+            if (message.ActualSpeedMetersPerSecond != 0)
+                throw new ArgumentException("Passenger exchange requires a stopped train.");
             if (message.BoardingPassengers > destination.WaitingPassengers)
                 throw new ArgumentException("Boarding exceeds the passengers waiting at this station.");
             if (message.BoardingPassengers > int.MaxValue - destination.TicketsSold
@@ -112,6 +114,16 @@ public class TrackService : ITrackService
         ArgumentNullException.ThrowIfNull(message);
         var b = RequireBlock(message.BlockId);
         b.BrokenRail = message.BrokenRail; b.TrackCircuitFailure = message.TrackCircuitFailure; b.PowerFailure = message.PowerFailure;
+        Changed();
+    }
+
+    public void ApplyTemperature(TrackModelTemperatureCommandMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        var block = RequireBlock(message.BlockId);
+        if (!double.IsFinite(message.TemperatureCelsius) || message.TemperatureCelsius < -273.15)
+            throw new ArgumentException("Temperature must be finite and at least absolute zero (-459.67 °F).");
+        block.TemperatureCelsius = message.TemperatureCelsius;
         Changed();
     }
 
@@ -166,6 +178,9 @@ public class TrackService : ITrackService
             AuthorityMeters = b.AuthorityMeters,
             Signal = b.EffectiveSignal, Beacon = b.StationName, ElevationMeters = b.ElevationMeters,
             GradePercent = b.GradePercent, TemperatureCelsius = b.TemperatureCelsius, WaitingPassengers = b.WaitingPassengers,
+            BoardingPassengers = b.BoardingPassengers, DisembarkingPassengers = b.DisembarkingPassengers, TicketsSold = b.TicketsSold,
+            HasHeater = b.HasHeater, HeaterOn = b.HeaterOn, SpeedLimitMetersPerSecond = b.SpeedLimitMetersPerSecond,
+            TravelDirection = b.TravelDirection,
             NextBlockId = b.NextBlockId };
     }
 

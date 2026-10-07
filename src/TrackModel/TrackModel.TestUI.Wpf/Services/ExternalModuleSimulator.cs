@@ -4,7 +4,7 @@ namespace TrackModel.TestUI.Wpf.Services;
 
 /// <summary>Owns the actual receiving endpoints of the external modules during standalone testing.
 /// Never constructs or references TrackModel.Core.</summary>
-public sealed class ExternalModuleSimulator(Dispatcher dispatcher)
+public sealed class ExternalModuleSimulator(Dispatcher dispatcher) : IExternalModuleConnection
 {
     public event Action<string, MessageEnvelope>? MessageReceived;
     public event Action<string>? ErrorReported;
