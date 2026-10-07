@@ -13,4 +13,10 @@ public static class UnitConversion
         metersPerSecond / MetersPerMile * 3600.0;
 
     public static double MetersToFeet(double meters) => meters / MetersPerFoot;
+
+    public static double KilometersPerHourToMetersPerSecond(double kilometersPerHour) =>
+        kilometersPerHour * 1000.0 / 3600.0;
+
+    public static double MetersPerSecondToKilometersPerHour(double metersPerSecond) =>
+        metersPerSecond * 3600.0 / 1000.0;
 }

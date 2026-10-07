@@ -18,6 +18,12 @@ public class CtcBlockState
 
     public double LengthMeters { get; set; }
 
+    /// <summary>
+    /// Civil speed limit of the block, in km/h exactly as received from the Track Model.
+    /// A property of the track, not of any train. Zero means the layout gave no limit.
+    /// </summary>
+    public double SpeedLimitKilometersPerHour { get; set; }
+
     /// <summary>Empty when the block has no station.</summary>
     public string StationName { get; set; } = string.Empty;
 

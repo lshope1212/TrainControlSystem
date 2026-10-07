@@ -1,7 +1,7 @@
 namespace CTC.Core.Models;
 
 /// <summary>
-/// CTC's view of a train that is operating on the line.
+/// CTC's view of a train it has released onto the line.
 /// </summary>
 public class DispatchedTrainState
 {
@@ -10,14 +10,20 @@ public class DispatchedTrainState
     // lines would currently refer to one DispatchedTrainState.
     public string TrainId { get; set; } = string.Empty;
 
-    /// <summary>Line the train was dispatched on; empty if CTC only knows it from an authorization report.</summary>
+    /// <summary>Line the train was dispatched on.</summary>
     public string LineId { get; set; } = string.Empty;
 
-    /// <summary>Speed authorized by the Track Controller (not CTC's suggestion).</summary>
-    public double AuthorizedSpeedMetersPerSecond { get; set; }
+    /// <summary>
+    /// Speed CTC suggested to the Track Controller when it released the train (NOT what the
+    /// Track Controller authorized). Initial value only: it is not recalculated as the train moves.
+    /// </summary>
+    public double SuggestedSpeedMetersPerSecond { get; set; }
 
-    /// <summary>Authority authorized by the Track Controller (not CTC's suggestion).</summary>
-    public double AuthorizedAuthorityMeters { get; set; }
+    /// <summary>
+    /// Authority CTC suggested to the Track Controller when it released the train (NOT what
+    /// the Track Controller authorized). Initial value only: it is not recalculated as the train moves.
+    /// </summary>
+    public double SuggestedAuthorityMeters { get; set; }
 
     /// <summary>
     /// Block the train currently occupies; empty when unknown. Set to the schedule's route

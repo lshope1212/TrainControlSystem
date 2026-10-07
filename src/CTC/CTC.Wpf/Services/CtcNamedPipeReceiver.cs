@@ -47,7 +47,6 @@ public sealed class CtcNamedPipeReceiver
         {
             nameof(BlockStatusMessage) => Route<BlockStatusMessage>(envelope, (ctc, m) => ctc.ApplyBlockStatus(m)),
             nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => ctc.ApplyTrackLayout(m)),
-            nameof(TrainAuthorizationStatusMessage) => Route<TrainAuthorizationStatusMessage>(envelope, (ctc, m) => ctc.ApplyTrainAuthorization(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
             nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ctc.SetSystemTimeAsync(m.SystemTime, cancellationToken)),
             _ => null,

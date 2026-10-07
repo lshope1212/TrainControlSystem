@@ -30,6 +30,13 @@ public sealed class ScheduleConversionResult
 /// <see cref="ScheduledTrain"/>. The whole template is rejected on the first error, so an
 /// invalid schedule is never partially converted.
 /// </summary>
+/// <remarks>
+/// A train's time in a block row is the time it ENTERS that block; the route-start row's
+/// time is therefore its departure time. A blank cell means the train does not use that
+/// block, so a train on a branching line simply leaves the other branch blank. Physical
+/// feasibility (speed) is checked later by CTC when the schedule is queued, because it
+/// needs the live track layout.
+/// </remarks>
 public static class ScheduleTemplateConverter
 {
     public const string TimeFormat = "HH:mm:ss";
@@ -83,60 +90,94 @@ public static class ScheduleTemplateConverter
             return $"{trainId} is missing a route start time.";
         }
 
-        if (!TryParseTime(startText, out var departureTime))
+        if (!TryParseTime(startText, out _))
         {
             return $"{trainId} has an invalid route start time '{startText.Trim()}'. Use {TimeFormat}.";
         }
 
-        var scheduled = new ScheduledTrain
-        {
-            TrainId = trainId,
-            LineId = template.LineId,
-            StartBlockId = startRow.BlockId,
-            DepartureTime = departureTime,
-        };
-
-        var previousTime = departureTime;
-        foreach (var row in template.Rows.Where(row => row.IsStation && row != startRow))
+        // Every nonblank cell is a block on this train's route; blank cells are blocks it does not use.
+        var scheduled = new Dictionary<string, (ScheduleTemplateRow Row, TimeSpan Time)>();
+        foreach (var row in template.Rows)
         {
             string text = row.TrainTimes[column];
-
-            // A blank station cell means this train does not stop there (e.g. another branch).
             if (string.IsNullOrWhiteSpace(text))
             {
                 continue;
             }
 
-            if (!TryParseTime(text, out var arrivalTime))
+            if (!TryParseTime(text, out var time))
             {
-                return $"{trainId} has an invalid arrival time at {row.StationName}. Use {TimeFormat}.";
+                return $"{trainId} has an invalid time '{text.Trim()}' at {row.BlockId}. Use {TimeFormat}.";
             }
 
-            if (arrivalTime < departureTime)
-            {
-                return $"{trainId} has an arrival time at {row.StationName} earlier than its departure time.";
-            }
-
-            if (arrivalTime < previousTime)
-            {
-                return $"{trainId} has an arrival time at {row.StationName} earlier than its previous scheduled stop.";
-            }
-
-            scheduled.Stops.Add(new ScheduleStop
-            {
-                BlockId = row.BlockId,
-                StationName = row.StationName,
-                ArrivalTime = arrivalTime,
-            });
-            previousTime = arrivalTime;
+            scheduled[row.BlockId] = (row, time);
         }
 
-        if (scheduled.Stops.Count == 0)
+        // Rows are in layout order, not travel order, so the route is recovered by walking the
+        // topology from the start block: each step must go to a CONNECTED block that has a time.
+        var route = new List<(ScheduleTemplateRow Row, TimeSpan Time)> { scheduled[startRow.BlockId] };
+        var visited = new HashSet<string> { startRow.BlockId };
+        while (true)
         {
-            return $"{trainId} has no scheduled station stops.";
+            var current = route[^1];
+            var nextIds = current.Row.ConnectedBlockIds
+                .Where(id => !visited.Contains(id) && scheduled.ContainsKey(id))
+                .Distinct()
+                .ToList();
+
+            if (nextIds.Count == 0)
+            {
+                break;
+            }
+
+            if (nextIds.Count > 1)
+            {
+                return $"{trainId} has times at both {nextIds[0]} and {nextIds[1]} after {current.Row.BlockId}. "
+                    + "A train can follow only one branch; leave the other blank.";
+            }
+
+            var next = scheduled[nextIds[0]];
+
+            // Crossing a block takes time, so the next block must be entered strictly later
+            // (a zero-length block may be entered and left at the same second).
+            bool tooEarly = current.Row.LengthMeters > 0 ? next.Time <= current.Time : next.Time < current.Time;
+            if (tooEarly)
+            {
+                return $"{trainId} enters {next.Row.BlockId} at {Format(next.Time)}, which is not later than it enters "
+                    + $"{current.Row.BlockId} at {Format(current.Time)}. Times must increase along the route.";
+            }
+
+            route.Add(next);
+            visited.Add(next.Row.BlockId);
         }
 
-        train = scheduled;
+        // Anything not reached is not connected to the route (a gap, a jump, or the other branch).
+        var stray = template.Rows.FirstOrDefault(row => scheduled.ContainsKey(row.BlockId) && !visited.Contains(row.BlockId));
+        if (stray is not null)
+        {
+            return $"{trainId} has a time at {stray.BlockId}, which is not connected to its route ending at {route[^1].Row.BlockId}. "
+                + "Consecutive scheduled blocks must be connected.";
+        }
+
+        if (route.Count < 2)
+        {
+            return $"{trainId} has only a route start time. Enter the time it enters at least the next block.";
+        }
+
+        var scheduledTrain = new ScheduledTrain
+        {
+            TrainId = trainId,
+            LineId = template.LineId,
+        };
+
+        foreach (var (row, time) in route)
+        {
+            scheduledTrain.BlockTimes.Add(new ScheduledBlockTime { BlockId = row.BlockId, ArrivalTime = time });
+        }
+
+        train = scheduledTrain;
         return null;
     }
+
+    private static string Format(TimeSpan time) => time.ToString(TimeSpanFormat, CultureInfo.InvariantCulture);
 }

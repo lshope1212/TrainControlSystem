@@ -28,6 +28,9 @@ public static class ScheduleTemplateFactory
             BlockNumber = block.BlockNumber,
             StationName = block.StationName,
             Infrastructure = DescribeInfrastructure(block),
+            LengthMeters = block.LengthMeters,
+            SpeedLimitKilometersPerHour = block.SpeedLimitKilometersPerHour,
+            ConnectedBlockIds = block.ConnectedBlockIds.ToList(),
             IsRouteStart = block == startBlock,
         });
 

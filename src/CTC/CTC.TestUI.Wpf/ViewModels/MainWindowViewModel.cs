@@ -26,7 +26,6 @@ public class MainWindowViewModel : ViewModelBase
         // Simulated inputs (other modules -> CTC).
         TrackLayoutInput = new TrackLayoutInputViewModel(sender, Communication);
         BlockStatusInput = new BlockStatusInputViewModel(sender, Communication);
-        TrainAuthorizationInput = new TrainAuthorizationInputViewModel(sender, Communication);
         SystemTimeInput = new SystemTimeInputViewModel(sender, Communication, shutdownToken);
     }
 
@@ -38,8 +37,6 @@ public class MainWindowViewModel : ViewModelBase
     public SystemTimeInputViewModel SystemTimeInput { get; }
 
     public BlockStatusInputViewModel BlockStatusInput { get; }
-
-    public TrainAuthorizationInputViewModel TrainAuthorizationInput { get; }
 
     // Other
     public CapturedOutputsViewModel Outputs { get; }

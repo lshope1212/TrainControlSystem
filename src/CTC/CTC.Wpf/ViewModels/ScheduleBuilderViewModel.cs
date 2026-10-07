@@ -103,7 +103,8 @@ public class ScheduleBuilderViewModel : ViewModelBase
 
         ShowTemplate(ScheduleTemplateFactory.Create(Line, trainCount));
         StatusMessage = $"Generated a {trainCount}-train template for {Line.Name}. "
-            + $"Enter route start and station times as {ScheduleTemplateConverter.TimeFormat}.";
+            + $"Enter the time each train enters each block on its route as {ScheduleTemplateConverter.TimeFormat}, "
+            + "starting at the route start block; leave blocks the train does not use blank.";
     }
 
     private void QueueSchedule()

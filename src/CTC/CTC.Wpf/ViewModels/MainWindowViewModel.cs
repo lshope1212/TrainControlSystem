@@ -51,8 +51,8 @@ public class MainWindowViewModel : ViewModelBase
     public int QueuedTrainCount => DispatchQueue.Count;
 
     /// <summary>
-    /// Trains operating on the selected line (plus trains CTC knows only from an
-    /// authorization report, whose line is unknown). Backed by CTC's DispatchedTrains state.
+    /// Trains CTC has released on the selected line, with the speed/authority CTC suggested.
+    /// Backed by CTC's DispatchedTrains state.
     /// </summary>
     public ObservableCollection<DispatchedTrainViewModel> DispatchedTrains { get; } = new ObservableCollection<DispatchedTrainViewModel>();
 
@@ -182,17 +182,13 @@ public class MainWindowViewModel : ViewModelBase
             case CtcStateChangeKind.TrainDispatched:
                 RebuildDispatchQueue();
                 RebuildDispatchedTrains();
-                CommunicationStatus = $"{e.TrainId} dispatched at {SystemTimeDisplay} (movement request sent).";
+                CommunicationStatus = $"{e.TrainId} dispatched at {SystemTimeDisplay} (movement suggestion and request sent)."
+                    + (e.Message is null ? string.Empty : $" Warning: {e.Message}");
                 break;
 
             case CtcStateChangeKind.DispatchFailed:
                 // The train is still queued; CTC retries on the next system time update.
                 CommunicationStatus = $"Unable to dispatch {e.TrainId}: {e.Message} Will retry on the next time update.";
-                break;
-
-            case CtcStateChangeKind.TrainAuthorization:
-                // An authorization can introduce a train CTC did not dispatch, so rebuild.
-                RebuildDispatchedTrains();
                 break;
         }
 
@@ -236,7 +232,7 @@ public class MainWindowViewModel : ViewModelBase
         DispatchedTrains.Clear();
 
         var lineId = SelectedLine?.LineId;
-        foreach (var train in _ctc.State.DispatchedTrains.Where(train => train.LineId == lineId || train.LineId.Length == 0))
+        foreach (var train in _ctc.State.DispatchedTrains.Where(train => train.LineId == lineId))
         {
             DispatchedTrains.Add(new DispatchedTrainViewModel(train));
         }

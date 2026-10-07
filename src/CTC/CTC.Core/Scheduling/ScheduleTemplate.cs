@@ -49,17 +49,22 @@ public sealed class ScheduleTemplateRow
     /// <summary>Readable summary of the block's features, e.g. "Station B; Signal".</summary>
     public string Infrastructure { get; init; } = string.Empty;
 
+    public double LengthMeters { get; init; }
+
+    /// <summary>Read-only track data shown to the dispatcher; not editable in a schedule.</summary>
+    public double SpeedLimitKilometersPerHour { get; init; }
+
+    /// <summary>Blocks this block connects to, used to check each train's route is continuous.</summary>
+    public IReadOnlyList<string> ConnectedBlockIds { get; init; } = Array.Empty<string>();
+
     /// <summary>The train's time in this row is its departure (route start) time.</summary>
     public bool IsRouteStart { get; init; }
 
     public bool IsStation => !string.IsNullOrWhiteSpace(StationName);
 
-    /// <summary>Only the route start and station rows carry schedule times.</summary>
-    public bool IsTimeEditable => IsRouteStart || IsStation;
-
     /// <summary>
-    /// Time text per train column, as entered (expected HH:mm:ss). Blank means the train
-    /// has no scheduled time at this block.
+    /// Time text per train column, as entered (expected HH:mm:ss): the time the train ENTERS
+    /// this block. Every row accepts a time. Blank means the train does not use this block.
     /// </summary>
     public string[] TrainTimes { get; }
 }

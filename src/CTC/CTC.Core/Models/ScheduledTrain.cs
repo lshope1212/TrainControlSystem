@@ -1,9 +1,9 @@
 namespace CTC.Core.Models;
 
 /// <summary>
-/// One train's schedule on one line: where it starts, when it departs, and the station
-/// stops it is scheduled to make. This normalized form is what CTC stores, whether the
-/// schedule was built manually or (in future) imported from a spreadsheet.
+/// One train's schedule on one line: the ordered blocks of its route and when it enters
+/// each one. This normalized form is what CTC stores, whether the schedule was built
+/// manually or (in future) imported from a spreadsheet.
 /// </summary>
 public class ScheduledTrain
 {
@@ -11,15 +11,19 @@ public class ScheduledTrain
 
     public string LineId { get; set; } = string.Empty;
 
-    /// <summary>Block the train's route starts from.</summary>
-    public string StartBlockId { get; set; } = string.Empty;
+    /// <summary>
+    /// The train's route in travel order, each block with the time the train enters it.
+    /// The first entry is the route-start block; consecutive entries are connected blocks.
+    /// Blocks the train does not use (e.g. another branch) are absent.
+    /// </summary>
+    public IList<ScheduledBlockTime> BlockTimes { get; } = new List<ScheduledBlockTime>();
+
+    /// <summary>Block the train's route starts from (the first block time); empty if there is none.</summary>
+    public string StartBlockId => BlockTimes.Count > 0 ? BlockTimes[0].BlockId : string.Empty;
 
     /// <summary>
-    /// Departure (route start) time as time of simulation day. Not entered on its own:
-    /// it is derived from the train's timestamp at the route-start block.
+    /// Departure time as time of simulation day: the time the train enters its
+    /// route-start block. Not entered on its own; it is the first block time.
     /// </summary>
-    public TimeSpan DepartureTime { get; set; }
-
-    /// <summary>Scheduled station stops in route order. Stations the train skips have no stop.</summary>
-    public IList<ScheduleStop> Stops { get; } = new List<ScheduleStop>();
+    public TimeSpan DepartureTime => BlockTimes.Count > 0 ? BlockTimes[0].ArrivalTime : TimeSpan.Zero;
 }

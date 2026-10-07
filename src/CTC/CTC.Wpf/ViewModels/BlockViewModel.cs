@@ -22,6 +22,9 @@ public class BlockViewModel : ViewModelBase
 
     public bool HasSwitch => _block.HasSwitch;
 
+    /// <summary>Track speed limit from the layout, in km/h. Read-only: the dispatcher cannot change it.</summary>
+    public double SpeedLimitKilometersPerHour => _block.SpeedLimitKilometersPerHour;
+
     public MaintenanceState RequestedMaintenanceState => _block.RequestedMaintenanceState;
 
     public string Occupancy => _block.Occupancy.ToString();

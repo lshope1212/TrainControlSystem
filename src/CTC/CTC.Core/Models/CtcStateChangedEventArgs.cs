@@ -8,8 +8,6 @@ public enum CtcStateChangeKind
 
     BlockStatus,
 
-    TrainAuthorization,
-
     TicketSales,
 
     SystemTime,
@@ -23,14 +21,17 @@ public enum CtcStateChangeKind
     DispatchQueue,
 
     /// <summary>
-    /// A train's MovementRequest was sent: it left the dispatch queue and was added to the
-    /// dispatched trains. <see cref="CtcStateChangedEventArgs.TrainId"/> names the train.
+    /// A train's MovementSuggestion and MovementRequest were sent: it left the dispatch queue
+    /// and was added to the dispatched trains. <see cref="CtcStateChangedEventArgs.TrainId"/>
+    /// names the train; <see cref="CtcStateChangedEventArgs.Message"/> carries a warning
+    /// (e.g. the train left late) or is null.
     /// </summary>
     TrainDispatched,
 
     /// <summary>
-    /// Sending a train's MovementRequest failed. Nothing was dispatched and the train stays
-    /// queued for retry; <see cref="CtcStateChangedEventArgs.Message"/> gives the reason.
+    /// A train could not be released (a send failed, or its start block is unsafe). Nothing
+    /// was dispatched and the train stays queued for retry;
+    /// <see cref="CtcStateChangedEventArgs.Message"/> gives the reason.
     /// </summary>
     DispatchFailed,
 }

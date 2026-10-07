@@ -24,14 +24,13 @@ public interface ICTCService
 
     void ApplyBlockStatus(BlockStatusMessage message);
 
-    void ApplyTrainAuthorization(TrainAuthorizationStatusMessage message);
-
     void ApplyTicketSales(TicketSalesMessage message);
 
     /// <summary>
     /// Records the time reported by the external system clock, then releases every queued
-    /// train whose departure time has been reached (sending a MovementRequest for each).
-    /// Send failures are reported through <see cref="StateChanged"/>, not thrown.
+    /// train whose departure time has been reached (sending a MovementSuggestion with its
+    /// initial suggested speed/authority, then a MovementRequest, for each).
+    /// Dispatch failures are reported through <see cref="StateChanged"/>, not thrown.
     /// </summary>
     Task SetSystemTimeAsync(TimeSpan systemTime, CancellationToken cancellationToken = default);
 
@@ -41,6 +40,7 @@ public interface ICTCService
     /// Replaces the schedule for every line in <paramref name="scheduledTrains"/> and
     /// rebuilds the pending dispatch queue from it, ordered by departure time. Trains that
     /// have already been dispatched are never queued again. Does not dispatch by itself.
+    /// A schedule that needs more than the permitted speed on any segment is rejected.
     /// </summary>
     void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains);
 

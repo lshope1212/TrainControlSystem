@@ -442,6 +442,7 @@
                                         <RowDefinition Height="28"/>
                                         <RowDefinition Height="28"/>
                                         <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
                                     </Grid.RowDefinitions>
 
                                     <TextBlock Grid.Row="0"
@@ -502,6 +503,18 @@
                                                Grid.Column="1"
                                                Text="{Binding SelectedBlock.CrossingStatus,
                                                               TargetNullValue=N/A}"
+                                               Style="{StaticResource ValueStyle}"/>
+
+                                    <!-- Track data from the layout; read-only. -->
+                                    <TextBlock Grid.Row="6"
+                                               Text="Speed Limit"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="6"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.SpeedLimitKilometersPerHour,
+                                                              StringFormat={}{0:F0} km/h,
+                                                              FallbackValue=--}"
                                                Style="{StaticResource ValueStyle}"/>
 
                                 </Grid>
@@ -734,8 +747,10 @@
                         </Grid>
 
 
-                        <!-- Schedule matrix. Only route-start and station
-                             cells accept times (HH:mm:ss). -->
+                        <!-- Schedule matrix. Every block cell accepts the time
+                             (HH:mm:ss) the train ENTERS that block; blank means
+                             the train does not use the block. Length and speed
+                             limit are read-only track data. -->
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding Rows}"
                                   behaviors:DataGridTrainColumns.Source="{Binding TrainColumns}"
@@ -745,7 +760,7 @@
                                   CanUserSortColumns="False"
                                   CanUserReorderColumns="False"
                                   SelectionUnit="Cell"
-                                  FrozenColumnCount="4">
+                                  FrozenColumnCount="6">
 
                             <DataGrid.Columns>
 
@@ -768,6 +783,16 @@
                                                     Binding="{Binding Infrastructure}"
                                                     IsReadOnly="True"
                                                     Width="200"/>
+
+                                <DataGridTextColumn Header="Length (m)"
+                                                    Binding="{Binding LengthMeters}"
+                                                    IsReadOnly="True"
+                                                    Width="75"/>
+
+                                <DataGridTextColumn Header="Speed Limit (km/h)"
+                                                    Binding="{Binding SpeedLimitKilometersPerHour}"
+                                                    IsReadOnly="True"
+                                                    Width="115"/>
 
                             </DataGrid.Columns>
 
@@ -856,8 +881,8 @@
 
                 <!-- ==============================================
                      DISPATCHED TRAINS
-                     Speed/authority are displayed as read-only data.
-                     The CTC operator does not set them here.
+                     Speed/authority are CTC's initial suggestions,
+                     displayed read-only. The CTC operator does not set them here.
                      ============================================== -->
                 <TabItem Header="Dispatched Trains">
 
@@ -868,7 +893,7 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Text="Trains already released from the queue. Speed and authority are monitoring values reported by the Track Controller, not dispatcher inputs. Current Block is the block the train was released at; CTC cannot yet track it from occupancy."
+                        <TextBlock Text="Trains already released from the queue. Suggested Speed and Suggested Authority are what CTC sent to the Track Controller when the train was released; they are not recalculated afterwards. Current Block is the block the train was released at; CTC cannot yet track it from occupancy."
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    TextWrapping="Wrap"
@@ -886,15 +911,15 @@
                                                     Binding="{Binding TrainId}"
                                                     Width="120"/>
 
-                                <DataGridTextColumn Header="Authorized Speed"
-                                                    Binding="{Binding AuthorizedSpeed,
+                                <DataGridTextColumn Header="Suggested Speed"
+                                                    Binding="{Binding SuggestedSpeed,
                                                                       StringFormat={}{0:F1} mph}"
                                                     Width="160"/>
 
-                                <DataGridTextColumn Header="Authority"
-                                                    Binding="{Binding Authority,
+                                <DataGridTextColumn Header="Suggested Authority"
+                                                    Binding="{Binding SuggestedAuthority,
                                                                       StringFormat={}{0:F0} ft}"
-                                                    Width="150"/>
+                                                    Width="160"/>
 
                                 <DataGridTextColumn Header="Current Block"
                                                     Binding="{Binding CurrentBlock}"

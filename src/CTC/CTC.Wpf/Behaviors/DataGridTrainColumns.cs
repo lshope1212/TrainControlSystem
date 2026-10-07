@@ -2,7 +2,6 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Media;
 
 namespace CTC.Wpf.Behaviors;
 
@@ -28,8 +27,6 @@ public static class DataGridTrainColumns
         typeof(ColumnState),
         typeof(DataGridTrainColumns));
 
-    private static readonly Brush ReadOnlyCellBrush = CreateFrozenBrush(Color.FromRgb(0xF3, 0xF4, 0xF6));
-
     public static IEnumerable<string>? GetSource(DependencyObject element) => (IEnumerable<string>?)element.GetValue(SourceProperty);
 
     public static void SetSource(DependencyObject element, IEnumerable<string>? value) => element.SetValue(SourceProperty, value);
@@ -51,36 +48,17 @@ public static class DataGridTrainColumns
         state.Attach(e.NewValue as IEnumerable<string>);
     }
 
-    private static DataGridColumn CreateTrainColumn(string trainId, int column)
+    // Every block row accepts a time, so all cells are editable.
+    private static DataGridColumn CreateTrainColumn(string trainId, int column) => new DataGridTextColumn
     {
-        string cellPath = $"TrainTimes[{column}]";
-
-        var cellStyle = new Style(typeof(DataGridCell));
-        cellStyle.Setters.Add(new Setter(UIElement.IsEnabledProperty, new Binding($"{cellPath}.IsEditable")));
-
-        var readOnlyTrigger = new DataTrigger { Binding = new Binding($"{cellPath}.IsEditable"), Value = false };
-        readOnlyTrigger.Setters.Add(new Setter(Control.BackgroundProperty, ReadOnlyCellBrush));
-        cellStyle.Triggers.Add(readOnlyTrigger);
-
-        return new DataGridTextColumn
+        Header = trainId,
+        Width = new DataGridLength(90),
+        Binding = new Binding($"TrainTimes[{column}].TimeText")
         {
-            Header = trainId,
-            Width = new DataGridLength(90),
-            CellStyle = cellStyle,
-            Binding = new Binding($"{cellPath}.TimeText")
-            {
-                Mode = BindingMode.TwoWay,
-                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
-            },
-        };
-    }
-
-    private static Brush CreateFrozenBrush(Color color)
-    {
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
-    }
+            Mode = BindingMode.TwoWay,
+            UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+        },
+    };
 
     private sealed class ColumnState
     {

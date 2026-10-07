@@ -14,6 +14,9 @@ public class TrackBlockDefinition
 
     public double LengthMeters { get; set; }
 
+    /// <summary>Civil speed limit of the block, in km/h as given by the track data.</summary>
+    public double SpeedLimitKilometersPerHour { get; set; }
+
     /// <summary>Empty when the block has no station.</summary>
     public string StationName { get; set; } = string.Empty;
 

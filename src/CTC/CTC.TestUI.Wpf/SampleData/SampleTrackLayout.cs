@@ -3,12 +3,16 @@ using TrainControl.Contracts.Messages;
 namespace CTC.TestUI.Wpf.SampleData;
 
 /// <summary>
-/// Small, hand-made layout the Test UI sends to the running CTC, expressed with the
-/// real shared contracts. Illustrative only; it is NOT the real Green/Red line data
-/// that the Track Model will eventually provide.
+/// The Blue Line layout the Test UI sends to the running CTC, expressed with the real
+/// shared contracts: 15 blocks, each 50 m long with a 50 km/h speed limit, branching at
+/// A5 to section B or section C. It is NOT the Green/Red line data that the Track Model
+/// will eventually provide.
 /// </summary>
 public static class SampleTrackLayout
 {
+    /// <summary>Every Blue Line block has the same civil speed limit.</summary>
+    private const double BlueLineSpeedLimitKilometersPerHour = 50.0;
+
     public static TrackLayoutMessage Create() => new TrackLayoutMessage
     {
         Lines =
@@ -67,7 +71,8 @@ public static class SampleTrackLayout
         string station = "",
         bool hasSwitch = false,
         bool hasSignal = false,
-        bool hasCrossing = false)
+        bool hasCrossing = false,
+        double speedLimitKilometersPerHour = BlueLineSpeedLimitKilometersPerHour)
     {
         var block = new TrackBlockDefinition
         {
@@ -75,6 +80,7 @@ public static class SampleTrackLayout
             BlockNumber = number,
             Section = section,
             LengthMeters = lengthMeters,
+            SpeedLimitKilometersPerHour = speedLimitKilometersPerHour,
             StationName = station,
             HasSwitch = hasSwitch,
             HasSignal = hasSignal,

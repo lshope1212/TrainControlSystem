@@ -1,3 +1,5 @@
+using CTC.Core.Dispatching;
+using CTC.Core.Exceptions;
 using CTC.Core.Interfaces;
 using CTC.Core.Models;
 using TrainControl.Common.Validation;
@@ -10,8 +12,9 @@ namespace CTC.Core.Services;
 /// CTC office service. Maps shared contract messages into <see cref="CtcSystemState"/>
 /// and builds outbound contract messages. Transmission is delegated to an injected
 /// <see cref="IMessageSender"/>; this class knows nothing about the transport.
-/// Dispatching is time-triggered only (see <see cref="SetSystemTimeAsync"/>); there are no
-/// routing or authority algorithms yet (see RouteManager / AuthorityManager).
+/// Dispatching is time-triggered only (see <see cref="SetSystemTimeAsync"/>). Speed and
+/// authority rules live in <see cref="SpeedPlanner"/> and <see cref="AuthorityManager"/>;
+/// only the INITIAL suggestion at dispatch is calculated.
 /// </summary>
 /// <remarks>
 /// Async methods resume on the caller's synchronization context, so when called from the
@@ -55,6 +58,7 @@ public class CTCService : ICTCService
                     BlockNumber = blockDefinition.BlockNumber,
                     Section = blockDefinition.Section,
                     LengthMeters = blockDefinition.LengthMeters,
+                    SpeedLimitKilometersPerHour = blockDefinition.SpeedLimitKilometersPerHour,
                     StationName = blockDefinition.StationName,
                     HasSwitch = blockDefinition.HasSwitch,
                     HasSignal = blockDefinition.HasSignal,
@@ -86,29 +90,6 @@ public class CTCService : ICTCService
         block.Crossing = message.Crossing;
 
         OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
-    }
-
-    /// <summary>
-    /// Records the speed/authority the Track Controller has authorized for a train,
-    /// in SI units exactly as received. A train not yet known to CTC is added to the
-    /// dispatched trains, since the wayside is reporting an authorization for it.
-    /// </summary>
-    public void ApplyTrainAuthorization(TrainAuthorizationStatusMessage message)
-    {
-        ArgumentNullException.ThrowIfNull(message);
-        Guard.NotNullOrWhiteSpace(message.TrainId, nameof(message));
-
-        DispatchedTrainState? train = State.FindDispatchedTrain(message.TrainId);
-        if (train is null)
-        {
-            train = new DispatchedTrainState { TrainId = message.TrainId };
-            State.DispatchedTrains.Add(train);
-        }
-
-        train.AuthorizedSpeedMetersPerSecond = message.AuthorizedSpeedMetersPerSecond;
-        train.AuthorizedAuthorityMeters = message.AuthorizedAuthorityMeters;
-
-        OnStateChanged(CtcStateChangeKind.TrainAuthorization);
     }
 
     public void ApplyTicketSales(TicketSalesMessage message)
@@ -165,8 +146,8 @@ public class CTCService : ICTCService
         {
             try
             {
-                await DispatchTrainAsync(entry, cancellationToken);
-                OnStateChanged(CtcStateChangeKind.TrainDispatched, trainId: entry.TrainId);
+                string? warning = await DispatchTrainAsync(entry, cancellationToken);
+                OnStateChanged(CtcStateChangeKind.TrainDispatched, trainId: entry.TrainId, message: warning);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -188,25 +169,50 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
-    /// Sends the MovementRequest that releases <paramref name="entry"/>'s train, then moves
-    /// the train from the dispatch queue to the dispatched trains.
+    /// Releases <paramref name="entry"/>'s train: calculates its initial suggested speed and
+    /// authority, sends the MovementSuggestion and then the MovementRequest to the Track
+    /// Controller, and only then moves the train from the dispatch queue to the dispatched trains.
     /// </summary>
-    /// <exception cref="Exceptions.MessageSendException">The request could not be delivered; nothing changed.</exception>
-    private async Task DispatchTrainAsync(DispatchQueueEntry entry, CancellationToken cancellationToken)
+    /// <returns>A dispatcher-readable warning (e.g. the train is late), or null.</returns>
+    /// <exception cref="DispatchException">The start block is unsafe; nothing was sent or changed.</exception>
+    /// <exception cref="MessageSendException">A message could not be delivered; nothing changed.</exception>
+    private async Task<string?> DispatchTrainAsync(DispatchQueueEntry entry, CancellationToken cancellationToken)
     {
         var scheduledTrain = State.ScheduledTrains.FirstOrDefault(train => train.TrainId == entry.TrainId && train.LineId == entry.LineId)
             ?? throw new InvalidOperationException($"Train '{entry.TrainId}' is queued but no longer scheduled.");
 
+        var line = State.FindLine(scheduledTrain.LineId)
+            ?? throw new InvalidOperationException($"Train '{entry.TrainId}' is scheduled on unknown line '{scheduledTrain.LineId}'.");
+        var route = ResolveRoute(scheduledTrain, line)
+            ?? throw new InvalidOperationException($"Train '{entry.TrainId}' uses a block that is no longer in the track layout.");
+
+        // Releasing a train with zero authority would leave it stranded, because CTC cannot
+        // recalculate authority later. Hold it in the queue instead; it is retried next tick.
+        double authority = AuthorityManager.CalculateInitialAuthorityMeters(route);
+        if (authority <= 0)
+        {
+            throw new DispatchException($"its start block {route[0].BlockId} is occupied or closed for maintenance.");
+        }
+
+        var speed = SpeedPlanner.CalculateInitialSpeed(scheduledTrain, route, State.SystemTime);
+
+        var suggestion = new MovementSuggestionMessage
+        {
+            TrainId = scheduledTrain.TrainId,
+            SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond,
+            SuggestedAuthorityMeters = authority,
+        };
         var request = CreateMovementRequest(scheduledTrain.TrainId);
 
+        // Suggestion first, so the Track Controller has movement data before the release.
+        // If the release then fails, the train stays queued and the retry sends both again.
+        await _messageSender.SendAsync(suggestion, cancellationToken);
         await _messageSender.SendAsync(request, cancellationToken);
 
-        // Only now, after a successful send, does the train leave the queue. Removing it first
+        // Only now, after both sends succeeded, does the train leave the queue. Removing it first
         // would make CTC believe a train was released when the request never reached the wayside.
         State.DispatchQueue.Remove(entry);
 
-        // The Track Controller may already have reported an authorization for this train;
-        // reuse that record rather than creating a duplicate.
         var dispatched = State.FindDispatchedTrain(scheduledTrain.TrainId);
         if (dispatched is null)
         {
@@ -215,11 +221,38 @@ public class CTCService : ICTCService
         }
 
         dispatched.LineId = scheduledTrain.LineId;
+        dispatched.SuggestedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
+        dispatched.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
 
         // Known authoritatively only at release time: the schedule says the train starts here.
         // StartBlockId was fixed when the schedule was built; it is not re-derived per tick.
         // TODO: real route/yard logic will replace the temporary route-start rule.
         dispatched.CurrentBlockId = scheduledTrain.StartBlockId;
+
+        return speed.IsLate
+            ? $"{scheduledTrain.TrainId} is behind schedule for {route[1].BlockId}; suggested the maximum permitted speed."
+            : null;
+    }
+
+    /// <summary>
+    /// The line's blocks for <paramref name="train"/>'s route, aligned with its block times;
+    /// null if any scheduled block is not on the line.
+    /// </summary>
+    private static List<CtcBlockState>? ResolveRoute(ScheduledTrain train, CtcLineState line)
+    {
+        var route = new List<CtcBlockState>();
+        foreach (var blockTime in train.BlockTimes)
+        {
+            var block = line.Blocks.FirstOrDefault(block => block.BlockId == blockTime.BlockId);
+            if (block is null)
+            {
+                return null;
+            }
+
+            route.Add(block);
+        }
+
+        return route;
     }
 
     /// <summary>
@@ -227,7 +260,11 @@ public class CTCService : ICTCService
     /// scheduled on the same line(s) are replaced; other lines' schedules are kept.
     /// Everything is checked before any state changes, so a bad schedule is never partially queued.
     /// </summary>
-    /// <exception cref="ArgumentException">A train is blank, duplicated, or on an unknown line.</exception>
+    /// <exception cref="ArgumentException">
+    /// A train is blank, duplicated, on an unknown line, has fewer than two route blocks or a
+    /// block not on its line, or its schedule needs a speed above the permitted maximum
+    /// (see <see cref="SpeedPlanner.ValidateFeasibility"/>).
+    /// </exception>
     public void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains)
     {
         ArgumentNullException.ThrowIfNull(scheduledTrains);
@@ -246,9 +283,23 @@ public class CTCService : ICTCService
                 throw new ArgumentException($"Train '{train.TrainId}' is scheduled more than once.", nameof(scheduledTrains));
             }
 
-            if (State.FindLine(train.LineId) is null)
+            var line = State.FindLine(train.LineId)
+                ?? throw new ArgumentException($"Unknown line '{train.LineId}'.", nameof(scheduledTrains));
+
+            if (train.BlockTimes.Count < 2)
             {
-                throw new ArgumentException($"Unknown line '{train.LineId}'.", nameof(scheduledTrains));
+                throw new ArgumentException($"{train.TrainId} needs at least a route start block and the next block it enters.", nameof(scheduledTrains));
+            }
+
+            var route = ResolveRoute(train, line)
+                ?? throw new ArgumentException($"{train.TrainId} uses a block that is not on {line.Name}.", nameof(scheduledTrains));
+
+            // An impossible schedule is rejected outright; it is never accepted with its speed clamped.
+            // No parameter name, so the message stays dispatcher-readable as it is.
+            string? infeasible = SpeedPlanner.ValidateFeasibility(train, route);
+            if (infeasible is not null)
+            {
+                throw new ArgumentException(infeasible);
             }
         }
 

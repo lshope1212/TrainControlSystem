@@ -32,6 +32,11 @@ public class ScheduleTemplateRowViewModel
 
     public string Infrastructure => Row.Infrastructure;
 
+    public double LengthMeters => Row.LengthMeters;
+
+    /// <summary>Track data, shown read-only.</summary>
+    public double SpeedLimitKilometersPerHour => Row.SpeedLimitKilometersPerHour;
+
     public bool IsStartBlock => Row.IsRouteStart;
 
     public bool IsStation => Row.IsStation;
@@ -41,8 +46,9 @@ public class ScheduleTemplateRowViewModel
 }
 
 /// <summary>
-/// One train's time cell within a <see cref="ScheduleTemplateRowViewModel"/>. Holds text,
-/// not a TimeSpan, so blank cells are natural; parsing happens when the schedule is queued.
+/// One train's time cell within a <see cref="ScheduleTemplateRowViewModel"/>: the time the
+/// train enters the block. Holds text, not a TimeSpan, so blank cells (block not used by the
+/// train) are natural; parsing happens when the schedule is queued.
 /// </summary>
 public class ScheduleTimeCellViewModel : ViewModelBase
 {
@@ -58,14 +64,12 @@ public class ScheduleTimeCellViewModel : ViewModelBase
 
     public string TrainId { get; }
 
-    public bool IsEditable => _row.IsTimeEditable;
-
     public string TimeText
     {
         get => _row.TrainTimes[_column];
         set
         {
-            if (!IsEditable || _row.TrainTimes[_column] == (value ?? string.Empty))
+            if (_row.TrainTimes[_column] == (value ?? string.Empty))
             {
                 return;
             }

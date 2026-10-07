@@ -32,6 +32,7 @@ public class CtcServiceTests
                         BlockNumber = 2,
                         Section = "A",
                         LengthMeters = 150.0,
+                        SpeedLimitKilometersPerHour = 55.0,
                         StationName = "Pioneer",
                         HasSwitch = true,
                         HasCrossing = true,
@@ -84,6 +85,7 @@ public class CtcServiceTests
         Assert.AreEqual(2, block.BlockNumber);
         Assert.AreEqual("A", block.Section);
         Assert.AreEqual(150.0, block.LengthMeters);
+        Assert.AreEqual(55.0, block.SpeedLimitKilometersPerHour);
         Assert.AreEqual("Pioneer", block.StationName);
         Assert.IsTrue(block.HasSwitch);
         Assert.IsFalse(block.HasSignal);
@@ -148,40 +150,6 @@ public class CtcServiceTests
 
         Assert.AreEqual(250, service.State.FindLine("RED")!.TicketSalesPerHour);
         Assert.AreEqual(0, service.State.FindLine("GREEN")!.TicketSalesPerHour);
-    }
-
-    [TestMethod]
-    public void ApplyTrainAuthorization_StoresSiValuesOnMatchingTrain()
-    {
-        var service = new CTCService(new FakeMessageSender());
-
-        service.ApplyTrainAuthorization(new TrainAuthorizationStatusMessage
-        {
-            TrainId = "T1",
-            AuthorizedSpeedMetersPerSecond = 12.5,
-            AuthorizedAuthorityMeters = 400.0,
-        });
-        service.ApplyTrainAuthorization(new TrainAuthorizationStatusMessage
-        {
-            TrainId = "T2",
-            AuthorizedSpeedMetersPerSecond = 5.0,
-            AuthorizedAuthorityMeters = 50.0,
-        });
-        service.ApplyTrainAuthorization(new TrainAuthorizationStatusMessage
-        {
-            TrainId = "T1",
-            AuthorizedSpeedMetersPerSecond = 15.0,
-            AuthorizedAuthorityMeters = 600.0,
-        });
-
-        Assert.HasCount(2, service.State.DispatchedTrains);
-
-        var train = service.State.FindDispatchedTrain("T1")!;
-        Assert.AreEqual(15.0, train.AuthorizedSpeedMetersPerSecond);
-        Assert.AreEqual(600.0, train.AuthorizedAuthorityMeters);
-        Assert.AreEqual(string.Empty, train.CurrentBlockId);
-
-        Assert.AreEqual(5.0, service.State.FindDispatchedTrain("T2")!.AuthorizedSpeedMetersPerSecond);
     }
 
     [TestMethod]
