@@ -19,7 +19,7 @@ Native computer-use checks exercised the two real WPF processes and their named-
 5. Missing switches/crossings showed Unknown, which was ambiguous with failed equipment. They now show N/A; their controls remain disabled.
 6. Elevation was shown in metres in TestUI while the dashboard used feet. Both now show feet.
 7. Passenger totals and cumulative tickets were absent from TestUI. They are now captured outputs, distinct from the rolling one-hour ticket count. Exchange remains an explicit one-shot action, and moving trains cannot exchange passengers.
-8. Step 10 sec used the multiplier. It now always advances ten simulation seconds. The running clock uses elapsed wall time, retains fractional seconds, validates a positive multiplier, and wraps time-of-day consistently at midnight.
+8. Step 10 sec used the multiplier. It now always advances ten simulation seconds. The running clock uses elapsed wall time, retains fractional seconds, validates a positive multiplier, and wraps the displayed time-of-day consistently at midnight while retaining elapsed days internally. Pause/resume preserves those days, so midnight does not clear the preceding-hour ticket ledger.
 9. Snapshot acknowledgements could hide validation errors. They no longer overwrite those messages, and initial connection now shows Connected after a snapshot.
 10. Environmental temperature was read-only, heaters were absent, and speed limit/direction/beacon were not all shown on the dashboard. Added per-block °F temperature controls, heater state, and the missing property displays. The additive temperature input contract carries °C.
 11. Clock buttons clipped at minimum TestUI size. Reduced spacing and visually verified all controls at 1180×720.
@@ -44,7 +44,7 @@ The automated workflow tests assert each intermediate expected output in the sup
 | 12 | Clock | PASS — paused time remained fixed; 09:42:18 → 09:42:28 → 09:42:38; manual 10:00:00 reached dashboard. Measured 14 simulation seconds / 14.306 real seconds at 1× and 26 / 13.545 at 2×, within whole-second display/tick precision. Pause held fixed. A step at 2× still added exactly 10 seconds. |
 | 13 | Selection/validation | PASS — output selection survives Refresh without moving the train; blocks 104/105 retain 30/15 mph independently. Negative speed, authority, passengers, letters, and 25:99:99 are rejected with readable messages; missing equipment disables controls and displays N/A/No signal. |
 
-Additional native checks: dashboard and TestUI both set 32°F/68°F and display heater On/Off. Domain regression tests also verify heater loss/restoration with power, absent heater equipment, absolute-zero validation, atomic rejection of moving passenger exchanges, collision/maintenance rejection, retry idempotency, and ticket expiry.
+Additional native checks: dashboard and TestUI both set 32°F/68°F and display heater On/Off. Domain regression tests also verify heater loss/restoration with power, absent heater equipment, absolute-zero validation, atomic rejection of moving passenger exchanges, collision/maintenance rejection, retry idempotency, and ticket expiry. A further WPF regression verifies that tickets sold just before midnight survive the day transition and subsequent pause/resume.
 
 Final validation:
 
@@ -52,12 +52,12 @@ Final validation:
 dotnet build TrainControlSystem.sln          PASS (0 errors)
 dotnet test TrainControlSystem.sln --no-build
   TrainControl.Tests                       68 passed
-  TrackModel.Wpf.Tests                     17 passed
-  Total                                    85 passed, 0 failed, 0 skipped
+  TrackModel.Wpf.Tests                     18 passed
+  Total                                    86 passed, 0 failed, 0 skipped
 git diff --check                            PASS
 ```
 
-A full initial build reported one existing nullable warning in `CTCService.cs:96`; no CTC source was changed. The final incremental build reported no warnings.
+A full initial build reported one existing nullable warning in `CTCService.cs:96`; no CTC source was changed. The final build still reported that same unrelated CTC warning and no errors.
 
 ## Equipment and behavior to use when testing manually
 

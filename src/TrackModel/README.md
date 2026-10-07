@@ -56,7 +56,7 @@ receiver, click **Refresh outputs** to request a fresh layout and snapshot.
    The train must be stopped. Boarding reduces waiting passengers and increments station ticket totals. Test UI displays cumulative boarding, disembarking, station tickets, and the rolling ticket rate separately.
    Ordinary speed/position edits send zero passenger counts, so they never replay
    the entered exchange.
-6. Edit time directly, or use **Start clock** / **Step 10 sec** to drive simulation time. A step is exactly ten simulation seconds at any multiplier; a running clock uses elapsed wall time and preserves fractional seconds. Time-of-day wraps at midnight.
+6. Edit time directly, or use **Start clock** / **Step 10 sec** to drive simulation time. A step is exactly ten simulation seconds at any multiplier; a running clock uses elapsed wall time and preserves fractional seconds. Displayed time-of-day wraps at midnight; elapsed days remain internal so the rolling ticket ledger continues across midnight and pause/resume.
    Pause the clock before manually changing its time.
 7. All inputs and output panels fit on a single page without vertical scrolling
    at the minimum window size of 1180 × 720. **Captured messages** opens a separate

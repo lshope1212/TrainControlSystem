@@ -177,7 +177,22 @@ public class TestUiWorkflowTests
         _vm.StepClockCommand.Execute(null); Assert.AreEqual("10:00:20",_vm.Time);
         Assert.AreEqual(new TimeSpan(10,0,20),_connection.Model.SystemTime);
         _vm.Time="23:59:55"; await _vm.RefreshAsync(); _vm.StepClockCommand.Execute(null);
-        Assert.AreEqual("00:00:05",_vm.Time); Assert.AreEqual(TimeSpan.FromSeconds(5),_connection.Model.SystemTime);
+        Assert.AreEqual("00:00:05",_vm.Time); Assert.AreEqual(TimeSpan.FromDays(1)+TimeSpan.FromSeconds(5),_connection.Model.SystemTime);
+    }
+
+    [TestMethod]
+    public async Task ClockMidnight_PreservesTicketsFromThePrecedingHour()
+    {
+        _vm.Time="23:59:55"; _vm.ActualSpeed="0"; await _vm.RefreshAsync();
+        _vm.Boarding="3"; _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
+        Assert.AreEqual(3,_connection.Model.CreateTicketSales("Blue").TicketsPerHour);
+        _vm.StepClockCommand.Execute(null); await _vm.RefreshAsync();
+        Assert.AreEqual("00:00:05",_vm.Time);
+        Assert.AreEqual(3,_connection.Model.CreateTicketSales("Blue").TicketsPerHour);
+        _vm.ToggleClockCommand.Execute(null); _vm.ToggleClockCommand.Execute(null);
+        _vm.StepClockCommand.Execute(null);
+        Assert.AreEqual(TimeSpan.FromDays(1)+TimeSpan.FromSeconds(15),_connection.Model.SystemTime);
+        Assert.AreEqual(3,_connection.Model.CreateTicketSales("Blue").TicketsPerHour);
     }
 
     [TestMethod]

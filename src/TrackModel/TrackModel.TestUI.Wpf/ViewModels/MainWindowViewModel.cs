@@ -423,7 +423,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             try
             {
-                _clockValue = ParseTime();
+                _clockValue ??= ParseTime();
                 if (Number(Multiplier, "Clock multiplier") <= 0) throw new ArgumentException("Clock multiplier must be greater than zero.");
             }
             catch (ArgumentException ex) { Status = "Clock stopped: " + ex.Message; return; }
@@ -443,8 +443,8 @@ public sealed class MainWindowViewModel : ViewModelBase
             var multiplier = scale ? Number(Multiplier, "Clock multiplier") : 1;
             if (multiplier <= 0) throw new ArgumentException("Clock multiplier must be greater than zero.");
             var time = (_clockValue ?? parsed) + TimeSpan.FromSeconds(seconds * multiplier);
-            // Time-of-day wraps consistently at midnight in both applications.
-            time = TimeSpan.FromTicks(time.Ticks % TimeSpan.TicksPerDay);
+            // Keep elapsed days internally so midnight does not look like a rewind
+            // to the rolling ticket ledger. HH:mm:ss display wraps in both windows.
             await _connection.SendAsync(new SystemTimeMessage { SystemTime = time });
             _clockValue = time;
             // The clock already sent this value; do not enqueue a second manual edit.
