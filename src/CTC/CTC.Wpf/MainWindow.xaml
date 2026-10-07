@@ -802,8 +802,9 @@
                 <!-- ==============================================
                      DISPATCH QUEUE
                      Read-only, ordered by departure time. No manual
-                     dispatch button is provided; automatic dispatch
-                     is not implemented yet.
+                     dispatch button is provided: CTC releases each
+                     train when the received System Time reaches its
+                     departure time.
                      ============================================== -->
                 <TabItem Header="Dispatch Queue">
 
@@ -821,7 +822,7 @@
                                 Padding="8"
                                 Margin="0,0,0,8">
 
-                            <TextBlock Text="Queued trains are awaiting dispatch at their scheduled route-start time. Automatic dispatch will be handled by the dispatching logic."
+                            <TextBlock Text="Queued trains are dispatched automatically when System Time reaches their departure time. A train leaves this queue only after its movement request has been sent; if sending fails it stays queued and is retried."
                                        Foreground="#1E3A8A"
                                        TextWrapping="Wrap"/>
 
@@ -867,14 +868,14 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Text="Trains already released from the queue. Speed and authority are monitoring values, not dispatcher inputs."
+                        <TextBlock Text="Trains already released from the queue. Speed and authority are monitoring values reported by the Track Controller, not dispatcher inputs. Current Block is the block the train was released at; CTC cannot yet track it from occupancy."
                                    Foreground="#6B7280"
                                    FontSize="11"
+                                   TextWrapping="Wrap"
                                    Margin="0,0,0,8"/>
 
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding DispatchedTrains}"
-                                  SelectedItem="{Binding SelectedDispatchedTrain}"
                                   AutoGenerateColumns="False"
                                   CanUserAddRows="False"
                                   IsReadOnly="True">
@@ -939,7 +940,7 @@
             <Separator/>
 
             <StatusBarItem>
-                <TextBlock Text="Automatic dispatch not yet implemented."/>
+                <TextBlock Text="Auto-dispatch follows the received system time."/>
             </StatusBarItem>
 
             <Separator/>

@@ -236,12 +236,12 @@ public class CtcServiceTests
     }
 
     [TestMethod]
-    public void SetSystemTime_UpdatesStateWithoutTimer()
+    public async Task SetSystemTimeAsync_UpdatesStateWithoutTimer()
     {
         var service = new CTCService(new FakeMessageSender());
         var time = new TimeSpan(7, 30, 15);
 
-        service.SetSystemTime(time);
+        await service.SetSystemTimeAsync(time);
 
         Assert.AreEqual(time, service.State.SystemTime);
     }

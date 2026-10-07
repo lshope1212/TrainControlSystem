@@ -64,11 +64,11 @@ public class CtcStateChangedTests
     }
 
     [TestMethod]
-    public void SetSystemTime_RaisesSystemTimeChange()
+    public async Task SetSystemTimeAsync_RaisesSystemTimeChange()
     {
         var (service, _, changes) = CreateService();
 
-        service.SetSystemTime(TimeSpan.FromHours(7));
+        await service.SetSystemTimeAsync(TimeSpan.FromHours(7));
 
         Assert.HasCount(1, changes);
         Assert.AreEqual(CtcStateChangeKind.SystemTime, changes[0].Kind);

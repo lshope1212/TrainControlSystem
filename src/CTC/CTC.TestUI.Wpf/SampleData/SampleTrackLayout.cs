@@ -19,19 +19,19 @@ public static class SampleTrackLayout
                 Name = "Blue Line",
                 Blocks =
                 {
-                    Block("B1",  1, "A", 50, connectedTo: ["B2"]),
-                    Block("B2",  2, "A", 50, connectedTo: ["B1", "B3"]),
-                    Block("B3",  3, "A", 50, connectedTo: ["B2", "B4"],
+                    Block("A1",  1, "A", 50, connectedTo: ["A2"]),
+                    Block("A2",  2, "A", 50, connectedTo: ["A1", "A3"]),
+                    Block("A3",  3, "A", 50, connectedTo: ["A2", "A4"],
                         hasCrossing: true),
 
-                    Block("B4",  4, "A", 50, connectedTo: ["B3", "B5"]),
+                    Block("A4",  4, "A", 50, connectedTo: ["A3", "A5"]),
 
-                    Block("B5",  5, "A", 50,
-                        connectedTo: ["B4", "B6", "B11"],
+                    Block("A5",  5, "A", 50,
+                        connectedTo: ["A4", "B6", "C11"],
                         hasSwitch: true),
 
                     Block("B6",  6, "B", 50,
-                        connectedTo: ["B5", "B7"],
+                        connectedTo: ["A5", "B7"],
                         hasSignal: true),
 
                     Block("B7",  7, "B", 50, connectedTo: ["B6", "B8"]),
@@ -42,16 +42,16 @@ public static class SampleTrackLayout
                         connectedTo: ["B9"],
                         station: "Station B"),
 
-                    Block("B11", 11, "C", 50,
-                        connectedTo: ["B5", "B12"],
+                    Block("C11", 11, "C", 50,
+                        connectedTo: ["A5", "C12"],
                         hasSignal: true),
 
-                    Block("B12", 12, "C", 50, connectedTo: ["B11", "B13"]),
-                    Block("B13", 13, "C", 50, connectedTo: ["B12", "B14"]),
-                    Block("B14", 14, "C", 50, connectedTo: ["B13", "B15"]),
+                    Block("C12", 12, "C", 50, connectedTo: ["C11", "C13"]),
+                    Block("C13", 13, "C", 50, connectedTo: ["C12", "C14"]),
+                    Block("C14", 14, "C", 50, connectedTo: ["C13", "C15"]),
 
-                    Block("B15", 15, "C", 50,
-                        connectedTo: ["B14"],
+                    Block("C15", 15, "C", 50,
+                        connectedTo: ["C14"],
                         station: "Station C"),
                 }
             }

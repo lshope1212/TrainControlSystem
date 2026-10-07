@@ -10,8 +10,13 @@ namespace CTC.Core.Services;
 /// CTC office service. Maps shared contract messages into <see cref="CtcSystemState"/>
 /// and builds outbound contract messages. Transmission is delegated to an injected
 /// <see cref="IMessageSender"/>; this class knows nothing about the transport.
-/// No dispatching, routing or authority algorithms yet (see RouteManager / AuthorityManager).
+/// Dispatching is time-triggered only (see <see cref="SetSystemTimeAsync"/>); there are no
+/// routing or authority algorithms yet (see RouteManager / AuthorityManager).
 /// </summary>
+/// <remarks>
+/// Async methods resume on the caller's synchronization context, so when called from the
+/// UI thread every state change also happens on the UI thread.
+/// </remarks>
 public class CTCService : ICTCService
 {
     private readonly IMessageSender _messageSender;
@@ -93,7 +98,7 @@ public class CTCService : ICTCService
         ArgumentNullException.ThrowIfNull(message);
         Guard.NotNullOrWhiteSpace(message.TrainId, nameof(message));
 
-        DispatchedTrainState train = State.FindDispatchedTrain(message.TrainId);
+        DispatchedTrainState? train = State.FindDispatchedTrain(message.TrainId);
         if (train is null)
         {
             train = new DispatchedTrainState { TrainId = message.TrainId };
@@ -120,14 +125,101 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
-    /// Sets CTC's notion of the current time. Intended to be driven by the shared
-    /// simulation clock; CTC deliberately has no timer of its own.
+    /// Sets CTC's notion of the current time and releases every train that is now due.
     /// </summary>
-    public void SetSystemTime(TimeSpan systemTime)
+    /// <remarks>
+    /// <para>
+    /// CTC deliberately has no clock of its own: every module must agree on one simulation
+    /// time, so the time is owned by the external system clock (the TestUI during isolated
+    /// development) and arrives here as SystemTimeMessages. CTC never interpolates between them.
+    /// </para>
+    /// <para>
+    /// A train is due when <c>DepartureTime &lt;= SystemTime</c>, not <c>==</c>: messages can
+    /// be delayed or skipped (e.g. 12:00:07 then 12:00:09), and a train due at 12:00:08 must
+    /// still leave. A jump forward therefore releases every train it passed, in departure order.
+    /// </para>
+    /// <para>
+    /// Each due train is attempted independently: if one send fails, that train stays queued
+    /// (and is retried on the next time update) while the remaining due trains are still attempted.
+    /// Moving the time backwards never un-dispatches a train; pending trains simply wait.
+    /// </para>
+    /// </remarks>
+    public async Task SetSystemTimeAsync(TimeSpan systemTime, CancellationToken cancellationToken = default)
     {
         State.SystemTime = systemTime;
-
         OnStateChanged(CtcStateChangeKind.SystemTime);
+
+        // Claim every due entry up front so a dispatch pass started while this one is
+        // awaiting a send (another time update, re-entrant on the UI thread) cannot send them again.
+        var dueEntries = State.DispatchQueue
+            .Where(entry => entry.QueueStatus == DispatchQueueStatus.Queued && entry.DepartureTime <= systemTime)
+            .OrderBy(entry => entry.DepartureTime)
+            .ToList();
+
+        foreach (var entry in dueEntries)
+        {
+            entry.QueueStatus = DispatchQueueStatus.Dispatching;
+        }
+
+        foreach (var entry in dueEntries)
+        {
+            try
+            {
+                await DispatchTrainAsync(entry, cancellationToken);
+                OnStateChanged(CtcStateChangeKind.TrainDispatched, trainId: entry.TrainId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Not dispatched: put the train back so the next time update retries it.
+                entry.QueueStatus = DispatchQueueStatus.Queued;
+                OnStateChanged(CtcStateChangeKind.DispatchFailed, trainId: entry.TrainId, message: ex.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutting down: release every claim that has not completed, then stop.
+                foreach (var pending in dueEntries.Where(pending => pending.QueueStatus == DispatchQueueStatus.Dispatching))
+                {
+                    pending.QueueStatus = DispatchQueueStatus.Queued;
+                }
+
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sends the MovementRequest that releases <paramref name="entry"/>'s train, then moves
+    /// the train from the dispatch queue to the dispatched trains.
+    /// </summary>
+    /// <exception cref="Exceptions.MessageSendException">The request could not be delivered; nothing changed.</exception>
+    private async Task DispatchTrainAsync(DispatchQueueEntry entry, CancellationToken cancellationToken)
+    {
+        var scheduledTrain = State.ScheduledTrains.FirstOrDefault(train => train.TrainId == entry.TrainId && train.LineId == entry.LineId)
+            ?? throw new InvalidOperationException($"Train '{entry.TrainId}' is queued but no longer scheduled.");
+
+        var request = CreateMovementRequest(scheduledTrain.TrainId);
+
+        await _messageSender.SendAsync(request, cancellationToken);
+
+        // Only now, after a successful send, does the train leave the queue. Removing it first
+        // would make CTC believe a train was released when the request never reached the wayside.
+        State.DispatchQueue.Remove(entry);
+
+        // The Track Controller may already have reported an authorization for this train;
+        // reuse that record rather than creating a duplicate.
+        var dispatched = State.FindDispatchedTrain(scheduledTrain.TrainId);
+        if (dispatched is null)
+        {
+            dispatched = new DispatchedTrainState { TrainId = scheduledTrain.TrainId };
+            State.DispatchedTrains.Add(dispatched);
+        }
+
+        dispatched.LineId = scheduledTrain.LineId;
+
+        // Known authoritatively only at release time: the schedule says the train starts here.
+        // StartBlockId was fixed when the schedule was built; it is not re-derived per tick.
+        // TODO: real route/yard logic will replace the temporary route-start rule.
+        dispatched.CurrentBlockId = scheduledTrain.StartBlockId;
     }
 
     /// <summary>
@@ -171,17 +263,25 @@ public class CTCService : ICTCService
             State.ScheduledTrains.Add(train);
         }
 
-        // Nothing has been released yet, so the queue is simply rebuilt from the schedule.
-        // TODO: once dispatching exists, preserve entries that have already been released.
-        State.DispatchQueue.Clear();
-        foreach (var train in State.ScheduledTrains.OrderBy(train => train.DepartureTime))
-        {
-            State.DispatchQueue.Add(new DispatchQueueEntry
+        // Rebuild only the pending part of the queue. Already-dispatched trains (recorded in
+        // DispatchedTrains) are never queued again, and entries whose MovementRequest is being
+        // sent right now are kept as they are so they cannot be sent twice.
+        var inFlight = State.DispatchQueue.Where(entry => entry.QueueStatus == DispatchQueueStatus.Dispatching).ToList();
+        var pending = State.ScheduledTrains
+            .Where(train => State.FindDispatchedTrain(train.TrainId) is null)
+            .Where(train => !inFlight.Any(entry => entry.TrainId == train.TrainId && entry.LineId == train.LineId))
+            .Select(train => new DispatchQueueEntry
             {
                 TrainId = train.TrainId,
                 LineId = train.LineId,
                 DepartureTime = train.DepartureTime,
             });
+
+        var rebuilt = inFlight.Concat(pending).OrderBy(entry => entry.DepartureTime).ToList();
+        State.DispatchQueue.Clear();
+        foreach (var entry in rebuilt)
+        {
+            State.DispatchQueue.Add(entry);
         }
 
         OnStateChanged(CtcStateChangeKind.Schedule);
@@ -261,8 +361,8 @@ public class CTCService : ICTCService
         OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
     }
 
-    private void OnStateChanged(CtcStateChangeKind kind, string? blockId = null) =>
-        StateChanged?.Invoke(this, new CtcStateChangedEventArgs(kind, blockId));
+    private void OnStateChanged(CtcStateChangeKind kind, string? blockId = null, string? trainId = null, string? message = null) =>
+        StateChanged?.Invoke(this, new CtcStateChangedEventArgs(kind, blockId, trainId, message));
 
     private CtcBlockState GetBlock(string blockId)
     {

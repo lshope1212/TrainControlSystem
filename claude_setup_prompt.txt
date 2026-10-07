@@ -1,818 +1,1169 @@
-I want you to make a substantial but focused update to the CTC scheduling UI and supporting CTC code in my TrainControlSystem solution.
+I want to complete the scheduling/dispatch functionality of the CTC module.
 
 Repository:
 lshope1212/TrainControlSystem
 
-I am working on the CTC module. Work against my CURRENT LOCAL BRANCH/WORKTREE, not just what is currently on GitHub. Preserve all recent local changes. In particular, I have recently:
-
-- changed the TestUI sample track layout to the Blue Line
-- added/started adding support for AvailableLines / SelectedLine so that the Blue Line appears in the Current Line ComboBox after TrackLayoutMessage is received
-- established the TestUI -> CTC Core -> CTC WPF state-change architecture
-
-Do not overwrite or revert those changes.
-
-Before modifying anything, inspect the current CTC.Core, CTC.Wpf, CTC.TestUI.Wpf, Shared contracts, and existing schedule-related models.
-
-============================================================
-GOAL
-============================================================
-
-I want to redesign the Schedule Builder so that MANUALLY CREATED schedules have essentially the same structure as schedules that will eventually be imported from Excel.
-
-Do NOT implement actual train dispatching yet.
-
-For this iteration I want to:
-
-1. Generate/edit a schedule.
-2. Convert that schedule into the existing CTC scheduling/domain representation.
-3. Queue the schedule.
-4. Display the resulting Dispatch Queue.
-5. Keep the Dispatched Trains area prepared for the next iteration.
-
-Do not send MovementRequestMessages as part of this work.
-Do not implement clock-triggered dispatch yet.
-
-============================================================
-BACKGROUND: SCHEDULE FORMAT
-============================================================
-
-The example Red/Green Line schedule spreadsheets use approximately this structure:
-
-Line
-Section
-Block Number
-Infrastructure
-Train 1 Arrival Time at Station
-Train 2 Arrival Time at Station
-Train 3 Arrival Time at Station
-...
-
-There is one train per train column.
-
-Most normal track-block cells in the train columns are blank.
-
-Times are populated at:
-
-1. the route/start block
-2. station blocks along the route
+I am working on my CURRENT LOCAL CTC branch/worktree.
 
 IMPORTANT:
+Inspect the CURRENT LOCAL WORKTREE before making changes.
 
-The timestamp in the train column at the route/start block should be interpreted by CTC as the train's DEPARTURE TIME / ROUTE START TIME.
+Do NOT assume the GitHub version is fully current. You just completed a substantial redesign of the Schedule Builder locally, including:
 
-DepartureTime should therefore NOT be separately entered by the dispatcher anymore.
+- generated per-line schedule templates
+- ScheduledTrain creation from the matrix
+- derived DepartureTime from the route-start block
+- QueueSchedule
+- Dispatch Queue population
+- dynamic train columns
+- schedule validation
+- SelectedLine integration
 
-For example conceptually:
+Preserve all of that work.
 
-----------------------------------------------------------------------
-Line | Section | Block | Infrastructure | Train 1 | Train 2 | Train 3
-----------------------------------------------------------------------
-BLUE | A       | 1     |                | 12:00:00| 12:03:00| 12:06:00
-BLUE | A       | 2     |                |         |         |
-BLUE | A       | 3     | CROSSING       |         |         |
-...
-BLUE | B       | 10    | STATION B      | 12:08:00| 12:11:00|
-BLUE | C       | 15    | STATION C      |         |         | 12:14:00
-----------------------------------------------------------------------
+The previous implementation ended with these TODOs:
 
-Here:
+- Clock-triggered release of queue entries and MovementRequest sending
+- QueueSchedule currently rebuilds the whole queue; once dispatching exists it must preserve trains already released
+- Mapping "Train n" to real Train Model IDs is still future work
+- GetRouteStartBlock is still temporary route/yard logic
+- Back the Dispatched Trains grid with a real collection
 
-Train 1 DepartureTime = 12:00:00
-Train 2 DepartureTime = 12:03:00
-Train 3 DepartureTime = 12:06:00
+This task should address the dispatch-related TODOs, EXCEPT:
 
-The departure time is DERIVED from the start-block cell.
-
-Do not require every train to have a time at every station. A train may take a different branch, so blank station cells are valid.
-
-============================================================
-SCHEDULE BUILDER UI REDESIGN
-============================================================
-
-Replace the current manual workflow where the dispatcher:
-
-- selects a train
-- types departure time
-- adds train
-- selects train
-- individually adds station stops
-
-with a generated schedule-template workflow.
-
-The Schedule Builder tab should approximately look like:
-
--------------------------------------------------------------
-Schedule Builder
--------------------------------------------------------------
-
-Current Line: Blue Line       Number of Trains: [ 3 ]
-
-[ Generate Schedule Template ]   [ Upload Schedule ]
-
--------------------------------------------------------------
-| Line | Section | Block | Infrastructure | Train 1 | Train 2 | ...
--------------------------------------------------------------
-| BLUE | A       | 1     |                |          |         |
-| BLUE | A       | 2     |                |          |         |
-...
-| BLUE | B       | 10    | Station B      |          |         |
-...
-| BLUE | C       | 15    | Station C      |          |         |
--------------------------------------------------------------
-
-                                     [ Queue Schedule ]
-
-The actual styling should remain consistent with the existing CTC UI.
-
-Use SelectedLine as the line for which the schedule is being generated.
-
-Do not add another independent line selector if the global Current Line ComboBox already exists.
+DO NOT solve real Train Model ID mapping yet.
+DO NOT replace GetRouteStartBlock with full routing/yard logic yet.
 
 ============================================================
-GENERATE SCHEDULE TEMPLATE
+OVERALL GOAL
 ============================================================
 
-Add an input for:
-
-Number of Trains
-
-and a command/button:
-
-Generate Schedule Template
-
-The user enters a positive number, for example:
-
-3
-
-and the schedule grid dynamically gets:
-
-Train 1
-Train 2
-Train 3
-
-columns.
-
-For this iteration, these generated names can also serve as the TrainId values:
-
-"Train 1"
-"Train 2"
-"Train 3"
-
-Do NOT invent Train Model IDs such as 0000, 0001, etc.
-
-Eventually these generated train identifiers can be replaced/mapped to real Train Model train IDs once modules are integrated.
-
-Keep this train identifier generation isolated so that changing it later is easy.
-
-============================================================
-ROWS IN THE GENERATED TEMPLATE
-============================================================
-
-Generate rows from the currently selected CtcLineState and its Blocks.
-
-The grid should include ALL blocks so that the structure closely resembles the imported spreadsheet.
-
-For each block show:
-
-- Line
-- Section
-- Block Number
-- Infrastructure
-- train arrival/start time columns
-
-Infrastructure should be a readable string derived from CtcBlockState data.
-
-Examples:
-
-Station B
-Switch
-Railway Crossing
-Signal
-
-If multiple properties apply, combine them in a readable way.
-
-Example:
-
-"Station B; Signal"
-
-Do not copy or independently hardcode Blue Line block information into the Schedule Builder.
-
-The schedule MUST be generated from the track layout already contained in:
-
-_ctc.State.Lines / SelectedLine
-
-That ensures imported TrackLayoutMessages remain the source of truth.
-
-============================================================
-WHICH CELLS ARE EDITABLE
-============================================================
-
-The dispatcher should enter times only for meaningful schedule checkpoints.
-
-For this iteration:
-
-- the line's START BLOCK should allow time entry
-- blocks containing stations should allow time entry
-- ordinary non-station blocks should have read-only/disabled train-time cells
-
-For the Blue Line iteration, determine the start block from the line's block data.
-
-A simple rule is acceptable for now:
-
-use the first/lowest-numbered block as the route starting block.
-
-HOWEVER:
-
-isolate this logic in a clearly named helper such as:
-
-GetRouteStartBlock(...)
-
-so that later routing/yard logic can replace this assumption.
-
-Do NOT spread the "lowest block number means start" assumption throughout the codebase.
-
-============================================================
-TIME ENTRY
-============================================================
-
-Each editable train-time cell should initially be blank.
-
-Use a string/editing ViewModel representation so blank values are naturally supported.
-
-Expected format:
-
-HH:mm:ss
-
-Examples:
-
-12:00:00
-12:03:00
-12:10:00
-
-Do not initialize blank cells as 00:00:00.
-
-Validate entered times when Queue Schedule is pressed.
-
-A TimeSpan can be used internally after parsing.
-
-============================================================
-IMPORTANT: DYNAMIC DATAGRID COLUMNS
-============================================================
-
-The number of train columns is dynamic.
-
-Do NOT hardcode:
-
-Train 1
-Train 2
-Train 3
-...
-
-in MainWindow.xaml.
-
-Implement the dynamic columns cleanly.
-
-Preferred options:
-
-1. a small reusable DataGrid behavior/helper that creates the dynamic columns
-OR
-2. minimal view-only code-behind that generates DataGrid columns
-
-A small amount of code-behind is acceptable ONLY for WPF presentation responsibilities such as:
-
-- creating dynamic DataGrid columns
-- assigning bindings
-- reacting to the TrainColumns collection changing
-
-DO NOT put:
-
-- schedule parsing
-- queue creation
-- validation
-- CTC state mutation
-- dispatch logic
-
-in code-behind.
-
-Those responsibilities belong in ViewModels/Core.
-
-If you can implement the dynamic column behavior cleanly in MVVM without excessive complexity, do that.
-
-============================================================
-VIEWMODEL REPRESENTATION
-============================================================
-
-Create clean presentation models rather than trying to bind the DataGrid directly to the Core domain objects.
-
-Something conceptually like:
-
-ScheduleTemplateRowViewModel
-{
-    string LineId
-    string Section
-    string BlockId
-    int BlockNumber
-    string Infrastructure
-    bool IsStartBlock
-    bool IsStation
-
-    ObservableCollection<ScheduleTimeCellViewModel> TrainTimes
-}
-
-ScheduleTimeCellViewModel
-{
-    string TrainId
-    string TimeText
-    bool IsEditable
-}
-
-You do NOT have to use those exact names if something fits the project better.
-
-The important idea is:
-
-TRACK STATE
-    ↓
-schedule template rows
-    ↓
-editable matrix
-    ↓
-normalized Core schedule when Queue Schedule is pressed
-
-Do not make CTC.Core depend on WPF ViewModels.
-
-If MainWindowViewModel is becoming excessively large, I would prefer creating a:
-
-ScheduleBuilderViewModel
-
-under CTC.Wpf/ViewModels and exposing it through MainWindowViewModel.
-
-However, do not introduce unnecessary architecture just for the sake of abstraction. Use good judgment.
-
-============================================================
-CORE DOMAIN MODEL
-============================================================
-
-The UI spreadsheet/matrix representation should NOT become the primary Core storage format.
-
-The Core should keep a normalized representation where a train owns its schedule.
-
-The project currently has concepts similar to:
-
-ScheduledTrain
-ScheduleStop
-DispatchQueueEntry
-
-Update them as necessary.
-
-ScheduledTrain should conceptually contain:
-
-string TrainId
-string LineId
-string StartBlockId
-TimeSpan DepartureTime
-IList<ScheduleStop> Stops
-
-IMPORTANT:
-
-DepartureTime is retained in the backend, but it is no longer entered independently.
-
-Change its documentation to make this explicit:
-
-DepartureTime is derived from the train's timestamp at the route-start block.
-
-ScheduleStop should preferably contain:
-
-string BlockId
-string StationName
-TimeSpan ArrivalTime
-
-BlockId is useful because future routing/dispatch logic should not have to identify a station only by its display name.
-
-Do not add dwell time in this iteration.
-
-The provided schedule format does not require dwell time for what I am implementing right now.
-
-============================================================
-BUILDING ScheduledTrain OBJECTS
-============================================================
-
-When Queue Schedule is pressed, convert each TRAIN COLUMN into one ScheduledTrain.
+Complete the current Schedule Builder -> Dispatch Queue -> Dispatched Trains workflow.
+
+The desired runtime flow is:
+
+1. TestUI sends the Blue Line layout.
+2. User creates a schedule.
+3. User presses Queue Schedule.
+4. Pending trains appear in Dispatch Queue.
+5. A continuously running system/simulation clock advances.
+6. TestUI sends the current SystemTime to CTC continuously.
+7. When CTC receives a time at or past a queued train's DepartureTime:
+   - CTC sends a MovementRequestMessage for that train.
+8. ONLY if the MovementRequestMessage is successfully sent:
+   - remove that train from Dispatch Queue
+   - add that train to Dispatched Trains
+9. The Dispatched Trains grid updates immediately.
+10. TestUI's fake Track Controller receiver should capture the outgoing MovementRequestMessage.
 
 For example:
 
-Train 1 column
+Queue:
 
-B1  -> 12:00:00
-B10 -> 12:08:00
-B15 -> blank
+Train 1    12:00:05
+Train 2    12:00:10
+Train 3    12:00:15
 
-becomes approximately:
+If system time is:
 
-ScheduledTrain
-{
-    TrainId = "Train 1",
-    LineId = "BLUE",
-    StartBlockId = "B1",
-    DepartureTime = 12:00:00,
-    Stops =
-    {
-        ScheduleStop
-        {
-            BlockId = "B10",
-            StationName = "Station B",
-            ArrivalTime = 12:08:00
-        }
-    }
-}
+12:00:04
+-> all three remain queued
 
-The blank B15 value means this train does not have a scheduled stop there.
+At:
 
-Do not create a ScheduleStop for blank cells.
+12:00:05
+-> MovementRequestMessage sent for Train 1
+-> Train 1 disappears from Dispatch Queue
+-> Train 1 appears in Dispatched Trains
+
+At:
+
+12:00:10
+-> same for Train 2
+
+etc.
 
 ============================================================
-VALIDATION WHEN QUEUE SCHEDULE IS PRESSED
+IMPORTANT ARCHITECTURE: CTC DOES NOT OWN THE CLOCK
 ============================================================
 
-Validate the complete generated schedule before queueing it.
+Do NOT add a timer inside CTC.Core that independently advances:
 
-At minimum:
+State.SystemTime
 
-1. A template must have been generated.
-2. A SelectedLine must exist.
-3. There must be at least one train column.
-4. Every train must have a valid timestamp in the start-block row.
-5. Every nonblank station time must parse as HH:mm:ss.
-6. Each train should have at least one scheduled station stop.
-7. For each train, populated timestamps should not go backwards in time relative to the order of the populated schedule checkpoints.
+CTC should remain driven by an EXTERNAL system/simulation clock.
 
-Blank station cells are VALID.
+The existing architecture already reflects this:
 
-Do NOT require all station cells to be populated because trains may use different branches.
+TestUI / future simulation system
+        |
+        | SystemTimeMessage
+        v
+CtcNamedPipeReceiver
+        |
+        v
+CTCService
+        |
+        v
+CtcSystemState.SystemTime
 
-If validation fails:
+Keep this architecture.
 
-- do not partially queue the schedule
-- expose a useful human-readable validation/status message in the UI
+For THIS isolated-development iteration:
 
-Examples:
+CTC.TestUI.Wpf should simulate the shared system clock.
 
-"Train 2 is missing a route start time."
-
-"Train 3 has an invalid arrival time at Station B."
-
-"Train 1 has an arrival time earlier than its departure time."
-
-============================================================
-CTC SERVICE RESPONSIBILITY
-============================================================
-
-Preserve the architecture where MainWindowViewModel translates UI intent into CTC service calls.
-
-Do NOT directly mutate:
-
-_ctc.State.ScheduledTrains
-_ctc.State.DispatchQueue
-
-from the WPF ViewModel.
-
-Add appropriate methods to ICTCService / CTCService.
-
-For example, something conceptually like:
-
-void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains)
-
-or separate methods if cleaner.
-
-CTCService should own the actual state mutation.
-
-When a schedule is queued:
-
-1. Replace/update State.ScheduledTrains with the validated schedule.
-2. Build DispatchQueue entries from each ScheduledTrain.
-3. Sort DispatchQueue by DepartureTime.
-4. Raise StateChanged.
-
-Add appropriate CtcStateChangeKind values, for example:
-
-Schedule
-DispatchQueue
-
-Use names that fit the existing enum.
-
-Do not abuse TrackLayout or another unrelated state-change kind.
+Later, when the complete system is integrated, the real system clock can send the same SystemTimeMessage and CTC should require little or no change.
 
 ============================================================
-DISPATCH QUEUE DOMAIN MODEL
+PART 1 — MAKE THE TESTUI SYSTEM CLOCK ACTUALLY RUN
 ============================================================
 
-For this iteration the Dispatch Queue only needs to DISPLAY:
+Currently SystemTimeInputViewModel allows a static hh:mm:ss value to be sent manually.
 
-Train ID
-Departure Time
+Replace/extend this so it behaves like a small simulation clock.
 
-Internally, I recommend DispatchQueueEntry retain whatever information future dispatch logic actually needs, such as:
+The TestUI System Time area should support approximately:
 
-TrainId
-LineId
-DepartureTime
-QueueStatus
+Current Time:  [ 12:00:00 ]
 
-The current FirstStation field is no longer needed for the UI.
+[ Set Time ] [ Start ] [ Pause ] [ Reset ]
 
-If FirstStation has no meaningful dependencies elsewhere, remove it.
+Exact wording/layout can be adjusted to fit the current TestUI style.
 
-QueueStatus may remain internally because it will be useful once actual dispatching is implemented, even though it should not be shown as a column right now.
+The important behavior is:
+
+SET TIME
+- User can type a valid HH:mm:ss value while the clock is stopped/paused.
+- Set Time establishes the simulation clock's current value.
+- It should send that value immediately to CTC.
+
+START
+- Begins advancing simulation time.
+- For now use a simple 1x clock:
+  1 real second = 1 simulation second.
+- Send a SystemTimeMessage after each clock advancement.
+- The displayed time in TestUI must update.
+
+PAUSE
+- Stops advancing.
+- Does NOT reset current time.
+
+RESET
+- Stops the clock.
+- Restores the configured/default start value.
+- Sends the reset time to CTC.
+
+If keeping the existing manual Send button is useful, it can become Set Time.
+
+Do not introduce an unnecessary global framework.
+
+A DispatcherTimer or similarly simple WPF-appropriate implementation is fine.
+
+If using an async timer callback:
+- prevent overlapping sends
+- handle exceptions cleanly
+- do not let a failed send crash TestUI
+- do not accumulate multiple timers when Start is pressed repeatedly
+
+Expose an IsRunning property if useful for button enable/disable state.
 
 ============================================================
-DISPATCH QUEUE TAB
+CLOCK SOURCE OF TRUTH
 ============================================================
 
-Change the Dispatch Queue DataGrid so the ONLY visible columns are:
+The TestUI owns the running simulated time during this iteration.
 
-Train ID
-Departure Time
+CTC should NOT interpolate time itself between SystemTimeMessages.
 
-The queue should be read-only.
+If TestUI says:
 
-Format departure time clearly as:
+12:00:07
 
-HH:mm:ss
+then:
 
-When Queue Schedule succeeds, this grid should immediately populate.
+CTC.State.SystemTime == 12:00:07
+
+If a tick is skipped because of UI scheduling and the next message says:
+
+12:00:09
+
+CTC must correctly handle that.
+
+Dispatching therefore must use:
+
+DepartureTime <= CurrentSystemTime
+
+NOT:
+
+DepartureTime == CurrentSystemTime
+
+This is very important.
+
+A delayed/jumped clock must never cause a scheduled train to be missed.
+
+============================================================
+DAY BOUNDARY
+============================================================
+
+We do not need multi-day scheduling yet.
+
+Keep the clock as a time-of-day for this iteration.
+
+Avoid introducing complex date/day rollover logic.
+
+A simple behavior such as stopping/pausing at 23:59:59 is acceptable if necessary.
+
+Do not create a multi-day simulation architecture.
+
+============================================================
+PART 2 — MAKE SYSTEM TIME PROCESSING ASYNCHRONOUS WHERE NEEDED
+============================================================
+
+Currently the CTC receives SystemTimeMessage and applies SetSystemTime.
+
+Dispatching requires asynchronous outgoing message transmission.
+
+Do NOT solve this using:
+
+async void inside CTC.Core
+Task.Run fire-and-forget
+_ = SomeAsyncMethod()
+business logic in MainWindowViewModel
+
+Instead, cleanly adapt the CTC service boundary.
+
+A design such as this would be appropriate:
+
+Task SetSystemTimeAsync(
+    TimeSpan systemTime,
+    CancellationToken cancellationToken = default)
+
+or:
+
+Task ApplySystemTimeAsync(
+    SystemTimeMessage message,
+    CancellationToken cancellationToken = default)
+
+Exact naming is up to you.
+
+The important behavior is:
+
+receive system time
+    ↓
+update State.SystemTime
+    ↓
+find due queued trains
+    ↓
+await dispatch attempts
+    ↓
+raise appropriate state changes
+
+Update ICTCService and CtcNamedPipeReceiver appropriately.
+
+CtcNamedPipeReceiver currently routes inbound messages into CTCService.
+
+Extend its routing cleanly so SystemTimeMessage can invoke an asynchronous CTC service operation.
+
+Do NOT turn the receiver into the place where dispatching logic lives.
+
+Receiver responsibility remains:
+
+message envelope
+    ↓
+deserialize
+    ↓
+call correct service method
+
+CTCService remains responsible for CTC behavior.
+
+============================================================
+PART 3 — DETERMINE WHICH TRAINS ARE DUE
+============================================================
+
+When system time changes, CTCService must inspect:
+
+State.DispatchQueue
+
+A train is due when approximately:
+
+entry.QueueStatus == Queued
+AND
+entry.DepartureTime <= State.SystemTime
+
+Use whatever QueueStatus representation currently exists after the previous scheduling implementation.
+
+Process due trains in:
+
+DepartureTime ascending order.
+
+If multiple trains became due because the clock jumped forward, dispatch ALL due trains.
 
 Example:
 
-Train ID   Departure Time
-Train 1    12:00:00
-Train 2    12:03:00
-Train 3    12:06:00
+Queue:
 
-Entries should be ordered by departure time.
+Train 1  12:00:05
+Train 2  12:00:07
+Train 3  12:00:09
 
-The current UI text claims trains are automatically dispatched when System Time reaches Departure Time.
+Previous time:
+12:00:04
 
-ACTUAL AUTO-DISPATCH IS NOT IMPLEMENTED IN THIS ITERATION.
+Next SystemTimeMessage:
+12:00:10
 
-Change this text so the UI does not imply functionality that does not exist.
+ALL THREE should be processed.
 
-Something like:
-
-"Queued trains are awaiting dispatch at their scheduled route-start time. Automatic dispatch will be handled by the dispatching logic."
-
-Do not implement that dispatch logic yet.
+Do not only process one entry per tick.
 
 ============================================================
-DISPATCHED TRAINS TAB
+PART 4 — ACTUAL DISPATCH REQUEST
 ============================================================
 
-Keep the Dispatched Trains grid essentially as it currently exists.
+Use the EXISTING MovementRequestMessage/shared contract.
 
-Visible columns should be:
+Do not create a second dispatch message type unless the current local code proves that the contract has changed.
+
+The existing CTC architecture already has:
+
+IMessageSender
+
+and MovementRequest creation/sending concepts.
+
+Add a clean CTC service operation for releasing a train.
+
+Something conceptually like:
+
+private async Task DispatchTrainAsync(
+    DispatchQueueEntry entry,
+    CancellationToken cancellationToken)
+
+or a public method if tests/API structure make that cleaner.
+
+It should:
+
+1. Find the ScheduledTrain corresponding to the queue entry.
+2. Build a MovementRequestMessage.
+3. Set:
+       TrainId = scheduled train's TrainId
+       RequestType = ReleaseTrain
+4. Send it using the existing IMessageSender.
+5. Await the send.
+
+DO NOT bypass IMessageSender.
+
+DO NOT write named-pipe code inside CTCService.
+
+The existing sender abstraction must remain the transport boundary.
+
+============================================================
+PART 5 — SUCCESSFUL DISPATCH STATE TRANSITION
+============================================================
+
+A queued train must NOT disappear from the queue until its MovementRequest has successfully been sent.
+
+Correct order:
+
+queued entry exists
+      ↓
+build MovementRequest
+      ↓
+await IMessageSender.SendAsync(...)
+      ↓
+SUCCESS
+      ↓
+remove/mark released queue entry
+      ↓
+add DispatchedTrainState
+      ↓
+raise StateChanged
+
+Do NOT do this:
+
+remove from queue
+      ↓
+try to send
+
+because a failed communication attempt would make CTC falsely believe the train was dispatched.
+
+============================================================
+PART 6 — FAILURE BEHAVIOR
+============================================================
+
+If sending the MovementRequest fails:
+
+- do NOT add the train to DispatchedTrains
+- do NOT permanently remove it from DispatchQueue
+- do NOT claim that the train was dispatched
+- keep it eligible for a future dispatch attempt
+- report the failure through the existing CTC status/error mechanism
+
+The next system-time update may retry it.
+
+Be careful not to leave the queue entry stuck in an intermediate "Dispatching" state.
+
+If QueueStatus has a Dispatching state, restore an appropriate pending state after failure.
+
+Do not allow exceptions from one failed dispatch to corrupt the entire queue.
+
+Prefer processing each due train independently.
+
+If Train 1 fails but Train 2 is also due, use reasonable behavior and document it.
+
+My preference:
+attempt the other due entries rather than abandoning the entire batch.
+
+============================================================
+PART 7 — EXACTLY-ONCE STATE TRANSITION
+============================================================
+
+Once a train has successfully been dispatched:
+
+it must not be sent again on every future SystemTimeMessage.
+
+Example:
+
+Train 1 departure = 12:00:05
+
+At:
+12:00:05
+send once
+
+At:
+12:00:06
+DO NOT send again
+
+At:
+12:00:07
+DO NOT send again
+
+The easiest source of truth should be the state transition:
+
+DispatchQueue
+    ->
+DispatchedTrains
+
+A successfully dispatched train should no longer be considered pending.
+
+Do not maintain a redundant static HashSet if normal domain state already answers the question.
+
+============================================================
+PART 8 — DISPATCH QUEUE AFTER DISPATCHING BEGINS
+============================================================
+
+The previous implementation currently rebuilds the queue when Queue Schedule is pressed.
+
+Fix the TODO that says this would destroy released state.
+
+QueueSchedule MUST NOT make already dispatched trains become queued again.
+
+If a schedule is re-queued after some trains have already been dispatched:
+
+- preserve State.DispatchedTrains
+- rebuild/update the still-pending portion appropriately
+- exclude already dispatched trains from the new pending queue
+
+Do not reset the entire runtime dispatch state merely because Queue Schedule is pressed.
+
+For this iteration we only meaningfully support one selected line/Blue Line, but preserve LineId in the domain models where it already exists.
+
+If the current code already has a clean line/train identity strategy, use it.
+
+Do NOT spend this task redesigning placeholder Train IDs.
+
+"Train 1", "Train 2", etc. are still acceptable for this isolated CTC iteration.
+
+Leave the existing real-Train-Model-ID TODO in place.
+
+============================================================
+PART 9 — DISPATCHED TRAINS DOMAIN STATE
+============================================================
+
+Finish the TODO:
+
+"Back the Dispatched Trains grid with a real collection."
+
+State.DispatchedTrains must become the authoritative source for that tab.
+
+When a queue entry is successfully dispatched, create a real DispatchedTrainState.
+
+At minimum initialize:
+
+TrainId
+
+and anything already known authoritatively.
+
+If ScheduledTrain contains:
+
+LineId
+StartBlockId
+
+it is acceptable and desirable to initialize:
+
+CurrentBlockId = ScheduledTrain.StartBlockId
+
+because at release time the schedule says the train begins its route there.
+
+However, document the current limitation:
+
+the existing BlockStatusMessage does not identify which train occupies a block, so CTC cannot yet continuously update a dispatched train's CurrentBlockId from block occupancy alone.
+
+Do not invent train location updates.
+
+============================================================
+AUTHORIZED SPEED / AUTHORITY
+============================================================
+
+Do not invent speed or authority at dispatch time.
+
+The Dispatched Trains grid already conceptually displays:
+
+- Train ID
+- Authorized Speed
+- Authority
+- Current Block
+
+Authorized speed and authority should remain monitoring information supplied by:
+
+TrainAuthorizationStatusMessage
+
+The CTC already has inbound authorization-status handling.
+
+Ensure that after a train is dispatched:
+
+ApplyTrainAuthorization(...)
+
+updates that existing DispatchedTrainState rather than creating duplicate entries.
+
+If authorization arrives for a train not yet known, preserve the current intentional behavior unless it conflicts with the new dispatch model.
+
+Do not create fake speed or authority values beyond whatever default numeric state the model naturally has.
+
+============================================================
+PART 10 — DISPATCHED TRAINS VIEWMODEL/UI
+============================================================
+
+Ensure the Dispatched Trains DataGrid is bound to real state.
+
+It should display:
 
 Train ID
 Authorized Speed
 Authority
 Current Block
 
-REMOVE the Next Station column for now.
+Next Station should remain removed.
 
-If DispatchedTrainState.NextStation is completely unused, it may be removed from the model too.
+The collection should refresh when a dispatch succeeds.
 
-If removing it would create unnecessary unrelated changes, it is acceptable to leave the property internally and simply remove the UI column.
-
-Do not add any new controls to manually set speed or authority.
-
-Those remain monitoring values.
-
-============================================================
-UPLOAD SCHEDULE
-============================================================
-
-Keep the Upload Schedule button in the Schedule Builder UI.
-
-For this task, the important architecture requirement is that a FUTURE uploaded schedule and the manually generated schedule converge on the SAME normalized CTC schedule representation:
-
-ScheduledTrain
-    -> DepartureTime
-    -> Stops
-
-Do not create two unrelated scheduling systems.
-
-You do NOT need to fully implement Excel parsing unless there is already a straightforward implementation in the project.
-
-If Upload Schedule is still a placeholder, leave it as a clearly marked placeholder.
-
-The current goal is to make the manual schedule builder structurally compatible with that future feature.
-
-============================================================
-LINE SCOPING
-============================================================
-
-Scheduling must be scoped to SelectedLine.
-
-If BLUE is selected:
-
-Generate Schedule Template
-
-should use the Blue Line's blocks/stations.
-
-Do not use:
-
-_ctc.State.Lines.SelectMany(...)
-
-for schedule construction.
-
-Use SelectedLine.
-
-This is important because CTC will eventually contain multiple lines.
-
-Internally keep LineId on scheduled/queued trains even though I do not need a Line column in the Dispatch Queue UI.
-
-============================================================
-CURRENT LINE CHANGES
-============================================================
-
-I may have local changes related to:
-
-AvailableLines
-SelectedLine
-RebuildLines()
-
-and automatic Blue Line selection after TrackLayoutMessage.
-
-Preserve and integrate with those changes.
-
-Do NOT reset MainWindowViewModel to the older GitHub version if my local worktree is newer.
-
-============================================================
-STATE CHANGE / UI REFRESH
-============================================================
-
-The CTC already uses ICTCService.StateChanged.
-
-Continue using this architecture.
-
-When a schedule/queue changes:
+Use the existing StateChanged architecture:
 
 CTCService
     ↓
 StateChanged
     ↓
-MainWindowViewModel / ScheduleBuilderViewModel
+MainWindowViewModel
     ↓
-ObservableCollections / properties refresh
+ObservableCollection / ViewModels
     ↓
-WPF updates
+DataGrid refresh
 
-Do not introduce static/global state to get around bindings.
+Do not make the UI poll CTCService.
 
-============================================================
-EXPECTED USER FLOW AFTER THIS CHANGE
-============================================================
-
-The working flow should be:
-
-1. Start CTC and TestUI.
-2. TestUI sends the Blue Line TrackLayoutMessage.
-3. Blue Line becomes SelectedLine.
-4. Go to Schedule Builder.
-5. Enter:
-
-   Number of Trains: 3
-
-6. Press:
-
-   Generate Schedule Template
-
-7. A Blue Line schedule matrix appears with:
-
-   static block information
-   Train 1 column
-   Train 2 column
-   Train 3 column
-
-8. Enter start times in the starting-block row:
-
-   Train 1 = 12:00:00
-   Train 2 = 12:03:00
-   Train 3 = 12:06:00
-
-9. Enter appropriate arrival times at station rows.
-
-10. Press:
-
-    Queue Schedule
-
-11. The schedule is converted to ScheduledTrain objects.
-
-12. DepartureTime for each ScheduledTrain is derived from that train's start-block cell.
-
-13. CTCService stores the schedule and generates queue entries.
-
-14. Dispatch Queue immediately shows:
-
-    Train 1   12:00:00
-    Train 2   12:03:00
-    Train 3   12:06:00
-
-15. Nothing is actually dispatched yet.
+Do not populate the DataGrid directly from CTCService using code-behind.
 
 ============================================================
-TESTING
+PART 11 — STATE CHANGE KINDS
 ============================================================
 
-Add/update tests where appropriate.
+Review the current CtcStateChangeKind after the recent scheduling work.
+
+Use meaningful event kinds.
+
+There should be a distinct change notification for dispatching / dispatched trains if one does not already exist.
+
+For example:
+
+Schedule
+DispatchQueue
+TrainDispatched
+SystemTime
+
+Names do not have to match exactly.
+
+Do not use unrelated values such as TrackLayout to force a refresh.
+
+When one clock tick both:
+
+- changes SystemTime
+- dispatches one or more trains
+
+make sure the ViewModel receives enough notification to update:
+
+- System Time display
+- Dispatch Queue
+- Dispatched Trains
+- queued/dispatched counts
+
+Avoid excessive unnecessary full UI rebuilds if simple refreshes work.
+
+============================================================
+PART 12 — CURRENT CTC SYSTEM TIME DISPLAY
+============================================================
+
+The CTC header already displays System Time.
+
+Ensure that while the TestUI clock is running:
+
+CTC System Time visibly advances:
+
+12:00:00
+12:00:01
+12:00:02
+12:00:03
+...
+
+This must come from:
+
+State.SystemTime
+
+updated from received SystemTimeMessages.
+
+Do NOT create a second visual-only WPF timer in CTC just to animate the display.
+
+The CTC display must represent the actual system time CTC received.
+
+============================================================
+PART 13 — TESTUI OUTBOUND MESSAGE CAPTURE
+============================================================
+
+The TestUI already has a fake Track Controller receiver/captured-output mechanism.
+
+Preserve this.
+
+When Train 1 dispatches, TestUI should visibly capture something equivalent to:
+
+MovementRequestMessage
+TrainId: Train 1
+RequestType: ReleaseTrain
+
+This is an important integration test.
+
+The path should be the REAL current communication path:
+
+CTCService
+    ↓
+IMessageSender
+    ↓
+NamedPipeMessageSender
+    ↓
+TrackController named pipe
+    ↓
+TestUI FakeTrackControllerReceiver
+    ↓
+Captured Outputs UI
+
+Do NOT create a direct CTC -> TestUI shortcut for dispatching.
+
+============================================================
+PART 14 — SYSTEM CLOCK TESTUI UX
+============================================================
+
+Improve the System Time area enough that this flow is easy to test manually.
+
+I want to be able to do something like:
+
+1. Queue:
+       Train 1 12:00:05
+       Train 2 12:00:10
+
+2. In TestUI set:
+       12:00:00
+
+3. Press Start.
+
+4. Watch:
+       12:00:01
+       12:00:02
+       ...
+
+5. At 12:00:05:
+       Train 1 dispatches.
+
+6. At 12:00:10:
+       Train 2 dispatches.
+
+Display whether the clock is:
+
+Running
+Paused
+
+Disable Start when already running if appropriate.
+
+Disable Pause when already paused if appropriate.
+
+Do not over-design the UI.
+
+============================================================
+PART 15 — SCHEDULE BUILDER BEHAVIOR AFTER DISPATCH
+============================================================
+
+Do not let clock ticks destroy or regenerate the schedule-template editing matrix.
+
+System time changes and dispatch events should update operational state, not wipe the Schedule Builder.
+
+The existing behavior where a NEW TrackLayoutMessage or changing SelectedLine clears a schedule template can remain unless your current local implementation has changed it.
+
+Do not clear the schedule matrix merely because:
+
+- a train dispatches
+- system time updates
+- authorization status arrives
+
+============================================================
+PART 16 — ROUTE START LOGIC
+============================================================
+
+Do NOT expand GetRouteStartBlock into full routing in this task.
+
+Continue using the existing temporary implementation generated in the previous step.
+
+If dispatch needs StartBlockId, use the ScheduledTrain value already derived during schedule creation.
+
+Do not re-derive a start block during every clock tick.
+
+Leave a clear TODO explaining that real route/yard logic will replace this later.
+
+============================================================
+PART 17 — THREADING
+============================================================
+
+Be careful about WPF thread ownership.
+
+The current inbound named-pipe receiver marshals CTC state updates to the WPF Dispatcher.
+
+Preserve that architecture.
+
+CTC.Core must remain UI-framework-independent.
+
+Do not add references from CTC.Core to:
+
+System.Windows
+DispatcherTimer
+WPF controls
+
+TestUI may use WPF-specific timer infrastructure because it is a WPF simulation/test application.
+
+============================================================
+PART 18 — CANCELLATION / APPLICATION SHUTDOWN
+============================================================
+
+Ensure the running TestUI clock does not outlive the application.
+
+On TestUI shutdown:
+
+- timer should stop
+- no repeated sends should continue
+- cancellation should be clean
+
+Follow whatever cancellation/lifetime pattern already exists in App.xaml.cs.
+
+Do not introduce background tasks that leak when the window closes.
+
+============================================================
+PART 19 — AUTOMATIC DISPATCH ALGORITHM
+============================================================
+
+Keep the automatic dispatch algorithm straightforward.
+
+Conceptually:
+
+SetSystemTimeAsync(newTime):
+
+    State.SystemTime = newTime
+
+    dueEntries =
+        DispatchQueue
+        where DepartureTime <= newTime
+        ordered by DepartureTime
+
+    foreach dueEntry:
+        try:
+            await DispatchTrainAsync(dueEntry)
+
+        catch:
+            leave dueEntry queued
+            report failure
+
+    raise appropriate state notifications
+
+DispatchTrainAsync(entry):
+
+    scheduledTrain = find matching ScheduledTrain
+
+    request = new MovementRequestMessage
+    {
+        TrainId = scheduledTrain.TrainId,
+        RequestType = ReleaseTrain
+    }
+
+    await _messageSender.SendAsync(request)
+
+    // only after successful send
+
+    remove entry from State.DispatchQueue
+
+    add new DispatchedTrainState
+    {
+        TrainId = scheduledTrain.TrainId,
+        CurrentBlockId = scheduledTrain.StartBlockId
+    }
+
+This is CONCEPTUAL pseudocode.
+
+Adapt it to the actual current local models rather than blindly reproducing it.
+
+============================================================
+PART 20 — DO NOT DISPATCH BEFORE DEPARTURE
+============================================================
+
+Explicitly test this boundary.
+
+Given:
+
+DepartureTime = 12:00:05
+
+Then:
+
+11:59:59 -> not dispatched
+12:00:04 -> not dispatched
+12:00:05 -> dispatched
+12:00:06 -> already dispatched; no second request
+
+============================================================
+PART 21 — CLOCK JUMPS
+============================================================
+
+Explicitly support forward clock jumps.
+
+Given:
+
+Train A = 12:00:02
+Train B = 12:00:04
+Train C = 12:00:06
+
+If system time jumps directly:
+
+12:00:00
+->
+12:00:10
+
+then all three must be dispatched in order.
+
+Do not rely on receiving every individual second.
+
+============================================================
+PART 22 — CLOCK MOVING BACKWARD
+============================================================
+
+TestUI Set Time may allow setting the clock backward while paused.
+
+If system time moves backward:
+
+DO NOT move dispatched trains back into the queue.
+
+DO NOT "undo" dispatches.
+
+Already-dispatched state remains dispatched.
+
+Pending trains simply wait until the clock again reaches their DepartureTime.
+
+Do not implement historical rollback.
+
+============================================================
+PART 23 — MESSAGE FAILURE TEST
+============================================================
+
+Test dispatch with the TestUI fake Track Controller receiver NOT running.
+
+Expected:
+
+- sending MovementRequest fails
+- train stays in Dispatch Queue
+- train does NOT enter Dispatched Trains
+- CTC remains running
+- useful status/error appears
+
+Then start the fake receiver / TestUI and allow another clock update.
+
+The train should be eligible to dispatch successfully.
+
+============================================================
+PART 24 — TESTS
+============================================================
+
+Add/update unit tests using the project's existing test structure.
+
+Use a fake/mock IMessageSender appropriate to the existing architecture.
 
 At minimum verify behavior equivalent to:
 
-TEST 1
-A 3-train template produces 3 train-time columns.
+TEST 1 — Before departure
+Queue:
+Train 1 = 12:00:05
 
-TEST 2
-A start-block time of 12:00:00 creates:
+Set time:
+12:00:04
 
-ScheduledTrain.DepartureTime == 12:00:00
+Expected:
+0 MovementRequestMessages
+1 queue entry
+0 dispatched trains
 
-TEST 3
-A populated station cell becomes a ScheduleStop with:
 
-BlockId
-StationName
-ArrivalTime
+TEST 2 — Exact departure
+Set time:
+12:00:05
 
-TEST 4
-A blank station cell does not create a stop.
+Expected:
+1 MovementRequestMessage
+TrainId == "Train 1"
+RequestType == ReleaseTrain
 
-TEST 5
-Missing start-block time prevents Queue Schedule.
+Queue count == 0
+Dispatched count == 1
 
-TEST 6
-Invalid time text prevents Queue Schedule.
 
-TEST 7
-QueueSchedule creates one DispatchQueueEntry per ScheduledTrain.
+TEST 3 — Future ticks do not duplicate dispatch
 
-TEST 8
-DispatchQueue is sorted by DepartureTime.
+After Train 1 successfully dispatches:
 
-TEST 9
-Queue Schedule triggers the appropriate StateChanged event.
+Set time:
+12:00:06
+12:00:07
 
-Do not create an entirely new testing architecture if suitable tests/projects already exist. Follow the repository's existing patterns.
+Expected:
+MovementRequest count remains 1
+
+
+TEST 4 — Clock jump dispatches all due trains
+
+Train 1 = 12:00:02
+Train 2 = 12:00:04
+Train 3 = 12:00:06
+
+Set:
+12:00:10
+
+Expected:
+3 MovementRequestMessages
+
+Send order:
+Train 1
+Train 2
+Train 3
+
+
+TEST 5 — Future train stays queued
+
+Train 1 = 12:00:05
+Train 2 = 12:01:00
+
+Set:
+12:00:10
+
+Expected:
+Train 1 dispatched
+Train 2 remains queued
+
+
+TEST 6 — Failed send
+
+Configure fake IMessageSender to throw.
+
+Set system time >= departure.
+
+Expected:
+train remains queued
+no DispatchedTrainState is added
+
+
+TEST 7 — Retry after failure
+
+First dispatch attempt throws.
+Second system time update succeeds.
+
+Expected:
+exactly one successful dispatched state
+queue entry removed
+
+
+TEST 8 — QueueSchedule does not requeue dispatched train
+
+Dispatch Train 1.
+
+Queue/rebuild schedule.
+
+Expected:
+Train 1 does not reappear as pending.
+
+
+TEST 9 — Authorization update
+
+Dispatch Train 1.
+
+Apply TrainAuthorizationStatusMessage.
+
+Expected:
+existing Train 1 DispatchedTrainState is updated
+no duplicate Train 1 object is created
+
+
+TEST 10 — backward clock does not undo dispatch
+
+Dispatch Train 1 at 12:00:05.
+
+Set clock to 11:59:00.
+
+Expected:
+Train 1 remains in DispatchedTrains.
+
+
+TEST 11 — system time state
+
+Set time to 12:34:56.
+
+Expected:
+State.SystemTime == 12:34:56
+
+
+TEST 12 — StateChanged
+
+Verify relevant state-change notification(s) fire when:
+- system time changes
+- a train successfully dispatches
+
 
 ============================================================
-CODE QUALITY / SCOPE LIMITS
+PART 25 — MANUAL END-TO-END TEST
 ============================================================
 
-Keep the code straightforward and readable.
+After implementation, manually verify this exact workflow:
 
-This is a student systems-engineering project, not an enterprise framework.
+1. Launch CTC.
+2. Launch CTC.TestUI.
+3. Send the Blue Line sample layout.
+4. Verify Blue Line is selected in CTC.
+5. Generate a schedule template with 2 trains.
+6. Set route-start times approximately 5 and 10 seconds after the clock start.
+7. Populate valid station arrival times.
+8. Press Queue Schedule.
+9. Verify both trains appear in Dispatch Queue.
+10. Set TestUI System Time to several seconds before Train 1 departure.
+11. Start the TestUI clock.
+12. Verify CTC header System Time increments continuously.
+13. At Train 1 DepartureTime:
+    - MovementRequest is captured by TestUI
+    - Train 1 disappears from Dispatch Queue
+    - Train 1 appears in Dispatched Trains
+14. At Train 2 DepartureTime:
+    - same behavior occurs
+15. Let clock continue for several seconds.
+16. Verify no duplicate MovementRequest messages are sent.
+17. Send a TrainAuthorizationStatusMessage from TestUI for one dispatched train.
+18. Verify its authorized speed/authority update in the Dispatched Trains grid.
+
+============================================================
+PART 26 — SCOPE LIMITS
+============================================================
+
+Do NOT implement:
+
+- full routing
+- suggested speed calculation
+- authority calculation
+- MBO
+- route conflict resolution
+- yard routing
+- real Train Model ID assignment
+- train position inference from occupancy
+- automatic switch alignment
+- schedule import parsing unless required by current compilation
+- multiple simulation days
+
+This task is specifically:
+
+RUNNING SYSTEM CLOCK
+        +
+TIME-TRIGGERED DISPATCH
+        +
+MOVEMENT REQUEST SEND
+        +
+QUEUE -> DISPATCHED STATE TRANSITION
+        +
+REAL DISPATCHED TRAINS UI
+
+============================================================
+CODE QUALITY
+============================================================
+
+Keep the implementation understandable for a university systems-engineering project.
 
 Prefer:
 
-- small domain models
-- clear methods
-- ObservableCollection where needed by WPF
-- RelayCommand / existing command infrastructure
-- existing ViewModelBase / SetProperty patterns
-- CTCService as state owner
+- clear service methods
+- existing IMessageSender
+- existing StateChanged mechanism
+- existing RelayCommand/ViewModelBase patterns
+- small focused helpers
+- straightforward LINQ where appropriate
+- async/await
 
 Avoid:
 
-- generic repository patterns
 - event-bus frameworks
-- third-party MVVM frameworks
-- unnecessary dependency injection frameworks
-- reflection-based schedule systems
-- complicated generic abstractions
+- global static state
+- complex scheduler libraries
+- fire-and-forget tasks
+- business logic in WPF code-behind
+- unnecessary abstraction layers
 
-Do not alter unrelated modules.
+Comment important domain behavior, especially:
 
-Do not modify Train Model, Track Model, Train Controller, or Track Controller merely to make this feature work.
-
-Do not implement actual dispatching yet.
+- why CTC does not own the clock
+- why dispatch uses <= instead of ==
+- why queue removal happens only after send success
+- why CurrentBlockId cannot yet be authoritatively tracked after departure
+- why real Train Model IDs are still a TODO
 
 ============================================================
 WHEN FINISHED
 ============================================================
 
-After implementing:
-
 1. Build the entire solution.
-2. Fix compilation errors caused by these changes.
-3. Run relevant tests.
-4. Review WPF bindings for binding-path mistakes.
-5. Confirm there is no schedule business logic in MainWindow code-behind.
-6. Confirm Queue Schedule cannot partially queue an invalid schedule.
-7. Confirm Dispatch Queue has only Train ID + Departure Time visible.
-8. Confirm Dispatched Trains no longer shows Next Station.
-9. Confirm no actual train dispatch/message transmission was added.
+2. Fix all compilation errors caused by these changes.
+3. Run all relevant tests.
+4. Manually inspect WPF binding paths.
+5. Verify TestUI clock can Start/Pause/Reset.
+6. Verify CTC System Time continuously updates.
+7. Verify Queue entries dispatch at their scheduled times.
+8. Verify MovementRequestMessages appear in TestUI Captured Outputs.
+9. Verify successful trains leave Dispatch Queue.
+10. Verify successful trains appear in Dispatched Trains.
+11. Verify failed sends do not falsely dispatch trains.
+12. Verify no train is sent twice.
+13. Verify QueueSchedule does not resurrect already-dispatched trains.
 
-Then give me a concise summary containing:
+Then give me a concise summary of:
 
 - files changed
-- new/changed classes
-- how Schedule Template generation works
-- how DepartureTime is derived
-- how Queue Schedule converts the matrix into ScheduledTrain objects
-- any TODO intentionally left for the next dispatching iteration
+- clock implementation
+- changes to ICTCService
+- changes to CtcNamedPipeReceiver
+- dispatch algorithm
+- failure/retry behavior
+- how Dispatch Queue updates
+- how Dispatched Trains updates
+- tests added
+- TODOs intentionally left for later integration

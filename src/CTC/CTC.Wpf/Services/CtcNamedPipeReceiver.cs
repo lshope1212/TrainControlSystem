@@ -34,18 +34,22 @@ public sealed class CtcNamedPipeReceiver
 
     /// <summary>Receives until <paramref name="cancellationToken"/> is cancelled.</summary>
     public Task RunAsync(CancellationToken cancellationToken) =>
-        NamedPipeTransport.ListenAsync(NamedPipeNames.Ctc, HandleAsync, ReportError, cancellationToken);
+        NamedPipeTransport.ListenAsync(
+            NamedPipeNames.Ctc,
+            envelope => HandleAsync(envelope, cancellationToken),
+            ReportError,
+            cancellationToken);
 
-    private async Task HandleAsync(MessageEnvelope envelope)
+    private async Task HandleAsync(MessageEnvelope envelope, CancellationToken cancellationToken)
     {
         // Deserialize on the background thread; only the service call runs on the UI thread.
-        Action<ICTCService>? apply = envelope.MessageType switch
+        Func<ICTCService, Task>? apply = envelope.MessageType switch
         {
             nameof(BlockStatusMessage) => Route<BlockStatusMessage>(envelope, (ctc, m) => ctc.ApplyBlockStatus(m)),
             nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => ctc.ApplyTrackLayout(m)),
             nameof(TrainAuthorizationStatusMessage) => Route<TrainAuthorizationStatusMessage>(envelope, (ctc, m) => ctc.ApplyTrainAuthorization(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
-            nameof(SystemTimeMessage) => Route<SystemTimeMessage>(envelope, (ctc, m) => ctc.SetSystemTime(m.SystemTime)),
+            nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ctc.SetSystemTimeAsync(m.SystemTime, cancellationToken)),
             _ => null,
         };
 
@@ -55,14 +59,20 @@ public sealed class CtcNamedPipeReceiver
             return;
         }
 
-        // CTC state backs WPF bindings, so it is only ever mutated on the UI thread.
-        await _dispatcher.InvokeAsync(() =>
+        // CTC state backs WPF bindings, so it is only ever mutated on the UI thread. The
+        // service call is awaited to completion (including any dispatch sends it makes), so
+        // inbound messages are applied strictly one after another.
+        await _dispatcher.InvokeAsync(async () =>
         {
             string status;
             try
             {
-                apply(_ctc);
+                await apply(_ctc);
                 status = $"Received {envelope.MessageType}.";
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
             }
             catch (Exception ex)
             {
@@ -71,10 +81,21 @@ public sealed class CtcNamedPipeReceiver
             }
 
             Report(status);
-        });
+        }).Task.Unwrap();
     }
 
-    private static Action<ICTCService> Route<TMessage>(MessageEnvelope envelope, Action<ICTCService, TMessage> apply)
+    private static Func<ICTCService, Task> Route<TMessage>(MessageEnvelope envelope, Action<ICTCService, TMessage> apply)
+        where TMessage : class
+    {
+        var message = MessageSerializer.DeserializePayload<TMessage>(envelope);
+        return ctc =>
+        {
+            apply(ctc, message);
+            return Task.CompletedTask;
+        };
+    }
+
+    private static Func<ICTCService, Task> RouteAsync<TMessage>(MessageEnvelope envelope, Func<ICTCService, TMessage, Task> apply)
         where TMessage : class
     {
         var message = MessageSerializer.DeserializePayload<TMessage>(envelope);

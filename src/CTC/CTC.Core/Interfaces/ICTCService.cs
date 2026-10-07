@@ -28,13 +28,19 @@ public interface ICTCService
 
     void ApplyTicketSales(TicketSalesMessage message);
 
-    void SetSystemTime(TimeSpan systemTime);
+    /// <summary>
+    /// Records the time reported by the external system clock, then releases every queued
+    /// train whose departure time has been reached (sending a MovementRequest for each).
+    /// Send failures are reported through <see cref="StateChanged"/>, not thrown.
+    /// </summary>
+    Task SetSystemTimeAsync(TimeSpan systemTime, CancellationToken cancellationToken = default);
 
     // Scheduling.
 
     /// <summary>
     /// Replaces the schedule for every line in <paramref name="scheduledTrains"/> and
-    /// rebuilds the dispatch queue from it, ordered by departure time. Does not dispatch.
+    /// rebuilds the pending dispatch queue from it, ordered by departure time. Trains that
+    /// have already been dispatched are never queued again. Does not dispatch by itself.
     /// </summary>
     void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains);
 

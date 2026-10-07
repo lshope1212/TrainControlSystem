@@ -7,6 +7,10 @@ public static class UnitConversion
 {
     public const double MetersPerMile = 1609.344;
 
+    public const double MetersPerFoot = 0.3048;
+
     public static double MetersPerSecondToMilesPerHour(double metersPerSecond) =>
         metersPerSecond / MetersPerMile * 3600.0;
+
+    public static double MetersToFeet(double meters) => meters / MetersPerFoot;
 }

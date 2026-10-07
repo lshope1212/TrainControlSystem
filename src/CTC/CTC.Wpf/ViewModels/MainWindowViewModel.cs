@@ -38,6 +38,7 @@ public class MainWindowViewModel : ViewModelBase
         RebuildLines();
         RebuildBlocks();
         RebuildDispatchQueue();
+        RebuildDispatchedTrains();
         _ctc.StateChanged += OnCtcStateChanged;
     }
 
@@ -49,11 +50,15 @@ public class MainWindowViewModel : ViewModelBase
 
     public int QueuedTrainCount => DispatchQueue.Count;
 
+    /// <summary>
+    /// Trains operating on the selected line (plus trains CTC knows only from an
+    /// authorization report, whose line is unknown). Backed by CTC's DispatchedTrains state.
+    /// </summary>
+    public ObservableCollection<DispatchedTrainViewModel> DispatchedTrains { get; } = new ObservableCollection<DispatchedTrainViewModel>();
+
+    public int DispatchedTrainCount => DispatchedTrains.Count;
+
     public string Title => "CTC Office";
-
-    public string Status => "Architecture skeleton — no dispatching implemented yet.";
-
-    public int TrainCount => _ctc.State.DispatchedTrains.Count;
 
     public string SystemTimeDisplay => _ctc.State.SystemTime.ToString(@"hh\:mm\:ss");
 
@@ -105,6 +110,7 @@ public class MainWindowViewModel : ViewModelBase
                 // Later this can rebuild/filter the territory display for only the selected line. TODO
                 ScheduleBuilder.Line = value;
                 RebuildDispatchQueue();
+                RebuildDispatchedTrains();
             }
         }
     }
@@ -143,32 +149,57 @@ public class MainWindowViewModel : ViewModelBase
 
     private void OnCtcStateChanged(object? sender, CtcStateChangedEventArgs e)
     {
-        if (e.Kind == CtcStateChangeKind.TrackLayout)
+        switch (e.Kind)
         {
-            // The old CtcBlockState objects were discarded, so the adapters must be rebuilt.
-            RebuildLines();
-            RebuildBlocks();
-        }
-        else if (e.Kind is CtcStateChangeKind.Schedule or CtcStateChangeKind.DispatchQueue)
-        {
-            RebuildDispatchQueue();
-        }
-        else
-        {
-            foreach (var block in Blocks)
-            {
-                block.Refresh();
-            }
-        }
+            case CtcStateChangeKind.TrackLayout:
+                // The old CtcBlockState objects were discarded, so the adapters must be rebuilt.
+                RebuildLines();
+                RebuildBlocks();
+                MarkTerritoryUpdated();
+                break;
 
-        LastTerritoryUpdate = DateTime.Now.ToString("HH:mm:ss");
+            case CtcStateChangeKind.BlockStatus:
+            case CtcStateChangeKind.MaintenanceRequest:
+                foreach (var block in Blocks)
+                {
+                    block.Refresh();
+                }
 
-        OnPropertyChanged(nameof(SystemTimeDisplay));
-        OnPropertyChanged(nameof(OccupiedBlockCount));
-        OnPropertyChanged(nameof(TrainCount));
+                OnPropertyChanged(nameof(OccupiedBlockCount));
+                MarkTerritoryUpdated();
+                break;
+
+            case CtcStateChangeKind.SystemTime:
+                // Shows the time CTC actually received; CTC has no display timer of its own.
+                OnPropertyChanged(nameof(SystemTimeDisplay));
+                break;
+
+            case CtcStateChangeKind.Schedule:
+            case CtcStateChangeKind.DispatchQueue:
+                RebuildDispatchQueue();
+                break;
+
+            case CtcStateChangeKind.TrainDispatched:
+                RebuildDispatchQueue();
+                RebuildDispatchedTrains();
+                CommunicationStatus = $"{e.TrainId} dispatched at {SystemTimeDisplay} (movement request sent).";
+                break;
+
+            case CtcStateChangeKind.DispatchFailed:
+                // The train is still queued; CTC retries on the next system time update.
+                CommunicationStatus = $"Unable to dispatch {e.TrainId}: {e.Message} Will retry on the next time update.";
+                break;
+
+            case CtcStateChangeKind.TrainAuthorization:
+                // An authorization can introduce a train CTC did not dispatch, so rebuild.
+                RebuildDispatchedTrains();
+                break;
+        }
 
         CommandManager.InvalidateRequerySuggested();
     }
+
+    private void MarkTerritoryUpdated() => LastTerritoryUpdate = DateTime.Now.ToString("HH:mm:ss");
 
     private void RebuildBlocks()
     {
@@ -198,6 +229,19 @@ public class MainWindowViewModel : ViewModelBase
         }
 
         OnPropertyChanged(nameof(QueuedTrainCount));
+    }
+
+    private void RebuildDispatchedTrains()
+    {
+        DispatchedTrains.Clear();
+
+        var lineId = SelectedLine?.LineId;
+        foreach (var train in _ctc.State.DispatchedTrains.Where(train => train.LineId == lineId || train.LineId.Length == 0))
+        {
+            DispatchedTrains.Add(new DispatchedTrainViewModel(train));
+        }
+
+        OnPropertyChanged(nameof(DispatchedTrainCount));
     }
 
     private void RebuildLines()
