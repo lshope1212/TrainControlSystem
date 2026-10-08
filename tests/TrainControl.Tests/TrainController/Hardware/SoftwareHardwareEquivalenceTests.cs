@@ -204,6 +204,7 @@ public class SoftwareHardwareEquivalenceTests
         Assert.AreEqual(x.RemainingAuthorityMeters, y.RemainingAuthorityMeters, Tolerance, $"{context}: authority");
         AssertNullableClose(x.DistanceToNextStationMeters, y.DistanceToNextStationMeters, $"{context}: station distance");
         AssertNullableClose(x.DistanceToStationBrakePointMeters, y.DistanceToStationBrakePointMeters, $"{context}: brake point");
+        AssertNullableClose(x.DistanceToAuthorityBrakePointMeters, y.DistanceToAuthorityBrakePointMeters, $"{context}: authority brake point");
         Assert.AreEqual(x.ServiceBrakeStoppingDistanceMeters, y.ServiceBrakeStoppingDistanceMeters, Tolerance, $"{context}: stopping distance");
         Assert.AreEqual(x.NextStationName, y.NextStationName, $"{context}: station name");
         Assert.AreEqual(x.PlatformSide, y.PlatformSide, $"{context}: platform side");

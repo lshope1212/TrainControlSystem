@@ -159,6 +159,7 @@ public sealed class SoftwareTrainController
 
         // 3. Authority protection (always automatic).
         var authority = AuthorityProtection.Evaluate(v, remainingAuthority, dt, vehicle, policy);
+        var distanceToAuthorityBrakePoint = AuthorityProtection.DistanceToBrakePoint(v, remainingAuthority, dt, vehicle, policy);
 
         // 4. Emergency-brake latch.
         var emergency = _brakes.Evaluate(
@@ -386,6 +387,7 @@ public sealed class SoftwareTrainController
                 AuthorityRecalibrated = authorityRecalibrated,
                 ServiceBrakeStoppingDistanceMeters = stationStoppingDistance,
                 DistanceToStationBrakePointMeters = distanceToBrakePoint,
+                DistanceToAuthorityBrakePointMeters = distanceToAuthorityBrakePoint,
                 StationBrakingAdvised = stationBrakingAdvised,
                 StationBrakingActive = stationBrakingActive,
                 AtStation = atStation,

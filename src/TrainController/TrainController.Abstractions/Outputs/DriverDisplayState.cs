@@ -47,6 +47,14 @@ public sealed record DriverDisplayState
     /// </summary>
     public double? DistanceToStationBrakePointMeters { get; init; }
 
+    /// <summary>
+    /// Distance from the train to the point where authority protection applies the service brake
+    /// (remaining authority − service stopping distance − authority margin − v·dt; stopped:
+    /// remaining authority − margin). ≤ 0 means authority braking is active. Null only when the
+    /// sender does not provide it (e.g. an older Hardware build).
+    /// </summary>
+    public double? DistanceToAuthorityBrakePointMeters { get; init; }
+
     /// <summary>Manual mode: station braking is due (advisory to the driver).</summary>
     public bool StationBrakingAdvised { get; init; }
 

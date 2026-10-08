@@ -84,6 +84,7 @@ public class PresentationTests
                 RemainingAuthorityMeters = 365.76,
                 DistanceToNextStationMeters = 304.8,
                 DistanceToStationBrakePointMeters = -1.0,
+                DistanceToAuthorityBrakePointMeters = 304.8,
                 NextStationName = "PIONEER",
                 StationBrakingAdvised = true,
             },
@@ -103,6 +104,8 @@ public class PresentationTests
         Assert.AreEqual(1000.0, status.Guidance.StationFeet!.Value, 1e-6);
         Assert.AreEqual(0.0, status.Guidance.BrakePointFeet!.Value, "A brake point already passed is drawn at the train.");
         Assert.IsTrue(status.Guidance.BrakingDue);
+        Assert.AreEqual(1000.0, status.Guidance.AuthorityBrakePointFeet!.Value, 1e-6);
+        Assert.IsFalse(status.Guidance.AuthorityBrakingDue);
     }
 
     [TestMethod]

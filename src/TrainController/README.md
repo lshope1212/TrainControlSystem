@@ -111,7 +111,7 @@ green/red/orange/blue status colors).
 
 | Window | Contains | Never contains |
 | ------ | -------- | -------------- |
-| **Main UI** (`MainWindow`) | Train dropdown (TRAIN-001…010 with fixed SW/HW label), controller source badge, Pi link status, input-source badge, station & authority guidance bar (train · brake point · authority end · station), speed readouts incl. effective target and what limits it, Driver controls (mode; requested speed as a numeric **mph** entry — Manual only, applied with Enter/Set, validated; service / emergency brake; E-brake reset; doors; lights; one-shot announcement; cabin °F), Engineer Kp/Ki per train (with untuned-placeholder warning), status cards, fleet table, alerts, event log | Train Model inputs, simulation controls |
+| **Main UI** (`MainWindow`) | Train dropdown (TRAIN-001…010 with fixed SW/HW label), controller source badge, Pi link status, input-source badge, station & authority guidance bar (train · station brake point · authority brake point · authority end · station, all vertical lines), speed readouts incl. effective target and what limits it, Driver controls (mode; requested speed as a numeric **mph** entry — Manual only, applied with Enter/Set, validated; service / emergency brake; E-brake reset; doors; lights; one-shot announcement; cabin °F), Engineer Kp/Ki per train (with untuned-placeholder warning), status cards, fleet table, alerts, event log | Train Model inputs, simulation controls |
 | **Test UI** (`TestWindow`) | Own train dropdown (independent of the Main UI), GLOBAL input source (Train Model / Test UI), Run / Stop / Step / Reset / speed, Train Model → Train Controller inputs of the selected train (incl. "active / dispatched" = Train Model state, and "Transmit beacon"), Train Controller → Train Model outputs, fleet table limited to Train Model boundary I/O, edge-value warnings | Driver or Engineer controls, controller type, any non-boundary data (enforced by tests) |
 
 **UI units are imperial everywhere: mph, ft, °F, hp** (480 000 W ≈ 644 hp). Internal,
@@ -136,7 +136,8 @@ Layering and restyling:
   when the selected train changes, so typing is never overwritten. Selecting a train never
   starts, stops or resets any train.
 - Reusable view pieces: `Views/Controls/KeyValueRow` (status row) and
-  `Views/Controls/GuidanceBar` (distance bar, drawn to scale from controller output).
+  `Views/Controls/GuidanceBar` (distance bar, drawn to scale from controller output; position 0 = train front,
+  the TRAIN icon is drawn entirely behind it; every marker is a vertical line at its exact position).
 
 ## Software Train Controller behavior (TrainController.Core)
 
@@ -185,6 +186,7 @@ While invalid: target speed 0 (service-brake stop by default, configurable emerg
 5. Emergency latch (driver, passenger, authority). Reset accepted only when no emergency
    condition remains; one source clearing never releases the brake.
 6. Station guidance: latest brake point = distance − v·dt − (v²/2·1.2 + station margin).
+   Authority brake point (display only, same thresholds as authority protection) = remaining authority − v·dt − (v²/2·1.2 + authority margin); stopped: remaining authority − margin. ≤ 0 ⇔ authority protection applies the service brake.
    Manual: advisory only. Automatic: controller applies the service brake.
 7. Arrival = distance ≤ station threshold AND speed ≤ stopped threshold. Automatic: dwell
    with platform-side doors open, then close and depart.
@@ -296,6 +298,7 @@ current provisional behavior; all remain changeable in one place.
 | Driver E-brake reset is allowed only when the passenger request is no longer active and no other emergency condition remains; no stopped-train requirement | accepted | `BrakeController` |
 | Track signal invalid before any trusted authority → remaining authority 0 (held if stopped; authority emergency brake if moving) | provisional | `AuthorityTracker`, Pi `HardwareTrainController` |
 | Manual mode: arrival ends station braking guidance; doors are the driver's | provisional | `SoftwareTrainController` step 7 |
+| The train is a point; all distances (station, authority, brake points) are measured from the train's front. Train length is expected to be reflected in the beacon / authority distances supplied by Track Model | provisional — confirm with Track Model / Train Model | `GuidanceBar`, `SoftwareTrainController`, `HardwareTrainController` |
 | Look-ahead of one control period (v·dt) in station/authority braking | provisional | discretization compensation, not a safety margin |
 | Overspeed has no tolerance band (none defined) | provisional | `OverspeedProtection` |
 | Announcement events and wording ("Next station: X. …" on new beacon, "Arrived at X." on arrival; driver text takes precedence) | provisional | `SoftwareTrainController` |

@@ -517,6 +517,22 @@ public class SoftwareTrainControllerTests
     }
 
     [TestMethod]
+    public void AuthorityBrakePoint_IsWhereAuthorityProtectionStartsBraking()
+    {
+        // v = 10 m/s: service stop 10²/(2·1.2) = 41.667 m, v·dt = 1 m, margin 0 → brake point at 42.667 m.
+        var far = Step(NewController(), Input(Model(speed: 10.0, authorized: 15.0, authority: 500.0), Manual(requested: 15.0)));
+        Assert.AreEqual(500.0 - 42.0 - 2.0 / 3.0, far.Display.DistanceToAuthorityBrakePointMeters!.Value, 1e-9);
+        Assert.IsFalse(far.Display.AuthorityProtectionActive);
+
+        var due = Step(NewController(), Input(Model(speed: 10.0, authorized: 15.0, authority: 42.0), Manual(requested: 15.0)));
+        NumericAssert.AtMost(due.Display.DistanceToAuthorityBrakePointMeters!.Value, 0.0);
+        Assert.IsTrue(due.Display.AuthorityProtectionActive, "Brake point reached ⇔ authority protection active.");
+
+        var stopped = Step(NewController(), Input(Model(speed: 0.0, authorized: 15.0, authority: 120.0), Manual(requested: 15.0)));
+        Assert.AreEqual(120.0, stopped.Display.DistanceToAuthorityBrakePointMeters!.Value, 1e-9);
+    }
+
+    [TestMethod]
     public void AuthorityProtection_ObeysAuthorityEvenWhenStationIsFarther()
     {
         var c = NewController();

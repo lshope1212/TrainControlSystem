@@ -23,7 +23,9 @@ public sealed record GuidanceBarModel(
     string StationName,
     double? AuthorityEndFeet,
     double? BrakePointFeet,
-    bool BrakingDue)
+    bool BrakingDue,
+    double? AuthorityBrakePointFeet = null,
+    bool AuthorityBrakingDue = false)
 {
     public static GuidanceBarModel Empty { get; } = new GuidanceBarModel(false, null, string.Empty, null, null, false);
 }
@@ -280,7 +282,9 @@ public static class TrainControllerPresenter
                 StationName: display.NextStationName,
                 AuthorityEndFeet: DisplayUnits.ToFeet(display.RemainingAuthorityMeters),
                 BrakePointFeet: display.DistanceToStationBrakePointMeters is double b ? DisplayUnits.ToFeet(Math.Max(0.0, b)) : null,
-                BrakingDue: display.StationBrakingAdvised || display.StationBrakingActive),
+                BrakingDue: display.StationBrakingAdvised || display.StationBrakingActive,
+                AuthorityBrakePointFeet: display.DistanceToAuthorityBrakePointMeters is double ab ? DisplayUnits.ToFeet(Math.Max(0.0, ab)) : null,
+                AuthorityBrakingDue: display.AuthorityProtectionActive),
         };
     }
 

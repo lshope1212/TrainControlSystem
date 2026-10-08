@@ -151,10 +151,12 @@ public sealed class HardwareTrainController
 
         // ---- authority protection (independent safety backstop) ----
         bool authorityService, authorityEmergency;
+        double toAuthorityBrakePoint;
         if (isStopped)
         {
             authorityService = _authorityLeft <= cfg.AuthorityBrakingMarginMeters;
             authorityEmergency = false;
+            toAuthorityBrakePoint = _authorityLeft - cfg.AuthorityBrakingMarginMeters;
         }
         else
         {
@@ -162,6 +164,7 @@ public sealed class HardwareTrainController
             var needEmergency = Square(speed) / (2.0 * car.EmergencyBrakeDecelerationMetersPerSecondSquared);
             authorityService = _authorityLeft <= needService;
             authorityEmergency = _authorityLeft < needEmergency;
+            toAuthorityBrakePoint = _authorityLeft - needService;
         }
 
         // ---- emergency latch ----
@@ -404,6 +407,7 @@ public sealed class HardwareTrainController
                 AuthorityRecalibrated = authorityFresh,
                 ServiceBrakeStoppingDistanceMeters = stationStop,
                 DistanceToStationBrakePointMeters = toBrakePoint,
+                DistanceToAuthorityBrakePointMeters = toAuthorityBrakePoint,
                 StationBrakingAdvised = advise,
                 StationBrakingActive = autoBrake,
                 AtStation = atStation,

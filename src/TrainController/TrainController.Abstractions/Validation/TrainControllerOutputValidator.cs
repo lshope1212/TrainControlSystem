@@ -98,6 +98,11 @@ public static class TrainControllerOutputValidator
             CheckFinite(errors, brakePoint, "Display.DistanceToStationBrakePointMeters");
         }
 
+        if (display.DistanceToAuthorityBrakePointMeters is double authorityBrakePoint)
+        {
+            CheckFinite(errors, authorityBrakePoint, "Display.DistanceToAuthorityBrakePointMeters");
+        }
+
         if (!Enum.IsDefined(display.TractionState) || !Enum.IsDefined(display.StationEvent) || !Enum.IsDefined(display.TargetLimitedBy))
         {
             errors.Add("Display enum values must be defined.");

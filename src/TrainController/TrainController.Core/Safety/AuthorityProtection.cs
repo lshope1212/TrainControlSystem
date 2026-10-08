@@ -55,4 +55,30 @@ public static class AuthorityProtection
 
         return new AuthorityDemand(service, emergency);
     }
+
+    /// <summary>
+    /// Distance to the point where <see cref="Evaluate"/> starts demanding the service brake
+    /// (same thresholds). ≤ 0 means authority braking is active now.
+    /// </summary>
+    public static double DistanceToBrakePoint(
+        double actualSpeedMetersPerSecond,
+        double remainingAuthorityMeters,
+        double deltaTimeSeconds,
+        VehicleSpecification vehicle,
+        ControllerPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(vehicle);
+        ArgumentNullException.ThrowIfNull(policy);
+
+        var v = actualSpeedMetersPerSecond;
+        if (v <= policy.StoppedSpeedThresholdMetersPerSecond)
+        {
+            return remainingAuthorityMeters - policy.AuthorityBrakingMarginMeters;
+        }
+
+        return remainingAuthorityMeters
+            - StoppingDistance.Compute(v, vehicle.ServiceBrakeDecelerationMetersPerSecondSquared)
+            - policy.AuthorityBrakingMarginMeters
+            - v * deltaTimeSeconds;
+    }
 }
