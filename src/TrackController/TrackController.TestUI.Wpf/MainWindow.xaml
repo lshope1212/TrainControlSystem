@@ -358,7 +358,7 @@
                                 </StackPanel>
                                 <StackPanel Margin="0,0,10,10">
                                     <TextBlock Style="{StaticResource Label}"
-                                               Text="Next blocks in route (e.g. 6, 7, 8)"/>
+                                               Text="Next blocks in route, in order (comma-separated)"/>
                                     <TextBox Text="{Binding RequestedPath, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <Expander Header="Switch entry (if target is a switch)" Margin="0,0,0,10">

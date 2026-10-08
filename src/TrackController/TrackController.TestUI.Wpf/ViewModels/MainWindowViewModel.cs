@@ -19,7 +19,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     private readonly WaysideTestConnection _testConnection;
     private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
-    private static readonly WaysideSnapshotMessage NoTestOutput = new("HW-TC01", "Green Line", DateTimeOffset.MinValue, DateTimeOffset.MinValue, 0, true, 1, true, false, "Waiting for controller output", "No output received.", [], []);
+    private static readonly WaysideSnapshotMessage NoTestOutput = new("HW-TC01", "No line loaded", DateTimeOffset.MinValue, DateTimeOffset.MinValue, 0, true, 1, true, false, "Waiting for controller output", "No output received.", [], []);
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher;
     private DateTimeOffset _lastHeartbeat;
@@ -257,6 +257,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         {
             _appliedFeedback = null;
             _appliedRequest = null;
+            ApplyLayoutDefaults();
             CreateFeedbackRows();
         }
         foreach (var name in new[] { nameof(Snapshot), nameof(Blocks), nameof(Equipment), nameof(Movements), nameof(Connection), nameof(DataStatus), nameof(LastResult) })

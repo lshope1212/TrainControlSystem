@@ -205,14 +205,16 @@ public sealed partial class MainWindowViewModel
 
     public string FeedbackDraftStatus => !_hasSentFeedback ? "Draft · no feedback sent yet" : _feedbackDirty ? "Unsent edits · controller still has the last sent feedback" : "Feedback sent · editor matches the last transmission";
 
-    public string ScenarioDescription => Scenario switch
+    private ScenarioPlan? Plan => ScenarioPlan.From(Blocks);
+
+    public string ScenarioDescription => Plan is not { } plan ? "Presets need a layout with a switch. Edit feedback for your loaded territory directly." : Scenario switch
     {
-        "Clear route" => "Block 5 occupied; route 6 → 7 → 8 clear, switch normal, signals green, crossing closed.",
-        "Switch mismatch" => "Switch 6 reversed. A request through 6 → 7 will be withheld.",
-        "Occupied route" => "Block 7 occupied. Authority stops before the occupied block.",
-        "Track fault" => "Block 7 reports a fault. The route will be withheld.",
-        "Crossing awaiting feedback" => "Crossing 8 reports open. The route waits for closed feedback.",
-        _ => "Choose a preset for the sample territory."
+        "Clear route" => $"Block {plan.Target} occupied; route {string.Join(" → ", plan.Path)} clear, switch normal, signals green, crossing closed.",
+        "Switch mismatch" => $"Switch {plan.SwitchId} reversed. A request through {plan.SwitchId} → {plan.NormalExit} will be withheld.",
+        "Occupied route" => $"Block {plan.NormalExit} occupied. Authority stops before the occupied block.",
+        "Track fault" => $"Block {plan.NormalExit} reports a fault. The route will be withheld.",
+        "Crossing awaiting feedback" => $"Crossing {plan.CrossingId ?? FeedbackCrossing} reports open. The route waits for closed feedback.",
+        _ => "Choose a preset for the loaded territory."
     };
 
     private void MarkFeedbackDirty()
@@ -257,11 +259,12 @@ public sealed partial class MainWindowViewModel
         }
 
         FeedbackRows.Clear();
+        string occupied = Plan?.Target ?? BlockIds.FirstOrDefault() ?? "";
         foreach (string id in BlockIds)
         {
             var row = new FeedbackRow(id)
             {
-                Occupancy = id == "5" ? OccupancyState.Occupied : OccupancyState.Clear
+                Occupancy = id == occupied ? OccupancyState.Occupied : OccupancyState.Clear
             };
             row.PropertyChanged += FeedbackEdited;
             FeedbackRows.Add(row);
@@ -314,44 +317,49 @@ public sealed partial class MainWindowViewModel
         await SendAsync(_appliedFeedback, announce: false);
     }
 
-    private void LoadScenario()
+    /// <summary>Points the drafts at the switch route of a newly reported layout.</summary>
+    private void ApplyLayoutDefaults()
     {
-        if (!new[]
+        EntryBlock = "";
+        if (Plan is not { } plan)
         {
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "10",
-            "11"
-        }.All(BlockIds.Contains))
-        {
-            throw new InvalidOperationException("These presets use the sample territory. Edit feedback for your loaded territory directly.");
+            return;
         }
 
-        FeedbackSwitch = "6";
-        FeedbackSignal = "4";
-        FeedbackCrossing = "8";
+        TargetBlock = plan.Target;
+        RequestedPath = string.Join(", ", plan.Path);
+        SwitchTarget = plan.SwitchId;
+        FeedbackSwitch = plan.SwitchId;
+        FeedbackSignal = plan.SignalId ?? FeedbackSignal;
+        FeedbackCrossing = plan.CrossingId ?? FeedbackCrossing;
+        MaintenanceTarget = plan.LastBlockId;
+    }
+
+    private void LoadScenario()
+    {
+        var plan = Plan ?? throw new InvalidOperationException("These presets need a layout with a switch. Edit feedback for your loaded territory directly.");
+        FeedbackSwitch = plan.SwitchId;
+        FeedbackSignal = plan.SignalId ?? FeedbackSignal;
+        FeedbackCrossing = plan.CrossingId ?? FeedbackCrossing;
         foreach (var row in FeedbackRows)
         {
-            row.Occupancy = row.BlockId == "5" ? OccupancyState.Occupied : OccupancyState.Clear;
+            row.Occupancy = row.BlockId == plan.Target ? OccupancyState.Occupied : OccupancyState.Clear;
             row.IsFaulted = false;
             row.IsReserved = false;
             row.Signal = SignalState.Green;
             row.Switch = SwitchPosition.Normal;
             row.Crossing = CrossingState.Closed;
-            if (Scenario == "Switch mismatch" && row.BlockId is "4" or "10" or "11")
+            if (Scenario == "Switch mismatch" && plan.MismatchOccupied.Contains(row.BlockId))
             {
                 row.Occupancy = OccupancyState.Occupied;
             }
 
-            if (Scenario == "Occupied route" && row.BlockId == "7")
+            if (Scenario == "Occupied route" && row.BlockId == plan.NormalExit)
             {
                 row.Occupancy = OccupancyState.Occupied;
             }
 
-            if (Scenario == "Track fault" && row.BlockId == "7")
+            if (Scenario == "Track fault" && row.BlockId == plan.NormalExit)
             {
                 row.IsFaulted = true;
             }
