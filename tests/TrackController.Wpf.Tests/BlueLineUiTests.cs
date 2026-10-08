@@ -7,6 +7,7 @@ namespace TrackController.Wpf.Tests;
 
 /// <summary>Drives the Blue Line through the operator window and the external Test UI over real pipes.</summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class BlueLineUiTests
 {
     /// <summary>Ensures every sample offered by Load sample layout is bundled and loads.</summary>
