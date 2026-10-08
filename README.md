@@ -1,9 +1,13 @@
 # TrainControl System
 
 `TrainControlSystem.sln` is the overall Visual Studio solution for the train
-control / simulation project. This repository currently contains an **architecture
-skeleton only** — every class is a placeholder. No physics, no hardware
-communication, no networking, and no database are implemented yet.
+control / simulation project. CTC and Track Model now have working domain state,
+WPF interfaces, and local named-pipe communication. Train Model, Train Controller,
+and Track Controller remain architecture placeholders; train physics and hardware
+communication are not implemented yet.
+
+For the independent Track Model dashboard and external-module Test UI, see
+[Track Model running and integration instructions](src/TrackModel/README.md).
 
 ## The launcher
 

@@ -1,0 +1,4 @@
+Id,LineId,Number,Section,LengthMeters,ElevationMeters,GradePercent,HasSignal,HasSwitch,HasCrossing,StationName,InitialWaitingPassengers,ConnectedBlockIds,NormalNextBlockId,ReverseNextBlockId
+B1,Blue,1,Main,100,220,1.5,true,true,false,,0,B2;B3,B2,B3
+B2,Blue,2,Main,121.92,0,0,true,false,true,Station A,24,B1;B3,,
+B3,Blue,3,Main,150,0,0,true,false,false,,0,B1;B2,,

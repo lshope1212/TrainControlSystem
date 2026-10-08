@@ -13,6 +13,15 @@ public class TrackBlockDefinition
     public string Section { get; set; } = string.Empty;
 
     public double LengthMeters { get; set; }
+    public double ElevationMeters { get; set; }
+    public double GradePercent { get; set; }
+    public double SpeedLimitMetersPerSecond { get; set; }
+    public string TravelDirection { get; set; } = "Bidirectional";
+    public bool HasHeater { get; set; }
+    public string Beacon { get; set; } = string.Empty;
+    public string BeaconTargetBlockId { get; set; } = string.Empty;
+    public string NormalNextBlockId { get; set; } = string.Empty;
+    public string ReverseNextBlockId { get; set; } = string.Empty;
 
     /// <summary>Empty when the block has no station.</summary>
     public string StationName { get; set; } = string.Empty;
