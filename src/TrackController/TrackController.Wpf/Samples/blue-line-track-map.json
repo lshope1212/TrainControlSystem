@@ -19,7 +19,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 30,
-      "mapY": 60
+      "mapY": 160
     },
     {
       "blockId": "2",
@@ -36,7 +36,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 136,
-      "mapY": 60
+      "mapY": 160
     },
     {
       "blockId": "3",
@@ -57,7 +57,7 @@
         "4"
       ],
       "mapX": 242,
-      "mapY": 60
+      "mapY": 160
     },
     {
       "blockId": "4",
@@ -74,7 +74,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 348,
-      "mapY": 60
+      "mapY": 160
     },
     {
       "blockId": "5",
@@ -97,7 +97,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 454,
-      "mapY": 60
+      "mapY": 160
     },
     {
       "blockId": "6",
@@ -197,7 +197,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 560,
-      "mapY": 165
+      "mapY": 260
     },
     {
       "blockId": "12",
@@ -214,7 +214,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 666,
-      "mapY": 165
+      "mapY": 260
     },
     {
       "blockId": "13",
@@ -231,7 +231,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 772,
-      "mapY": 165
+      "mapY": 260
     },
     {
       "blockId": "14",
@@ -248,7 +248,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 878,
-      "mapY": 165
+      "mapY": 260
     },
     {
       "blockId": "15",
@@ -263,7 +263,7 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 984,
-      "mapY": 165
+      "mapY": 260
     }
   ]
 }
