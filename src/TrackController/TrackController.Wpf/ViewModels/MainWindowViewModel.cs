@@ -124,6 +124,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public WaysideSnapshotMessage Snapshot => _snapshot;
 
+    public System.Windows.Media.Brush LineAccentBrush => LineAccent.For(_snapshot.LineName);
+
     public IReadOnlyList<WaysideBlockStatus> Blocks => _snapshot.Blocks;
 
     public IReadOnlyList<MovementRow> Movements => _movements;
@@ -376,6 +378,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         foreach (string propertyName in new[]
         {
             nameof(Snapshot),
+            nameof(LineAccentBrush),
             nameof(PlcSummary),
             nameof(Blocks),
             nameof(Movements),

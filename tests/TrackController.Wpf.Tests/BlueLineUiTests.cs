@@ -22,6 +22,18 @@ public sealed class BlueLineUiTests
         }
     }
 
+    /// <summary>Ensures each known line gets its own header color and unknown lines stay neutral.</summary>
+    [TestMethod]
+    public void For_LineName_ReturnsDistinctColorPerLine()
+    {
+        var blue = (System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For("Blue Line");
+        var green = (System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For("Green Line");
+        var other = (System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For("Violet Line");
+        Assert.AreNotEqual(blue.Color, green.Color);
+        Assert.AreNotEqual(blue.Color, other.Color);
+        Assert.AreEqual(other.Color, ((System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For(null)).Color);
+    }
+
     /// <summary>Checks the Blue Line drafts, a granted switch route, and a withheld mismatched switch.</summary>
     [TestMethod]
     public Task SendMovementCommand_BlueLine_UsesBlueDraftsAndSwitchRoute() => RunAsync(async session =>

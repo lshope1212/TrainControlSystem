@@ -19,8 +19,8 @@ public sealed partial class MainWindowViewModel
     /// <summary>Built-in sample deployments offered by Load sample layout; any other line loads through Load deployment.</summary>
     public static IReadOnlyList<SampleLine> SampleLines { get; } =
     [
-        new("Green Line, illustrative 12 blocks", "all-pc.deployment.json"),
-        new("Blue Line, course prototype 15 blocks", "blue-line-all-pc.deployment.json")
+        new("Green Line", "all-pc.deployment.json"),
+        new("Blue Line", "blue-line-all-pc.deployment.json")
     ];
 
     public SampleLine SelectedSampleLine
