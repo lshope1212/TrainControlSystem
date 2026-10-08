@@ -46,10 +46,18 @@ public class CtcBlockState
     public CrossingState Crossing { get; set; } = CrossingState.Unknown;
 
     /// <summary>
+    /// The maintenance state the Track Controller most recently REPORTED for this block
+    /// (via BlockStatusMessage): the block's actual wayside state.
+    /// </summary>
+    public MaintenanceState ConfirmedMaintenanceState { get; set; } = MaintenanceState.Open;
+
+    // CTC's own requests.
+
+    /// <summary>
     /// The maintenance state CTC has most recently REQUESTED (and successfully sent)
     /// for this block. Closed means "CTC issued a Close request", NOT "the Track
-    /// Controller confirmed the block is closed": the current I/O defines no Track
-    /// Controller -> CTC maintenance acknowledgement.
+    /// Controller confirmed the block is closed" (see <see cref="ConfirmedMaintenanceState"/>).
+    /// While the two differ, a request is awaiting Track Controller confirmation.
     /// </summary>
     public MaintenanceState RequestedMaintenanceState { get; set; } = MaintenanceState.Open;
 }

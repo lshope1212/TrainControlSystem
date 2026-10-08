@@ -29,15 +29,18 @@ public class BlockViewModel : ViewModelBase
     /// </summary>
     public double SpeedLimitMilesPerHour => UnitConversion.KilometersPerHourToMilesPerHour(_block.SpeedLimitKilometersPerHour);
 
+    /// <summary>Latest maintenance state CTC successfully requested; used for pending-request checks.</summary>
     public MaintenanceState RequestedMaintenanceState => _block.RequestedMaintenanceState;
+
+    /// <summary>Latest maintenance state reported by the Track Controller.</summary>
+    public MaintenanceState MaintenanceState => _block.ConfirmedMaintenanceState;
 
     public string Occupancy => _block.Occupancy.ToString();
 
     public bool IsOccupied => _block.Occupancy == OccupancyState.Occupied;
 
-    // Worded as a request: CTC has no Track Controller confirmation of maintenance state.
-    public string MaintenanceStatus =>
-        _block.RequestedMaintenanceState == MaintenanceState.Closed ? "Close requested" : "Open";
+    // The Track Controller-reported state, not CTC's request.
+    public string MaintenanceStatus => _block.ConfirmedMaintenanceState.ToString();
 
     /// <summary>Latest switch position reported by the Track Controller.</summary>
     public SwitchPosition SwitchPosition => _block.Switch;

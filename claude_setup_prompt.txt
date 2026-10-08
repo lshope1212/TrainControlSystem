@@ -580,7 +580,878 @@ Also verify:
 
 Keep this implementation focused.
 
+Do NOT:Implement the remaining CTC maintenance workflow on the current `Luke_CTC` branch.
+
+There are two related changes:
+
+1. Implement the existing **Reopen Block** button end-to-end.
+2. Extend the Track Controller -> CTC block status simulation so the Track Controller can report whether a block is actually **Open or Closed for maintenance**.
+
+Before making changes, inspect the current implementation, especially:
+
+- `src/CTC/CTC.Wpf/MainWindow.xaml`
+- `src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
+- `src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs`
+- `src/CTC/CTC.Core/Interfaces/ICTCService.cs`
+- `src/CTC/CTC.Core/Services/CTCService.cs`
+- `src/CTC/CTC.Core/Models/CtcBlockState.cs`
+- `src/CTC/CTC.Core/Dispatching/AuthorityManager.cs`
+- `src/Shared/TrainControl.Contracts/Messages/BlockStatusMessage.cs`
+- `src/Shared/TrainControl.Contracts/Messages/MaintenanceRequestMessage.cs`
+- `src/Shared/TrainControl.Contracts/Enums/MaintenanceState.cs`
+- `src/CTC/CTC.TestUI.Wpf/ViewModels/BlockStatusInputViewModel.cs`
+- `src/CTC/CTC.TestUI.Wpf/MainWindow.xaml`
+- existing CTC maintenance tests
+
+Do not redesign the architecture. Build on the existing Close Block and Toggle Switch patterns.
+
+---
+
+# Goal / intended message flow
+
+Closing a block should work like:
+
+```text
+CTC operator presses Close Block
+        ↓
+CTC sends MaintenanceRequestMessage
+RequestedState = Closed
+        ↓
+TestUI captures outbound message
+        ↓
+TestUI simulates Track Controller confirmation
+BlockStatusMessage
+Maintenance = Closed
+        ↓
+CTC updates its confirmed block status
+        ↓
+UI displays Maintenance: Closed
+```
+
+Reopening should mirror it:
+
+```text
+CTC operator presses Reopen Block
+        ↓
+CTC sends MaintenanceRequestMessage
+RequestedState = Open
+        ↓
+TestUI captures outbound message
+        ↓
+TestUI simulates Track Controller confirmation
+BlockStatusMessage
+Maintenance = Open
+        ↓
+CTC updates its confirmed block status
+        ↓
+UI displays Maintenance: Open
+```
+
+The important architectural distinction is:
+
+```text
+RequestedMaintenanceState
+```
+
+means:
+
+> What CTC most recently successfully requested from the Track Controller.
+
+while the new actual/confirmed maintenance state means:
+
+> What the Track Controller most recently reported the block actually is.
+
+Do not collapse those two concepts.
+
+---
+
+# 1. Add confirmed maintenance state to BlockStatusMessage
+
+The existing `BlockStatusMessage` already represents the current wayside state reported from:
+
+```text
+Track Controller -> CTC
+```
+
+It currently includes:
+
+- Occupancy
+- Signal
+- Switch
+- Crossing
+
+Add maintenance state to this same contract.
+
+Something equivalent to:
+
+```csharp
+public MaintenanceState Maintenance { get; set; } = MaintenanceState.Open;
+```
+
+Use an appropriate property name such as `Maintenance`, `MaintenanceState`, or `MaintenanceStatus`, consistent with the project.
+
+Do NOT create a separate maintenance-status message unless the current architecture absolutely requires it. This information logically belongs in `BlockStatusMessage`.
+
+Keep the existing `MaintenanceState` enum:
+
+```csharp
+Open
+Closed
+```
+
+unless there is a compelling implementation reason to change it.
+
+---
+
+# 2. Track confirmed maintenance separately inside CtcBlockState
+
+Currently `CtcBlockState` only has:
+
+```csharp
+RequestedMaintenanceState
+```
+
+Add a separate property representing the latest state reported by the Track Controller, for example:
+
+```csharp
+public MaintenanceState Maintenance { get; set; }
+    = MaintenanceState.Open;
+```
+
+or:
+
+```csharp
+public MaintenanceState ConfirmedMaintenanceState { get; set; }
+    = MaintenanceState.Open;
+```
+
+Prefer a name that clearly distinguishes this value from:
+
+```csharp
+RequestedMaintenanceState
+```
+
+Update comments/documentation accordingly.
+
+The concepts must remain:
+
+```text
+RequestedMaintenanceState
+    CTC's latest successfully transmitted request
+
+Maintenance / ConfirmedMaintenanceState
+    Track Controller's latest reported physical/wayside state
+```
+
+---
+
+# 3. Apply maintenance from BlockStatusMessage
+
+Update:
+
+```csharp
+CTCService.ApplyBlockStatus(...)
+```
+
+so it also copies the incoming maintenance state into the block.
+
+Conceptually:
+
+```csharp
+block.Occupancy = message.Occupancy;
+block.Signal = message.Signal;
+block.Switch = message.Switch;
+block.Crossing = message.Crossing;
+block.Maintenance = message.Maintenance;
+```
+
+The existing:
+
+```csharp
+OnStateChanged(CtcStateChangeKind.BlockStatus, ...)
+```
+
+should continue to cause the WPF block adapter to refresh.
+
+Do not modify `RequestedMaintenanceState` when a `BlockStatusMessage` arrives.
+
+---
+
+# 4. Change the CTC Block Status display to show confirmed maintenance
+
+Currently the `Maintenance` row in the CTC selected-block UI is effectively showing CTC's requested state, e.g. `"Close requested"`.
+
+Now that Track Controller confirmation exists, that row should display the actual/latest reported state:
+
+```text
+Maintenance: Open
+```
+
+or:
+
+```text
+Maintenance: Closed
+```
+
+Update `BlockViewModel` accordingly.
+
+Expose the actual enum value too if useful for command logic, e.g.:
+
+```csharp
+public MaintenanceState MaintenanceState =>
+    _block.Maintenance;
+```
+
+Do not parse display strings to determine state.
+
+`RequestedMaintenanceState` can remain exposed internally for command/pending-request logic, but the primary Block Status field should represent the Track Controller-reported state.
+
+---
+
+# 5. Implement ReopenBlockAsync in ICTCService
+
+Add:
+
+```csharp
+Task ReopenBlockAsync(
+    string blockId,
+    CancellationToken cancellationToken = default);
+```
+
+to `ICTCService`.
+
+This should mirror the existing:
+
+```csharp
+CloseBlockAsync(...)
+```
+
+behavior.
+
+---
+
+# 6. Implement ReopenBlockAsync in CTCService
+
+Implement the method using the existing `CreateMaintenanceRequest(...)`.
+
+Conceptually:
+
+```csharp
+public async Task ReopenBlockAsync(
+    string blockId,
+    CancellationToken cancellationToken = default)
+{
+    var block = GetBlock(blockId);
+
+    var request =
+        CreateMaintenanceRequest(
+            blockId,
+            MaintenanceState.Open);
+
+    await _messageSender.SendAsync(
+        request,
+        cancellationToken);
+
+    block.RequestedMaintenanceState =
+        MaintenanceState.Open;
+
+    OnStateChanged(
+        CtcStateChangeKind.MaintenanceRequest,
+        block.BlockId);
+}
+```
+
+As with Close Block:
+
+- validate the block through the existing mechanisms,
+- send through the real `IMessageSender`,
+- only update `RequestedMaintenanceState` after the send succeeds,
+- do NOT immediately change the confirmed maintenance state.
+
+If sending fails:
+
+```text
+RequestedMaintenanceState
+```
+
+must remain unchanged.
+
+Most importantly:
+
+```csharp
+block.Maintenance = MaintenanceState.Open;
+```
+
+must NOT happen inside `ReopenBlockAsync`.
+
+The block does not become confirmed Open until a Track Controller `BlockStatusMessage` reports it.
+
+---
+
+# 7. Implement ReopenSelectedBlockCommand
+
+The CTC XAML already contains the Reopen Block button. Wire up its missing ViewModel implementation.
+
+Add:
+
+```csharp
+public ICommand ReopenSelectedBlockCommand { get; }
+```
+
+and initialize it using the existing `AsyncRelayCommand` pattern.
+
+Add:
+
+```csharp
+private async Task ReopenSelectedBlockAsync()
+```
+
+which calls:
+
+```csharp
+await _ctc.ReopenBlockAsync(block.BlockId);
+```
+
+Use the same error-handling pattern as:
+
+```csharp
+CloseSelectedBlockAsync()
+```
+
+Update `CommunicationStatus`.
+
+Examples:
+
+Before:
+
+```text
+Sending reopen request for Block A12...
+```
+
+Success:
+
+```text
+Reopen request sent for Block A12.
+```
+
+Failure:
+
+```text
+Unable to send reopen request: <reason>
+```
+
+Do not modify the confirmed maintenance status from the ViewModel.
+
+---
+
+# 8. Improve Close/Reopen CanExecute rules
+
+Now that we have both requested and confirmed maintenance states, use both to prevent duplicate or contradictory actions while waiting for Track Controller confirmation.
+
+Desired normal workflow:
+
+## Initially
+
+```text
+Confirmed = Open
+Requested = Open
+```
+
+Close enabled.
+Reopen disabled.
+
+## Immediately after Close request is successfully sent
+
+```text
+Confirmed = Open
+Requested = Closed
+```
+
+The request is pending.
+
+Close disabled.
+Reopen disabled.
+
+## After Track Controller reports Closed
+
+```text
+Confirmed = Closed
+Requested = Closed
+```
+
+Close disabled.
+Reopen enabled.
+
+## Immediately after Reopen request is successfully sent
+
+```text
+Confirmed = Closed
+Requested = Open
+```
+
+The reopen is pending.
+
+Close disabled.
+Reopen disabled.
+
+## After Track Controller reports Open
+
+```text
+Confirmed = Open
+Requested = Open
+```
+
+Close enabled.
+Reopen disabled.
+
+Both buttons still require:
+
+```text
+IsMaintenanceMode == true
+```
+
+Conceptually, the command checks can look like:
+
+```csharp
+private bool CanCloseSelectedBlock() =>
+    IsMaintenanceMode
+    && SelectedBlock is not null
+    && SelectedBlock.MaintenanceState == MaintenanceState.Open
+    && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Closed;
+```
+
+and:
+
+```csharp
+private bool CanReopenSelectedBlock() =>
+    IsMaintenanceMode
+    && SelectedBlock is not null
+    && SelectedBlock.MaintenanceState == MaintenanceState.Closed
+    && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Open;
+```
+
+Use the actual property names chosen in the implementation.
+
+Make sure command availability reevaluates after:
+
+- Maintenance Mode changes
+- SelectedBlock changes
+- a Close/Reopen request succeeds
+- a `BlockStatusMessage` arrives
+
+The existing project already uses:
+
+```csharp
+CommandManager.InvalidateRequerySuggested();
+```
+
+so continue using that mechanism.
+
+---
+
+# 9. IMPORTANT: update authority safety logic
+
+Inspect:
+
+```text
+CTC.Core/Dispatching/AuthorityManager.cs
+```
+
+This is important because it currently treats:
+
+```csharp
+RequestedMaintenanceState == MaintenanceState.Closed
+```
+
+as unsafe.
+
+Once Reopen exists, this alone is insufficient.
+
+Consider this state:
+
+```text
+Confirmed maintenance = Closed
+Requested maintenance = Open
+```
+
+That means CTC has SENT a reopen request, but Track Controller has NOT yet confirmed that the block physically reopened.
+
+The block must still be considered unsafe.
+
+Update `AuthorityManager.IsUnsafe(...)` so a block is unsafe when:
+
+```text
+Occupancy == Occupied
+
+OR
+
+confirmed maintenance state == Closed
+
+OR
+
+RequestedMaintenanceState == Closed
+```
+
+Conceptually:
+
+```csharp
+return block.Occupancy == OccupancyState.Occupied
+    || block.Maintenance == MaintenanceState.Closed
+    || block.RequestedMaintenanceState == MaintenanceState.Closed;
+```
+
+This intentionally handles both transitional states:
+
+### Close pending
+
+```text
+Confirmed = Open
+Requested = Closed
+```
+
+Unsafe.
+
+### Reopen pending
+
+```text
+Confirmed = Closed
+Requested = Open
+```
+
+Unsafe.
+
+Only when:
+
+```text
+Confirmed = Open
+Requested = Open
+```
+
+should maintenance no longer make the block unsafe.
+
+Update comments in `AuthorityManager` to describe this behavior clearly.
+
+Do not weaken the current dispatch protection.
+
+---
+
+# 10. Add Maintenance Status to the CTC TestUI
+
+In the existing:
+
+```text
+Track Controller -> CTC
+Block Status (BlockStatusMessage)
+```
+
+section of the TestUI, add a maintenance selector.
+
+The current section already lets the user choose:
+
+```text
+Block ID
+Occupancy
+Signal
+Switch
+Crossing
+```
+
+Add:
+
+```text
+Maintenance
+```
+
+with a ComboBox containing:
+
+```text
+Open
+Closed
+```
+
+This does NOT need to be a completely separate message/input panel because it is part of the same block status message.
+
+Update `BlockStatusInputViewModel` with something equivalent to:
+
+```csharp
+private MaintenanceState _selectedMaintenance =
+    MaintenanceState.Open;
+
+public MaintenanceState[] MaintenanceOptions { get; } =
+    Enum.GetValues<MaintenanceState>();
+
+public MaintenanceState SelectedMaintenance
+{
+    get => _selectedMaintenance;
+    set => SetProperty(
+        ref _selectedMaintenance,
+        value);
+}
+```
+
+Then include it when constructing the message:
+
+```csharp
+var message = new BlockStatusMessage
+{
+    BlockId = BlockId.Trim(),
+    Occupancy = SelectedOccupancy,
+    Signal = SelectedSignal,
+    Switch = SelectedSwitch,
+    Crossing = SelectedCrossing,
+    Maintenance = SelectedMaintenance,
+};
+```
+
+Update the TestUI XAML Grid rows appropriately.
+
+Keep the TestUI simple. It is simulating what the real Track Controller will eventually report.
+
+---
+
+# 11. Preserve the real communication paths
+
+Closing and reopening must use the real CTC outbound architecture:
+
+```text
+MainWindowViewModel
+      ↓
+ICTCService
+      ↓
+CTCService
+      ↓
+MaintenanceRequestMessage
+      ↓
+IMessageSender
+      ↓
+Track Controller pipe
+      ↓
+CTC TestUI fake Track Controller receiver
+```
+
+Do NOT make a TestUI-specific shortcut.
+
+Similarly, Track Controller maintenance confirmation should use:
+
+```text
+CTC TestUI
+      ↓
+BlockStatusMessage
+      ↓
+real CTC named-pipe endpoint
+      ↓
+CTCService.ApplyBlockStatus
+      ↓
+CtcBlockState
+      ↓
+MainWindowViewModel / BlockViewModel
+```
+
+---
+
+# 12. Expected end-to-end manual test
+
+Verify this exact sequence.
+
+### Initial setup
+
+Start:
+
+```text
+CTC.Wpf
+CTC.TestUI.Wpf
+```
+
+Send the sample track layout.
+
+Select a block in CTC.
+
+From the TestUI send:
+
+```text
+BlockStatusMessage
+Maintenance = Open
+```
+
+CTC should display:
+
+```text
+Maintenance: Open
+```
+
+Turn Maintenance Mode ON.
+
+At this point:
+
+```text
+Close Block = enabled
+Reopen Block = disabled
+```
+
+### Close
+
+Press:
+
+```text
+Close Block
+```
+
+The TestUI captured outputs should show:
+
+```text
+MaintenanceRequestMessage
+BlockId = <selected block>
+RequestedState = Closed
+```
+
+The CTC should NOT immediately change the displayed maintenance status to Closed.
+
+Until confirmation it should still display:
+
+```text
+Maintenance: Open
+```
+
+and both Close/Reopen should be disabled because a close request is pending.
+
+Now use the TestUI to send:
+
+```text
+BlockStatusMessage
+Maintenance = Closed
+```
+
+CTC should update to:
+
+```text
+Maintenance: Closed
+```
+
+Now:
+
+```text
+Close Block = disabled
+Reopen Block = enabled
+```
+
+### Reopen
+
+Press:
+
+```text
+Reopen Block
+```
+
+The captured outputs should show:
+
+```text
+MaintenanceRequestMessage
+BlockId = <selected block>
+RequestedState = Open
+```
+
+The CTC should remain:
+
+```text
+Maintenance: Closed
+```
+
+until confirmation arrives.
+
+Both Close/Reopen should be disabled while the reopen is pending.
+
+Now send from TestUI:
+
+```text
+BlockStatusMessage
+Maintenance = Open
+```
+
+CTC should update to:
+
+```text
+Maintenance: Open
+```
+
+and:
+
+```text
+Close Block = enabled
+Reopen Block = disabled
+```
+
+Also verify Maintenance Mode OFF disables both controls regardless of block state.
+
+---
+
+# 13. Tests
+
+Update/add automated tests for the new behavior.
+
+At minimum cover:
+
+```text
+ApplyBlockStatus
+- incoming Maintenance = Closed updates confirmed state
+- incoming Maintenance = Open updates confirmed state
+
+CloseBlockAsync
+- sends MaintenanceRequestMessage with Closed
+- successful send changes RequestedMaintenanceState to Closed
+- does NOT change confirmed maintenance state
+- failed send does not change requested or confirmed state
+
+ReopenBlockAsync
+- sends MaintenanceRequestMessage with Open
+- successful send changes RequestedMaintenanceState to Open
+- does NOT immediately change confirmed maintenance state
+- failed send leaves the previously requested state unchanged
+
+AuthorityManager
+- confirmed Closed is unsafe
+- close requested but not confirmed is unsafe
+- reopen requested but still confirmed Closed is unsafe
+- confirmed Open + requested Open is safe unless occupied
+```
+
+Reuse the existing `FakeMessageSender`.
+
+Do not write WPF UI tests unless the project already has an established pattern for them.
+
+---
+
+# Scope constraints
+
+Keep this focused.
+
 Do NOT:
+
+- create a second maintenance status message unnecessarily
+- change the existing Maintenance Mode concept
+- combine maintenance and switch controls
+- make CTC assume a request succeeded physically merely because the message was transmitted
+- modify Track Controller implementation itself
+- add MBO logic
+- change unrelated schedule/dispatch functionality
+- redesign either UI
+- bypass named-pipe communication in the TestUI
+
+The intended principle is the same one now used for switch control:
+
+```text
+CTC request != physical confirmation
+```
+
+CTC sends the requested action first.
+
+The actual displayed state changes only when Track Controller reports it back.
+
+After implementing:
+
+1. Build the affected projects/solution.
+2. Run all CTC tests.
+3. Fix any compilation, binding, serialization, or test failures introduced by the change.
+4. Briefly summarize each modified file and its purpose.
 
 - redesign the Block Controls UI,
 - add new shared message types,

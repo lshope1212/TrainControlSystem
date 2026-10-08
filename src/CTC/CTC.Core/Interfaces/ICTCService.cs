@@ -60,6 +60,13 @@ public interface ICTCService
     Task CloseBlockAsync(string blockId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Requests that the Track Controller reopen <paramref name="blockId"/> after maintenance.
+    /// Records only the request; the block's confirmed maintenance state changes when the
+    /// Track Controller reports it via <see cref="ApplyBlockStatus"/>.
+    /// </summary>
+    Task ReopenBlockAsync(string blockId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Requests that the Track Controller move the switch in <paramref name="blockId"/> to
     /// <paramref name="requestedPosition"/>. Does not change the block's switch state; that
     /// changes only when the Track Controller reports it via <see cref="ApplyBlockStatus"/>.

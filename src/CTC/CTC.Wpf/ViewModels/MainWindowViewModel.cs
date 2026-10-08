@@ -32,6 +32,7 @@ public class MainWindowViewModel : ViewModelBase
 
         ToggleMaintenanceModeCommand = new RelayCommand(_ => IsMaintenanceMode = !IsMaintenanceMode);
         CloseSelectedBlockCommand = new AsyncRelayCommand(_ => CloseSelectedBlockAsync(), _ => CanCloseSelectedBlock());
+        ReopenSelectedBlockCommand = new AsyncRelayCommand(_ => ReopenSelectedBlockAsync(), _ => CanReopenSelectedBlock());
         ToggleSelectedBlockSwitchCommand = new AsyncRelayCommand(_ => ToggleSelectedBlockSwitchAsync(), _ => CanToggleSelectedBlockSwitch());
 
         //TODO other command implementations
@@ -148,8 +149,13 @@ public class MainWindowViewModel : ViewModelBase
 
     public ICommand CloseSelectedBlockCommand { get; }
 
+    // Confirmed and requested states differ while a request awaits Track Controller
+    // confirmation; Close and Reopen are both disabled then, so no contradictory request is sent.
     private bool CanCloseSelectedBlock() =>
-        IsMaintenanceMode && SelectedBlock is not null && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Closed;
+        IsMaintenanceMode
+        && SelectedBlock is not null
+        && SelectedBlock.MaintenanceState == MaintenanceState.Open
+        && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Closed;
 
     private async Task CloseSelectedBlockAsync()
     {
@@ -172,6 +178,43 @@ public class MainWindowViewModel : ViewModelBase
             // Controller is not connected."). Everything is caught because this runs
             // from an async void command and must never crash the UI.
             CommunicationStatus = $"Unable to send maintenance request: {ex.Message}";
+        }
+        finally
+        {
+            block.Refresh();
+        }
+    }
+
+    public ICommand ReopenSelectedBlockCommand { get; }
+
+    private bool CanReopenSelectedBlock() =>
+        IsMaintenanceMode
+        && SelectedBlock is not null
+        && SelectedBlock.MaintenanceState == MaintenanceState.Closed
+        && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Open;
+
+    private async Task ReopenSelectedBlockAsync()
+    {
+        var block = SelectedBlock;
+        if (block is null)
+        {
+            return;
+        }
+
+        CommunicationStatus = $"Sending reopen request for Block {block.BlockId}...";
+
+        try
+        {
+            // The displayed maintenance state stays Closed until the Track Controller
+            // reports the block Open in a BlockStatusMessage.
+            await _ctc.ReopenBlockAsync(block.BlockId);
+            CommunicationStatus = $"Reopen request sent for Block {block.BlockId}.";
+        }
+        catch (Exception ex)
+        {
+            // Everything is caught because this runs from an async void command and must
+            // never crash the UI.
+            CommunicationStatus = $"Unable to send reopen request: {ex.Message}";
         }
         finally
         {

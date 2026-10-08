@@ -284,4 +284,44 @@ public class CtcSpeedAndAuthorityTests
 
         Assert.AreEqual(150.0, AuthorityManager.CalculateInitialAuthorityMeters(route));
     }
+
+    // ---- Maintenance safety (confirmed vs requested) ----
+
+    [TestMethod]
+    [DataRow(MaintenanceState.Closed, MaintenanceState.Closed, DisplayName = "Confirmed closed")]
+    [DataRow(MaintenanceState.Open, MaintenanceState.Closed, DisplayName = "Close requested, not confirmed")]
+    [DataRow(MaintenanceState.Closed, MaintenanceState.Open, DisplayName = "Reopen requested, still confirmed closed")]
+    public void IsUnsafe_ClosedOrPendingMaintenance_IsUnsafe(MaintenanceState confirmed, MaintenanceState requested)
+    {
+        var block = Block("B1");
+        block.Occupancy = OccupancyState.Clear;
+        block.ConfirmedMaintenanceState = confirmed;
+        block.RequestedMaintenanceState = requested;
+
+        Assert.IsTrue(AuthorityManager.IsUnsafe(block));
+    }
+
+    [TestMethod]
+    public void IsUnsafe_ConfirmedAndRequestedOpen_IsSafeUnlessOccupied()
+    {
+        var block = Block("B1");
+        block.Occupancy = OccupancyState.Clear;
+        block.ConfirmedMaintenanceState = MaintenanceState.Open;
+        block.RequestedMaintenanceState = MaintenanceState.Open;
+
+        Assert.IsFalse(AuthorityManager.IsUnsafe(block));
+
+        block.Occupancy = OccupancyState.Occupied;
+
+        Assert.IsTrue(AuthorityManager.IsUnsafe(block));
+    }
+
+    [TestMethod]
+    public void Authority_ConfirmedClosedBlock_StopsAtPrecedingBoundary()
+    {
+        var route = Route(5);
+        route[3].ConfirmedMaintenanceState = MaintenanceState.Closed;
+
+        Assert.AreEqual(150.0, AuthorityManager.CalculateInitialAuthorityMeters(route));
+    }
 }

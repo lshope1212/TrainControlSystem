@@ -89,6 +89,10 @@ public class CTCService : ICTCService
         block.Switch = message.Switch;
         block.Crossing = message.Crossing;
 
+        // Only the confirmed state: RequestedMaintenanceState records what CTC asked for
+        // and is never overwritten by a wayside report.
+        block.ConfirmedMaintenanceState = message.Maintenance;
+
         OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
     }
 
@@ -351,7 +355,7 @@ public class CTCService : ICTCService
     /// <summary>
     /// Builds a maintenance request for a known block. Does not change CTC state; the
     /// requested state is recorded only once a request has actually been sent
-    /// (see <see cref="CloseBlockAsync"/>).
+    /// (see <see cref="CloseBlockAsync"/> and <see cref="ReopenBlockAsync"/>).
     /// </summary>
     public MaintenanceRequestMessage CreateMaintenanceRequest(string blockId, MaintenanceState requestedState)
     {
@@ -415,8 +419,28 @@ public class CTCService : ICTCService
 
         // RequestedMaintenanceState == Closed means "CTC successfully issued a Close
         // request". It does NOT mean the Track Controller confirmed the block is closed;
-        // that needs a future Track Controller -> CTC maintenance status message.
+        // ConfirmedMaintenanceState changes only when a BlockStatusMessage reports it.
         block.RequestedMaintenanceState = MaintenanceState.Closed;
+
+        OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
+    }
+
+    /// <summary>
+    /// Sends a request to the Track Controller to reopen a block closed for maintenance.
+    /// </summary>
+    /// <exception cref="ArgumentException">The block ID is blank or unknown to CTC.</exception>
+    /// <exception cref="Exceptions.MessageSendException">The request could not be delivered.</exception>
+    public async Task ReopenBlockAsync(string blockId, CancellationToken cancellationToken = default)
+    {
+        var block = GetBlock(blockId);
+        var request = CreateMaintenanceRequest(blockId, MaintenanceState.Open);
+
+        // As with CloseBlockAsync, a failed send leaves the requested state untouched.
+        await _messageSender.SendAsync(request, cancellationToken);
+
+        // The block stays confirmed Closed (and unsafe for authority) until the Track
+        // Controller reports it Open via ApplyBlockStatus.
+        block.RequestedMaintenanceState = MaintenanceState.Open;
 
         OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
     }

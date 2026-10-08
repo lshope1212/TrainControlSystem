@@ -59,6 +59,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <!-- Block ID -->
@@ -127,12 +128,27 @@
                                            Grid.Column="0"
                                            Text="Crossing:"
                                            VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
+                                           Margin="0,0,8,6"/>
 
                                 <ComboBox Grid.Row="4"
                                           Grid.Column="1"
                                           ItemsSource="{Binding BlockStatusInput.CrossingOptions}"
-                                          SelectedItem="{Binding BlockStatusInput.SelectedCrossing}"/>
+                                          SelectedItem="{Binding BlockStatusInput.SelectedCrossing}"
+                                          Margin="0,0,0,6"/>
+
+
+                                <!-- Maintenance -->
+
+                                <TextBlock Grid.Row="5"
+                                           Grid.Column="0"
+                                           Text="Maintenance:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+
+                                <ComboBox Grid.Row="5"
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding BlockStatusInput.MaintenanceOptions}"
+                                          SelectedItem="{Binding BlockStatusInput.SelectedMaintenance}"/>
 
                             </Grid>
 

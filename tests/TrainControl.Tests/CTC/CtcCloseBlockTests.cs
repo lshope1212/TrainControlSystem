@@ -57,6 +57,16 @@ public class CtcCloseBlockTests
     }
 
     [TestMethod]
+    public async Task CloseBlockAsync_OnSuccess_DoesNotChangeConfirmedState()
+    {
+        var (service, _) = CreateService();
+
+        await service.CloseBlockAsync("12");
+
+        Assert.AreEqual(MaintenanceState.Open, service.State.FindBlock("12")!.ConfirmedMaintenanceState);
+    }
+
+    [TestMethod]
     public async Task CloseBlockAsync_UnknownBlock_ThrowsAndSendsNothing()
     {
         var (service, sender) = CreateService();
@@ -95,5 +105,6 @@ public class CtcCloseBlockTests
         await Assert.ThrowsExactlyAsync<MessageSendException>(() => service.CloseBlockAsync("12"));
 
         Assert.AreEqual(MaintenanceState.Open, service.State.FindBlock("12")!.RequestedMaintenanceState);
+        Assert.AreEqual(MaintenanceState.Open, service.State.FindBlock("12")!.ConfirmedMaintenanceState);
     }
 }

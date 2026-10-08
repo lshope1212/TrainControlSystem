@@ -21,14 +21,22 @@ namespace CTC.Core.Dispatching;
 public static class AuthorityManager
 {
     /// <summary>
-    /// A block a train must not enter: it is occupied, or CTC has requested it be closed for
-    /// maintenance. Unknown occupancy is not treated as occupied.
+    /// A block a train must not enter: it is occupied, the Track Controller reports it closed
+    /// for maintenance, or CTC has requested it be closed. Unknown occupancy is not treated
+    /// as occupied.
     /// </summary>
+    /// <remarks>
+    /// Both pending maintenance transitions are unsafe: a close CTC requested that the Track
+    /// Controller has not yet confirmed (confirmed Open, requested Closed), and a reopen CTC
+    /// requested while the block is still confirmed Closed (confirmed Closed, requested Open).
+    /// Maintenance stops making a block unsafe only when both states are Open.
+    /// </remarks>
     public static bool IsUnsafe(CtcBlockState block)
     {
         ArgumentNullException.ThrowIfNull(block);
 
         return block.Occupancy == OccupancyState.Occupied
+            || block.ConfirmedMaintenanceState == MaintenanceState.Closed
             || block.RequestedMaintenanceState == MaintenanceState.Closed;
     }
 
