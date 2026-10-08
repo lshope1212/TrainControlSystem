@@ -1,0 +1,20 @@
+# Shared wayside PLC program v1 — identical source on Windows and Raspberry Pi.
+# This is the project's bounded Boolean language, not IEC ladder logic or Python.
+# The runtime supplies these inputs after evaluating the configured territory:
+#   route_safe: candidate route passes occupancy, topology, fault and maintenance checks
+#   running: simulation is resumed and maintenance mode is off
+#   switch_safe: switch protection zone is clear, current, unreserved and unlocked
+#   requested_normal: requested/reported switch position is Normal (false means Reverse)
+#   crossing_required: occupied/uncertain approach or protected movement needs gates closed
+# Numeric speed/distance calculations and the final independent guard stay in the runtime.
+
+movement_enabled = route_safe and running
+allow_route = movement_enabled
+signal_clear = movement_enabled
+
+# This output selects a position; it never grants permission to move a switch.
+# The runtime separately requires switch_safe before applying the requested position.
+switch_normal = requested_normal
+
+# Protective closure remains active while paused or while maintenance mode is on.
+crossing_close = crossing_required or not running

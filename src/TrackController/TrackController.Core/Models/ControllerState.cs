@@ -13,5 +13,5 @@ public class ControllerState
 
     public SignalState CommandedSignalState { get; set; } = SignalState.Unknown;
 
-    public bool CrossingActive { get; set; }
+    public bool IsCrossingActive { get; set; }
 }

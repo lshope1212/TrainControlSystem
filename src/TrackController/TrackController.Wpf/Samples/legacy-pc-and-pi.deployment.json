@@ -1,0 +1,16 @@
+{
+  "name": "PC + Pi demonstration",
+  "plcFile": "wayside.plc",
+  "territories": [
+    {
+      "configurationFile": "territory-software.json",
+      "execution": "Local"
+    },
+    {
+      "configurationFile": "territory-pi.json",
+      "execution": "Pi",
+      "host": "127.0.0.1",
+      "port": 11405
+    }
+  ]
+}

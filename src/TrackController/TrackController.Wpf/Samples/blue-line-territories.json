@@ -1,0 +1,31 @@
+{
+  "territories": [
+    {
+      "id": "wayside-a",
+      "name": "Station C approach",
+      "blockIds": [
+        "12",
+        "13",
+        "14",
+        "15"
+      ]
+    },
+    {
+      "id": "wayside-b",
+      "name": "Yard, junction and Station B",
+      "blockIds": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11"
+      ]
+    }
+  ]
+}

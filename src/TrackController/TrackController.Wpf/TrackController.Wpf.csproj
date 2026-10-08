@@ -1,6 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\TrackController.Runtime\TrackController.Runtime.csproj" />
     <ProjectReference Include="..\TrackController.Core\TrackController.Core.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
@@ -13,5 +14,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="Samples\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
 </Project>

@@ -5,17 +5,18 @@ namespace TrackController.Core.Exceptions;
 /// </summary>
 public class TrackControllerException : Exception
 {
+    /// <summary>Describes a controller-domain failure, optionally retaining its original cause.</summary>
     public TrackControllerException()
     {
     }
 
-    public TrackControllerException(string message)
-        : base(message)
+    /// <summary>Describes a controller-domain failure, optionally retaining its original cause.</summary>
+    public TrackControllerException(string message) : base(message)
     {
     }
 
-    public TrackControllerException(string message, Exception innerException)
-        : base(message, innerException)
+    /// <summary>Describes a controller-domain failure, optionally retaining its original cause.</summary>
+    public TrackControllerException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

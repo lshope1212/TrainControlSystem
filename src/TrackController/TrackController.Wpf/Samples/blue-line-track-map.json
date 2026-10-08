@@ -1,0 +1,271 @@
+{
+  "waysideId": "Shared track map",
+  "lineName": "Blue Line",
+  "feedbackTimeoutSeconds": 5,
+  "requestTimeoutSeconds": 10,
+  "blocks": [
+    {
+      "blockId": "1",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "2"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 160
+    },
+    {
+      "blockId": "2",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "3"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 160
+    },
+    {
+      "blockId": "3",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "4"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": true,
+      "crossingProtectionBlockIds": [
+        "2",
+        "3",
+        "4"
+      ],
+      "mapX": 242,
+      "mapY": 160
+    },
+    {
+      "blockId": "4",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "5"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 160
+    },
+    {
+      "blockId": "5",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "6",
+        "11"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "6",
+      "reverseNextBlockId": "11",
+      "stemBlockId": "4",
+      "switchProtectionBlockIds": [
+        "4",
+        "5",
+        "6",
+        "11"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 160
+    },
+    {
+      "blockId": "6",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "7"
+      ],
+      "hasSignal": true,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 60
+    },
+    {
+      "blockId": "7",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "8"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 60
+    },
+    {
+      "blockId": "8",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "9"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 60
+    },
+    {
+      "blockId": "9",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "10"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 60
+    },
+    {
+      "blockId": "10",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 60,
+      "stationName": "Station B"
+    },
+    {
+      "blockId": "11",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "12"
+      ],
+      "hasSignal": true,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 260
+    },
+    {
+      "blockId": "12",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "13"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 260
+    },
+    {
+      "blockId": "13",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "14"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 260
+    },
+    {
+      "blockId": "14",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [
+        "15"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 260
+    },
+    {
+      "blockId": "15",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 13.88888888888889,
+      "nextBlockIds": [],
+      "hasSignal": false,
+      "normalNextBlockId": null,
+      "reverseNextBlockId": null,
+      "stemBlockId": null,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 260,
+      "stationName": "Station C"
+    }
+  ]
+}

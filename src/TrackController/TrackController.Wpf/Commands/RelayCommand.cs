@@ -1,4 +1,4 @@
-﻿using System.Windows.Input;
+using System.Windows.Input;
 
 namespace TrackController.Wpf.Commands;
 
@@ -11,6 +11,7 @@ public class RelayCommand : ICommand
     private readonly Action<object?> _execute;
     private readonly Predicate<object?>? _canExecute;
 
+    /// <summary>Connects a UI action and its availability predicate to the WPF command interface.</summary>
     public RelayCommand(Action<object?> execute, Predicate<object?>? canExecute = null)
     {
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
@@ -23,7 +24,9 @@ public class RelayCommand : ICommand
         remove => CommandManager.RequerySuggested -= value;
     }
 
+    /// <summary>Reports whether the command can currently run so the UI can disable unavailable actions.</summary>
     public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
 
+    /// <summary>Invokes the bound synchronous operator action.</summary>
     public void Execute(object? parameter) => _execute(parameter);
 }
