@@ -8,5 +8,16 @@ public enum SignalState
     Unknown = 0,
     Red,
     Yellow,
-    Green
+    Green,
+    SuperGreen
+}
+
+public static class SignalStateExtensions
+{
+    /// <summary>Dispatcher-facing text for a signal aspect, e.g. <see cref="SignalState.SuperGreen"/> -> "Super Green".</summary>
+    public static string ToDisplayName(this SignalState signal) => signal switch
+    {
+        SignalState.SuperGreen => "Super Green",
+        _ => signal.ToString(),
+    };
 }

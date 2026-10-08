@@ -36,7 +36,9 @@ public class BlockStatusInputViewModel : CtcInputViewModelBase
     // Available enum values for the ComboBoxes
     public OccupancyState[] OccupancyOptions { get; } = Enum.GetValues<OccupancyState>();
 
-    public SignalState[] SignalOptions { get; } = Enum.GetValues<SignalState>();
+    // Paired with display text so SuperGreen shows as "Super Green".
+    public KeyValuePair<SignalState, string>[] SignalOptions { get; } =
+        Enum.GetValues<SignalState>().Select(signal => KeyValuePair.Create(signal, signal.ToDisplayName())).ToArray();
 
     public SwitchPosition[] SwitchOptions { get; } = Enum.GetValues<SwitchPosition>();
 

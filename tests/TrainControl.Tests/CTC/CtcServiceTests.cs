@@ -1,4 +1,5 @@
 using CTC.Core.Services;
+using TrainControl.Common.Communication;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 
@@ -130,6 +131,40 @@ public class CtcServiceTests
         Assert.AreEqual(CrossingState.Closed, block.Crossing);
 
         Assert.AreEqual(OccupancyState.Unknown, service.State.FindBlock("G1")!.Occupancy);
+    }
+
+    [TestMethod]
+    [DataRow(SignalState.Red)]
+    [DataRow(SignalState.Yellow)]
+    [DataRow(SignalState.Green)]
+    [DataRow(SignalState.SuperGreen)]
+    public void ApplyBlockStatus_AcceptsEverySignalState(SignalState signal)
+    {
+        var service = CreateServiceWithLayout();
+
+        service.ApplyBlockStatus(new BlockStatusMessage { BlockId = "G2", Signal = signal });
+
+        Assert.AreEqual(signal, service.State.FindBlock("G2")!.Signal);
+    }
+
+    [TestMethod]
+    public void SuperGreenBlockStatus_SurvivesSerialization()
+    {
+        var json = MessageSerializer.Serialize(new BlockStatusMessage { BlockId = "G2", Signal = SignalState.SuperGreen });
+
+        var message = MessageSerializer.DeserializePayload<BlockStatusMessage>(MessageSerializer.Deserialize(json));
+
+        Assert.AreEqual(SignalState.SuperGreen, message.Signal);
+    }
+
+    [TestMethod]
+    [DataRow(SignalState.Red, "Red")]
+    [DataRow(SignalState.Yellow, "Yellow")]
+    [DataRow(SignalState.Green, "Green")]
+    [DataRow(SignalState.SuperGreen, "Super Green")]
+    public void SignalState_DisplayName(SignalState signal, string expected)
+    {
+        Assert.AreEqual(expected, signal.ToDisplayName());
     }
 
     [TestMethod]
