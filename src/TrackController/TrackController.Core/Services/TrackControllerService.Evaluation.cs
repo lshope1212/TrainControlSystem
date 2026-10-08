@@ -83,7 +83,7 @@ public sealed partial class TrackControllerService
                     };
                 }
 
-                if (block.Definition.HasSignal && (block.ManualRed || block.Feedback?.Signal is not (SignalState.Green or SignalState.Yellow)))
+                if (block.Definition.HasSignal && (block.ManualRed || block.Feedback?.Signal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow)))
                 {
                     result = Stop(result, $"Waiting for proceed signal feedback at block {id}.");
                 }
@@ -143,7 +143,7 @@ public sealed partial class TrackControllerService
     private WaysideAuthorization Evaluate(Request receivedRequest)
     {
         var request = receivedRequest.Value;
-        var output = new WaysideAuthorization(request.RequestId, request.TrainId, request.TargetBlockId, request.EntryBlockId, request.FrontOffsetMeters!.Value, request.PathBlockIds.AsReadOnly(), request.SuggestedSpeedMetersPerSecond, request.SuggestedAuthorityMeters, 0, 0, "Withheld", "");
+        var output = new WaysideAuthorization(request.RequestId, request.TrainId, request.TargetBlockId, request.EntryBlockId, request.PathBlockIds.AsReadOnly(), request.SuggestedSpeedMetersPerSecond, request.SuggestedAuthorityMeters, 0, 0, "Withheld", "");
         if (_paused)
         {
             return Stop(output, "Simulation paused.");
@@ -161,12 +161,12 @@ public sealed partial class TrackControllerService
 
         if (!IsActive(receivedRequest))
         {
-            return Stop(output, "CTC request expired; refresh its origin or submit a new position.");
+            return Stop(output, "CTC request expired; refresh it or submit a new target block and route.");
         }
 
         if (_retiredRequests.Contains(request.RequestId))
         {
-            return Stop(output, "Target block cleared; a new request and position are required.");
+            return Stop(output, "Target block cleared; a new request and current target block are required.");
         }
 
         if (GetBlock(request.TargetBlockId).Feedback?.Occupancy != OccupancyState.Occupied)
@@ -220,7 +220,8 @@ public sealed partial class TrackControllerService
                 break;
             }
 
-            distance += block.Definition.LengthMeters - (i == 0 ? request.FrontOffsetMeters.Value : 0);
+            // This locates a fixed route endpoint from a known block boundary, not from an inferred train position.
+            distance += block.Definition.LengthMeters;
             speed = Math.Min(speed, block.Definition.SpeedLimitMetersPerSecond);
             if (block.Definition.HasSignal && block.Feedback.Signal == SignalState.Yellow)
             {
@@ -271,7 +272,7 @@ public sealed partial class TrackControllerService
             }
 
             yield return id;
-            remaining -= GetBlock(id).Definition.LengthMeters - (id == authorization.TargetBlockId ? authorization.FrontOffsetMeters : 0);
+            remaining -= GetBlock(id).Definition.LengthMeters;
         }
     }
 

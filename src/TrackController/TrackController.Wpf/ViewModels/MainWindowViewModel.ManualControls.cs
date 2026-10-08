@@ -9,6 +9,8 @@ public sealed partial class MainWindowViewModel
     private string _manualTarget = "6";
     private string _manualAction = "Switch normal";
 
+    public string ManualCommandResult { get; private set; } = "No manual command sent.";
+
     public string ManualTarget
     {
         get => _manualTarget;

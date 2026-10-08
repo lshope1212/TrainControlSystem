@@ -15,7 +15,7 @@ The `blue-line-*` files are the same three decisions for the course Blue Line pr
 ## Change PC/Pi placement in the UI
 
 1. Pause the controller in **TrackController.Wpf**.
-2. Open **Controller setup → Load sample layout**. It starts two named territories on the PC, without needing a Pi. Use **Load deployment…** for a saved plan instead.
+2. Open **Controller setup → Load setup**. It starts two named territories on the PC, without needing a Pi. For a saved plan, choose **Saved setup file…** in the selector, then **Load setup**.
 3. Under **Execution setup**, inspect **Owned blocks** and **Observe only**. Choose **PC** or **Pi** in **Run on** for each territory.
 4. For a Pi, use its local SSH tunnel endpoint. The default junction endpoint is `127.0.0.1:11405`; see [Pi setup](../TrackController.Pi/README.md). Each additional Pi territory needs a separate runtime/tunnel port. Two territories cannot share one runtime process.
 5. Select **Apply execution**. This validates the choices, verifies that all controllers are paused, and replaces the deployment. Feedback and movement requests are cleared; the current valid PLC source is retained. It restarts paused, and a missing Pi stays unavailable.
@@ -68,6 +68,6 @@ a local controller. Fresh feedback and an explicit resume are required afterward
 
 Older deployments that reference `configurationFile` still load. `legacy-pc-and-pi.deployment.json` preserves the previous demonstration; use the new shared-map examples for further development.
 
-The Pi protocol is now version 2 because configuration distinguishes topology from ownership and snapshots include read-only neighbor observations. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected rather than running an older controller that could misunderstand ownership.
+The Pi protocol is version 3: authority is a fixed route limit from the target block's entry, with no train offset input, and signal feedback accepts Super Green. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected so the two ends cannot interpret authority differently.
 
 Automated checks cover intact boundary edges, exclusive command ownership, invalid partitions and split protection zones, feedback fan-out, direct Pi ownership enforcement, equivalent local/Pi decisions, explicit placement saving, and the operator execution editor receiving external Test UI inputs through module pipes. Device-level Pi/LED verification and cross-territory handoff remain separate integration work.

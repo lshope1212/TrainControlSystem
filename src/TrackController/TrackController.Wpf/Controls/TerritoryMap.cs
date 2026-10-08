@@ -84,11 +84,12 @@ public sealed class TerritoryMap : FrameworkElement
                 {
                     SignalState.Red => Color("#C84036"),
                     SignalState.Green => Color("#368653"),
+                    SignalState.SuperGreen => Color("#00B86B"),
                     SignalState.Yellow => Brushes.Goldenrod,
                     _ => Brushes.Gray
                 };
                 dc.DrawEllipse(signal, null, PointAt(blockStatus.MapX + 8, blockStatus.MapY - 14), 5 * scale, 5 * scale);
-                DrawText(blockStatus.IsFresh ? blockStatus.ReportedSignal.ToString() : "Unknown", PointAt(blockStatus.MapX + 20, blockStatus.MapY - 23), 11 * scale, Color("#253140"));
+                DrawText(blockStatus.IsFresh ? blockStatus.ReportedSignal.ToString().Replace("SuperGreen", "Super Green") : "Unknown", PointAt(blockStatus.MapX + 20, blockStatus.MapY - 23), 11 * scale, Color("#253140"));
             }
 
             if (!string.IsNullOrWhiteSpace(blockStatus.StationName))

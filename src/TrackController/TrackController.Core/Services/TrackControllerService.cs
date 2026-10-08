@@ -28,10 +28,10 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
 
     private sealed record Request(WaysideMovementRequestMessage Value, DateTimeOffset Received);
 
-    private sealed record RequestOrigin(string TargetBlockId, string? EntryBlockId, double FrontOffsetMeters, string[] PathBlockIds)
+    private sealed record RequestOrigin(string TargetBlockId, string? EntryBlockId, string[] PathBlockIds)
     {
-        /// <summary>Checks that a repeated request retains its original front position and ordered route.</summary>
-        public bool Matches(WaysideMovementRequestMessage request) => TargetBlockId == request.TargetBlockId && EntryBlockId == request.EntryBlockId && FrontOffsetMeters == request.FrontOffsetMeters && PathBlockIds.SequenceEqual(request.PathBlockIds);
+        /// <summary>Checks that a repeated request retains its target block, direction and ordered route.</summary>
+        public bool Matches(WaysideMovementRequestMessage request) => TargetBlockId == request.TargetBlockId && EntryBlockId == request.EntryBlockId && PathBlockIds.SequenceEqual(request.PathBlockIds);
     }
 
     private readonly object _gate = new();

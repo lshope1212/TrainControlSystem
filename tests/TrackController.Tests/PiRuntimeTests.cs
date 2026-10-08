@@ -22,7 +22,6 @@ public sealed class PiRuntimeTests
         RequestId = Guid.NewGuid().ToString("N"),
         TrainId = "Train 101",
         TargetBlockId = target,
-        FrontOffsetMeters = 0,
         PathBlockIds = path.Length == 0 ? ["6", "7", "8"] : path.ToList(),
         SuggestedSpeedMetersPerSecond = 11.176,
         SuggestedAuthorityMeters = 365.76
@@ -60,7 +59,9 @@ public sealed class PiRuntimeTests
 
         )
         {
-            Assert.IsTrue((await Send(runtime, Clear(config))).IsAccepted);
+            var feedback = Clear(config);
+            feedback.Blocks.ForEach(block => block.Signal = SignalState.SuperGreen);
+            Assert.IsTrue((await Send(runtime, feedback)).IsAccepted);
             Assert.IsTrue((await Send(runtime, new WaysideSimulationMessage { IsPaused = false })).IsAccepted);
             Assert.IsTrue((await Send(runtime, request)).IsAccepted);
         }
@@ -68,6 +69,8 @@ public sealed class PiRuntimeTests
         var actual = await remote.PollAsync();
         var expected = await local.PollAsync();
         Assert.AreEqual(365.76, actual.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
+        Assert.AreEqual(WaysideMovementRequestMessage.BlockEntryReference, actual.Authorizations.Single().AuthorityReference);
+        Assert.IsTrue(actual.Blocks.Where(block => block.HasSignal).All(block => block.ReportedSignal == SignalState.SuperGreen));
         Assert.AreEqual(expected.Authorizations.Single().AuthorizedSpeedMetersPerSecond, actual.Authorizations.Single().AuthorizedSpeedMetersPerSecond);
         Assert.AreEqual(expected.Authorizations.Single().Status, actual.Authorizations.Single().Status);
         Assert.IsTrue(actual.Blocks.All(blockStatus => blockStatus.IsFresh));

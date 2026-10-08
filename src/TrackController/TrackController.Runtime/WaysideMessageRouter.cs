@@ -53,7 +53,9 @@ public sealed class WaysideMessageRouter(ITrackControllerService controller)
                     controller.Configure(Read<WaysideConfigurationMessage>(envelope));
                     break;
                 case nameof(WaysideManualCommandMessage):
-                    controller.ApplyManual(Read<WaysideManualCommandMessage>(envelope));
+                    var manual = Read<WaysideManualCommandMessage>(envelope);
+                    controller.ApplyManual(manual);
+                    detail = $"Manual command applied for block {manual.BlockId}. Check Command and Reported in Wayside equipment.";
                     break;
                 case nameof(WaysideMaintenanceModeMessage):
                     controller.SetMaintenanceMode(Read<WaysideMaintenanceModeMessage>(envelope).IsEnabled);
@@ -76,7 +78,7 @@ public sealed class WaysideMessageRouter(ITrackControllerService controller)
                     break;
                 case nameof(MovementSuggestionMessage):
                 case nameof(MovementRequestMessage):
-                    throw new ArgumentException("Movement requires WaysideMovementRequestMessage with target block, front offset, and route. A train label alone cannot identify an occupied block.");
+                    throw new ArgumentException("Movement requires WaysideMovementRequestMessage with target block and route. A train label alone cannot identify an occupied block.");
                 default:
                     throw new ArgumentException($"Unsupported message type: {envelope.MessageType}.");
             }

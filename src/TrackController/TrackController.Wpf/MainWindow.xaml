@@ -301,7 +301,7 @@
                                                TextAlignment="Right"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,8">
-                                    <TextBlock Text="Authorized authority (ft)" Foreground="#6B7280"/>
+                                    <TextBlock Text="Authorized route limit (ft)" Foreground="#6B7280"/>
                                     <TextBlock Text="{Binding SelectedMovement.AuthorizedAuthority, TargetNullValue=—}"
                                                FontWeight="SemiBold"
                                                TextAlignment="Right"/>
@@ -333,15 +333,15 @@
                                 <DataGridTextColumn Header="Suggested mph"
                                                     Binding="{Binding SuggestedSpeed}"
                                                     Width="100"/>
-                                <DataGridTextColumn Header="Requested ft"
+                                <DataGridTextColumn Header="Requested limit (ft)"
                                                     Binding="{Binding RequestedAuthority}"
-                                                    Width="95"/>
+                                                    Width="140"/>
                                 <DataGridTextColumn Header="Authorized mph"
                                                     Binding="{Binding AuthorizedSpeed}"
                                                     Width="105"/>
-                                <DataGridTextColumn Header="Authorized ft"
+                                <DataGridTextColumn Header="Authorized limit (ft)"
                                                     Binding="{Binding AuthorizedAuthority}"
-                                                    Width="100"/>
+                                                    Width="145"/>
                                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="95"/>
                                 <DataGridTextColumn Header="Restriction reason"
                                                     Binding="{Binding Reason}"
@@ -378,7 +378,7 @@
                                     <CheckBox Content="Enable maintenance mode"
                                               IsChecked="{Binding IsMaintenanceMode}"
                                               Margin="0,0,0,8"/>
-                                    <TextBlock Text="Maintenance mode withholds automatic movement. Equipment protection still applies."
+                                    <TextBlock Text="Maintenance mode withholds automatic movement. Switch protection blocks must be clear, current and unreserved. Track Model reports the actual equipment position separately."
                                                Style="{StaticResource Hint}"
                                                Margin="0,0,0,10"/>
                                     <UniformGrid Columns="2">
@@ -396,6 +396,8 @@
                                     <Button Content="Send manual command"
                                             Command="{Binding SendManualCommand}"
                                             HorizontalAlignment="Left"/>
+                                    <TextBlock Text="{Binding ManualCommandResult}"
+                                               TextWrapping="Wrap" Margin="0,10,0,0"/>
                                 </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
@@ -407,28 +409,29 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <WrapPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
-                                        <ComboBox ItemsSource="{Binding SampleLines}"
-                                                  SelectedItem="{Binding SelectedSampleLine}"
+                                        <TextBlock Text="Setup" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <ComboBox ItemsSource="{Binding SetupChoices}"
+                                                  SelectedItem="{Binding SelectedSetup}"
                                                   MinWidth="210"
                                                   VerticalAlignment="Center"
                                                   Margin="0,0,8,0"
-                                                  ToolTip="Line started by Load sample layout. Other lines load through Load deployment."/>
-                                        <Button Content="Load sample layout"
-                                                Command="{Binding LoadSampleDeploymentCommand}"
-                                                ToolTip="Starts the selected line's sample deployment on the PC. Pause first."/>
-                                        <Button Content="Load deployment…" Command="{Binding LoadDeploymentCommand}"/>
-                                        <Button Content="Local preview"
-                                                Command="{Binding RestoreLocalDemoCommand}"
-                                                ToolTip="Return to the original single-controller preview. Pause first."/>
+                                                  ToolTip="Choose Green Line, Blue Line, or a saved setup file."/>
+                                        <Button Content="Load setup"
+                                                Command="{Binding LoadSetupCommand}"
+                                                IsEnabled="{Binding Snapshot.IsPaused}"
+                                                ToolTip="Loads the selected track, territory assignments and PLC together. Saved setup file opens a file picker. Starts paused."/>
                                         <Button Content="Reset controller"
                                                 Command="{Binding ResetControllerCommand}"
                                                 ToolTip="Pauses and clears controller feedback and requests, retaining the applied deployment and PLC. Stop Test UI repeats first."/>
                                     </WrapPanel>
-                                    <TextBlock Text="Execution setup"
+                                    <TextBlock Text="Track and controllers"
                                                FontSize="16"
                                                FontWeight="SemiBold"
                                                VerticalAlignment="Center"/>
                                 </DockPanel>
+                                <TextBlock Text="A setup includes the track, controller assignments and PLC program. Choose a line or a saved setup file, then Load setup. Pause before changing setups."
+                                           Style="{StaticResource Hint}"
+                                           Margin="0,0,0,8"/>
                                 <TextBlock Text="{Binding LayoutDescription}"
                                            Style="{StaticResource Hint}"
                                            Margin="0,0,0,6"
@@ -519,27 +522,39 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,20,0">
                                 <StackPanel>
                                     <TextBlock Text="Controller logic" Style="{StaticResource SectionHeading}"/>
-                                    <ComboBox ItemsSource="{Binding ControllerModes}"
-                                              SelectedItem="{Binding ControllerMode}"
-                                              IsEnabled="{Binding CanChooseLogic}"
-                                              Margin="0,0,0,8"/>
-                                    <TextBlock Text="PC and Pi territories run the same loaded PLC. Software logic is an alternate rule evaluator available in the local preview."
-                                               Style="{StaticResource Hint}"
-                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="{Binding ControllerMode}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Loading a setup also loads its PLC program."
+                                               Style="{StaticResource Hint}" Margin="0,0,0,8"/>
                                     <TextBlock Text="{Binding Snapshot.PlcName}"
                                                FontWeight="SemiBold"
                                                Margin="0,8,0,8"/>
                                     <TextBlock Text="{Binding PlcSummary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                    <WrapPanel>
-                                        <Button Content="Load PLC file…" Command="{Binding LoadPlcCommand}"/>
-                                        <Button Content="Load sample PLC" Command="{Binding LoadSamplePlcCommand}"/>
-                                    </WrapPanel>
-                                    <Separator Margin="0,12,0,12"/>
-                                    <TextBlock Text="Local preview layout" Style="{StaticResource SectionHeading}"/>
-                                    <Button Content="Load territory…"
-                                            Command="{Binding LoadLayoutCommand}"
-                                            HorizontalAlignment="Left"
-                                            IsEnabled="{Binding CanChooseLogic}"/>
+                                    <Expander Header="Advanced" Margin="0,12,0,0">
+                                        <StackPanel Margin="0,10,0,0">
+                                            <TextBlock Text="Custom PLC" Style="{StaticResource SectionHeading}"/>
+                                            <TextBlock Text="Replace only the PLC program, keeping the current track and assignments."
+                                                       Style="{StaticResource Hint}" Margin="0,0,0,8"/>
+                                            <Button Content="Replace PLC…" Command="{Binding LoadPlcCommand}"
+                                                    HorizontalAlignment="Left" Margin="0,0,0,16"/>
+                                            <TextBlock Text="Standalone testing" Style="{StaticResource SectionHeading}"/>
+                                            <TextBlock Text="Returns to the original PC controller for software-logic or single-territory tests. Does not load the selected line or a PLC file. Pause first."
+                                                       Style="{StaticResource Hint}" Margin="0,0,0,8"/>
+                                            <Button Content="Use standalone controller"
+                                                    Command="{Binding RestoreLocalDemoCommand}"
+                                                    IsEnabled="{Binding Snapshot.IsPaused}"
+                                                    HorizontalAlignment="Left"/>
+                                            <TextBlock Text="Logic" Style="{StaticResource Label}" Margin="0,10,0,5"/>
+                                            <ComboBox ItemsSource="{Binding ControllerModes}"
+                                                      SelectedItem="{Binding ControllerMode}"
+                                                      IsEnabled="{Binding CanChooseLogic}"
+                                                      Margin="0,0,0,8"/>
+                                            <Button Content="Change territory…"
+                                                    Command="{Binding LoadLayoutCommand}"
+                                                    HorizontalAlignment="Left"
+                                                    IsEnabled="{Binding CanChooseLogic}"
+                                                    ToolTip="Replaces the standalone controller's territory; load a PLC separately afterward if using PLC logic."/>
+                                        </StackPanel>
+                                    </Expander>
                                 </StackPanel>
                             </ScrollViewer>
                             <DockPanel Grid.Column="1">

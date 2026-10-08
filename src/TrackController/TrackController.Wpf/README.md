@@ -14,10 +14,28 @@ dotnet run --project src/TrackController/TrackController.Wpf
 
 For a demonstration, also start **TrackController.TestUI.Wpf**. In the operator
 window choose **Controller setup**, pick a line in the selector, and select
-**Load sample layout**. The Green Line sample starts two territories on the PC;
+**Load setup**. The Green Line sample starts two territories on the PC;
 the Blue Line sample starts one. Both load the sample PLC and start paused. In the
 Test UI load **Clear route** and select **Send feedback**, then select **Resume**
 in this window and **Send movement request** in the Test UI.
+
+Choose **Saved setup file…** in the same selector and select **Load setup** to
+open a `.deployment.json` file. A setup includes its track, territory ownership,
+PC/Pi assignments, and PLC program. Loading requires pause and fresh feedback
+afterward. Choosing an item alone does not replace the active setup.
+
+The collapsed **Advanced** section contains **Replace PLC…** to change only the
+program, preserving the track and assignments. The built-in setup already loads
+its PLC, so no additional program-loading step is needed for a demonstration.
+
+**Advanced → Use standalone controller** returns to the
+original PC controller for software-logic or single-territory tests. It does not
+load the selected line or a PLC automatically. Check the logic/program status;
+use **Change territory…**, the logic selector, and **Replace PLC…** for this advanced workflow.
+
+The footer shows CTC and Track Model connection states together and changes only
+when a receiver becomes available or unavailable. Routine feedback and output
+publication continue without replacing operator messages; rejected inputs remain visible.
 
 ## Blue Line prototype
 
@@ -61,6 +79,14 @@ contains simulated measurements, CTC requests, and captured controller outputs.
 There is no Test/Live switch: either the real modules or their test replacements
 connect to the same controller interface.
 
+Manual command acceptance or rejection stays visible beside the manual controls
+in **Wayside equipment**. Switch rejection identifies the occupied, unavailable,
+faulted, reserved, or authority-protected block. A paused CTC switch request
+requires Resume or maintenance mode; PLC mode also requires a valid program.
+For a sample switch demonstration, send the Test UI's **All blocks clear** preset
+first. A successful command changes **Command**; **Reported** changes only when
+Track Model or the Test UI sends the actual position.
+
 **Reset controller** pauses and clears feedback and movement requests. It retains
 the applied deployment and PLC. Stop Test UI repeats before resetting; otherwise
 the external simulator will continue sending measurements. Send fresh feedback
@@ -87,14 +113,14 @@ Automated tests remain in the existing repository `tests` directory:
 
 ## Movement and protection rules
 
-- A request explicitly identifies its target block, front offset in meters, ordered path of **subsequent** blocks, speed, authority, and request ID. The target must be occupied; occupancy does not identify a train. The optional train label comes only from CTC. If the target itself is a switch, also supply `entryBlockId` to establish the incoming leg.
-- Authority is measured from the supplied front offset along the target block and path. A repeated output is the **same anchored limit**, not a fresh distance allowance. Track Model/Train Controller must subtract traveled distance. Use a new request ID for a new origin or route. Once the target clears, its old request can never authorize another occupant.
+- A request identifies its occupied target block, ordered path of **subsequent** blocks, speed, route limit, and request ID. It does not require a train position within the block. The optional train label comes only from CTC; occupancy does not identify a train. If the target itself is a switch, also supply `entryBlockId` to establish the incoming leg.
+- Request and output `authorityReference` is `TargetBlockEntry`: the numeric limit is measured from the target block's entry along the ordered route. It defines a fixed endpoint, **not remaining distance from the train**. For a 100 m target block followed by another 100 m block, a 150 m limit ends 50 m into the second block regardless of where the train is. The receiver that knows train position must calculate remaining distance to that endpoint; do not restart the allowance on repeated output or assume an unknown position is zero. Use a new request ID for a new target block or route. Once the target clears, its old request cannot authorize another occupant. Old requests carrying `frontOffsetMeters` are rejected rather than silently reinterpreted.
 - Directed topology, ownership, speed limits, occupancy, faults, maintenance, fresh feedback, and switch alignment constrain permission. For bidirectional track, list each allowed direction in `nextBlockIds`; switch definitions identify the stem, normal branch, and reverse branch. Reverse travel must use the aligned branch-to-stem connection; branch-to-branch travel is denied. Front offset is measured along the request's travel direction. Authority never extends beyond the supplied route/territory. Overlapping active requests both stop; this is local movement protection, not inferred CTC reservation ownership.
 - Missing/unknown/stale feedback on the evaluated route withholds authority. Valid feedback restores eligibility without erasing maintenance or reported faults. Out-of-order/replayed feedback cannot refresh the watchdog.
 - An occupied or closed block ahead ends authority before that block. Closing an occupied or unknown block enters **Pending closure**: new entry is denied; an existing occupant may leave. Fresh clear feedback completes closure. Only an explicit reopen clears it.
 - Switch movement requires its entire configured protection zone to be fresh, clear, fault-free, explicitly unreserved, and outside active positive authority. Movement through the switch waits for matching reported alignment. `IsReservedByCtc = null` is unknown and blocks switch movement.
 - Crossings close for occupied, unknown, stale, or faulted protection blocks, an active request across the crossing, or a protective manual command. They open only after all those conditions clear. The zone must include approaches in the supplied configuration. Crossing closed feedback is required before movement across it, and signals stay red while waiting.
-- Signals default red. A protected route requests a proceed aspect; red/unknown reported signals withhold movement. A Yellow command or feedback caps speed at 5 m/s. That is a documented prototype default, not a braking-distance model.
+- Signals default red. A protected route requests a proceed aspect; red/unknown reported signals withhold movement. Super Green is available as reported feedback and adds no signal speed cap, as with Green. Track speed limits, CTC requested speed, granted authority, and all protection checks still apply. A Yellow command or feedback caps speed at 5 m/s. That is a documented prototype default, not a braking-distance model.
 - Manual commands require maintenance mode, which withholds automatic movement. Switch protection still applies. A manual signal may be set to Red; a proceed aspect requires automatic route protection. A crossing cannot be manually opened over an active protection condition.
 - A separate guard rechecks every positive authorization against the resulting block/equipment snapshot and topology. This is a simulation safety implementation, not a certified vital controller, redundant hardware platform, or formal safety proof.
 - Watchdogs use wall time, independent of pause and the 1×–10× simulation clock. Defaults: feedback 5 s, request 10 s. Configuration accepts feedback 1–60 s and request 1–120 s.
@@ -129,7 +155,7 @@ The `Wayside*` inputs and outputs are controller extensions used by the external
 Use the Common serializer rather than building JSON by hand. Existing shared feedback is timestamped on arrival; it cannot provide reservation confirmation or all richer fault data. The test/Pi extension `WaysideFeedbackMessage` carries explicit measurement timestamps, optional actual speed, reservation status, and equipment feedback. Mode/program requests are operator/simulation controls; they still pass through the same validation boundary in the test UI.
 
 ```json
-{"messageType":"WaysideMovementRequestMessage","payload":{"requestId":"example-1","trainId":"Train 101","targetBlockId":"5","frontOffsetMeters":0,"pathBlockIds":["6","7","8"],"suggestedSpeedMetersPerSecond":11.176,"suggestedAuthorityMeters":365.76,"active":true}}
+{"messageType":"WaysideMovementRequestMessage","payload":{"requestId":"example-1","trainId":"Train 101","targetBlockId":"5","authorityReference":"TargetBlockEntry","pathBlockIds":["6","7","8"],"suggestedSpeedMetersPerSecond":11.176,"suggestedAuthorityMeters":365.76,"active":true}}
 ```
 
 ```json

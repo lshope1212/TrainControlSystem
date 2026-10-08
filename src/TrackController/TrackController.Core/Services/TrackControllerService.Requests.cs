@@ -13,7 +13,7 @@ public sealed partial class TrackControllerService
         ArgumentNullException.ThrowIfNull(message);
         lock (_gate)
         {
-            var target = GetOwnedBlock(message.TargetBlockId);
+            GetOwnedBlock(message.TargetBlockId);
             if (string.IsNullOrWhiteSpace(message.RequestId) || message.RequestId.Length > 128 || message.TrainId is null || message.TrainId.Length > 128)
             {
                 throw new ArgumentException("Provide a request ID (up to 128 characters). The train label is optional.");
@@ -33,12 +33,12 @@ public sealed partial class TrackControllerService
 
             if (_retiredRequests.Contains(message.RequestId))
             {
-                throw new ArgumentException("This request's target block cleared. Submit a new request ID and current front position.");
+                throw new ArgumentException("This request's target block cleared. Submit a new request ID and current target block.");
             }
 
-            if (message.FrontOffsetMeters is not double offset || !double.IsFinite(offset) || offset < 0 || offset >= target.Definition.LengthMeters || !double.IsFinite(message.SuggestedSpeedMetersPerSecond) || message.SuggestedSpeedMetersPerSecond < 0 || !double.IsFinite(message.SuggestedAuthorityMeters) || message.SuggestedAuthorityMeters < 0 || message.PathBlockIds is null || message.PathBlockIds.Count > _blocks.Count)
+            if (message.AuthorityReference != WaysideMovementRequestMessage.BlockEntryReference || !double.IsFinite(message.SuggestedSpeedMetersPerSecond) || message.SuggestedSpeedMetersPerSecond < 0 || !double.IsFinite(message.SuggestedAuthorityMeters) || message.SuggestedAuthorityMeters < 0 || message.PathBlockIds is null || message.PathBlockIds.Count > _blocks.Count)
             {
-                throw new ArgumentException("Specify a front offset within the target block and finite, nonnegative speed/authority.");
+                throw new ArgumentException("Use a route limit measured from the target block's entry and finite, nonnegative speed/authority.");
             }
 
             var path = new[]
@@ -74,8 +74,8 @@ public sealed partial class TrackControllerService
                 throw new InvalidOperationException("Request ID history is full. Restart the controller while the simulation is stopped.");
             }
 
-            _requestOrigins[message.RequestId] = new RequestOrigin(message.TargetBlockId, message.EntryBlockId, offset, [.. message.PathBlockIds]);
-            _requests[message.TargetBlockId] = new Request(new WaysideMovementRequestMessage { RequestId = message.RequestId, TrainId = message.TrainId, TargetBlockId = message.TargetBlockId, EntryBlockId = message.EntryBlockId, FrontOffsetMeters = offset, PathBlockIds = [.. message.PathBlockIds], SuggestedAuthorityMeters = message.SuggestedAuthorityMeters, SuggestedSpeedMetersPerSecond = message.SuggestedSpeedMetersPerSecond }, _clock.GetUtcNow());
+            _requestOrigins[message.RequestId] = new RequestOrigin(message.TargetBlockId, message.EntryBlockId, [.. message.PathBlockIds]);
+            _requests[message.TargetBlockId] = new Request(new WaysideMovementRequestMessage { RequestId = message.RequestId, TrainId = message.TrainId, TargetBlockId = message.TargetBlockId, EntryBlockId = message.EntryBlockId, PathBlockIds = [.. message.PathBlockIds], SuggestedAuthorityMeters = message.SuggestedAuthorityMeters, SuggestedSpeedMetersPerSecond = message.SuggestedSpeedMetersPerSecond }, _clock.GetUtcNow());
             Reevaluate();
         }
     }
@@ -86,19 +86,11 @@ public sealed partial class TrackControllerService
         lock (_gate)
         {
             var block = GetOwnedBlock(message.BlockId);
-            if (block.Definition.NormalNextBlockId is null || message.RequestedPosition is not (SwitchPosition.Normal or SwitchPosition.Reverse))
-            {
-                throw new ArgumentException("Select an owned switch and Normal or Reverse.");
-            }
-
-            if (!CanMoveSwitch(block))
-            {
-                throw new InvalidOperationException("Switch protected: protection blocks must be fresh, clear, fault-free, explicitly unreserved, and outside active authority.");
-            }
+            ValidateSwitchCommand(block, message.RequestedPosition);
 
             block.DesiredSwitch = message.RequestedPosition;
             Reevaluate();
-            return "Switch request accepted. Authority waits for matching feedback.";
+            return $"Switch {message.BlockId}: requested {message.RequestedPosition}, commanded {block.CommandedSwitch}. Track Model must report the actual position separately.";
         }
     }
 
@@ -130,9 +122,9 @@ public sealed partial class TrackControllerService
             }
 
             var block = GetOwnedBlock(message.BlockId);
-            if (message.Switch is not null && (block.Definition.NormalNextBlockId is null || message.Switch is not (SwitchPosition.Normal or SwitchPosition.Reverse) || !CanMoveSwitch(block)))
+            if (message.Switch is { } requestedPosition)
             {
-                throw new InvalidOperationException("Manual switch movement is blocked by the switch protection zone.");
+                ValidateSwitchCommand(block, requestedPosition);
             }
 
             if (message.Signal is not null && (!block.Definition.HasSignal || message.Signal != SignalState.Red))
@@ -164,11 +156,61 @@ public sealed partial class TrackControllerService
         }
     }
 
-    private bool CanMoveSwitch(Block block) => block.Definition.SwitchProtectionBlockIds.All(id =>
+    private void ValidateSwitchCommand(Block block, SwitchPosition position)
+    {
+        if (block.Definition.NormalNextBlockId is null || position is not (SwitchPosition.Normal or SwitchPosition.Reverse))
+        {
+            throw new ArgumentException("Select an owned switch and Normal or Reverse.");
+        }
+
+        if (_hardwareMode && _plc is null)
+        {
+            throw new InvalidOperationException($"Switch {block.Definition.BlockId}: load a valid PLC program before sending a switch command.");
+        }
+
+        if (_paused && !_maintenanceMode)
+        {
+            throw new InvalidOperationException($"Switch {block.Definition.BlockId}: simulation is paused. Resume or enable maintenance mode before sending a switch command.");
+        }
+
+        if (GetSwitchProtectionReason(block) is { } reason)
+        {
+            throw new InvalidOperationException(reason);
+        }
+    }
+
+    private bool CanMoveSwitch(Block block) => GetSwitchProtectionReason(block) is null;
+
+    private string? GetSwitchProtectionReason(Block block)
+    {
+        string prefix = $"Switch {block.Definition.BlockId} locked: ";
+        foreach (string id in block.Definition.SwitchProtectionBlockIds)
         {
             var zone = GetBlock(id);
-            return IsFresh(zone) && zone.Feedback is { Occupancy: OccupancyState.Clear, IsFaulted: false, IsReservedByCtc: false };
-        }) && !(_snapshot?.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.TargetBlockId }.Concat(authorization.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any()) ?? false);
+            if (!IsFresh(zone))
+            {
+                return $"{prefix}block {id} needs fresh feedback.";
+            }
+
+            if (zone.Feedback!.Occupancy != OccupancyState.Clear)
+            {
+                return $"{prefix}block {id} is {(zone.Feedback.Occupancy == OccupancyState.Occupied ? "occupied" : "of unknown occupancy")}.";
+            }
+
+            if (zone.Feedback.IsFaulted)
+            {
+                return $"{prefix}block {id} reports a fault.";
+            }
+
+            if (zone.Feedback.IsReservedByCtc != false)
+            {
+                return $"{prefix}block {id} is {(zone.Feedback.IsReservedByCtc == true ? "reserved by CTC" : "missing CTC reservation feedback")}.";
+            }
+        }
+
+        var movement = _snapshot?.Authorizations.FirstOrDefault(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.TargetBlockId }.Concat(authorization.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any());
+        return movement is null ? null : $"{prefix}active movement from block {movement.TargetBlockId} uses its protection zone.";
+    }
 
     private bool CrossingRequired(Block block) => block.Definition.CrossingProtectionBlockIds.Any(id =>
         {

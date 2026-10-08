@@ -68,7 +68,6 @@ public sealed class WaysideSafetyTests
             RequestId = Guid.NewGuid().ToString("N"),
             TrainId = "CTC label",
             TargetBlockId = target,
-            FrontOffsetMeters = 0,
             PathBlockIds = path.Length > 0 ? [.. path] : ["6", "7", "8"],
             SuggestedSpeedMetersPerSecond = 12,
             SuggestedAuthorityMeters = 350
@@ -104,6 +103,31 @@ public sealed class WaysideSafetyTests
         var authorization = fixture.Submit();
         Assert.AreEqual(350d, authorization.AuthorizedAuthorityMeters);
         Assert.AreEqual(12d, authorization.AuthorizedSpeedMetersPerSecond);
+    }
+
+    /// <summary>Allows Super Green without a signal speed cap while retaining track limits and route protection.</summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_SuperGreen_PreservesTrackAndAuthorityLimits(bool hardware)
+    {
+        var fixture = new Fixture(hardware);
+        fixture.Feedback(rows => rows.ForEach(row => row.Signal = SignalState.SuperGreen));
+        var request = fixture.Request();
+        request.SuggestedSpeedMetersPerSecond = 100;
+        var result = fixture.Submit(request);
+        Assert.AreEqual(15d, result.AuthorizedSpeedMetersPerSecond);
+        Assert.AreEqual(350d, result.AuthorizedAuthorityMeters);
+        var snapshot = fixture.Service.GetSnapshot();
+        Assert.IsTrue(AuthorizationGuard.IsSafe(result, snapshot.Blocks, fixture.Service.GetConfiguration()));
+
+        fixture.Feedback(rows => rows.ForEach(row => row.Signal = SignalState.Yellow));
+        Assert.AreEqual(5d, fixture.Output.AuthorizedSpeedMetersPerSecond);
+        fixture.Feedback(rows => rows.ForEach(row => row.Signal = SignalState.Red));
+        Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
+        fixture.Feedback(rows => rows.ForEach(row => row.Signal = SignalState.SuperGreen));
+        fixture.Service.SetSimulation(new() { IsPaused = true });
+        Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters, "Super Green cannot override pause.");
     }
 
     /// <summary>Verifies that hardware cannot resume without aprogram.</summary>
@@ -177,15 +201,16 @@ public sealed class WaysideSafetyTests
         Assert.AreEqual(8d, fixture.Submit(request).AuthorizedSpeedMetersPerSecond);
     }
 
-    /// <summary>Verifies that authority accounts for offset and territory end.</summary>
+    /// <summary>Locates the authority endpoint from the block entry without requiring train position.</summary>
     [TestMethod]
-    public void SubmitMovement_FrontOffsetAndTerritoryEnd_LimitsAuthority()
+    public void SubmitMovement_BlockEntryAndTerritoryEnd_LimitsAuthority()
     {
         var fixture = new Fixture();
         var request = fixture.Request();
-        request.FrontOffsetMeters = 60;
         request.SuggestedAuthorityMeters = 900;
-        Assert.AreEqual(340d, fixture.Submit(request).AuthorizedAuthorityMeters);
+        var result = fixture.Submit(request);
+        Assert.AreEqual(400d, result.AuthorizedAuthorityMeters);
+        Assert.AreEqual(WaysideMovementRequestMessage.BlockEntryReference, result.AuthorityReference);
     }
 
     /// <summary>Verifies that unknown block withholds movement.</summary>
@@ -269,7 +294,9 @@ public sealed class WaysideSafetyTests
     public void RequestSwitch_OccupiedApproach_RejectsMovement()
     {
         var fixture = new Fixture();
-        Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
+        StringAssert.Contains(exception.Message, "block 5");
+        StringAssert.Contains(exception.Message, "occupied");
     }
 
     /// <summary>Verifies that unknown reservation blocks switch movement.</summary>
@@ -282,7 +309,34 @@ public sealed class WaysideSafetyTests
             feedback.Occupancy = OccupancyState.Clear;
             feedback.IsReservedByCtc = null;
         }));
-        Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
+        StringAssert.Contains(exception.Message, "reservation feedback");
+    }
+
+    /// <summary>Rejects a paused request explicitly rather than silently applying it after a later resume.</summary>
+    [TestMethod]
+    public void RequestSwitch_Paused_RejectsWithoutQueuingCommand()
+    {
+        var fixture = new Fixture();
+        fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = OccupancyState.Clear));
+        fixture.Service.SetSimulation(new() { IsPaused = true });
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
+        StringAssert.Contains(exception.Message, "paused");
+        fixture.Service.SetSimulation(new() { IsPaused = false });
+        Assert.AreEqual(SwitchPosition.Normal, fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "6").CommandedSwitch);
+    }
+
+    /// <summary>Reports the missing PLC when maintenance permits manual operation but no program is loaded.</summary>
+    [TestMethod]
+    public void ApplyManual_MissingPlc_RejectsSwitchCommand()
+    {
+        var fixture = new Fixture();
+        fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = OccupancyState.Clear));
+        fixture.Service.SetHardwareMode(true);
+        fixture.Service.SetMaintenanceMode(true);
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(new() { BlockId = "6", Switch = SwitchPosition.Reverse }));
+        StringAssert.Contains(exception.Message, "valid PLC");
+        Assert.AreEqual(SwitchPosition.Normal, fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "6").CommandedSwitch);
     }
 
     /// <summary>Verifies that maintenance on occupied block allows exit then closes.</summary>
@@ -439,7 +493,9 @@ public sealed class WaysideSafetyTests
         var fixture = new Fixture();
         var request = fixture.Request();
         fixture.Submit(request);
-        request.FrontOffsetMeters = 5;
+        request.TargetBlockId = "6";
+        request.EntryBlockId = "5";
+        request.PathBlockIds = ["7", "8"];
         Assert.Throws<ArgumentException>(() => fixture.Service.SubmitMovement(request));
     }
 
@@ -608,9 +664,9 @@ public sealed class WaysideSafetyTests
             Assert.Throws<ArgumentException>(() => fixture.Submit(request));
         }
 
-        var noOrigin = fixture.Request();
-        noOrigin.FrontOffsetMeters = null;
-        Assert.Throws<ArgumentException>(() => fixture.Submit(noOrigin));
+        var unsupportedReference = fixture.Request();
+        unsupportedReference.AuthorityReference = "TrainFront";
+        Assert.Throws<ArgumentException>(() => fixture.Submit(unsupportedReference));
     }
 
     /// <summary>Verifies that invalid feedback batch does not partially apply.</summary>
@@ -641,6 +697,10 @@ public sealed class WaysideSafetyTests
         var fixture = new Fixture();
         var authorization = fixture.Submit();
         var snapshot = fixture.Service.GetSnapshot();
+        Assert.IsFalse(AuthorizationGuard.IsSafe(authorization with
+        {
+            AuthorityReference = "TrainFront"
+        }, snapshot.Blocks, fixture.Service.GetConfiguration()));
         Assert.IsFalse(AuthorizationGuard.IsSafe(authorization with
         {
             AuthorizedAuthorityMeters = 5000

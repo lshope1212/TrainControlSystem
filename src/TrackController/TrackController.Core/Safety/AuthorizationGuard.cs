@@ -9,7 +9,7 @@ public static class AuthorizationGuard
     /// <summary>Independently checks a proposed authorization against topology and measured conditions.</summary>
     public static bool IsSafe(WaysideAuthorization output, IReadOnlyList<WaysideBlockStatus> blocks, WaysideConfigurationMessage configuration)
     {
-        if (!double.IsFinite(output.AuthorizedAuthorityMeters) || !double.IsFinite(output.AuthorizedSpeedMetersPerSecond) || output.AuthorizedAuthorityMeters < 0 || output.AuthorizedSpeedMetersPerSecond < 0)
+        if (output.AuthorityReference != WaysideMovementRequestMessage.BlockEntryReference || !double.IsFinite(output.AuthorizedAuthorityMeters) || !double.IsFinite(output.AuthorizedSpeedMetersPerSecond) || output.AuthorizedAuthorityMeters < 0 || output.AuthorizedSpeedMetersPerSecond < 0)
         {
             return false;
         }
@@ -48,7 +48,7 @@ public static class AuthorizationGuard
                 return false;
             }
 
-            if (block.HasSignal && (block.CommandedSignal == SignalState.Red || block.ReportedSignal is SignalState.Red or SignalState.Unknown))
+            if (block.HasSignal && (block.CommandedSignal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow) || block.ReportedSignal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow)))
             {
                 return false;
             }
@@ -58,12 +58,7 @@ public static class AuthorizationGuard
                 return false;
             }
 
-            if (i == 0 && (!double.IsFinite(output.FrontOffsetMeters) || output.FrontOffsetMeters < 0 || output.FrontOffsetMeters >= block.LengthMeters))
-            {
-                return false;
-            }
-
-            remaining -= block.LengthMeters - (i == 0 ? output.FrontOffsetMeters : 0);
+            remaining -= block.LengthMeters;
             if (remaining > 0.000001 && (i + 1 >= sequence.Length || !block.NextBlockIds.Contains(sequence[i + 1])))
             {
                 return false;

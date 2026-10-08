@@ -4,12 +4,15 @@ using TrainControl.Contracts.Enums;
 namespace TrackController.Contracts.Messages;
 
 /// <summary>
-/// Authority is measured from the specified front position along TargetBlockId + PathBlockIds.
-/// Repeated status reports retain this origin; receivers must subtract traveled distance,
-/// never restart the distance on receipt. TrainId is a CTC label, not inferred from occupancy.
+/// Authority defines a fixed route limit from the entry of TargetBlockId along TargetBlockId + PathBlockIds.
+/// It is not remaining distance from the train. The receiver must locate the train relative to that limit.
+/// TrainId is a CTC label, not inferred from occupancy.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class WaysideMovementRequestMessage
 {
+    public const string BlockEntryReference = "TargetBlockEntry";
+
     public string RequestId { get; set; } = "";
 
     public string TrainId { get; set; } = "";
@@ -18,7 +21,7 @@ public sealed class WaysideMovementRequestMessage
 
     public string? EntryBlockId { get; set; }
 
-    public double? FrontOffsetMeters { get; set; }
+    public string AuthorityReference { get; set; } = BlockEntryReference;
 
     public List<string> PathBlockIds { get; set; } = [];
 

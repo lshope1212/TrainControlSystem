@@ -8,7 +8,7 @@ public sealed partial class MainWindowViewModel
 {
     private string _scenario = "Clear route";
     // Form buffers are applied only by their explicit Send / Apply command.
-    private string _targetBlock = "5", _trainLabel = "Train 101", _speed = "25", _authority = "1200", _offset = "0", _path = "6, 7, 8";
+    private string _targetBlock = "5", _trainLabel = "Train 101", _speed = "25", _path = "6, 7, 8";
     private string _entryBlock = "";
     private string _switchTarget = "6", _maintenanceTarget = "12", _feedbackSwitch = "6", _feedbackSignal = "4", _feedbackCrossing = "8";
     private SwitchPosition _requestedSwitch = SwitchPosition.Normal, _reportedSwitch = SwitchPosition.Normal;
@@ -25,7 +25,10 @@ public sealed partial class MainWindowViewModel
         {
             if (value is not null)
             {
-                SetProperty(ref _targetBlock, value);
+                if (SetProperty(ref _targetBlock, value))
+                {
+                    OnPropertyChanged(nameof(RequestedAuthority));
+                }
             }
         }
     }
@@ -48,22 +51,18 @@ public sealed partial class MainWindowViewModel
         set => SetProperty(ref _speed, value);
     }
 
-    public string RequestedAuthority
-    {
-        get => _authority;
-        set => SetProperty(ref _authority, value);
-    }
-
-    public string FrontOffset
-    {
-        get => _offset;
-        set => SetProperty(ref _offset, value);
-    }
+    public string RequestedAuthority => CalculateDraftAuthority() is double distance ? (distance / DisplayUnits.MetersPerFoot).ToString("0.##", System.Globalization.CultureInfo.CurrentCulture) : "—";
 
     public string RequestedPath
     {
         get => _path;
-        set => SetProperty(ref _path, value);
+        set
+        {
+            if (SetProperty(ref _path, value))
+            {
+                OnPropertyChanged(nameof(RequestedAuthority));
+            }
+        }
     }
 
     public string SwitchTarget
@@ -73,7 +72,10 @@ public sealed partial class MainWindowViewModel
         {
             if (value is not null)
             {
-                SetProperty(ref _switchTarget, value);
+                if (SetProperty(ref _switchTarget, value))
+                {
+                    OnPropertyChanged(nameof(SwitchFeedbackStatus));
+                }
             }
         }
     }
@@ -186,13 +188,13 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    public string[] Scenarios { get; } = ["Clear route", "Switch mismatch", "Occupied route", "Track fault", "Crossing awaiting feedback"];
+    public string[] Scenarios { get; } = ["Clear route", "All blocks clear", "Switch mismatch", "Occupied route", "Track fault", "Crossing awaiting feedback"];
 
     public Array Occupancies { get; } = Enum.GetValues<OccupancyState>();
 
     public Array SwitchPositions { get; } = Enum.GetValues<SwitchPosition>();
 
-    public Array SignalStates { get; } = Enum.GetValues<SignalState>();
+    public KeyValuePair<SignalState, string>[] SignalStates { get; } = Enum.GetValues<SignalState>().Select(state => new KeyValuePair<SignalState, string>(state, state == SignalState.SuperGreen ? "Super Green" : state.ToString())).ToArray();
 
     public Array CrossingStates { get; } = Enum.GetValues<CrossingState>();
 
@@ -210,6 +212,7 @@ public sealed partial class MainWindowViewModel
     public string ScenarioDescription => Plan is not { } plan ? "Presets need a layout with a switch. Edit feedback for your loaded territory directly." : Scenario switch
     {
         "Clear route" => $"Block {plan.Target} occupied; route {string.Join(" → ", plan.Path)} clear, switch normal, signals green, crossing closed.",
+        "All blocks clear" => "All blocks clear and unreserved for equipment testing. Send feedback, then resume or enable maintenance mode before requesting a switch change.",
         "Switch mismatch" => $"Switch {plan.SwitchId} reversed. A request through {plan.SwitchId} → {plan.NormalExit} will be withheld.",
         "Occupied route" => $"Block {plan.NormalExit} occupied. Authority stops before the occupied block.",
         "Track fault" => $"Block {plan.NormalExit} reports a fault. The route will be withheld.",
@@ -281,15 +284,15 @@ public sealed partial class MainWindowViewModel
             RequestId = Guid.NewGuid().ToString("N"),
             TrainId = TrainLabel,
             TargetBlockId = TargetBlock,
-            FrontOffsetMeters = ParseNumber(FrontOffset, "Front offset") * DisplayUnits.MetersPerFoot,
             EntryBlockId = string.IsNullOrWhiteSpace(EntryBlock) ? null : EntryBlock.Trim(),
             SuggestedSpeedMetersPerSecond = ParseNumber(SuggestedSpeed, "Suggested speed") * DisplayUnits.MetersPerSecondPerMph,
-            SuggestedAuthorityMeters = ParseNumber(RequestedAuthority, "Requested authority") * DisplayUnits.MetersPerFoot,
-            PathBlockIds = RequestedPath.Split([',', ' ', '→', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+            SuggestedAuthorityMeters = CalculateDraftAuthority() ?? throw new ArgumentException("Enter a connected route using distinct blocks in this layout to calculate authority."),
+            PathBlockIds = ParseRequestedPath()
         };
         await SendAsync(request);
-        _appliedRequest = request;
+        SetAppliedRequest(request);
         SelectedBlockId = TargetBlock;
+        MovementProgress = $"Following the last sent route from block {request.TargetBlockId}. Send feedback as occupancy moves to its next block.";
     }
 
     private async Task ApplyFeedbackAsync()
@@ -305,6 +308,7 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(HasUnsentFeedback));
         OnPropertyChanged(nameof(FeedbackDraftStatus));
         Status = ShouldRepeatInputs ? "Track feedback sent. Repeating the sent values every second." : "Track feedback sent once. It expires after the configured timeout (5 seconds by default).";
+        await FollowMovementAsync(message);
     }
 
     private async Task ApplyLatchedFeedbackAsync()
@@ -343,7 +347,7 @@ public sealed partial class MainWindowViewModel
         FeedbackCrossing = plan.CrossingId ?? FeedbackCrossing;
         foreach (var row in FeedbackRows)
         {
-            row.Occupancy = row.BlockId == plan.Target ? OccupancyState.Occupied : OccupancyState.Clear;
+            row.Occupancy = Scenario != "All blocks clear" && row.BlockId == plan.Target ? OccupancyState.Occupied : OccupancyState.Clear;
             row.IsFaulted = false;
             row.IsReserved = false;
             row.Signal = SignalState.Green;

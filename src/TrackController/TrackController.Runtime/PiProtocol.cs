@@ -6,7 +6,7 @@ namespace TrackController.Runtime;
 /// <summary>Shared message envelopes over an ordered request/reply stream inside an SSH tunnel.</summary>
 internal sealed class PiProtocol : IDisposable
 {
-    public const int Version = 2;
+    public const int Version = 3;
     private const int MaxCharacters = 1_048_576;
     private readonly StreamReader _reader;
     private readonly StreamWriter _writer;

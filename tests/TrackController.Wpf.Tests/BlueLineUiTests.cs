@@ -1,5 +1,6 @@
 using TrackController.Runtime;
 using TrackController.Tests;
+using TrainControl.Contracts.Enums;
 using OperatorModel = TrackController.Wpf.ViewModels.MainWindowViewModel;
 using static TrackController.Wpf.Tests.UiTestSession;
 
@@ -10,7 +11,85 @@ namespace TrackController.Wpf.Tests;
 [DoNotParallelize]
 public sealed class BlueLineUiTests
 {
-    /// <summary>Ensures every sample offered by Load sample layout is bundled and loads.</summary>
+    /// <summary>Combines Blue Line presets with CTC and manual switch commands, preserving separate actual feedback.</summary>
+    [TestMethod]
+    public Task SendSwitchCommand_BlueLineAllClear_UsesSwitchFiveAndReportsFeedback() => RunAsync(async session =>
+    {
+        var inputs = session.Inputs;
+        var controller = session.Controller;
+        controller.SelectedSetup = "Blue Line";
+        Assert.AreEqual("Green Line", inputs.Snapshot.LineName, "Choosing a setup must not apply it before Load setup.");
+        await ExecuteAsync(controller.LoadSetupCommand);
+        await UntilAsync(() => inputs.Snapshot.LineName == "Blue Line" && inputs.Blocks.Count == 15);
+        Assert.IsTrue(inputs.Snapshot.IsHardwareMode);
+        StringAssert.Contains(inputs.Snapshot.PlcStatus, "Program loaded");
+        StringAssert.Contains(controller.Status, "loaded with wayside.plc");
+        await ExecuteAsync(inputs.LoadScenarioCommand);
+        await ExecuteAsync(inputs.ApplyFeedbackCommand);
+        await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
+        await ExecuteAsync(controller.PauseResumeCommand);
+        await UntilAsync(() => !inputs.Snapshot.IsPaused);
+        Assert.IsFalse(controller.LoadSetupCommand.CanExecute(null), "Pause before replacing a running setup.");
+        inputs.RequestedSwitch = SwitchPosition.Reverse;
+        await ExecuteAsync(inputs.SendSwitchCommand);
+        await UntilAsync(() => inputs.SwitchRequestResult.Contains("block 4 is occupied"));
+
+        inputs.Scenario = "All blocks clear";
+        await ExecuteAsync(inputs.LoadScenarioCommand);
+        Assert.IsTrue(inputs.FeedbackRows.All(row => row.Occupancy == OccupancyState.Clear && row.IsReserved == false));
+        await ExecuteAsync(inputs.ApplyFeedbackCommand);
+        await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh && block.Occupancy == OccupancyState.Clear));
+        await ExecuteAsync(inputs.SendSwitchCommand);
+        await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == "5").CommandedSwitch == SwitchPosition.Reverse);
+        Assert.AreEqual(SwitchPosition.Normal, inputs.Blocks.Single(block => block.BlockId == "5").ReportedSwitch);
+        inputs.ReportedSwitch = SwitchPosition.Reverse;
+        await ExecuteAsync(inputs.ApplyFeedbackCommand);
+        await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == "5").ReportedSwitch == SwitchPosition.Reverse);
+
+        controller.IsMaintenanceMode = true;
+        await UntilAsync(() => inputs.Snapshot.IsMaintenanceMode);
+        Assert.AreEqual("5", controller.ManualTarget);
+        controller.ManualAction = "Switch normal";
+        await ExecuteAsync(controller.SendManualCommand);
+        await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == "5").CommandedSwitch == SwitchPosition.Normal);
+        Assert.AreEqual(SwitchPosition.Reverse, inputs.Blocks.Single(block => block.BlockId == "5").ReportedSwitch);
+        StringAssert.Contains(controller.ManualCommandResult, "Accepted");
+    });
+
+    /// <summary>Preserves cancellation's original target and clears that target when a new line replaces the layout.</summary>
+    [TestMethod]
+    public Task CancelMovementCommand_BlueLineThenGreen_PreservesTargetAndResetsWithLayout() => RunAsync(async session =>
+    {
+        var inputs = session.Inputs;
+        var controller = session.Controller;
+        controller.SelectedSetup = "Blue Line";
+        await ExecuteAsync(controller.LoadSetupCommand);
+        await UntilAsync(() => inputs.Snapshot.LineName == "Blue Line" && inputs.Blocks.Count == 15);
+        await ExecuteAsync(inputs.SendMovementCommand);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1);
+        inputs.TargetBlock = "15";
+        StringAssert.Contains(inputs.CancelMovementLabel, "block 4");
+        await ExecuteAsync(inputs.CancelMovementCommand);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 0);
+        Assert.IsFalse(inputs.CancelMovementCommand.CanExecute(null));
+
+        inputs.TargetBlock = "4";
+        await ExecuteAsync(inputs.SendMovementCommand);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1);
+        bool descriptionUpdated = false;
+        inputs.PropertyChanged += (_, change) => descriptionUpdated |= change.PropertyName == nameof(inputs.ScenarioDescription);
+        controller.SelectedSetup = "Green Line";
+        await ExecuteAsync(controller.LoadSetupCommand);
+        await UntilAsync(() => inputs.Snapshot.LineName == "Green Line" && inputs.Blocks.Count == 12);
+        Assert.IsTrue(descriptionUpdated);
+        Assert.IsFalse(inputs.CancelMovementCommand.CanExecute(null));
+        Assert.AreEqual("5", inputs.TargetBlock);
+        Assert.AreEqual("6, 7, 8", inputs.RequestedPath);
+        Assert.AreEqual("6", controller.ManualTarget);
+        StringAssert.StartsWith(inputs.ScenarioDescription, "Block 5 occupied");
+    });
+
+    /// <summary>Ensures every built-in line is bundled with a loadable setup.</summary>
     [TestMethod]
     public void SampleLines_EachEntry_ReferencesLoadableDeployment()
     {
@@ -66,7 +145,15 @@ public sealed class BlueLineUiTests
         await UntilAsync(() => !inputs.Snapshot.IsPaused);
         await ExecuteAsync(inputs.SendMovementCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
-        Assert.AreEqual(200, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
+        Assert.AreEqual(150, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
+
+        inputs.FeedbackSignal = "6";
+        inputs.ReportedSignal = SignalState.SuperGreen;
+        await ExecuteAsync(inputs.ApplyFeedbackCommand);
+        await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == "6").ReportedSignal == SignalState.SuperGreen);
+        await UntilAsync(() => controller.Equipment.Single(row => row.Equipment == "Signal 6").Feedback == "Super Green");
+        Assert.IsGreaterThan(0, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters);
+        Assert.AreEqual("TargetBlockEntry", inputs.Snapshot.Authorizations.Single().AuthorityReference);
 
         inputs.Scenario = "Switch mismatch";
         await ExecuteAsync(inputs.LoadScenarioCommand);

@@ -34,7 +34,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     };
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher;
-    private string _status = "Open Controller setup to load a layout and choose PLC or software logic.";
+    private string _status = "Open Controller setup, choose a line, then select Load setup.";
     private string _connection = "Starting local connection…";
     private string _selectedBlockId = "5";
     private WaysideSnapshotMessage _snapshot = null!;
@@ -48,7 +48,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     private int _speedMultiplier = 1;
     private int _tabIndex;
     private string? _deploymentPath;
-    private string _deploymentDescription = "Local PC preview · all blocks";
+    private string _deploymentDescription = "Standalone controller · local PC";
     private string _programSource = "Select a .plc file to view its Boolean program.";
 
     /// <summary>Creates the operator view model around the single running controller.</summary>
@@ -62,10 +62,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         ObserveHost();
         PauseResumeCommand = Command(() => SendAsync(new WaysideSimulationMessage { IsPaused = !Snapshot.IsPaused, SpeedMultiplier = SpeedMultiplier }));
         LoadPlcCommand = Command(ChoosePlcAsync);
-        LoadSamplePlcCommand = Command(() => LoadPlcFileAsync(Path.Combine(AppContext.BaseDirectory, "Samples", "wayside.plc")));
         LoadLayoutCommand = Command(ChooseLayoutAsync);
-        LoadDeploymentCommand = Command(ChooseDeploymentAsync);
-        LoadSampleDeploymentCommand = Command(() => ReplaceDeploymentAsync(Path.Combine(AppContext.BaseDirectory, "Samples", SelectedSampleLine.DeploymentFile)));
+        LoadSetupCommand = new AsyncRelayCommand(() => RunAsync(LoadSelectedSetupAsync), () => !_disposed && Snapshot is { IsPaused: true });
         ApplyExecutionCommand = Command(ApplyExecutionAsync);
         SaveExecutionCommand = Command(SaveExecutionAsync);
         RestoreLocalDemoCommand = Command(RestoreLocalDemoAsync);
@@ -80,13 +78,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public ICommand LoadPlcCommand { get; }
 
-    public ICommand LoadSamplePlcCommand { get; }
-
     public ICommand LoadLayoutCommand { get; }
 
-    public ICommand LoadDeploymentCommand { get; }
-
-    public ICommand LoadSampleDeploymentCommand { get; }
+    public ICommand LoadSetupCommand { get; }
 
     public ICommand ApplyExecutionCommand { get; }
 
@@ -340,7 +334,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public string DataStatus => $"Track feedback: {Blocks.Count(block => block.IsFresh)}/{Blocks.Count} current · Logic: {(Snapshot.IsHardwareMode ? "PLC program" : "Software")} · {Snapshot.Authorizations.Count} movement request(s)";
 
-    public string LastResult => Movements.LastOrDefault() is { } movement ? $"{movement.Status} — {movement.AuthorizedSpeed} mph / {movement.AuthorizedAuthority} ft\n{movement.Reason}" : "No movement request submitted.";
+    public string LastResult => Movements.LastOrDefault() is { } movement ? $"{movement.Status} — {movement.AuthorizedSpeed} mph / route limit {movement.AuthorizedAuthority} ft\n{movement.Reason}" : "No movement request submitted.";
 
     private void Refresh()
     {
@@ -360,12 +354,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             string status = blockStatus.Status;
             if (blockStatus.HasSwitch)
             {
-                rows.Add(new($"Switch {blockStatus.BlockId}", blockStatus.BlockId, blockStatus.CommandedSwitch.ToString(), blockStatus.ReportedSwitch.ToString(), status));
+                string switchStatus = blockStatus.IsFresh && blockStatus.CommandedSwitch != blockStatus.ReportedSwitch ? $"Waiting for {blockStatus.CommandedSwitch} feedback" : status;
+                rows.Add(new($"Switch {blockStatus.BlockId}", blockStatus.BlockId, blockStatus.CommandedSwitch.ToString(), blockStatus.ReportedSwitch.ToString(), switchStatus));
             }
 
             if (blockStatus.HasSignal)
             {
-                rows.Add(new($"Signal {blockStatus.BlockId}", blockStatus.BlockId, blockStatus.CommandedSignal.ToString(), blockStatus.ReportedSignal.ToString(), status));
+                rows.Add(new($"Signal {blockStatus.BlockId}", blockStatus.BlockId, blockStatus.CommandedSignal.ToString().Replace("SuperGreen", "Super Green"), blockStatus.ReportedSignal.ToString().Replace("SuperGreen", "Super Green"), status));
             }
 
             if (blockStatus.HasCrossing)

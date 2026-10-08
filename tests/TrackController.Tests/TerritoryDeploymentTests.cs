@@ -217,7 +217,7 @@ public sealed class TerritoryDeploymentTests
         {
             AutoFlush = true
         };
-        await writer.WriteLineAsync(TrainControl.Common.Communication.MessageSerializer.Serialize(new PiHello(1, DateTimeOffset.UtcNow)));
+        await writer.WriteLineAsync(TrainControl.Common.Communication.MessageSerializer.Serialize(new PiHello(2, DateTimeOffset.UtcNow)));
         var result = await pending;
         Assert.IsTrue(result.IsPaused);
         Assert.IsTrue(result.Blocks.All(blockStatus => !blockStatus.IsFresh));

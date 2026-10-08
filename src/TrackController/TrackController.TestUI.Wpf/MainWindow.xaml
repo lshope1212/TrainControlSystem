@@ -163,7 +163,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="1" Margin="18,0,10,0" VerticalAlignment="Center">
-                        <CheckBox Content="Repeat sent inputs every second" IsChecked="{Binding ShouldRepeatInputs}"/>
+                        <CheckBox Content="Keep test inputs active" IsChecked="{Binding ShouldRepeatInputs}"/>
                         <TextBlock Text="{Binding RepeatDescription}"
                                    Style="{StaticResource Hint}"
                                    FontSize="11"
@@ -288,7 +288,10 @@
                                                 <StackPanel Margin="0,0,10,10">
                                                     <TextBlock Style="{StaticResource Label}" Text="Actual aspect"/>
                                                     <ComboBox ItemsSource="{Binding SignalStates}"
-                                                              SelectedItem="{Binding ReportedSignal}"/>
+                                                              DisplayMemberPath="Value"
+                                                              SelectedValuePath="Key"
+                                                              SelectedValue="{Binding ReportedSignal}"
+                                                              ToolTip="Super Green adds no signal speed cap. Track speed limits and granted authority still apply."/>
                                                 </StackPanel>
                                                 <StackPanel Margin="0,0,10,10">
                                                     <TextBlock Style="{StaticResource Label}" Text="Crossing"/>
@@ -312,68 +315,70 @@
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top" Margin="12,12,12,0">
                             <TextBlock Text="2. CTC requests" Style="{StaticResource SectionHeading}"/>
-                            <TextBlock Text="Request movement using the track feedback you sent."
+                            <TextBlock Text="Each section sends its own request."
                                        Style="{StaticResource Hint}"
                                        Margin="0,0,0,10"/>
                         </StackPanel>
-                        <Border DockPanel.Dock="Bottom"
-                                Background="#F9FAFB"
-                                BorderBrush="#E5E7EB"
-                                BorderThickness="0,1,0,0"
-                                Padding="12,9">
-                            <WrapPanel>
-                                <Button Content="Send movement request"
-                                        Command="{Binding SendMovementCommand}"
-                                        HorizontalAlignment="Left"
-                                        Style="{StaticResource PrimaryButton}"/>
-                                <Button Content="Cancel request"
-                                        Command="{Binding CancelMovementCommand}"
-                                        HorizontalAlignment="Left"/>
-                            </WrapPanel>
-                        </Border>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="12,0,12,12">
-                                <UniformGrid Columns="2">
-                                    <StackPanel Margin="0,0,10,10">
-                                        <TextBlock Style="{StaticResource Label}" Text="Occupied target block"/>
-                                        <ComboBox ItemsSource="{Binding BlockIds}"
-                                                  SelectedItem="{Binding TargetBlock}"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,10,10">
-                                        <TextBlock Style="{StaticResource Label}" Text="Train label (optional)"/>
-                                        <TextBox Text="{Binding TrainLabel, UpdateSourceTrigger=PropertyChanged}"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,10,10">
-                                        <TextBlock Style="{StaticResource Label}" Text="Suggested speed (mph)"/>
-                                        <TextBox Text="{Binding SuggestedSpeed, UpdateSourceTrigger=PropertyChanged}"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,10,10">
-                                        <TextBlock Style="{StaticResource Label}" Text="Requested authority (ft)"/>
-                                        <TextBox Text="{Binding RequestedAuthority, UpdateSourceTrigger=PropertyChanged}"/>
-                                    </StackPanel>
-                                </UniformGrid>
-                                <StackPanel Margin="0,0,10,10">
-                                    <TextBlock Style="{StaticResource Label}" Text="Front offset in target block (ft)"/>
-                                    <TextBox Text="{Binding FrontOffset, UpdateSourceTrigger=PropertyChanged}"/>
-                                </StackPanel>
-                                <StackPanel Margin="0,0,10,10">
-                                    <TextBlock Style="{StaticResource Label}"
-                                               Text="Next blocks in route, in order (comma-separated)"/>
-                                    <TextBox Text="{Binding RequestedPath, UpdateSourceTrigger=PropertyChanged}"/>
-                                </StackPanel>
-                                <Expander Header="Switch entry (if target is a switch)" Margin="0,0,0,10">
+                                <Expander Header="Movement request" IsExpanded="True" Margin="0,0,0,12">
                                     <StackPanel Margin="0,10,0,0">
+                                        <UniformGrid Columns="2">
+                                            <StackPanel Margin="0,0,10,10">
+                                                <TextBlock Style="{StaticResource Label}" Text="Occupied target block"/>
+                                                <ComboBox ItemsSource="{Binding BlockIds}"
+                                                          SelectedItem="{Binding TargetBlock}"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,10,10">
+                                                <TextBlock Style="{StaticResource Label}" Text="Train label (optional)"/>
+                                                <TextBox Text="{Binding TrainLabel, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,10,10">
+                                                <TextBlock Style="{StaticResource Label}" Text="Suggested speed (mph)"/>
+                                                <TextBox Text="{Binding SuggestedSpeed, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,10,10">
+                                                <TextBlock Style="{StaticResource Label}" Text="Calculated authority (ft)"/>
+                                                <TextBox Text="{Binding RequestedAuthority, Mode=OneWay}"
+                                                         IsReadOnly="True"
+                                                         ToolTip="Calculated from block lengths to the entrance of the last requested block. Change the route to change this value."/>
+                                            </StackPanel>
+                                        </UniformGrid>
+                                        <TextBlock Text="Authority is calculated from the current block's entry to the final block's entry. Send feedback as occupancy moves: the request updates automatically, then clears at arrival with 0 authority."
+                                                   Style="{StaticResource Hint}" Margin="0,0,10,10"/>
                                         <StackPanel Margin="0,0,10,10">
                                             <TextBlock Style="{StaticResource Label}"
-                                                       Text="Block the train enters from"/>
-                                            <TextBox Text="{Binding EntryBlock, UpdateSourceTrigger=PropertyChanged}"/>
+                                                       Text="Next blocks in route, in order (comma-separated)"/>
+                                            <TextBox Text="{Binding RequestedPath, UpdateSourceTrigger=PropertyChanged}"/>
                                         </StackPanel>
+                                        <Expander Header="Switch entry (if target is a switch)" Margin="0,0,0,10">
+                                            <StackPanel Margin="0,10,0,0">
+                                                <StackPanel Margin="0,0,10,10">
+                                                    <TextBlock Style="{StaticResource Label}"
+                                                               Text="Block the train enters from"/>
+                                                    <TextBox Text="{Binding EntryBlock, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Expander>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <Button Content="Send movement request"
+                                                    Command="{Binding SendMovementCommand}"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Margin="0,0,6,6"/>
+                                            <Button Content="{Binding CancelMovementLabel}"
+                                                    Command="{Binding CancelMovementCommand}"
+                                                    ToolTip="{Binding MovementRequestSummary}"
+                                                    Margin="0,0,0,6"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding MovementRequestSummary}"
+                                                   Style="{StaticResource Hint}"/>
+                                        <TextBlock Text="{Binding MovementProgress}"
+                                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
                                     </StackPanel>
                                 </Expander>
-                                <Separator Margin="0,14,0,10"/>
                                 <Expander Header="Switch request" Margin="0,0,0,12">
                                     <StackPanel Margin="0,10,0,0">
-                                        <TextBlock Text="Requests a switch change. Report its actual position in Track feedback separately."
+                                        <TextBlock Text="Requires a clear, current and unreserved protection zone. After the command changes, send its actual position separately in Track feedback."
                                                    Style="{StaticResource Hint}"
                                                    Margin="0,0,0,10"/>
                                         <UniformGrid Columns="2">
@@ -390,7 +395,12 @@
                                         </UniformGrid>
                                         <Button Content="Send switch request"
                                                 Command="{Binding SendSwitchCommand}"
+                                                Style="{StaticResource PrimaryButton}"
                                                 HorizontalAlignment="Left"/>
+                                        <TextBlock Text="{Binding SwitchRequestResult}"
+                                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                        <TextBlock Text="{Binding SwitchFeedbackStatus}"
+                                                   Style="{StaticResource Hint}" Margin="0,6,0,0"/>
                                     </StackPanel>
                                 </Expander>
                                 <Expander Header="Block closure request">
@@ -412,7 +422,10 @@
                                         </UniformGrid>
                                         <Button Content="Send closure request"
                                                 Command="{Binding SendMaintenanceCommand}"
+                                                Style="{StaticResource PrimaryButton}"
                                                 HorizontalAlignment="Left"/>
+                                        <TextBlock Text="{Binding ClosureRequestResult}"
+                                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
                                     </StackPanel>
                                 </Expander>
                             </StackPanel>
@@ -436,18 +449,10 @@
                             <DataGrid ItemsSource="{Binding Equipment}" MinHeight="175" MaxHeight="255">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Equipment" Binding="{Binding Equipment}" Width="*"/>
-                                    <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="85"/>
-                                    <DataGridTextColumn Header="Reported" Binding="{Binding Feedback}" Width="85"/>
+                                    <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="100"/>
+                                    <DataGridTextColumn Header="Reported" Binding="{Binding Feedback}" Width="100"/>
                                 </DataGrid.Columns>
                             </DataGrid>
-                            <Expander Header="Connection details" Margin="0,14,0,0">
-                                <StackPanel Margin="0,10,0,0">
-                                    <TextBlock Text="{Binding Connection}" Style="{StaticResource Hint}"/>
-                                    <TextBlock Text="{Binding LastReceipt}"
-                                               Style="{StaticResource Hint}"
-                                               Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Expander>
                         </StackPanel>
                     </ScrollViewer>
                 </Border>

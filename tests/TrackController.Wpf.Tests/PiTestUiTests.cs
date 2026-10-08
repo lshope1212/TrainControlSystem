@@ -39,7 +39,7 @@ public sealed class PiTestUiTests
             await UntilAsync(() => !inputs.Snapshot.IsPaused);
             await ExecuteAsync(inputs.SendMovementCommand);
             await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
-            Assert.AreEqual(365.76, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
+            Assert.AreEqual(300, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
             Assert.AreEqual("5", target.SelectedItem);
             StringAssert.Contains(controller.SelectedExecutionTarget, "Pi 5");
             controller.SelectedBlockId = "1";

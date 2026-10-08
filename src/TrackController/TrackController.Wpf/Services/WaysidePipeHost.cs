@@ -19,16 +19,21 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     public Task<WaysideSnapshotMessage> PollForSetupAsync(CancellationToken cancellationToken) => _runtime.PollAsync(cancellationToken);
 
     /// <summary>Returns the applied controller and execution target for a block.</summary>
-    public string GetOwnerDescription(string blockId) => _runtime is TerritoryRuntimeRouter router ? router.GetOwnerDescription(blockId) : "Local PC preview";
+    public string GetOwnerDescription(string blockId) => _runtime is TerritoryRuntimeRouter router ? router.GetOwnerDescription(blockId) : "Standalone controller · local PC";
 
     private readonly WaysideEndpoints _endpoints;
     private readonly CancellationTokenSource _stop = new();
     private Task[]? _workers;
     private readonly HashSet<string> _knownTrainLabels = [];
+    private readonly object _connectionGate = new();
+    private bool? _ctcConnected;
+    private bool? _trackModelConnected;
 
     public event Action<string>? StatusChanged;
 
     public event Action<string>? InputReceived;
+
+    public event Action<WaysideAcknowledgementMessage>? AcknowledgementReceived;
 
     /// <summary>Connects a runtime to the production named-pipe receiver and output publishers.</summary>
     public WaysidePipeHost(ITrackControllerService controller, WaysideEndpoints? endpoints = null) : this(new LocalWaysideRuntime(controller), endpoints)
@@ -56,7 +61,15 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     private async Task HandleAsync(MessageEnvelope envelope)
     {
         object result = await _runtime.ReceiveAsync(envelope, _stop.Token).ConfigureAwait(false);
-        InputReceived?.Invoke(result is WaysideAcknowledgementMessage ack ? ack.Detail : "Status requested.");
+        if (result is WaysideAcknowledgementMessage receipt)
+        {
+            AcknowledgementReceived?.Invoke(receipt);
+        }
+
+        if (result is WaysideAcknowledgementMessage { IsAccepted: false } rejected)
+        {
+            InputReceived?.Invoke($"Rejected: {rejected.Detail}");
+        }
         // Application results use the normal output pipe, not a test-only callback or duplex protocol.
         await TrySendAsync(_endpoints.TrackModelOutput, result, _stop.Token).ConfigureAwait(false);
     }
@@ -84,7 +97,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                     }
                 }
 
-                StatusChanged?.Invoke($"{(ctc ? "CTC" : "Track Model")}: {(delivered ? "sent" : "unavailable")}");
+                UpdateConnection(ctc, delivered);
                 await Task.Delay(500, stop).ConfigureAwait(false);
             }
         }
@@ -93,6 +106,36 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             return;
         }
     }
+
+    private void UpdateConnection(bool ctc, bool delivered)
+    {
+        lock (_connectionGate)
+        {
+            if ((ctc ? _ctcConnected : _trackModelConnected) == delivered)
+            {
+                return;
+            }
+
+            if (ctc)
+            {
+                _ctcConnected = delivered;
+            }
+            else
+            {
+                _trackModelConnected = delivered;
+            }
+
+            // Both independent publishers share one footer; report state changes, not each packet.
+            StatusChanged?.Invoke($"CTC: {ConnectionState(_ctcConnected)} · Track Model: {ConnectionState(_trackModelConnected)}");
+        }
+    }
+
+    private static string ConnectionState(bool? connected) => connected switch
+    {
+        true => "connected",
+        false => "unavailable",
+        _ => "checking"
+    };
 
     private IEnumerable<object> CreateCtcMessages(WaysideSnapshotMessage snapshot)
     {

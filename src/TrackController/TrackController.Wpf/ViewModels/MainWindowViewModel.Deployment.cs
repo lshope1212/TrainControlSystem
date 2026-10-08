@@ -14,23 +14,26 @@ public sealed partial class MainWindowViewModel
     private string _programName = "wayside.plc";
     private readonly ObservableCollection<ExecutionRow> _executionRows = [];
 
-    private SampleLine _selectedSampleLine = SampleLines[0];
+    private const string SavedSetupChoice = "Saved setup file…";
+    private string _selectedSetup = SampleLines[0].Name;
 
-    /// <summary>Built-in sample deployments offered by Load sample layout; any other line loads through Load deployment.</summary>
+    /// <summary>Built-in lines loaded with their PLC; other setups can be opened from a deployment file.</summary>
     public static IReadOnlyList<SampleLine> SampleLines { get; } =
     [
         new("Green Line", "all-pc.deployment.json"),
         new("Blue Line", "blue-line-all-pc.deployment.json")
     ];
 
-    public SampleLine SelectedSampleLine
+    public static IReadOnlyList<string> SetupChoices { get; } = [.. SampleLines.Select(line => line.Name), SavedSetupChoice];
+
+    public string SelectedSetup
     {
-        get => _selectedSampleLine;
+        get => _selectedSetup;
         set
         {
             if (value is not null)
             {
-                SetProperty(ref _selectedSampleLine, value);
+                SetProperty(ref _selectedSetup, value);
             }
         }
     }
@@ -39,7 +42,7 @@ public sealed partial class MainWindowViewModel
 
     public ObservableCollection<ExecutionRow> ExecutionRows => _executionRows;
 
-    public string LayoutDescription => ActivePlan?.LayoutDescription ?? "Load a deployment to separate track layout, territory ownership, and execution.";
+    public string LayoutDescription => ActivePlan?.LayoutDescription ?? "No line setup loaded. Choose a line above and select Load setup.";
 
     public string DeploymentFile => ActivePlan?.SourcePath ?? "";
 
@@ -55,13 +58,24 @@ public sealed partial class MainWindowViewModel
 
     public bool CanSaveExecution => IsRoutedDeployment && !HasExecutionChanges;
 
-    public string ExecutionDraftStatus => !IsRoutedDeployment ? "Choose a line, then Load sample layout to start its territories on the PC." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement to the loaded deployment file.";
+    public string ExecutionDraftStatus => !IsRoutedDeployment ? "Load a setup to choose where each territory runs." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement to the loaded setup file.";
+
+    private Task LoadSelectedSetupAsync()
+    {
+        if (SelectedSetup == SavedSetupChoice)
+        {
+            return ChooseDeploymentAsync();
+        }
+
+        var line = SampleLines.SingleOrDefault(line => line.Name == SelectedSetup) ?? throw new ArgumentException("Choose a built-in line or a saved setup file.");
+        return ReplaceDeploymentAsync(Path.Combine(AppContext.BaseDirectory, "Samples", line.DeploymentFile));
+    }
 
     private async Task ChooseDeploymentAsync()
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Load track, territories, and execution",
+            Title = "Open controller setup: track, territories, PC/Pi assignments and PLC",
             Filter = "Wayside deployments (*.deployment.json)|*.deployment.json|JSON files (*.json)|*.json",
             InitialDirectory = Path.Combine(AppContext.BaseDirectory, "Samples")
         };
@@ -123,6 +137,14 @@ public sealed partial class MainWindowViewModel
     {
         _host.StatusChanged += text => Post(() => Connection = text);
         _host.InputReceived += text => Post(() => Status = text);
+        _host.AcknowledgementReceived += receipt => Post(() =>
+        {
+            if (receipt.MessageType == nameof(WaysideManualCommandMessage))
+            {
+                ManualCommandResult = $"{(receipt.IsAccepted ? "Accepted" : "Rejected")}: {receipt.Detail}";
+                OnPropertyChanged(nameof(ManualCommandResult));
+            }
+        });
     }
 
     private async Task UseDeploymentAsync(PreparedDeployment? plan)
@@ -140,7 +162,7 @@ public sealed partial class MainWindowViewModel
             _host = routed is null ? new WaysidePipeHost(_controller, _endpoints) : new WaysidePipeHost(routed, _endpoints);
             _plan = plan;
             _deploymentPath = plan?.SourcePath;
-            _deploymentDescription = routed?.Description ?? "Local PC preview · all blocks";
+            _deploymentDescription = routed?.Description ?? "Standalone controller · local PC";
             ObserveHost();
             _host.Start();
         }
@@ -173,7 +195,7 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(CanChooseLogic));
         OnPropertyChanged(nameof(DeploymentDescription));
         NotifyExecutionEditor();
-        Status = "Deployment applied and paused. Send fresh feedback before resuming.";
+        Status = plan is null ? "Standalone controller selected and paused. Check controller logic and send fresh feedback before resuming." : $"{plan.Name} loaded with {plan.ProgramName}. Paused; send fresh feedback before resuming.";
     }
 
     private async Task ResetControllerAsync()

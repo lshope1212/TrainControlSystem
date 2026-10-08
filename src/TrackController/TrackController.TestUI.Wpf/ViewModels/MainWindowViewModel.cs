@@ -44,13 +44,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         {
             LastReceipt = $"{(receipt.IsAccepted ? "Accepted" : "Rejected")}: {receipt.Detail}";
             OnPropertyChanged(nameof(LastReceipt));
+            if (receipt.MessageType == nameof(SwitchPositionRequestMessage))
+            {
+                SwitchRequestResult = LastReceipt;
+                OnPropertyChanged(nameof(SwitchRequestResult));
+            }
+            else if (receipt.MessageType == nameof(MaintenanceRequestMessage))
+            {
+                ClosureRequestResult = LastReceipt;
+                OnPropertyChanged(nameof(ClosureRequestResult));
+            }
+
             if (!receipt.IsAccepted)
             {
                 Status = $"Controller rejected input: {receipt.Detail}";
             }
         });
         SendMovementCommand = Command(SendMovementAsync);
-        CancelMovementCommand = Command(CancelMovementAsync);
+        CancelMovementCommand = new AsyncRelayCommand(() => RunAsync(CancelMovementAsync), () => !_disposed && _appliedRequest is not null);
         SendSwitchCommand = Command(() => SendAsync(new SwitchPositionRequestMessage { BlockId = SwitchTarget, RequestedPosition = RequestedSwitch }));
         SendMaintenanceCommand = Command(() => SendAsync(new MaintenanceRequestMessage { BlockId = MaintenanceTarget, RequestedState = RequestedMaintenance }));
         ApplyFeedbackCommand = Command(ApplyFeedbackAsync);
@@ -80,6 +91,35 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     private AsyncRelayCommand Command(Func<Task> action) => new(() => RunAsync(action), () => !_disposed);
 
     public string LastReceipt { get; private set; } = "No controller receipt yet.";
+
+    public string SwitchRequestResult { get; private set; } = "No switch request sent.";
+
+    public string ClosureRequestResult { get; private set; } = "No closure request sent.";
+
+    public string CancelMovementLabel => _appliedRequest is { } request ? $"Cancel block {request.TargetBlockId} movement" : "Cancel last movement";
+
+    public string MovementRequestSummary => _appliedRequest is { } request ? $"Cancels only the last movement sent from this window, for block {request.TargetBlockId}, even if the draft target changes. Other requests are unaffected." : "No last sent movement to cancel. Each Send creates a movement request for the target block.";
+
+    public string SwitchFeedbackStatus
+    {
+        get
+        {
+            if (!_testConnection.IsSnapshotCurrent)
+            {
+                return "Waiting for current controller output.";
+            }
+
+            var block = Blocks.FirstOrDefault(block => block.BlockId == SwitchTarget && block.HasSwitch);
+            if (block is null)
+            {
+                return "Select a switch.";
+            }
+
+            string reported = block.IsFresh ? block.ReportedSwitch.ToString() : "unavailable";
+            string waiting = block.IsFresh && block.CommandedSwitch == block.ReportedSwitch ? "" : " Waiting for matching Track Model feedback.";
+            return $"Switch {block.BlockId}: commanded {block.CommandedSwitch}, reported {reported}.{waiting}";
+        }
+    }
 
     public string Status
     {
@@ -127,7 +167,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         }
     }
 
-    public string RepeatDescription => ShouldRepeatInputs ? "Repeats the last sent feedback and movement request. Unsent edits are not included." : "Automatic repeats are off. Sent feedback and requests will expire.";
+    public string RepeatDescription => ShouldRepeatInputs ? "Refreshes the last sent feedback and movement every second to prevent timeouts. New edits still require Send." : "Refreshes stopped to test timeouts. Feedback and movement requests expire unless sent again.";
 
     private void Post(Action action)
     {
@@ -215,11 +255,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public ICommand ClearInputsCommand { get; }
 
-    public string Connection => $"Module pipe transport · sent {_testConnection.SentCount} · CTC outputs {_testConnection.CtcReceivedCount} · Track Model outputs {_testConnection.TrackModelReceivedCount}";
-
     public string DataStatus => _testConnection.IsSnapshotCurrent ? $"Connected · {Blocks.Count(block => block.IsFresh)}/{Blocks.Count} feedback blocks current" : "Waiting for TrackController.Wpf output. Start the controller and check its connections.";
 
-    public string LastResult => !_testConnection.IsSnapshotCurrent ? "No current controller output. Check the pipe connection." : Movements.LastOrDefault() is { } movement ? $"{movement.Status} — {movement.AuthorizedSpeed} mph / {movement.AuthorizedAuthority} ft\n{movement.Reason}" : "No movement request submitted.";
+    public string LastResult
+    {
+        get
+        {
+            if (!_testConnection.IsSnapshotCurrent)
+            {
+                return "No current controller output. Check the pipe connection.";
+            }
+
+            var movement = _appliedRequest is { } request ? Movements.SingleOrDefault(row => row.Value.RequestId == request.RequestId) : Movements.LastOrDefault();
+            return movement is not null ? $"Block {movement.Target}: {movement.Status} — {movement.AuthorizedSpeed} mph / route limit {movement.AuthorizedAuthority} ft\n{movement.Reason}" : _appliedRequest is not null ? "Waiting for the controller response to the updated movement request." : "No movement requests in controller output.";
+        }
+    }
 
     private void Refresh()
     {
@@ -241,7 +291,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
             if (blockStatus.HasSignal)
             {
-                rows.Add(new($"Signal {blockStatus.BlockId}", blockStatus.BlockId, blockStatus.CommandedSignal.ToString(), blockStatus.ReportedSignal.ToString(), status));
+                rows.Add(new($"Signal {blockStatus.BlockId}", blockStatus.BlockId, blockStatus.CommandedSignal.ToString().Replace("SuperGreen", "Super Green"), blockStatus.ReportedSignal.ToString().Replace("SuperGreen", "Super Green"), status));
             }
 
             if (blockStatus.HasCrossing)
@@ -256,11 +306,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         if (Blocks.Count > 0 && !FeedbackRows.Select(row => row.BlockId).SequenceEqual(BlockIds))
         {
             _appliedFeedback = null;
-            _appliedRequest = null;
+            SetAppliedRequest(null);
             ApplyLayoutDefaults();
             CreateFeedbackRows();
+            OnPropertyChanged(nameof(ScenarioDescription));
         }
-        foreach (var name in new[] { nameof(Snapshot), nameof(Blocks), nameof(Equipment), nameof(Movements), nameof(Connection), nameof(DataStatus), nameof(LastResult) })
+        foreach (var name in new[] { nameof(Snapshot), nameof(Blocks), nameof(Equipment), nameof(Movements), nameof(DataStatus), nameof(LastResult), nameof(SwitchFeedbackStatus), nameof(RequestedAuthority) })
         {
             OnPropertyChanged(name);
         }
@@ -268,8 +319,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     private async Task CancelMovementAsync()
     {
-        await SendAsync(new WaysideMovementRequestMessage { RequestId = _appliedRequest?.RequestId ?? Guid.NewGuid().ToString("N"), TargetBlockId = TargetBlock, IsActive = false });
-        _appliedRequest = null;
+        if (_appliedRequest is not { } request)
+        {
+            return;
+        }
+
+        await SendAsync(new WaysideMovementRequestMessage { RequestId = request.RequestId, TargetBlockId = request.TargetBlockId, IsActive = false });
+        SetAppliedRequest(null);
+        MovementProgress = "Movement cancelled. Occupancy changes will not send another request until you select Send movement request.";
+        Status = $"Cancellation sent for the last movement from block {request.TargetBlockId}. Its repeats have stopped. Other requests are unaffected.";
+    }
+
+    private void SetAppliedRequest(WaysideMovementRequestMessage? request)
+    {
+        _appliedRequest = request;
+        _movementOriginObserved = request is not null && _appliedFeedback?.Blocks.Any(block => block.BlockId == request.TargetBlockId && block.Occupancy == OccupancyState.Occupied) == true;
+        _nextBlockObservedClear = request is not null && _appliedFeedback?.Blocks.Any(block => block.BlockId == request.PathBlockIds.FirstOrDefault() && block.Occupancy == OccupancyState.Clear) == true;
+        if (request is null)
+        {
+            MovementProgress = "Send a movement request to start following its route.";
+        }
+        OnPropertyChanged(nameof(CancelMovementLabel));
+        OnPropertyChanged(nameof(MovementRequestSummary));
+        OnPropertyChanged(nameof(LastResult));
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private async Task ClearInputsAsync()
@@ -306,7 +379,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
                         await ApplyLatchedFeedbackAsync();
                     }
 
-                    if (_appliedRequest is not null)
+                    if (_appliedRequest is not null && !HasMovementOriginCleared)
                     {
                         await SendAsync(_appliedRequest, announce: false);
                     }

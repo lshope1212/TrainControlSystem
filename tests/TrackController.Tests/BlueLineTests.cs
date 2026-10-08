@@ -65,7 +65,6 @@ public sealed class BlueLineTests
                 RequestId = Guid.NewGuid().ToString("N"),
                 TrainId = "Blue 1",
                 TargetBlockId = target,
-                FrontOffsetMeters = 0,
                 PathBlockIds = [.. path],
                 SuggestedSpeedMetersPerSecond = speed,
                 SuggestedAuthorityMeters = authorityMeters
