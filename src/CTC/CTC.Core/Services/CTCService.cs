@@ -225,9 +225,10 @@ public class CTCService : ICTCService
         dispatched.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
 
         // Known authoritatively only at release time: the schedule says the train starts here.
+        // It stays the last known block until a train-position message exists (occupancy has no TrainId).
         // StartBlockId was fixed when the schedule was built; it is not re-derived per tick.
         // TODO: real route/yard logic will replace the temporary route-start rule.
-        dispatched.CurrentBlockId = scheduledTrain.StartBlockId;
+        dispatched.LastKnownBlockId =scheduledTrain.StartBlockId;
 
         return speed.IsLate
             ? $"{scheduledTrain.TrainId} is behind schedule for {speed.TargetBlockId}; suggested the maximum permitted speed."

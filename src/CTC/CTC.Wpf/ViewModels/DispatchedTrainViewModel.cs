@@ -25,8 +25,8 @@ public class DispatchedTrainViewModel : ViewModelBase
     /// <summary>CTC's initial suggested authority, in feet.</summary>
     public double SuggestedAuthority => UnitConversion.MetersToFeet(_train.SuggestedAuthorityMeters);
 
-    /// <summary>Block the train was released at; not tracked afterwards (see <see cref="DispatchedTrainState.CurrentBlockId"/>).</summary>
-    public string CurrentBlock => string.IsNullOrEmpty(_train.CurrentBlockId) ? "Unknown" : _train.CurrentBlockId;
+    /// <summary>Last block CTC can authoritatively place the train in; not tracked after release (see <see cref="DispatchedTrainState.LastKnownBlockId"/>).</summary>
+    public string LastKnownBlock => string.IsNullOrEmpty(_train.LastKnownBlockId) ? "Unknown" : _train.LastKnownBlockId;
 
     /// <summary>Re-reads all values from the underlying CTC train state.</summary>
     public void Refresh() => OnPropertyChanged(string.Empty);

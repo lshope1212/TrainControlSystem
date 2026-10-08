@@ -28,6 +28,7 @@ public class ScheduleBuilderViewModel : ViewModelBase
         GenerateTemplateCommand = new RelayCommand(_ => GenerateTemplate(), _ => Line is not null);
         QueueScheduleCommand = new RelayCommand(_ => QueueSchedule(), _ => _template is not null);
         UploadScheduleCommand = new RelayCommand(_ => UploadSchedule());
+        ClearTemplateCommand = new RelayCommand(_ => ClearTemplateAndReport(), _ => _template is not null);
     }
 
     /// <summary>
@@ -80,6 +81,8 @@ public class ScheduleBuilderViewModel : ViewModelBase
     public ICommand QueueScheduleCommand { get; }
 
     public ICommand UploadScheduleCommand { get; }
+
+    public ICommand ClearTemplateCommand { get; }
 
     private void GenerateTemplate()
     {
@@ -146,6 +149,16 @@ public class ScheduleBuilderViewModel : ViewModelBase
         // PLACEHOLDER: spreadsheet import is not implemented yet. It should fill a
         // ScheduleTemplate and go through ScheduleTemplateConverter like the manual builder.
         StatusMessage = "Upload Schedule is not implemented yet.";
+    }
+
+    /// <summary>
+    /// Discards only the template being edited. The track layout, queued schedule,
+    /// dispatched trains and system time live in CTC and are left untouched.
+    /// </summary>
+    private void ClearTemplateAndReport()
+    {
+        ClearTemplate();
+        StatusMessage = "Schedule template cleared. Enter the number of trains and generate a new template.";
     }
 
     private void ShowTemplate(ScheduleTemplate template)

@@ -1,452 +1,211 @@
-I need you to implement the next iteration of the CTC module in the TrainControlSystem repository.
-
-IMPORTANT:
-- Work from the current Luke_CTC branch.
-- Inspect the existing architecture before modifying it.
-- Preserve the current separation:
-    CTC.Core = domain/state/business logic
-    CTC.Wpf = dispatcher UI/MVVM
-    CTC.TestUI.Wpf = simulator for external modules
-    TrainControl.Contracts = shared messages only
-- Do not make the TestUI depend directly on CTC.Core.
-- Continue using IMessageSender / named-pipe communication.
-- Do not introduce MBO logic.
-- Make the smallest coherent refactor rather than building a second parallel scheduling/dispatch system.
+I am working on the CTC module of this repository:
 
-The relevant existing files include:
+https://github.com/lshope1212/TrainControlSystem
 
-CTC.Core:
-- Models/CtcBlockState.cs
-- Models/ScheduledTrain.cs
-- Models/ScheduleStop.cs
-- Models/DispatchedTrainState.cs
-- Models/CtcStateChangedEventArgs.cs
-- Scheduling/ScheduleTemplate.cs
-- Scheduling/ScheduleTemplateFactory.cs
-- Scheduling/ScheduleTemplateConverter.cs
-- Services/CTCService.cs
-- Interfaces/ICTCService.cs
-- Dispatching/AuthorityManager.cs
-- Dispatching/RouteManager.cs
+Work on the current `Luke_CTC` branch and inspect the existing implementation before making changes.
 
-CTC.Wpf:
-- ViewModels/ScheduleBuilderViewModel.cs
-- ViewModels/ScheduleTemplateRowViewModel.cs
-- ViewModels/DispatchedTrainViewModel.cs
-- ViewModels/BlockViewModel.cs
-- ViewModels/MainWindowViewModel.cs
-- MainWindow.xaml
-- Services/CtcNamedPipeReceiver.cs
+I want to make two relatively small improvements to the CTC module. Please preserve the existing architecture, MVVM structure, formatting/style, and current dispatch behavior. Do not unnecessarily refactor unrelated code.
 
-CTC.TestUI.Wpf:
-- ViewModels/TrainAuthorizationInputViewModel.cs
-- ViewModels/TrackLayoutInputViewModel.cs
-- ViewModels/MainWindowViewModel.cs
-- SampleData/SampleTrackLayout.cs
-- MainWindow.xaml
+## 1. Change "Current Block" to "Last Known Block" for dispatched trains
 
-Shared:
-- TrainControl.Contracts/Messages/TrackBlockDefinition.cs
-- TrainControl.Contracts/Messages/MovementSuggestionMessage.cs
+Currently, when a train is dispatched, `DispatchedTrainState.CurrentBlockId` is initialized to the train's scheduled starting block.
 
-The project already has MovementSuggestionMessage with:
-- TrainId
-- SuggestedSpeedMetersPerSecond
-- SuggestedAuthorityMeters
+For example, a train starting at A1 will continue to display:
 
-USE THIS MESSAGE. Do not invent another speed/authority message.
+`Current Block: A1`
 
-==================================================
-1. ADD SPEED LIMIT TO TRACK BLOCK DATA
-==================================================
+even after it has theoretically moved.
 
-Track speed limit is a property of a block, NOT a train.
+This is misleading during our current isolated-module implementation.
 
-Add a speed-limit field to TrackBlockDefinition and propagate it into CtcBlockState when CTC receives a TrackLayoutMessage.
+The Track Controller reports block occupancy using `BlockStatusMessage`, but this message intentionally does NOT identify which train is occupying a block. Therefore CTC cannot reliably infer that a particular dispatched train has moved from one block to another.
 
-Prefer an explicitly named property such as:
+We are intentionally leaving actual train-location tracking for later system integration.
 
-    double SpeedLimitKilometersPerHour
+### Desired behavior
 
-because the supplied track-layout data gives speed limits in km/h.
+Replace the concept exposed to the UI as "Current Block" with:
 
-Update:
-- TrackBlockDefinition
-- CtcBlockState
-- CTCService.ApplyTrackLayout
-- SampleTrackLayout
-- any relevant presentation adapters
+`Last Known Block`
 
-The current Blue Line has 15 blocks and EVERY Blue Line block has:
-    length = 50 meters
-    speed limit = 50 km/h
+When a train is initially dispatched, its last known block should still be initialized to its scheduled start block because that is the last location CTC can authoritatively associate with the train.
 
-Keep the currently implemented Blue Line topology and infrastructure.
+For now it should remain at that value indefinitely.
 
-If reasonable, expose the selected block's speed limit in the CTC UI and/or Schedule Builder as a read-only value, but do not let the dispatcher edit it.
+Later, once the integrated system provides a reliable train-position message containing a train identity and location, this field can be updated.
 
-==================================================
-2. ALLOW ARRIVAL TIMES ON ANY BLOCK
-==================================================
+### Implementation requirements
 
-Currently ScheduleTemplateRow.IsTimeEditable only allows the route-start block and station blocks to receive times.
+Please inspect:
 
-Change this so EVERY block row can have a train time entered.
+- `CTC.Core/Models/DispatchedTrainState.cs`
+- `CTC.Core/Services/CTCService.cs`
+- `CTC.Wpf/ViewModels/DispatchedTrainViewModel.cs`
+- the dispatched-train DataGrid/table in `CTC.Wpf/MainWindow.xaml`
+- any tests or other references to `CurrentBlockId`
 
-Define the semantic clearly:
+Make the naming consistent through the relevant CTC code.
 
-    A train's time in a block row means the scheduled time
-    at which the train ENTERS that block.
+I would prefer the core model property to become something like:
 
-The route-start block's timestamp is therefore also the train's dispatch/departure time.
+```csharp
+public string LastKnownBlockId { get; set; } = string.Empty;
+```
 
-Do NOT require every train to contain a time for every physical block because Blue Line branches.
+instead of retaining the misleading `CurrentBlockId` name.
 
-Blank cells mean:
-    "This train does not use this block."
+Update the dispatch logic so:
 
-Example legal Blue routes include:
+```csharp
+dispatched.LastKnownBlockId = scheduledTrain.StartBlockId;
+```
 
-    A1-A2-A3-A4-A5-B6-B7-B8-B9-B10
+Update comments/XML documentation to clearly explain:
 
-or:
+- this is the last location CTC can authoritatively associate with the train;
+- initially it is the scheduled route start block;
+- Track Controller occupancy alone cannot update it because `BlockStatusMessage` contains no `TrainId`;
+- true train-position updates are deferred until module integration.
 
-    A1-A2-A3-A4-A5-C11-C12-C13-C14-C15
+Update the WPF ViewModel/property names as appropriate and change the dispatched-trains UI column header from:
 
-The converter must validate that consecutive nonblank scheduled blocks for a train are actually connected according to ConnectedBlockIds.
+`Current Block`
 
-A train must not be permitted to jump between unconnected blocks or use both branches in an impossible order.
+to:
 
-==================================================
-3. REFACTOR THE NORMALIZED SCHEDULE MODEL
-==================================================
+`Last Known Block`
 
-The existing ScheduleStop model is station-specific and is no longer sufficient because we now need timing at every route block.
+Do NOT implement any logic that guesses a train's location based on block occupancy transitions.
 
-Refactor this cleanly.
+Do NOT modify `BlockStatusMessage` to add a train ID.
 
-Create an appropriately named model such as:
+Do NOT add fake movement simulation to CTC.
 
-    ScheduledBlockTime
-    {
-        string BlockId
-        TimeSpan ArrivalTime
-    }
+The purpose of this change is simply to accurately represent what CTC actually knows.
 
-and have ScheduledTrain contain an ordered collection such as:
+---
 
-    IList<ScheduledBlockTime> BlockTimes
+## 2. Add a "Clear Template" button to the Schedule Builder
 
-The first BlockTime should correspond to StartBlockId and DepartureTime.
+Currently, once a schedule template has been generated in the Schedule Builder, there is no obvious way for the dispatcher to completely clear it and return to the initial empty state without restarting/changing state elsewhere.
 
-You may retain StartBlockId and DepartureTime as convenient derived/stored properties if doing so keeps the rest of the application simple.
+`ScheduleBuilderViewModel` already has a private `ClearTemplate()` helper that clears:
 
-Remove or stop using ScheduleStop if it is no longer appropriate.
+- `_template`
+- `Rows`
+- `TrainColumns`
 
-Update ScheduleTemplateConverter so for EACH train column it:
+I want this functionality exposed to the user.
 
-1. Requires a valid time at the route-start block.
-2. Parses every nonblank block time using the current HH:mm:ss format.
-3. Orders/retains the route correctly.
-4. Requires times to increase as the train progresses.
-   For positive-length blocks, consecutive times must be strictly later.
-5. Validates consecutive route blocks using ConnectedBlockIds.
-6. Produces a ScheduledTrain containing the complete route/block-time sequence.
+### Desired behavior
 
-Update ScheduleBuilder status text so it no longer says only route-start and station times are editable.
+Add a button to the Schedule Builder UI labeled:
 
-==================================================
-4. VEHICLE MAXIMUM SPEED
-==================================================
+`Clear Template`
 
-For this iteration the physical train is the Bombardier FLEXITY 2 from the supplied vehicle data.
+The button should clear the currently generated schedule template so that the schedule grid returns to its empty/pre-generated state.
 
-Maximum physical speed:
-    70 km/h
+It should NOT:
 
-Put this in a clearly named CTC.Core constant/configuration/model rather than scattering the number 70 through CTCService.
+- clear the imported track layout;
+- clear dispatched trains;
+- remove an already queued schedule from CTC;
+- reset system time;
+- modify any other CTC state.
 
-Example:
+It should only clear the editable Schedule Builder template currently shown in the UI.
 
-    TrainPerformance.MaxSpeedKilometersPerHour = 70.0
+After clearing, update `StatusMessage` to something clear, such as:
 
-Add a TODO explaining that this should eventually come from the Train Model / integrated vehicle data rather than being hardcoded.
+`Schedule template cleared. Enter the number of trains and generate a new template.`
 
-Do NOT model acceleration/deceleration yet.
+The user should then be able to immediately generate another template.
 
-==================================================
-5. VALIDATE SCHEDULE FEASIBILITY WHEN QUEUED
-==================================================
+### MVVM implementation
 
-When QueueSchedule is called, validate the speed required for every consecutive pair of scheduled route blocks.
+Follow the existing command pattern in `ScheduleBuilderViewModel`.
 
-For route blocks i and i+1:
+Add something along the lines of:
 
-    travelSeconds =
-        BlockTimes[i+1].ArrivalTime
-        - BlockTimes[i].ArrivalTime
+```csharp
+public ICommand ClearTemplateCommand { get; }
+```
 
-    requiredSpeedMps =
-        currentBlock.LengthMeters / travelSeconds
+Initialize it alongside `GenerateTemplateCommand`, `QueueScheduleCommand`, and `UploadScheduleCommand`.
 
-Convert limits as necessary.
+The command should call a small public-facing/private command handler rather than putting UI logic into code-behind.
 
-The permitted speed for the segment should never exceed:
+The existing `ClearTemplate()` helper can continue doing the actual collection clearing.
 
-    min(
-        physical train maximum speed,
-        applicable block speed limit
-    )
+The command should only be enabled when a template currently exists if that fits cleanly with the existing RelayCommand implementation.
 
-For a conservative implementation, using the minimum of the current and next block speed limits is acceptable and will support future lines where limits change.
+Place the button logically alongside the existing Schedule Builder controls such as Generate/Queue/Upload rather than creating a new unrelated panel.
 
-IMPORTANT:
-Do NOT silently accept an impossible schedule by simply clamping its required speed.
+Match the existing WPF styling.
 
-If the schedule mathematically requires a speed greater than the allowed maximum, reject the schedule with a dispatcher-readable message such as:
+---
 
-    "Train 1 cannot travel from A3 to A4 in the scheduled time.
-     Required: 60.0 km/h. Maximum allowed: 50.0 km/h."
+## 3. Preserve and verify the existing occupied-start-block dispatch protection
 
-For Blue Line:
-- block length = 50 m
-- block speed limit = 50 km/h
-- vehicle max = 70 km/h
+Do NOT remove or weaken the existing dispatch safety behavior.
 
-Therefore the effective maximum is 50 km/h.
+The current system should behave as follows:
 
-Keep this validation logic in CTC.Core, preferably in a focused helper/planner/validator instead of making CTCService excessively large.
+1. Sample Blue Line layout is loaded.
+2. Track Controller/TestUI sends a `BlockStatusMessage` marking A1 as occupied.
+3. A schedule is built for a train whose route starts at A1.
+4. The train reaches its scheduled departure time.
+5. `AuthorityManager.CalculateInitialAuthorityMeters()` should return zero because the first route block is unsafe.
+6. CTC must NOT send the movement suggestion/release for that train.
+7. The train must remain queued.
+8. The CTC UI should tell the dispatcher that dispatch failed because the starting block is occupied or closed for maintenance.
+9. The train should remain eligible to retry on a future system-time update after the block becomes clear.
 
-==================================================
-6. CALCULATE INITIAL SUGGESTED SPEED AT DISPATCH
-==================================================
+The existing implementation appears to already provide this behavior through `AuthorityManager`, `DispatchTrainAsync`, `DispatchFailed`, and `MainWindowViewModel`.
 
-When a queued train becomes due, CTC should calculate its initial Suggested Speed.
+Please verify it remains intact after your changes.
 
-The calculation should target the NEXT scheduled block.
+If there is already an appropriate automated test for this case, preserve it.
 
-At actual dispatch time:
+If there is no test, add a focused unit test covering at least:
 
-    currentTime = CTC system time
-    nextArrival = scheduled arrival time of BlockTimes[1]
+```text
+Start block occupied
+→ initial authority = 0
+→ train is not moved into DispatchedTrains
+→ train remains in DispatchQueue
+```
 
-    remainingSeconds = nextArrival - currentTime
+If practical within the existing test architecture, also verify that the dispatch-failure event contains an informative message mentioning the occupied start block.
 
-    requiredSpeed =
-        startBlock.LengthMeters / remainingSeconds
+Do not change the behavior to reject the schedule when it is initially built. Occupancy is live state and may change between schedule creation and departure, so the safety check belongs at dispatch time as it currently does.
 
-    effectiveMaximum =
-        min(block speed limit, physical train maximum)
+---
 
-    suggestedSpeed =
-        min(requiredSpeed, effectiveMaximum)
+## General constraints
 
-This protects the system if the simulation clock advanced slightly beyond the planned departure time.
+Keep this change small and focused.
 
-If remainingSeconds <= 0, the train is already late. Do not create an infinite/negative speed. Use the maximum safe permitted speed and surface a useful status/warning.
+Do not redesign the CTC architecture.
 
-For this iteration we only need the INITIAL suggested speed at dispatch.
+Do not implement post-dispatch train tracking yet.
 
-Do not attempt continuous speed recalculation after the train moves because CTC currently has no reliable train-specific block-location update.
+Do not infer train identity from occupancy.
 
-==================================================
-7. IMPLEMENT INITIAL SUGGESTED AUTHORITY
-==================================================
+Do not alter the existing initial suggested speed/authority algorithms except where necessary to preserve compilation after renaming.
 
-Implement a simple fixed-block authority algorithm appropriate for this iteration.
+Do not introduce code-behind for the new button if an MVVM command can be used.
 
-Authority means:
+Update comments/documentation where names change.
 
-    "The distance the train may travel along ITS SCHEDULED ROUTE
-     before reaching the first block it must not enter."
+Search the entire solution for references to `CurrentBlockId`, `Current Block`, and related properties so no stale naming remains.
 
-Starting from the train's route-start/current block, walk forward through its scheduled route.
+Build the affected projects/solution and fix any compile errors caused by the rename.
 
-A block ahead is unsafe if, at minimum:
-- Occupancy == Occupied
-- CTC has requested that the block be Closed for maintenance
+Run relevant tests after the changes.
 
-Stop the authority at the boundary BEFORE the first unsafe block.
-
-SuggestedAuthorityMeters should equal the sum of the traversable block lengths from the train's current position through the last safe block.
-
-Example with 50 m blocks:
-
-    Train at beginning of B1
-    B1 clear
-    B2 clear
-    B3 occupied
-
-Suggested authority = 100 m.
-
-If the current/start block itself is unusable, do not dispatch with a positive authority.
-
-If no route block ahead is blocked, authority may extend to the end of the scheduled route.
-
-Do NOT implement:
-- braking curves
-- moving-block logic
-- MBO
-- switch-conflict prediction
-- signal-based authority algorithms
-- train-following prediction
-
-Those are outside this iteration.
-
-A focused AuthorityManager is already present as a stub and is an appropriate place for this logic if it fits naturally.
-
-IMPORTANT LIMITATION:
-The current CTC cannot reliably recalculate authority after the train starts moving because BlockStatusMessage occupancy does not identify which train occupies a block. Keep this iteration to INITIAL authority at dispatch and document this limitation.
-
-==================================================
-8. SEND MovementSuggestionMessage DURING DISPATCH
-==================================================
-
-CTC already has MovementSuggestionMessage:
-
-    TrainId
-    SuggestedSpeedMetersPerSecond
-    SuggestedAuthorityMeters
-
-Use it.
-
-When DispatchTrainAsync releases a train:
-
-1. Locate the ScheduledTrain.
-2. Calculate initial suggested speed.
-3. Calculate initial suggested authority.
-4. Build a MovementSuggestionMessage.
-5. Send the MovementSuggestionMessage to the Track Controller through IMessageSender.
-6. Send the existing MovementRequestMessage that releases the train.
-7. ONLY after all required sends succeed:
-   - remove the queue entry
-   - add/update DispatchedTrainState
-   - store its suggested speed
-   - store its suggested authority
-   - set its initial CurrentBlockId
-
-Prefer sending the suggestion BEFORE the release so the Track Controller has movement data before receiving the release command.
-
-If either required send fails, the train should remain queued and be retried using the existing dispatch failure behavior.
-
-Do not bypass IMessageSender and do not communicate with the TestUI directly.
-
-==================================================
-9. CHANGE DISPATCHED TRAIN STATE/UI
-==================================================
-
-CTC should display what CTC SUGGESTED, not what the Track Controller later authorized.
-
-Refactor DispatchedTrainState:
-
-REMOVE/stop using:
-    AuthorizedSpeedMetersPerSecond
-    AuthorizedAuthorityMeters
-
-ADD:
-    SuggestedSpeedMetersPerSecond
-    SuggestedAuthorityMeters
-
-Update DispatchedTrainViewModel and MainWindow.xaml.
-
-The Dispatched Trains table should use labels such as:
-
-    Train ID
-    Suggested Speed
-    Suggested Authority
-    Current Block
-
-Replace the existing "Authorized Speed" column with "Suggested Speed."
-
-Keep conversions/presentation clean. CTC.Core should use consistent calculation units (prefer SI internally).
-
-==================================================
-10. REMOVE TRAIN AUTHORIZATION FROM THE TEST UI
-==================================================
-
-The TestUI should no longer require the user to manually enter an authorized speed and authority per train.
-
-Remove the Train Authorization Status section from CTC.TestUI.Wpf/MainWindow.xaml.
-
-Remove:
-    TrainAuthorizationInputViewModel creation/property
-from the TestUI MainWindowViewModel.
-
-Delete TrainAuthorizationInputViewModel.cs if nothing needs it.
-
-The Shared TrainAuthorizationStatusMessage contract does NOT need to be deleted because other modules may need it later.
-
-Since CTC is no longer using authorized speed/authority in this iteration, also clean up CTC-specific handling if it is no longer needed:
-- ICTCService.ApplyTrainAuthorization
-- CTCService.ApplyTrainAuthorization
-- CtcNamedPipeReceiver TrainAuthorizationStatusMessage route
-- CtcStateChangeKind.TrainAuthorization
-- associated WPF refresh logic
-
-Do NOT delete the shared contract simply to clean the CTC module.
-
-==================================================
-11. TEST UI BLUE LINE
-==================================================
-
-Keep "Send Sample Layout" as the isolated-development Track Model simulator.
-
-Update SampleTrackLayout so the Blue Line still has the current 15-block topology and each block now includes:
-
-    SpeedLimitKilometersPerHour = 50
-
-The TestUI should continue to:
-- send TrackLayoutMessage
-- send BlockStatusMessage
-- control SystemTime
-- capture CTC -> Track Controller messages
-
-It should NO LONGER manually enter train speed/authority.
-
-When a scheduled train dispatches, Captured CTC Outputs should show BOTH:
-
-    MovementSuggestionMessage
-    MovementRequestMessage
-
-The generic captured-output infrastructure already supports displaying arbitrary message payloads, so reuse it.
-
-==================================================
-12. TESTING / ACCEPTANCE CRITERIA
-==================================================
-
-Add/update tests where practical for the CTC.Core logic.
-
-At minimum verify:
-
-1. Every schedule-builder block time cell is editable.
-2. Blank rows may represent blocks not on a train's route.
-3. A route containing unconnected consecutive blocks is rejected.
-4. Non-increasing arrival times are rejected.
-5. A physically impossible schedule is rejected.
-6. A feasible 50 m / 4 second Blue segment produces:
-       12.5 m/s
-       45 km/h
-7. A 50 m / 3 second Blue segment is rejected because it requires 60 km/h > 50 km/h.
-8. The 70 km/h vehicle limit is considered.
-9. An occupied route block limits authority to the preceding block boundary.
-10. A maintenance-closed block limits authority.
-11. Dispatch sends MovementSuggestionMessage and MovementRequestMessage.
-12. Suggested speed/authority are stored in DispatchedTrainState.
-13. A send failure leaves the train queued.
-14. The TestUI no longer contains Train Authorization inputs.
-15. The Dispatched Trains UI displays Suggested Speed rather than Authorized Speed.
-
-After implementation:
-- build the entire solution
-- run all existing tests
-- fix any regressions
-- do not leave obsolete references/comments referring to station-only schedules or Track Controller-authorized speed in the CTC UI
-
-Finally, give me a concise summary of:
-1. files changed
-2. important model changes
-3. speed formula used
-4. authority algorithm used
-5. any known limitations/TODOs
-
-Do not make unrelated architecture changes.
+At the end, give me a concise summary of:
+1. files changed,
+2. what changed in each,
+3. whether the occupied-A1 dispatch test passed,
+4. any behavior you intentionally left for future integration.

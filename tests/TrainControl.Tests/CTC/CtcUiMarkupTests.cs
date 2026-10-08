@@ -38,4 +38,21 @@ public class CtcUiMarkupTests
         Assert.Contains("Header=\"Suggested Authority\"", xaml);
         Assert.DoesNotContain("Authorized Speed", xaml);
     }
+
+    [TestMethod]
+    public void DispatchedTrainsGrid_ShowsLastKnownNotCurrentBlock()
+    {
+        string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
+
+        Assert.Contains("Header=\"Last Known Block\"", xaml);
+        Assert.DoesNotContain("Current Block", xaml);
+    }
+
+    [TestMethod]
+    public void ScheduleBuilder_HasClearTemplateButton()
+    {
+        string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
+
+        Assert.Contains("Command=\"{Binding ClearTemplateCommand}\"", xaml);
+    }
 }

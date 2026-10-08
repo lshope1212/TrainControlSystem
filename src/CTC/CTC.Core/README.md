@@ -46,8 +46,10 @@ UI-only state such as the selected line or block belongs in the view model.
 ## Known I/O gaps
 
 1. **No train ID in block occupancy.** `BlockStatusMessage` reports only
-   clear/occupied/unknown, so CTC cannot authoritatively determine
-   `DispatchedTrainState.CurrentBlockId`. It is left empty rather than guessed.
+   clear/occupied/unknown, so CTC cannot tell which train moved into a block.
+   `DispatchedTrainState.LastKnownBlockId` therefore stays at the route start block
+   set at release; it waits for a train-position message after integration rather
+   than being guessed from occupancy.
    For the same reason suggested speed and authority are calculated only once, at
    dispatch, and are not recalculated as the train moves.
 2. **No maintenance acknowledgement.** There is no Track Controller -> CTC

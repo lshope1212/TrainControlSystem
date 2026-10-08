@@ -69,7 +69,7 @@ public class CtcDispatchTests
         var dispatched = service.State.DispatchedTrains.Single();
         Assert.AreEqual("Train 1", dispatched.TrainId);
         Assert.AreEqual("BLUE", dispatched.LineId);
-        Assert.AreEqual("A1", dispatched.CurrentBlockId);
+        Assert.AreEqual("A1", dispatched.LastKnownBlockId);
     }
 
     [TestMethod]

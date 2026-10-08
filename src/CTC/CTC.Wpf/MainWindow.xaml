@@ -713,6 +713,8 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="24"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
@@ -741,6 +743,10 @@
                                     Command="{Binding GenerateTemplateCommand}"/>
 
                             <Button Grid.Column="8"
+                                    Content="Clear Template"
+                                    Command="{Binding ClearTemplateCommand}"/>
+
+                            <Button Grid.Column="10"
                                     Content="Upload Schedule"
                                     Command="{Binding UploadScheduleCommand}"/>
 
@@ -894,7 +900,7 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Text="Trains already released from the queue. Suggested Speed and Suggested Authority are what CTC sent to the Track Controller when the train was released; they are not recalculated afterwards. Current Block is the block the train was released at; CTC cannot yet track it from occupancy."
+                        <TextBlock Text="Trains already released from the queue. Suggested Speed and Suggested Authority are what CTC sent to the Track Controller when the train was released; they are not recalculated afterwards. Last Known Block is the last block CTC can authoritatively place the train in (its route start block at release); block occupancy does not identify trains, so it is not updated yet."
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    TextWrapping="Wrap"
@@ -922,8 +928,8 @@
                                                                       StringFormat={}{0:F0} ft}"
                                                     Width="160"/>
 
-                                <DataGridTextColumn Header="Current Block"
-                                                    Binding="{Binding CurrentBlock}"
+                                <DataGridTextColumn Header="Last Known Block"
+                                                    Binding="{Binding LastKnownBlock}"
                                                     Width="*"/>
 
                             </DataGrid.Columns>

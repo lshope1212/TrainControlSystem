@@ -26,10 +26,13 @@ public class DispatchedTrainState
     public double SuggestedAuthorityMeters { get; set; }
 
     /// <summary>
-    /// Block the train currently occupies; empty when unknown. Set to the schedule's route
-    /// start block when CTC releases the train, because that is where the schedule says it begins.
-    /// KNOWN GAP: it is NOT updated after that. Block occupancy from the Track Controller
-    /// carries no train ID, so CTC cannot tell which train moved into a block and must not guess.
+    /// Last block CTC can authoritatively associate with the train; empty when unknown.
+    /// Set to the schedule's route start block when CTC releases the train, because that is
+    /// where the schedule says it begins. It is NOT necessarily where the train is now: Track
+    /// Controller occupancy alone cannot update it, because <c>BlockStatusMessage</c> carries no
+    /// TrainId, so CTC cannot tell which train moved into a block and must not guess.
+    /// TODO: update it from a train-position message (train identity + location) once the
+    /// modules are integrated.
     /// </summary>
-    public string CurrentBlockId { get; set; } = string.Empty;
+    public string LastKnownBlockId { get; set; } = string.Empty;
 }
