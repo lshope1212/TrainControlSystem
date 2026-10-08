@@ -16,8 +16,8 @@ public sealed class TrackModelConnection
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     private readonly DispatcherTimer _debounce;
     private int _layoutRequestVersion;
-    private int _ctcLayoutRevision = -1;
-    private int _ctcLayoutRequestVersion = -1;
+    private int _testUiLayoutRevision = -1;
+    private int _testUiLayoutRequestVersion = -1;
     public event EventHandler<string>? StatusReported;
     public event EventHandler<string>? DeliveryReported;
 
@@ -102,11 +102,9 @@ public sealed class TrackModelConnection
         var environments = _track.Layout.Blocks.Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
         foreach (var state in states) state.SnapshotId = snapshotId;
         foreach (var environment in environments) environment.SnapshotId = snapshotId;
-        var signals = environments.Select(e => new TrackModelSignalMessage
-            { BlockId = e.BlockId, TrainId = e.TrainId, Signal = e.Signal }).ToList();
         var sales = _track.Layout.Blocks.Select(b => b.LineId).Distinct().Select(_track.CreateTicketSales).ToList();
         _pending.Writer.TryWrite(new(_track.LayoutRevision, _layoutRequestVersion, layout,
-            states, environments, signals, sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
+            states, environments, sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
     }
 
     private async Task PublishAsync(CancellationToken token)
@@ -115,23 +113,23 @@ public sealed class TrackModelConnection
         {
             await foreach (var snapshot in _pending.Reader.ReadAllAsync(token))
             {
-                var ctc = new List<object>();
-                if (snapshot.LayoutRequestVersion != _ctcLayoutRequestVersion || snapshot.Revision != _ctcLayoutRevision) ctc.Add(snapshot.Layout);
-                ctc.AddRange(snapshot.Sales);
-                ctc.Add(snapshot.Time);
+                // Layout/accepted time are private test setup, not CTC subsystem outputs.
+                var testUi = new List<object>();
+                if (snapshot.LayoutRequestVersion != _testUiLayoutRequestVersion || snapshot.Revision != _testUiLayoutRevision) testUi.Add(snapshot.Layout);
+                testUi.Add(snapshot.Time);
                 var results = await Task.WhenAll(
                     SendBatchAsync(NamedPipeNames.TrackController, snapshot.Blocks.Cast<object>(), token),
                     SendBatchAsync(NamedPipeNames.TrainModel, snapshot.Environments.Cast<object>(), token),
-                    SendBatchAsync(NamedPipeNames.TrainController, snapshot.Signals.Cast<object>(), token),
-                    SendBatchAsync(NamedPipeNames.Ctc, ctc, token));
+                    SendBatchAsync(NamedPipeNames.Ctc, snapshot.Sales.Cast<object>(), token),
+                    SendBatchAsync(NamedPipeNames.TrackModelTestUi, testUi, token));
                 if (results[3])
                 {
-                    _ctcLayoutRevision = snapshot.Revision;
-                    _ctcLayoutRequestVersion = snapshot.LayoutRequestVersion;
+                    _testUiLayoutRevision = snapshot.Revision;
+                    _testUiLayoutRequestVersion = snapshot.LayoutRequestVersion;
                 }
                 if (!token.IsCancellationRequested)
                     await _dispatcher.InvokeAsync(() => DeliveryReported?.Invoke(this,
-                        string.Join("  •  ", new[] { "Track Controller", "Train Model", "Train Controller", "CTC" }
+                        string.Join("  •  ", new[] { "Track Controller", "Train Model", "CTC", "TestUI setup" }
                             .Select((name, i) => name + ": " + (results[i] ? "delivered" : "offline")))));
             }
         }
@@ -152,5 +150,5 @@ public sealed class TrackModelConnection
     private void Report(string text) => _dispatcher.InvokeAsync(() => StatusReported?.Invoke(this, text));
     private sealed record Snapshot(int Revision, int LayoutRequestVersion, TrackLayoutMessage Layout,
         List<TrackModelBlockStateMessage> Blocks, List<TrackModelTrainEnvironmentMessage> Environments,
-        List<TrackModelSignalMessage> Signals, List<TicketSalesMessage> Sales, SystemTimeMessage Time);
+        List<TicketSalesMessage> Sales, SystemTimeMessage Time);
 }

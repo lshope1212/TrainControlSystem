@@ -25,7 +25,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly List<object> _stagedInputs = [];
     private Guid _layoutSnapshotId;
     private bool _layoutInputsPending, _trainInputsPending;
-    private enum InputGroup { Controller, Train, Failures, Time, Temperature, Maintenance }
+    private enum InputGroup { Controller, Train, Failures, Time }
     private bool _clockBusy;
     private readonly Stopwatch _elapsed = new();
     private TimeSpan? _clockValue;
@@ -34,10 +34,8 @@ public sealed class MainWindowViewModel : ViewModelBase
     private string _status = "Disconnected";
     private string _speed = "25", _authority = "1200", _actualSpeed = "22", _boarding = "0", _disembarking = "0";
     private string _time = "09:42:18", _multiplier = "1";
-    private string _temperature = "68";
     private string _waitingPassengers = "24";
     private TrackBlockDefinition? _selectedDemandBlock;
-    private MaintenanceState _maintenance;
     private SwitchPosition _switch = SwitchPosition.Normal;
     private SignalState _signal = SignalState.Green;
     private CrossingState _crossing = CrossingState.Open;
@@ -88,7 +86,6 @@ public sealed class MainWindowViewModel : ViewModelBase
     public SignalState[] SignalOptions { get; } = [SignalState.Green, SignalState.Yellow, SignalState.Red];
     public CrossingState[] CrossingOptions { get; } = [CrossingState.Open, CrossingState.Closed];
     public OccupancyState[] TrainOccupancyOptions { get; } = [OccupancyState.Occupied, OccupancyState.Clear];
-    public MaintenanceState[] MaintenanceOptions { get; } = [MaintenanceState.Open, MaintenanceState.Closed];
     public IEnumerable<TrackBlockDefinition> StationBlocks => Blocks.Where(b => !string.IsNullOrWhiteSpace(b.StationName));
     public TrackBlockDefinition? SelectedDemandBlock
     {
@@ -100,7 +97,6 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
     public string WaitingPassengers { get => _waitingPassengers; set => SetProperty(ref _waitingPassengers, value); }
-    public MaintenanceState Maintenance { get => _maintenance; set { if (SetProperty(ref _maintenance, value)) QueueInput(InputGroup.Maintenance); } }
     public ICommand SendCommandsCommand { get; }
     public ICommand SendTrainCommand { get; }
     public ICommand RemoveTrainCommand { get; }
@@ -122,8 +118,6 @@ public sealed class MainWindowViewModel : ViewModelBase
             if (value == _blockId) return;
             StagePendingInput(InputGroup.Controller);
             StagePendingInput(InputGroup.Failures);
-            StagePendingInput(InputGroup.Temperature);
-            StagePendingInput(InputGroup.Maintenance);
             SetProperty(ref _blockId, value);
             SelectOutput(value);
             LoadCapturedInputs();
@@ -169,7 +163,6 @@ public sealed class MainWindowViewModel : ViewModelBase
     public string Disembarking { get => _disembarking; set => SetProperty(ref _disembarking, value); }
     public string Time { get => _time; set { if (SetProperty(ref _time, value)) { _clockValue = null; QueueInput(InputGroup.Time); } } }
     public string Multiplier { get => _multiplier; set => SetProperty(ref _multiplier, value); }
-    public string Temperature { get => _temperature; set { if (SetProperty(ref _temperature, value)) QueueInput(InputGroup.Temperature); } }
     public SwitchPosition Switch { get => _switch; set { if (SetProperty(ref _switch, value)) QueueInput(InputGroup.Controller); } }
     public SignalState Signal { get => _signal; set { if (SetProperty(ref _signal, value)) QueueInput(InputGroup.Controller); } }
     public CrossingState Crossing { get => _crossing; set { if (SetProperty(ref _crossing, value)) QueueInput(InputGroup.Controller); } }
@@ -264,7 +257,7 @@ public sealed class MainWindowViewModel : ViewModelBase
                     var outputSelection = SelectedOutput?.Id;
                     var demandSelection = SelectedDemandBlock?.BlockId;
                     _layoutSnapshotId = layout.SnapshotId;
-                    _layoutInputsPending = !_pendingInputs.Contains(InputGroup.Controller) && !_pendingInputs.Contains(InputGroup.Failures) && !_pendingInputs.Contains(InputGroup.Temperature) && !_pendingInputs.Contains(InputGroup.Maintenance);
+                    _layoutInputsPending = !_pendingInputs.Contains(InputGroup.Controller) && !_pendingInputs.Contains(InputGroup.Failures);
                     _trainInputsPending = !_pendingInputs.Contains(InputGroup.Train);
                     Blocks.Clear(); _lineByBlock.Clear();
                     var ids = new HashSet<string>();
@@ -306,9 +299,6 @@ public sealed class MainWindowViewModel : ViewModelBase
                     TrySynchronizeLayoutInputs();
                     if (_layoutSnapshotId == Guid.Empty && initialEnvironment && environment.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
                     break;
-                case nameof(TrackModelSignalMessage):
-                    var signal = MessageSerializer.DeserializePayload<TrackModelSignalMessage>(envelope);
-                    GetCaptured(signal.BlockId).Apply(signal); break;
                 case nameof(TicketSalesMessage):
                     var sales = MessageSerializer.DeserializePayload<TicketSalesMessage>(envelope);
                     _ticketRates[sales.LineId] = sales.TicketsPerHour; OnPropertyChanged(nameof(TicketSales)); break;
@@ -357,7 +347,6 @@ public sealed class MainWindowViewModel : ViewModelBase
             if (state is not null)
             {
                 BrokenRail = state.BrokenRail; Circuit = state.TrackCircuitFailure; Power = state.PowerFailure;
-                Maintenance = state.IsClosed ? MaintenanceState.Closed : MaintenanceState.Open;
                 Switch = state.Switch == SwitchPosition.Reverse ? SwitchPosition.Reverse : SwitchPosition.Normal;
                 Signal = state.Signal is SignalState.Green or SignalState.Yellow ? state.Signal : SignalState.Red;
                 Crossing = state.Crossing == CrossingState.Closed ? CrossingState.Closed : CrossingState.Open;
@@ -367,7 +356,6 @@ public sealed class MainWindowViewModel : ViewModelBase
             {
                 Speed = (environment.CommandedSpeedMetersPerSecond / 0.44704).ToString("0.###", CultureInfo.CurrentCulture);
                 Authority = (environment.AuthorityMeters / 0.3048).ToString("0.###", CultureInfo.CurrentCulture);
-                Temperature = (environment.TemperatureCelsius * 1.8 + 32).ToString("0.###", CultureInfo.CurrentCulture);
             }
         }
         finally { _suppressInputs = wasSuppressed; }
@@ -402,9 +390,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         if (_suppressInputs || _stopped) return;
         // An edit made while the fresh snapshot is arriving belongs to the user.
-        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature or InputGroup.Maintenance) _layoutInputsPending = false;
+        if (group is InputGroup.Controller or InputGroup.Failures) _layoutInputsPending = false;
         if (group == InputGroup.Train) _trainInputsPending = false;
-        if (group is InputGroup.Controller or InputGroup.Failures or InputGroup.Temperature or InputGroup.Maintenance) SelectOutput(BlockId);
+        if (group is InputGroup.Controller or InputGroup.Failures) SelectOutput(BlockId);
         if (group == InputGroup.Train) SelectOutput(CurrentBlock);
         _pendingInputs.Add(group);
         _inputDebounce.Stop();
@@ -441,20 +429,10 @@ public sealed class MainWindowViewModel : ViewModelBase
                 InputGroup.Train => BuildTrainUpdate(),
                 InputGroup.Failures => BuildFailures(),
                 InputGroup.Time => new SystemTimeMessage { SystemTime = ParseTime() },
-                InputGroup.Temperature => BuildTemperature(),
-                InputGroup.Maintenance => new MaintenanceRequestMessage { BlockId = BlockId, RequestedState = Maintenance },
                 _ => throw new InvalidOperationException("Unknown input group.")
             });
         }
         catch (ArgumentException ex) { Status = "Unable to send: " + ex.Message; }
-    }
-
-    private TrackModelTemperatureCommandMessage BuildTemperature()
-    {
-        if (!double.TryParse(Temperature, NumberStyles.Number, CultureInfo.CurrentCulture, out var value)
-            || !double.IsFinite(value) || value < -459.67)
-            throw new ArgumentException("Temperature must be a number at least -459.67 °F.");
-        return new() { BlockId = BlockId, TemperatureCelsius = (value - 32) / 1.8 };
     }
 
     private void ToggleClock()

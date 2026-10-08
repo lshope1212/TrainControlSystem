@@ -4,7 +4,7 @@ Track Model has its own WPF dashboard and a separate TestUI process. The default
 
 - `TrackModel.Core` owns layout, equipment state, occupancy, failures, passenger exchange, demand, temperature/heaters and ticket accounting.
 - `TrackModel.Wpf` hosts Core, imports/exports layouts, draws the selectable schematic and exchanges shared messages over named pipes.
-- `TrackModel.TestUI.Wpf` replaces the four neighboring module endpoints for standalone testing. It references Contracts/Common only and displays messages actually received from the dashboard.
+- `TrackModel.TestUI.Wpf` replaces Track Controller, Train Model and CTC for standalone testing. It references Contracts/Common only and displays messages actually received from the dashboard. It has no Train Controller receiver.
 
 ## Run
 
@@ -18,7 +18,7 @@ dotnet run --project src/TrackModel/TrackModel.Wpf
 dotnet run --project src/TrackModel/TrackModel.TestUI.Wpf
 ```
 
-Run these two applications alone for standalone testing. TestUI occupies Track Controller, Train Model, Train Controller and CTC receiving endpoints, so other stubs/real modules must not compete for them. The dashboard works with offline receivers and reports each destination's delivery status. After starting a receiver, click **Refresh outputs**.
+Run these two applications alone for standalone testing. TestUI occupies Track Controller, Train Model and CTC receiving endpoints, plus its private setup/feedback endpoint, so other stubs/real modules must not compete for them. The dashboard works with offline receivers and reports each destination's delivery status. After starting a receiver, click **Refresh outputs**.
 
 ## Blue Line quick start
 
@@ -26,7 +26,7 @@ Run these two applications alone for standalone testing. TestUI occupies Track C
 2. Command block **5** controls the one switch: Normal → **6**, Reverse → **11**. Signals are on **6** and **11**; the crossing is on **3**.
 3. Keep train Occupancy **Occupied**, select current block **10** (Station B), and keep actual speed **0**. Set station demand with **Set waiting**, then use **Apply passenger exchange once** for one boarding/disembarking event. Ordinary telemetry edits never repeat passenger exchange. **Remove train** clears its occupancy; choose Occupied to reinsert it.
 4. Beacons are on approach blocks **9** (Station B / target 10) and **14** (Station C / target 15). Station blocks 10 and 15 do not implicitly emit beacons.
-5. Controller commands, failures, maintenance and temperature refer to the selected command block. Output block selection is independent of train position. Refresh flushes pending edits before requesting outputs.
+5. Controller commands and failures refer to the selected command block. Output block selection is independent of train position. Refresh flushes pending edits before requesting outputs. TestUI has no temperature, heater or maintenance controls/displays.
 6. **Layout details** shows captured static properties/equipment/topology in SI units. **Captured messages** shows the latest 200 received envelopes. The TestUI scrolls at smaller window sizes to keep all controls reachable.
 7. Start/Pause the test clock, edit HH:mm:ss while paused, or step exactly ten simulation seconds. Running speed uses elapsed wall time and a positive multiplier. Midnight preserves elapsed days and preceding-hour tickets.
 
@@ -40,7 +40,7 @@ For expected inputs/outputs and a full walkthrough, see [Iteration 2 software re
 
 JSON requires `name` and a nonempty `blocks` list. Each block requires unique `id`, `lineId` and positive `lengthMeters`. Optional fields include `number`, `section`, `elevationMeters`, `gradePercent`, `speedLimitMetersPerSecond`, `temperatureCelsius`, `stationName`, `initialWaitingPassengers`, `hasSwitch`, `hasSignal`, `hasCrossing`, `hasHeater`, `travelDirection`, `beacon`, `beaconTargetBlockId`, `connectedBlockIds`, `normalNextBlockId` and `reverseNextBlockId`. `travelDirection` accepts Forward, Reverse or Bidirectional. A beacon target must identify a station on the same line. A switch needs two distinct connected destinations.
 
-CSV uses these names case-insensitively, with Id, LineId and LengthMeters required, semicolon-separated connected IDs, true/false booleans and quoted fields. Domain state and contracts use SI. The dashboard/TestUI use mph, feet and Fahrenheit; captured layout details expose SI values. The schematic describes connectivity, not geographic position or scale.
+CSV uses these names case-insensitively, with Id, LineId and LengthMeters required, semicolon-separated connected IDs, true/false booleans and quoted fields. Domain state and contracts use SI. Speed/distance controls use mph/feet; the dashboard temperature control uses Fahrenheit. Captured layout details expose SI values. The schematic describes connectivity, not geographic position or scale.
 
 Blue Line direction, installed heaters, 68°F ambient temperature and initial waiting populations are documented simulation configuration because the workbook does not specify these fields. Heaters operate at/below 32°F when powered. The original workbook is not modified.
 
@@ -51,18 +51,20 @@ Blue Line direction, installed heaters, 68°F ambient temperature and initial wa
 | `TrainControl.TrackModel` | TrackModelCommandMessage, TrackModelTrainUpdateMessage, TrackModelFailureCommandMessage, TrackModelTemperatureCommandMessage, TrackModelPassengerDemandMessage, MaintenanceRequestMessage, SystemTimeMessage, TrackModelSnapshotRequestMessage |
 | `TrainControl.TrackController` | TrackModelBlockStateMessage |
 | `TrainControl.TrainModel` | TrackModelTrainEnvironmentMessage |
-| `TrainControl.TrainController` | TrackModelSignalMessage |
-| `TrainControl.CTC` | TrackLayoutMessage, TicketSalesMessage, SystemTimeMessage (mirror of accepted clock input) |
-| `TrainControl.TrackModel.TestUI` | TrackModelInputResultMessage (optional feedback) |
+| `TrainControl.TrainController` | None: Track Model does not send to this endpoint |
+| `TrainControl.CTC` | TicketSalesMessage only |
+| `TrainControl.TrackModel.TestUI` | TrackLayoutMessage and accepted SystemTimeMessage (private setup), TrackModelInputResultMessage (feedback) |
 
 Common transport sends newline-delimited JSON envelopes with camelCase fields and string enums. The dashboard serializes mutations on its UI thread, captures immutable snapshots, and publishes destinations independently. Layout/state/environment messages share a SnapshotId so TestUI can synchronize inputs after import/refresh without replaying stale state. Layout definitions include all physical values, beacon/equipment metadata and switch destinations. No UI coordinates enter the integration contracts.
+
+Per Derrick's October 8 interface correction, **To Track Controller** displays only occupancy and the three failure flags. **To CTC** displays only ticket sales. Passenger totals are shown under **To Train Model**. Physical traffic-light output and the Train Controller destination are removed. Existing shared state/environment fields are retained for contract compatibility and dashboard behavior; hiding fields does not alter those shared schemas.
 
 ## Behavior and scope
 
 - Train Model supplies block-level telemetry and actual speed. Moving/removing a train clears its old block; collision and closed-block entry are rejected atomically. An occupied switch cannot be thrown, and an occupied block cannot close for maintenance.
 - Passenger exchange requires a stopped train at a station and cannot exceed waiting demand. Exchange IDs prevent duplicate retries. One ticket per boarding passenger updates cumulative station totals and CTC's preceding-simulation-hour count. Rewinding time clears the hourly ledger, not cumulative station totals. Set waiting changes demand only.
 - All three failures are independent. Circuit/power failure reports Unknown occupancy while retaining physical train position; power failure makes signals Unknown and heaters Off. Track Controller owns safe speed/authority decisions.
-- Temperature is adjustable per block in either UI. Unsupported equipment is disabled / N/A. Beacon text comes from the transponder's explicit metadata, independent of station location.
+- Temperature remains adjustable in the main dashboard only. Maintenance remains a Core operation. Neither is a TestUI input. Unsupported equipment inputs are disabled; beacon text comes from the transponder's explicit metadata, independent of station location.
 - Iteration 2 permits neighboring-module stubs. This module does not implement train physics, onboard capacity, automatic train travel, PLC logic, geographic reconstruction, physical relay/PTC protocols or full team integration. Travel direction is metadata; beacon passage timing belongs to later integration.
 
 ## Validate
@@ -72,6 +74,6 @@ dotnet build TrainControlSystem.sln
 dotnet test TrainControlSystem.sln --no-build
 ```
 
-The suite includes platform-neutral Core/import tests and Windows STA workflows against the production TestUI view model with serialized contracts and a model-backed transport, plus a rendered layout-tab regression test. The current result is 97 passing tests (74 + 23). Native input/output checks are recorded in [Blue Line manual results](MANUAL_BLUE_LINE_RESULTS.md); actual-workbook import verification is recorded separately in the Iteration 2 readiness report.
+The suite includes platform-neutral Core/import tests and Windows STA workflows against the production TestUI view model with serialized contracts and a model-backed transport, plus a rendered layout-tab regression test. The current result is 97 passing tests (74 + 23). [October 8 interface changes](INTERFACE_CHANGES_OCT_8.md) records the latest checks; [Blue Line manual results](MANUAL_BLUE_LINE_RESULTS.md) retains the October 7 manual pass. Actual-workbook import verification is recorded separately in the Iteration 2 readiness report.
 
-For a reproducible check against the actual running dashboard, follow [TrackModel.PipeSmoke](../../tests/TrackModel.PipeSmoke/README.md). Its 18 output check groups passed with separate named-pipe receivers for all four neighboring modules. Close TestUI before running it and restore the Blue Line afterward.
+For a reproducible check against the actual running dashboard, follow [TrackModel.PipeSmoke](../../tests/TrackModel.PipeSmoke/README.md). Its 16 check groups include verifying ticket-only CTC traffic and zero messages to Train Controller. Close TestUI before running it and restore the Blue Line afterward.

@@ -23,7 +23,6 @@
     <DataGridTextColumn Header="Reverse" Binding="{Binding Definition.ReverseNextBlockId}" Width="85"/>
     <DataGridCheckBoxColumn Header="Signal" Binding="{Binding HasSignal, Mode=OneWay}" Width="75"/>
     <DataGridCheckBoxColumn Header="Crossing" Binding="{Binding HasCrossing, Mode=OneWay}" Width="90"/>
-    <DataGridCheckBoxColumn Header="Heater" Binding="{Binding Definition.HasHeater, Mode=OneWay}" Width="80"/>
     <DataGridTextColumn Header="Beacon" Binding="{Binding Definition.Beacon}" Width="120"/>
     <DataGridTextColumn Header="Target" Binding="{Binding Definition.BeaconTargetBlockId}" Width="75"/>
     <DataGridTextColumn Header="Connected blocks" Binding="{Binding Connections}" Width="*"/>

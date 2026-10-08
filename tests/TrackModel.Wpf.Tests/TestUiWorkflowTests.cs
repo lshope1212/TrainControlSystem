@@ -67,8 +67,7 @@ public class TestUiWorkflowTests
         foreach (var (signal, label) in new[] { (SignalState.Green,"PROCEED"), (SignalState.Yellow,"CAUTION"), (SignalState.Red,"STOP"), (SignalState.Green,"PROCEED") })
         {
             _vm.Signal = signal; await _vm.RefreshAsync();
-            Assert.AreEqual(signal.ToString().ToUpperInvariant(), _vm.SelectedOutput!.TrafficLight);
-            Assert.AreEqual(label, _vm.SelectedOutput.TrackSignal);
+            Assert.AreEqual(label, _vm.SelectedOutput!.TrackSignal);
             Assert.AreEqual("22 mph", Output("104").ActualSpeed);
         }
     }
@@ -109,7 +108,7 @@ public class TestUiWorkflowTests
         foreach (var (position, next) in new[] { (SwitchPosition.Normal,"104"), (SwitchPosition.Reverse,"121"), (SwitchPosition.Normal,"104") })
         {
             _vm.Switch = position; await _vm.RefreshAsync();
-            Assert.AreEqual(position.ToString(), _vm.SelectedOutput!.Switch);
+            Assert.AreEqual(position, _vm.SelectedOutput!.State!.Switch);
             Assert.AreEqual(next, _vm.SelectedOutput.NextBlock);
         }
     }
@@ -121,7 +120,7 @@ public class TestUiWorkflowTests
         foreach (var crossing in new[] { CrossingState.Open, CrossingState.Closed, CrossingState.Open })
         {
             _vm.Crossing = crossing; await _vm.RefreshAsync();
-            Assert.AreEqual(crossing.ToString(), _vm.SelectedOutput!.Crossing);
+            Assert.AreEqual(crossing, _vm.SelectedOutput!.State!.Crossing);
             Assert.AreEqual("No signal", _vm.SelectedOutput.TrackSignal);
         }
     }
@@ -223,19 +222,20 @@ public class TestUiWorkflowTests
         _vm.Time="25:99:99"; await _vm.RefreshAsync(); StringAssert.Contains(_vm.Status,"HH:mm:ss");
         Assert.AreEqual(new TimeSpan(9,42,18),_connection.Model.SystemTime);
         Assert.IsFalse(_vm.HasSwitch); Assert.IsFalse(_vm.HasCrossing); Assert.IsFalse(_vm.HasSignal);
-        Assert.AreEqual("N/A",Output("104").Switch); Assert.AreEqual("N/A",Output("104").Crossing);
+        Assert.AreEqual("No signal",Output("104").TrackSignal);
     }
 
 
     [TestMethod]
-    public async Task Temperature_UsesFahrenheitAndShowsHeaterAndPassengerTotals()
+    public async Task CapturedSetup_UsesPrivateEndpointAndCtcContainsOnlyTickets()
     {
-        _vm.Temperature="32"; await _vm.RefreshAsync();
-        Assert.AreEqual("32 °F",_vm.SelectedOutput!.Temperature);
-        Assert.AreEqual("ON",_vm.SelectedOutput.Heater);
-        _vm.Power=true; await _vm.RefreshAsync(); Assert.AreEqual("OFF",_vm.SelectedOutput.Heater);
-        _vm.Power=false; _vm.Temperature="68"; await _vm.RefreshAsync(); Assert.AreEqual("OFF",_vm.SelectedOutput.Heater);
-        Assert.AreEqual("12 / 8",_vm.SelectedOutput.PassengerTotals); Assert.AreEqual("12",_vm.SelectedOutput.Tickets);
+        await _vm.RefreshAsync();
+        Assert.IsTrue(_vm.Messages.Any(m => m.Destination == "TestUI setup / feedback" && m.MessageType == nameof(TrackLayoutMessage)));
+        Assert.IsTrue(_vm.Messages.Any(m => m.Destination == "TestUI setup / feedback" && m.MessageType == nameof(SystemTimeMessage)));
+        Assert.IsTrue(_vm.Messages.Any(m => m.Destination == "CTC"));
+        Assert.IsTrue(_vm.Messages.Where(m => m.Destination == "CTC").All(m => m.MessageType == nameof(TicketSalesMessage)));
+        Assert.IsFalse(_vm.Messages.Any(m => m.Destination == "Train Controller"));
+        Assert.AreEqual("12 / 8",_vm.SelectedOutput!.PassengerTotals); Assert.AreEqual("12",_vm.SelectedOutput.Tickets);
     }
 
     [TestMethod]
@@ -275,11 +275,10 @@ public class TestUiWorkflowTests
         foreach(var signal in new[]{SignalState.Green,SignalState.Yellow,SignalState.Red})
         {
             _vm.Signal=signal; await _vm.RefreshAsync();
-            Assert.AreEqual(signal.ToString().ToUpperInvariant(),Output("6").TrafficLight);
-            Assert.AreEqual(signal.ToString().ToUpperInvariant(),Output("6").StateSignal);
+            Assert.AreEqual(signal,Output("6").Environment!.Signal);
         }
         _vm.BlockId="3"; _vm.Crossing=CrossingState.Closed; await _vm.RefreshAsync();
-        Assert.AreEqual("Closed",Output("3").Crossing);
+        Assert.AreEqual(CrossingState.Closed,Output("3").State!.Crossing);
         _vm.SelectedOutput=Output("14"); await _vm.RefreshAsync();
         Assert.AreEqual("Station C",_vm.SelectedOutput!.Beacon); Assert.AreEqual("14",_vm.SelectedOutput.Id);
         Assert.AreEqual("3",_vm.BlockId); Assert.AreEqual("1",_vm.CurrentBlock);
@@ -301,20 +300,22 @@ public class TestUiWorkflowTests
     }
 
     [TestMethod]
-    public async Task BlueLine_MaintenanceInputAndOutputRejectEntryAndClosingOccupiedBlock()
+    public async Task BlueLine_OrdinaryTestInputsDoNotSendTemperatureOrMaintenance()
     {
         await UseBlueLineAsync();
-        _vm.BlockId="3"; _vm.Maintenance=MaintenanceState.Closed; await _vm.RefreshAsync();
-        Assert.AreEqual("CLOSED",Output("3").Maintenance);
-        _vm.CurrentBlock="3"; await _vm.RefreshAsync();
-        StringAssert.Contains(_vm.Status,"closed for maintenance");
-        Assert.AreEqual("01",_connection.Model.FindBlock("1")!.TrainId);
-        _vm.BlockId="1"; _vm.Maintenance=MaintenanceState.Closed; await _vm.RefreshAsync();
-        StringAssert.Contains(_vm.Status,"occupied block cannot be closed"); Assert.AreEqual("OPEN",Output("1").Maintenance);
+        _connection.Sent.Clear();
+        _vm.Speed="20"; _vm.Authority="600"; _vm.Power=true; _vm.Time="10:00:00";
+        _vm.BlockId="3"; _vm.CurrentBlock="10";
+        await _vm.RefreshAsync();
+        Assert.IsTrue(_connection.Sent.Any(m => m is TrackModelCommandMessage));
+        Assert.IsTrue(_connection.Sent.Any(m => m is TrackModelFailureCommandMessage));
+        Assert.IsTrue(_connection.Sent.Any(m => m is SystemTimeMessage));
+        Assert.IsTrue(_connection.Sent.All(m => m is TrackModelCommandMessage or TrackModelTrainUpdateMessage
+            or TrackModelFailureCommandMessage or SystemTimeMessage or TrackModelSnapshotRequestMessage));
     }
 
     [TestMethod]
-    public async Task BlueLine_LayoutCaptureAndHeaterFailureOutputsAreComplete()
+    public async Task BlueLine_LayoutCaptureAndPowerFailurePreservePhysicalTrain()
     {
         await UseBlueLineAsync();
         Assert.AreEqual(50d,Output("1").Definition!.LengthMeters);
@@ -322,20 +323,21 @@ public class TestUiWorkflowTests
         Assert.AreEqual("Bidirectional",Output("1").Definition!.TravelDirection);
         Assert.AreEqual("Station B",Output("9").Definition!.Beacon);
         Assert.AreEqual("No beacon",Output("10").Beacon);
-        _vm.Temperature="32"; await _vm.RefreshAsync(); Assert.AreEqual("ON",Output("1").Heater);
         _vm.Power=true; await _vm.RefreshAsync();
-        Assert.AreEqual("OFF",Output("1").Heater); Assert.AreEqual("UNKNOWN",Output("1").Occupancy);
+        Assert.AreEqual("UNKNOWN",Output("1").Occupancy);
         Assert.AreEqual("01",Output("1").Train);
     }
 
     private sealed class ModelConnection : IExternalModuleConnection
     {
         public TrackService Model { get; }=new();
+        public List<object> Sent { get; } = [];
         public event Action<string,MessageEnvelope>? MessageReceived;
         public event Action<string>? ErrorReported { add {} remove {} }
         public ModelConnection() => SampleTrackLayout.LoadDemo(Model);
         public Task SendAsync(object message)
         {
+            Sent.Add(message);
             try
             {
                 switch(message)
@@ -344,27 +346,24 @@ public class TestUiWorkflowTests
                     case TrackModelTrainUpdateMessage t: Model.ApplyTrainUpdate(t); break;
                     case TrackModelFailureCommandMessage f: Model.ApplyFailures(f); break;
                     case SystemTimeMessage t: Model.SetSystemTime(t.SystemTime); break;
-                    case TrackModelTemperatureCommandMessage t: Model.ApplyTemperature(t); break;
                     case TrackModelPassengerDemandMessage p: Model.ApplyPassengerDemand(p); break;
-                    case MaintenanceRequestMessage m: Model.SetMaintenance(m.BlockId,m.RequestedState); break;
                 }
                 var snapshot=Guid.NewGuid();
                 if(message is TrackModelSnapshotRequestMessage)
-                { var layout=Model.CreateLayoutMessage(); layout.SnapshotId=snapshot; Emit(layout); }
+                { var layout=Model.CreateLayoutMessage(); layout.SnapshotId=snapshot; Emit(layout,"TestUI setup / feedback"); }
                 foreach(var block in Model.Layout.Blocks)
                 {
-                    var state=Model.CreateBlockState(block.Id); state.SnapshotId=snapshot; Emit(state);
-                    var environment=Model.CreateTrainEnvironment(block.Id); environment.SnapshotId=snapshot; Emit(environment);
-                    Emit(new TrackModelSignalMessage{BlockId=block.Id,TrainId=environment.TrainId,Signal=environment.Signal});
+                    var state=Model.CreateBlockState(block.Id); state.SnapshotId=snapshot; Emit(state,"Track Controller");
+                    var environment=Model.CreateTrainEnvironment(block.Id); environment.SnapshotId=snapshot; Emit(environment,"Train Model");
                 }
-                foreach(var line in Model.Layout.Blocks.Select(b=>b.LineId).Distinct()) Emit(Model.CreateTicketSales(line));
-                Emit(new SystemTimeMessage{SystemTime=Model.SystemTime});
+                foreach(var line in Model.Layout.Blocks.Select(b=>b.LineId).Distinct()) Emit(Model.CreateTicketSales(line),"CTC");
+                Emit(new SystemTimeMessage{SystemTime=Model.SystemTime},"TestUI setup / feedback");
                 Emit(new TrackModelInputResultMessage{Accepted=true,MessageType=message.GetType().Name});
             }
             catch(ArgumentException ex) { Emit(new TrackModelInputResultMessage{Accepted=false,MessageType=message.GetType().Name,Detail=ex.Message}); }
             catch(InvalidOperationException ex) { Emit(new TrackModelInputResultMessage{Accepted=false,MessageType=message.GetType().Name,Detail=ex.Message}); }
             return Task.CompletedTask;
         }
-        private void Emit(object message) => MessageReceived?.Invoke("Model",MessageSerializer.Deserialize(MessageSerializer.Serialize(message)));
+        private void Emit(object message, string destination = "TestUI setup / feedback") => MessageReceived?.Invoke(destination,MessageSerializer.Deserialize(MessageSerializer.Serialize(message)));
     }
 }

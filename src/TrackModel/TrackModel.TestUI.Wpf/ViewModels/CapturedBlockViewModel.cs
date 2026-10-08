@@ -12,29 +12,21 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     public bool? HasCrossing { get; private set; }
     public TrackModelBlockStateMessage? State { get; private set; }
     public TrackModelTrainEnvironmentMessage? Environment { get; private set; }
-    public TrackModelSignalMessage? Signal { get; private set; }
     public TrackBlockDefinition? Definition { get; private set; }
     public string Connections => Definition is null ? "—" : string.Join(", ", Definition.ConnectedBlockIds);
-    public string Maintenance => State is null ? "—" : State.IsClosed ? "CLOSED" : "OPEN";
-    public string StateSignal => HasSignal == false ? "N/A" : State?.Signal.ToString().ToUpperInvariant() ?? "—";
     public string Occupancy => State?.Occupancy.ToString().ToUpperInvariant() ?? "—";
     public string BrokenRail => State is null ? "—" : State.BrokenRail ? "FAILURE" : "NORMAL";
     public string TrackCircuit => State is null ? "—" : State.TrackCircuitFailure ? "FAILURE" : "NORMAL";
     public string Power => State is null ? "—" : State.PowerFailure ? "FAILURE" : "NORMAL";
-    public string Switch => HasSwitch == false ? "N/A" : State?.Switch.ToString() ?? "—";
-    public string Crossing => HasCrossing == false ? "N/A" : State?.Crossing.ToString() ?? "—";
     public string Speed => Environment is null ? "—" : $"{Environment.CommandedSpeedMetersPerSecond / 0.44704:0.#} mph";
     public string ActualSpeed => Environment is null ? "—" : $"{Environment.ActualSpeedMetersPerSecond / 0.44704:0.#} mph";
     public string Authority => Environment is null ? "—" : $"{Environment.AuthorityMeters / 0.3048:N0} ft";
     public string TrackSignal => HasSignal == false ? "No signal" : Environment is null ? "—" : Describe(Environment.Signal);
-    public string TrafficLight => HasSignal == false ? "No signal" : Signal?.Signal.ToString().ToUpperInvariant() ?? "—";
     public string Beacon => Environment is null ? "—" : Environment.Beacon.Length == 0 ? "No beacon" : Environment.Beacon;
     public string ElevationGrade => Environment is null ? "—" : $"{Environment.ElevationMeters / 0.3048:0.#} ft / {Environment.GradePercent:0.##}%";
     public string Demand => Environment is null ? "—" : $"{Environment.WaitingPassengers} waiting";
     public string PassengerTotals => Environment is null ? "—" : $"{Environment.BoardingPassengers} / {Environment.DisembarkingPassengers}";
     public string Tickets => Environment is null ? "—" : Environment.TicketsSold.ToString("N0");
-    public string Temperature => Environment is null ? "—" : $"{Environment.TemperatureCelsius * 1.8 + 32:0.#} °F";
-    public string Heater => Environment is null ? "—" : !Environment.HasHeater ? "N/A" : Environment.HeaterOn ? "ON" : "OFF";
     public string Train => Environment is null ? "—" : Environment.TrainId.Length == 0 ? "No train" : Environment.TrainId;
     public string NextBlock => Environment?.NextBlockId ?? "—";
     public string LastReceived { get; private set; } = "No output received.";
@@ -42,7 +34,6 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
         State?.Occupancy == OccupancyState.Clear ? Brushes.ForestGreen : Brushes.DarkOrange;
     public void Apply(TrackModelBlockStateMessage state) { State = state; Changed(); }
     public void Apply(TrackModelTrainEnvironmentMessage environment) { Environment = environment; Changed(); }
-    public void Apply(TrackModelSignalMessage signal) { Signal = signal; Changed(); }
     public void ApplyDefinition(TrackBlockDefinition block)
     {
         HasSignal = block.HasSignal; HasSwitch = block.HasSwitch; HasCrossing = block.HasCrossing;

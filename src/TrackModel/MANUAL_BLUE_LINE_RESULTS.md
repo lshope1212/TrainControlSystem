@@ -1,5 +1,7 @@
 # Blue Line: native TestUI input/output checks
 
+> Historical October 7 pass. Derrick's October 8 correction removes the temperature/heater/maintenance controls, extra wayside outputs and Train Controller destination described below. See [current interface changes and checks](INTERFACE_CHANGES_OCT_8.md).
+
 October 7, 2026. These checks used the actual Windows TestUI controls and inspected the messages displayed by its output panels while the separate Track Model dashboard was running. They are separate from the automated view-model tests and the console transport checks.
 
 | Input configured manually | Observed result |

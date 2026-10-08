@@ -12,8 +12,7 @@ public sealed class ExternalModuleSimulator(Dispatcher dispatcher) : IExternalMo
     public Task RunAsync(CancellationToken token) => Task.WhenAll(
         Listen("Track Controller", NamedPipeNames.TrackController, token),
         Listen("Train Model", NamedPipeNames.TrainModel, token),
-        Listen("Train Controller", NamedPipeNames.TrainController, token),
-        Listen("Input result", NamedPipeNames.TrackModelTestUi, token),
+        Listen("TestUI setup / feedback", NamedPipeNames.TrackModelTestUi, token),
         Listen("CTC", NamedPipeNames.Ctc, token));
 
     private Task Listen(string name, string pipe, CancellationToken token) => NamedPipeTransport.ListenAsync(pipe,

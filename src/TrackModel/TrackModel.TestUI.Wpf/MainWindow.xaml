@@ -50,9 +50,6 @@
 </Grid>
 <TextBlock Grid.Row="5" Text="Crossing" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="5" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding CrossingOptions}" SelectedItem="{Binding Crossing}" IsEnabled="{Binding HasCrossing}" AutomationProperties.Name="Crossing command" />
 </Grid>
-    <Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions>
-     <TextBlock Text="Maintenance"/><ComboBox Grid.Column="1" ItemsSource="{Binding MaintenanceOptions}" SelectedItem="{Binding Maintenance}" AutomationProperties.Name="Maintenance request"/>
-    </Grid>
    </StackPanel></Border>
    <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource Card}" Margin="0,0,0,8"><StackPanel>
     <TextBlock Text="From Train Model" Style="{StaticResource Heading}"/>
@@ -87,13 +84,7 @@
 <TextBlock Grid.Row="1" Text="Broken rail" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedOutput.BrokenRail}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
 <TextBlock Grid.Row="2" Text="Track circuit" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedOutput.TrackCircuit}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
 <TextBlock Grid.Row="3" Text="Power" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedOutput.Power}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="4" Text="Switch position" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedOutput.Switch}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="5" Text="Crossing gates" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedOutput.Crossing}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
 </Grid>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="26"/></Grid.RowDefinitions>
-     <TextBlock Text="Signal state"/><TextBlock Grid.Column="1" Text="{Binding SelectedOutput.StateSignal}" Style="{StaticResource OutputValue}"/>
-     <TextBlock Grid.Row="1" Text="Maintenance"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedOutput.Maintenance}" Style="{StaticResource OutputValue}"/>
-    </Grid>
    </StackPanel></Border>
    <Border Grid.Row="2" Style="{StaticResource Card}"><StackPanel>
     <TextBlock Text="Failure Injection" Style="{StaticResource Heading}"/>
@@ -103,10 +94,6 @@
      <CheckBox Content="Track circuit" IsChecked="{Binding Circuit}" Margin="0,6,12,6" AutomationProperties.Name="Inject track circuit"/>
      <CheckBox Content="Power" IsChecked="{Binding Power}" AutomationProperties.Name="Inject power"/>
     </StackPanel>
-    <Grid Margin="0,0,0,4"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions>
-     <TextBlock Text="Temperature (°F)"/>
-     <TextBox Grid.Column="1" Text="{Binding Temperature, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Ambient temperature Fahrenheit"/>
-    </Grid>
     <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="0,5,0,0"><StackPanel>
      <TextBlock Text="Shared System Clock" Style="{StaticResource Heading}" Margin="0,0,0,3"/>
      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="34"/><RowDefinition Height="34"/></Grid.RowDefinitions>
@@ -132,19 +119,15 @@
 <TextBlock Grid.Row="7" Text="Passenger demand" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedOutput.Demand}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
 <TextBlock Grid.Row="8" Text="Next block" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedOutput.NextBlock}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
 </Grid>
-   </StackPanel></Border>
-   <Border Grid.Row="2" Grid.Column="4" Style="{StaticResource Card}"><StackPanel>
-    <TextBlock Text="To Train Controller &amp; CTC" Style="{StaticResource Heading}"/>
-    <TextBlock Text="Traffic light" Foreground="{StaticResource Muted}" Margin="0,4,0,3"/>
-    <TextBlock Text="{Binding SelectedOutput.TrafficLight}" Style="{StaticResource OutputValue}" FontSize="19"/>
-    <TextBlock Text="Tickets in preceding simulation hour" Foreground="{StaticResource Muted}" Margin="0,10,0,3"/>
-    <TextBlock Text="{Binding TicketSales}" Style="{StaticResource OutputValue}" FontSize="17"/>
-    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="26"/><RowDefinition Height="26"/><RowDefinition Height="26"/></Grid.RowDefinitions>
+    <Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="26"/></Grid.RowDefinitions>
      <TextBlock Text="Boarded / disembarked"/><TextBlock Grid.Column="1" Text="{Binding SelectedOutput.PassengerTotals}" Style="{StaticResource OutputValue}"/>
      <TextBlock Grid.Row="1" Text="Cumulative station tickets"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedOutput.Tickets}" Style="{StaticResource OutputValue}"/>
-     <TextBlock Grid.Row="2" Text="Temperature"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedOutput.Temperature}" Style="{StaticResource OutputValue}"/>
-     <TextBlock Grid.Row="3" Text="Track heater"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedOutput.Heater}" Style="{StaticResource OutputValue}"/>
     </Grid>
+   </StackPanel></Border>
+   <Border Grid.Row="2" Grid.Column="4" Style="{StaticResource Card}"><StackPanel>
+    <TextBlock Text="To CTC" Style="{StaticResource Heading}"/>
+    <TextBlock Text="Tickets in preceding simulation hour" Foreground="{StaticResource Muted}" Margin="0,10,0,3"/>
+    <TextBlock Text="{Binding TicketSales}" Style="{StaticResource OutputValue}" FontSize="17"/>
    </StackPanel></Border>
   </Grid>
   </ScrollViewer>
