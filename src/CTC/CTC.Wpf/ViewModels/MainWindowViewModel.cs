@@ -24,11 +24,13 @@ public class MainWindowViewModel : ViewModelBase
     private string _communicationStatus = "No requests sent.";
     private string _inboundStatus = "No messages received.";
     private string _lastTerritoryUpdate = "--";
+    private bool _isMaintenanceMode;
 
     public MainWindowViewModel(ICTCService ctc)
     {
         _ctc = ctc ?? throw new ArgumentNullException(nameof(ctc));
 
+        ToggleMaintenanceModeCommand = new RelayCommand(_ => IsMaintenanceMode = !IsMaintenanceMode);
         CloseSelectedBlockCommand = new AsyncRelayCommand(_ => CloseSelectedBlockAsync(), _ => CanCloseSelectedBlock());
 
         //TODO other command implementations
@@ -115,9 +117,31 @@ public class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Local operator mode that unlocks the Block Controls. Separate from a block's
+    /// <see cref="MaintenanceState"/>: toggling it changes no CTC state and sends no messages.
+    /// </summary>
+    public bool IsMaintenanceMode
+    {
+        get => _isMaintenanceMode;
+        private set
+        {
+            if (SetProperty(ref _isMaintenanceMode, value))
+            {
+                OnPropertyChanged(nameof(MaintenanceModeButtonText));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
+    public string MaintenanceModeButtonText => IsMaintenanceMode ? "Maintenance Mode: ON" : "Maintenance Mode: OFF";
+
+    public ICommand ToggleMaintenanceModeCommand { get; }
+
     public ICommand CloseSelectedBlockCommand { get; }
 
-    private bool CanCloseSelectedBlock() => SelectedBlock is not null && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Closed;
+    private bool CanCloseSelectedBlock() =>
+        IsMaintenanceMode && SelectedBlock is not null && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Closed;
 
     private async Task CloseSelectedBlockAsync()
     {

@@ -1,240 +1,248 @@
-Continue working on the current `Luke_CTC` branch of:
+We need to make one relatively small change to the CTC module for this iteration.
 
-https://github.com/lshope1212/TrainControlSystem
+Please inspect the current CTC implementation before making changes, especially:
 
-The previous changes for three-digit train IDs and mph speed-limit display have already been implemented or are in progress. Do not regress those changes.
+- `src/CTC/CTC.Wpf/MainWindow.xaml`
+- `src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
+- `src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs`
+- Any existing commands associated with closing/reopening blocks and toggling switches
 
-I want one additional presentation-layer unit conversion:
+## Goal
 
-**Keep all track/block lengths stored internally in meters, but display them to the user in feet everywhere they appear in the CTC WPF UI.**
+The **Block Controls** section of the CTC window should only be usable when the CTC operator has explicitly enabled **Maintenance Mode**.
 
-## Important architecture rule
+This is an operator/UI mode for the CTC application. It is **not the same thing as the existing per-block `MaintenanceState` / requested maintenance state**.
 
-Do NOT change backend/core storage units.
+Do not modify the meaning of `MaintenanceState`, do not mark every block as being in maintenance, and do not send any message to another module simply because Maintenance Mode was turned on or off.
 
-Properties such as:
+---
+
+## Required behavior
+
+### 1. Add a Maintenance Mode toggle to the Block Controls section
+
+In the existing **Block Controls** panel in `MainWindow.xaml`, add a button near the top of the section that toggles Maintenance Mode.
+
+The UI should make the current state obvious. For example, the button can display:
+
+- `Maintenance Mode: OFF`
+- `Maintenance Mode: ON`
+
+A small status label or reasonable visual difference between ON/OFF is also fine, but keep it consistent with the existing CTC UI styling. Do not redesign the panel.
+
+Maintenance Mode must default to **OFF** when the CTC application starts.
+
+The Maintenance Mode toggle itself must ALWAYS remain enabled so the operator can enter or leave Maintenance Mode.
+
+---
+
+### 2. Disable all actual block-control actions while Maintenance Mode is OFF
+
+When Maintenance Mode is OFF, the following existing Block Controls must be disabled:
+
+- Close Block
+- Reopen Block
+- Toggle Switch
+
+The selected-block information above the Block Controls section should remain usable/readable. Only the controls that modify track/block state should be restricted.
+
+A clean way to handle this in XAML is to leave the Maintenance Mode toggle outside of a child container and bind that child container's `IsEnabled` to `IsMaintenanceMode`.
+
+For example, conceptually:
+
+```text
+Block Controls
+    [ Maintenance Mode: OFF ]     <-- always usable
+
+    Child controls container      <-- IsEnabled = IsMaintenanceMode
+        [ Close Block ]
+        [ Reopen Block ]
+
+        Track Switch
+        [ Toggle Switch ]
+```
+
+Do not blindly use this exact XAML; fit it into the existing layout.
+
+---
+
+### 3. Preserve the existing Toggle Switch rule
+
+The existing behavior where **Toggle Switch is only available when the selected block actually has a switch must remain**.
+
+Currently the XAML has logic equivalent to:
+
+```xml
+IsEnabled="{Binding SelectedBlock.HasSwitch}"
+```
+
+The resulting behavior must be:
+
+| Maintenance Mode | Selected block has switch | Toggle Switch |
+|---|---|---|
+| OFF | No | Disabled |
+| OFF | Yes | Disabled |
+| ON | No | Disabled |
+| ON | Yes | Enabled |
+
+Do not remove the `HasSwitch` protection just to add Maintenance Mode.
+
+If using an `IsEnabled` parent container, WPF's inherited disabling should naturally provide both restrictions: the parent requires Maintenance Mode, while the Toggle Switch retains its own `SelectedBlock.HasSwitch` condition.
+
+If the command already has a `CanExecute`, also preserve that logic.
+
+---
+
+## ViewModel changes
+
+Implement this using the existing MVVM architecture.
+
+In `MainWindowViewModel`, add something equivalent to:
 
 ```csharp
-CtcBlockState.LengthMeters
-ScheduleTemplateRow.LengthMeters
-TrackBlockDefinition.LengthMeters
+private bool _isMaintenanceMode;
+
+public bool IsMaintenanceMode
+{
+    get => _isMaintenanceMode;
+    private set
+    {
+        if (SetProperty(ref _isMaintenanceMode, value))
+        {
+            OnPropertyChanged(nameof(MaintenanceModeButtonText));
+
+            // If necessary for the existing command implementation:
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+}
+
+public string MaintenanceModeButtonText =>
+    IsMaintenanceMode
+        ? "Maintenance Mode: ON"
+        : "Maintenance Mode: OFF";
 ```
 
-must remain in meters.
-
-Any authority calculations or other backend logic that uses meters must also remain unchanged.
-
-This is strictly a UI/presentation conversion.
-
-The existing shared utility:
-
-```text
-TrainControl.Common.Utilities.UnitConversion
-```
-
-already contains:
+Add a command such as:
 
 ```csharp
-MetersToFeet(double meters)
+public ICommand ToggleMaintenanceModeCommand { get; }
 ```
 
-Reuse that method. Do not duplicate the conversion formula elsewhere.
+and initialize it in the constructor using the project's existing `RelayCommand` pattern.
 
----
-
-## 1. Schedule Builder
-
-The Schedule Builder currently shows a read-only length column using `LengthMeters`.
-
-It likely appears similar to:
-
-```text
-Length (m)
-```
-
-Change this user-facing column to:
-
-```text
-Length (ft)
-```
-
-The underlying `ScheduleTemplateRow.LengthMeters` should remain unchanged.
-
-Update `ScheduleTemplateRowViewModel` to expose a presentation property such as:
+The command should simply toggle:
 
 ```csharp
-public double LengthFeet =>
-    UnitConversion.MetersToFeet(Row.LengthMeters);
+IsMaintenanceMode = !IsMaintenanceMode;
 ```
 
-Then update the Schedule Builder DataGrid binding to use the feet property.
-
-Use reasonable formatting, preferably one decimal place.
-
-Example:
-
-```text
-100 meters -> 328.1 ft
-```
+Use the actual `RelayCommand` constructor/signature already used by this project rather than assuming the exact syntax above.
 
 ---
 
-## 2. Search for every other CTC UI length display
+## Command-level protection
 
-Search the CTC WPF project for:
+Do not rely exclusively on graying out the XAML.
 
-```text
-LengthMeters
-Length (m)
-meters
-Length
-```
+Where practical, make the existing block-control commands' `CanExecute` logic also require Maintenance Mode.
 
-Inspect every user-facing location that displays physical track/block length.
-
-Any visible track/block length should be shown in feet.
-
-Do not blindly rename legitimate backend properties or XML documentation that describe stored SI units.
-
-The distinction should remain:
-
-```text
-Core / contracts / calculations:
-meters
-
-WPF UI:
-feet
-```
-
-If `BlockViewModel` or another presentation ViewModel exposes `LengthMeters` directly, add a feet property there instead of modifying the underlying state.
-
-For example:
+For example, the Close Block rule should become conceptually:
 
 ```csharp
-public double LengthFeet =>
-    UnitConversion.MetersToFeet(_block.LengthMeters);
+IsMaintenanceMode
+&& SelectedBlock is not null
+&& SelectedBlock.RequestedMaintenanceState != MaintenanceState.Closed
 ```
 
-If the Selected Block panel displays track length now or is designed to display it, make sure that value is shown in feet as well.
+Likewise:
+
+- Reopen Block should require Maintenance Mode plus whatever existing conditions it already uses.
+- Toggle Switch should require Maintenance Mode plus `SelectedBlock.HasSwitch` plus any existing conditions.
+
+**Preserve all existing command-specific rules.** Maintenance Mode is an additional requirement, not a replacement for them.
+
+If some of these commands are currently controlled entirely through XAML rather than `CanExecute`, do not unnecessarily rewrite the architecture. Just make sure they cannot execute while Maintenance Mode is OFF.
 
 ---
 
-## 3. Do not alter authority units internally
+## Important distinction
 
-This is especially important.
+There are now two different concepts:
 
-Authority calculations currently use meters internally.
-
-Do NOT modify:
+### CTC Maintenance Mode
+A local operator mode controlling whether the dispatcher is allowed to use the Block Controls UI.
 
 ```text
-AuthorityManager
-SuggestedAuthorityMeters
-route length calculations
-block length calculations
+IsMaintenanceMode = true / false
 ```
 
-just because block lengths are displayed in feet.
+### Block maintenance state
+The existing state/request associated with an individual track block:
 
-The Dispatched Trains UI already converts suggested authority from meters to feet. Preserve that existing behavior.
+```text
+MaintenanceState.Open
+MaintenanceState.Closed
+```
 
-Do not double-convert it.
+These must remain separate.
+
+Turning CTC Maintenance Mode ON must NOT:
+
+- close any block,
+- reopen any block,
+- change a block's `RequestedMaintenanceState`,
+- send `MaintenanceRequestMessage`,
+- send `SwitchPositionRequestMessage`,
+- or otherwise communicate with another module.
+
+It simply unlocks the existing controls.
 
 ---
 
-## 4. Naming
+## Expected behavior / acceptance test
 
-Prefer explicit ViewModel property names such as:
+After implementation, verify the following manually:
 
-```csharp
-LengthFeet
-```
-
-rather than keeping a property named `LengthMeters` that actually returns feet.
-
-Keep Core property names explicit and unchanged:
-
-```csharp
-LengthMeters
-```
-
-This should make it obvious where conversion occurs.
-
----
-
-## 5. Tests
-
-Add or update a focused unit test for the existing `MetersToFeet` conversion if one does not already exist.
-
-For example:
-
-```text
-100 m -> approximately 328.084 ft
-```
-
-Use a reasonable floating-point tolerance.
-
-If ViewModel tests exist, add/update one to verify:
-
-```text
-Row.LengthMeters = 100
-ScheduleTemplateRowViewModel.LengthFeet ≈ 328.084
-```
+1. Start the CTC application.
+2. Maintenance Mode initially displays **OFF**.
+3. Close Block, Reopen Block, and Toggle Switch are disabled.
+4. Select a block that contains a switch.
+5. Toggle Switch must still be disabled because Maintenance Mode is OFF.
+6. Press the Maintenance Mode button.
+7. It changes to **ON**.
+8. Close/Reopen become available according to their existing block-state rules.
+9. With a block containing a switch selected, Toggle Switch becomes available.
+10. Select a block without a switch.
+11. Toggle Switch becomes disabled even though Maintenance Mode remains ON.
+12. Select a block with a switch again.
+13. Toggle Switch becomes enabled again.
+14. Turn Maintenance Mode OFF.
+15. All Block Controls immediately become disabled again.
+16. The Maintenance Mode button itself remains enabled throughout.
+17. Toggling Maintenance Mode alone does not modify CTC Core state or send any outgoing messages.
 
 ---
 
-## 6. Expected UI
+## Scope
 
-The Schedule Builder should now conceptually look like:
+Keep this change small.
 
-```text
-Section | Block | Infrastructure | Length (ft) | Speed Limit (mph) | Train 000 Arrival Time | ...
-```
+Do NOT:
 
-rather than:
+- redesign the CTC window,
+- create a new service just for Maintenance Mode,
+- add a new shared contract/message,
+- modify Track Controller behavior,
+- change the meaning of the existing `MaintenanceState`,
+- change block closing/reopening logic beyond adding the Maintenance Mode guard,
+- remove the existing `HasSwitch` restriction,
+- or refactor unrelated CTC functionality.
 
-```text
-Length (m) | Speed Limit (km/h)
-```
+Follow the existing MVVM conventions and naming/style of the project.
 
-For example:
+After implementing the change:
 
-```text
-Length: 328.1 ft
-Speed Limit: 43.5 mph
-```
-
-while the backend still stores:
-
-```text
-LengthMeters = 100
-SpeedLimitKilometersPerHour = 70
-```
-
----
-
-## General constraints
-
-Keep this change small and focused.
-
-Do not alter backend units.
-
-Do not change contracts.
-
-Do not alter scheduling, speed planning, authority calculations, dispatch behavior, train IDs, or occupancy logic.
-
-Reuse `UnitConversion.MetersToFeet()`.
-
-Search for all user-facing meter-based track-length displays and update them consistently.
-
-After the changes:
-
-1. Build the affected projects.
-2. Run relevant tests.
-3. Fix any compile/test failures caused by the change.
-4. Give me a concise summary of:
-   - files changed,
-   - UI locations converted to feet,
-   - ViewModel properties added or renamed,
-   - tests updated,
-   - confirmation that Core still stores meters.
+1. Build the affected CTC projects/solution.
+2. Fix any binding or compilation errors caused by the change.
+3. Briefly summarize which files were modified and what changed in each.

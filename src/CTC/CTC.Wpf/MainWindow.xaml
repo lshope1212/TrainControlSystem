@@ -539,51 +539,74 @@
                                            Style="{StaticResource SubHeaderStyle}"
                                            Margin="0,0,0,8"/>
 
-                                <Grid Margin="0,0,0,8">
+                                <!-- Always enabled so the operator can enter or leave Maintenance Mode. -->
+                                <Button Content="{Binding MaintenanceModeButtonText}"
+                                        Command="{Binding ToggleMaintenanceModeCommand}"
+                                        Margin="2,0,2,8">
+                                    <Button.Style>
+                                        <Style TargetType="Button"
+                                               BasedOn="{StaticResource {x:Type Button}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsMaintenanceMode}"
+                                                             Value="True">
+                                                    <Setter Property="Background" Value="#FEF3C7"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                                <!-- Block-modifying controls are usable only in Maintenance Mode. -->
+                                <StackPanel IsEnabled="{Binding IsMaintenanceMode}">
 
-                                    <Button Grid.Column="0"
-                                            Content="Close Block"
-                                            Command="{Binding CloseSelectedBlockCommand}"/>
+                                    <Grid Margin="0,0,0,8">
 
-                                    <Button Grid.Column="1"
-                                            Content="Reopen Block"
-                                            Command="{Binding ReopenSelectedBlockCommand}"/>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                </Grid>
+                                        <Button Grid.Column="0"
+                                                Content="Close Block"
+                                                Command="{Binding CloseSelectedBlockCommand}"/>
 
-                                <Separator Margin="0,4,0,8"/>
+                                        <Button Grid.Column="1"
+                                                Content="Reopen Block"
+                                                Command="{Binding ReopenSelectedBlockCommand}"/>
 
-                                <Grid>
+                                    </Grid>
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Separator Margin="0,4,0,8"/>
 
-                                    <StackPanel>
+                                    <Grid>
 
-                                        <TextBlock Text="Track Switch"
-                                                   FontWeight="SemiBold"/>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
 
-                                        <TextBlock Text="Available only when the selected block contains a switch."
-                                                   Foreground="#6B7280"
-                                                   FontSize="10"
-                                                   TextWrapping="Wrap"/>
+                                        <StackPanel>
 
-                                    </StackPanel>
+                                            <TextBlock Text="Track Switch"
+                                                       FontWeight="SemiBold"/>
 
-                                    <Button Grid.Column="1"
-                                            Content="Toggle Switch"
-                                            Width="110"
-                                            IsEnabled="{Binding SelectedBlock.HasSwitch}"
-                                            Command="{Binding ToggleSelectedBlockSwitchCommand}"/>
+                                            <TextBlock Text="Available only when the selected block contains a switch."
+                                                       Foreground="#6B7280"
+                                                       FontSize="10"
+                                                       TextWrapping="Wrap"/>
 
-                                </Grid>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="1"
+                                                Content="Toggle Switch"
+                                                Width="110"
+                                                IsEnabled="{Binding SelectedBlock.HasSwitch}"
+                                                Command="{Binding ToggleSelectedBlockSwitchCommand}"/>
+
+                                    </Grid>
+
+                                </StackPanel>
 
                             </StackPanel>
 
