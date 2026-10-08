@@ -1,1471 +1,422 @@
-Implement the currently incomplete **Toggle Switch** functionality in the CTC module.
+You are working in the TrainControlSystem repository, primarily on the `Luke_CTC` branch and the CTC module.
 
-Work from the current code on the `Luke_CTC` branch and inspect the existing implementation before changing anything.
+Before changing anything, inspect the current implementation and preserve the existing architecture. This is a small iteration change, not a redesign.
 
-Relevant files include at least:
+## Goal
 
-- `src/CTC/CTC.Wpf/MainWindow.xaml`
-- `src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
-- `src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs`
-- `src/CTC/CTC.Core/Interfaces/ICTCService.cs`
-- `src/CTC/CTC.Core/Services/CTCService.cs`
-- `src/Shared/TrainControl.Contracts/Messages/SwitchPositionRequestMessage.cs`
-- `src/Shared/TrainControl.Contracts/Enums/SwitchPosition.cs`
-- `tests/TrainControl.Tests/CTC/CtcServiceTests.cs`
+Make two related changes:
 
-Also inspect the CTC TestUI's captured-output system to make sure the outgoing message will naturally appear there.
+1. Simplify the **Line Summary** in the real CTC UI so it displays only:
+   - `Tickets Sold / Hour`
 
-## Current problem
+2. Finish the existing **Track Model -> CTC** Ticket Sales simulator in `CTC.TestUI.Wpf` so the user can enter a tickets-per-hour value for the Blue Line and send a real `TicketSalesMessage` to the running CTC.
 
-The CTC UI already contains a `Toggle Switch` button.
-
-The shared contract also already contains:
-
-```csharp
-SwitchPositionRequestMessage
-```
-
-and `CTCService` already contains:
-
-```csharp
-CreateSwitchPositionRequest(string blockId, SwitchPosition requestedPosition)
-```
-
-However, the actual dispatcher action is not implemented.
-
-Currently:
-
-1. A track layout can be loaded.
-2. A block with a switch can receive an initial switch state through the CTC TestUI.
-3. The CTC correctly displays that state.
-4. The dispatcher can select that block.
-5. The Toggle Switch button can be pressed when allowed.
-6. But pressing it sends no outbound message and performs no actual action.
-
-Implement the complete CTC-side switch-request workflow.
+The value should then immediately appear in the CTC Line Summary.
 
 ---
 
-# Desired architecture
+## Important: much of the backend already exists
 
-The flow should be:
+Do NOT create duplicate contracts or duplicate ticket-sales logic.
 
-```text
-CTC UI
-   ↓
-MainWindowViewModel
-   ↓
-ICTCService
-   ↓
-CTCService
-   ↓
-SwitchPositionRequestMessage
-   ↓
-IMessageSender
-   ↓
-Track Controller
-```
+The repository already contains:
 
-During isolated testing, the CTC TestUI's fake Track Controller receiver should capture and display the outgoing `SwitchPositionRequestMessage`.
+### Shared contract
 
-Do NOT have the ViewModel construct shared contract messages directly.
+`src/Shared/TrainControl.Contracts/Messages/TicketSalesMessage.cs`
 
-Follow the same architecture already used by `CloseBlockAsync()`.
+It already represents:
 
----
+`Track Model -> CTC`
 
-# 1. Add a switch action to ICTCService
+and contains roughly:
 
-Add an asynchronous dispatcher action such as:
+- `LineId`
+- `TicketsPerHour`
 
-```csharp
-Task SetSwitchPositionAsync(
-    string blockId,
-    SwitchPosition requestedPosition,
-    CancellationToken cancellationToken = default);
-```
+Use this existing contract.
 
-A name such as `RequestSwitchPositionAsync` is also acceptable if it fits the existing naming conventions better.
+### CTC line state
 
-This is different from:
+`src/CTC/CTC.Core/Models/CtcLineState.cs`
 
-```csharp
-CreateSwitchPositionRequest(...)
-```
+already contains:
 
-The existing `Create...` method only builds a message.
+`TicketSalesPerHour`
 
-The new async method must actually SEND the request using the injected `IMessageSender`.
+Use this existing property.
 
----
+### CTC service handling
 
-# 2. Implement the action in CTCService
+`src/CTC/CTC.Core/Services/CTCService.cs`
 
-Implement the new method in `CTCService`.
+already has:
 
-Conceptually:
+`ApplyTicketSales(TicketSalesMessage message)`
 
-```csharp
-public async Task SetSwitchPositionAsync(
-    string blockId,
-    SwitchPosition requestedPosition,
-    CancellationToken cancellationToken = default)
-{
-    var request = CreateSwitchPositionRequest(
-        blockId,
-        requestedPosition);
+It already:
 
-    await _messageSender.SendAsync(
-        request,
-        cancellationToken);
-}
-```
+- finds the line by `LineId`
+- assigns `line.TicketSalesPerHour = message.TicketsPerHour`
+- raises `CtcStateChangeKind.TicketSales`
 
-Reuse the validation that already exists inside:
+Preserve this implementation unless a very small correction is required.
 
-```csharp
-CreateSwitchPositionRequest(...)
-```
+### CTC named-pipe receiver
 
-That validation already ensures:
+`src/CTC/CTC.Wpf/Services/CtcNamedPipeReceiver.cs`
 
-- the block exists,
-- the block actually has a switch,
-- the requested position is not `Unknown`.
+already routes:
 
-Do not duplicate validation unnecessarily.
+`TicketSalesMessage -> ICTCService.ApplyTicketSales(...)`
+
+Do not create another communication path.
+
+The intended flow must remain:
+
+`CTC.TestUI.Wpf`
+→ real `TicketSalesMessage`
+→ CTC named pipe
+→ `CtcNamedPipeReceiver`
+→ `CTCService.ApplyTicketSales`
+→ `CtcLineState.TicketSalesPerHour`
+→ `MainWindowViewModel`
+→ CTC Line Summary
 
 ---
 
-# IMPORTANT: do not optimistically modify the actual switch status
+# 1. Simplify the CTC "Line Summary"
 
-Do NOT simply do this after sending:
+File:
 
-```csharp
-block.Switch = requestedPosition;
-```
+`src/CTC/CTC.Wpf/MainWindow.xaml`
 
-The existing `CtcBlockState.Switch` represents:
+Find the existing **Line Summary** section.
 
-> the latest wayside switch status reported by the Track Controller
+It currently displays things such as:
 
-The real architecture should therefore be:
+- Queued Trains
+- Dispatched Trains
+- Tickets Sold / Hour
 
-```text
-CTC requests Reverse
-        ↓
-Track Controller receives request
-        ↓
-Track Controller moves switch
-        ↓
-Track Controller reports BlockStatusMessage
-        ↓
-CTC ApplyBlockStatus(...)
-        ↓
-CtcBlockState.Switch becomes Reverse
-        ↓
-UI updates
-```
+For this iteration, Line Summary should display **ONLY**:
 
-The CTC must not claim that the switch physically changed just because its request was successfully transmitted.
+`Tickets Sold / Hour    <value>`
 
-For this iteration, when testing CTC in isolation:
+Remove the other rows from the Line Summary UI.
 
-1. press Toggle Switch,
-2. verify that the TestUI captures the outbound request,
-3. then use the TestUI's Block Status input to simulate the Track Controller reporting the resulting switch position,
-4. verify that the CTC Block Status display changes.
+Do NOT remove the actual dispatch queue, dispatched train collections, counts, or related backend logic. Those are still used elsewhere in the CTC application.
 
-This separation is intentional.
+This is only a change to what the **Line Summary panel displays**.
+
+Keep the existing visual style (`InsetPanelStyle`, `FieldLabelStyle`, `ValueStyle`, etc.) and make the panel clean/compact now that it only has one value.
 
 ---
 
-# 3. Implement ToggleSelectedBlockSwitchCommand
+# 2. Make the existing ticket-sales binding actually update
 
-In:
+The existing XAML already appears to reference:
 
-```text
-CTC.Wpf/ViewModels/MainWindowViewModel.cs
-```
+`CurrentLineTicketSalesPerHour`
 
-add:
-
-```csharp
-public ICommand ToggleSelectedBlockSwitchCommand { get; }
-```
-
-Initialize it using the existing `AsyncRelayCommand` implementation.
-
-The command must determine the opposite switch state from the CTC's latest known state.
-
-The current enum is:
-
-```csharp
-Unknown
-Normal
-Reverse
-```
-
-Desired toggle behavior:
-
-```text
-Normal  -> Reverse
-Reverse -> Normal
-```
-
-Do NOT send `Unknown`.
-
-If the current switch state is `Unknown`, the command should not execute.
-
----
-
-# 4. Expose the actual enum value from BlockViewModel if necessary
-
-Currently `BlockViewModel` exposes the switch primarily as display text:
-
-```csharp
-public string? SwitchStatus =>
-    _block.HasSwitch
-        ? _block.Switch.ToString()
-        : null;
-```
-
-If `MainWindowViewModel` needs the actual `SwitchPosition`, expose a read-only property such as:
-
-```csharp
-public SwitchPosition SwitchPosition => _block.Switch;
-```
-
-or an equivalent clearly named property.
-
-Do not parse the `SwitchStatus` string.
-
-The ViewModel should operate on the enum itself.
-
----
-
-# 5. Command CanExecute requirements
-
-The Toggle Switch command should only execute when ALL of the following are true:
-
-```text
-Maintenance Mode is ON
-AND
-a block is selected
-AND
-the selected block has a switch
-AND
-the current switch position is known
-```
-
-So conceptually:
-
-```csharp
-private bool CanToggleSelectedBlockSwitch()
-{
-    return IsMaintenanceMode
-        && SelectedBlock is not null
-        && SelectedBlock.HasSwitch
-        && SelectedBlock.SwitchPosition != SwitchPosition.Unknown;
-}
-```
-
-Preserve the Maintenance Mode feature that was just added.
-
-The existing behavior must therefore be:
-
-| Maintenance Mode | Has Switch | Switch Known | Button |
-|---|---:|---:|---|
-| OFF | Yes | Yes | Disabled |
-| ON | No | N/A | Disabled |
-| ON | Yes | No | Disabled |
-| ON | Yes | Yes | Enabled |
-
-Do not remove any XAML-level protections that already exist unless they are redundant and the resulting behavior remains identical.
-
----
-
-# 6. Implement the toggle action in MainWindowViewModel
-
-Create a method similar to:
-
-```csharp
-private async Task ToggleSelectedBlockSwitchAsync()
-```
-
-The basic logic should be:
-
-```csharp
-var block = SelectedBlock;
-
-if (block is null || !block.HasSwitch)
-{
-    return;
-}
-
-SwitchPosition requestedPosition =
-    block.SwitchPosition == SwitchPosition.Normal
-        ? SwitchPosition.Reverse
-        : SwitchPosition.Normal;
-```
-
-Then call the Core service:
-
-```csharp
-await _ctc.SetSwitchPositionAsync(
-    block.BlockId,
-    requestedPosition);
-```
-
-Do not build `SwitchPositionRequestMessage` in the ViewModel.
-
----
-
-# 7. Update CommunicationStatus
-
-Use the existing `CommunicationStatus` property so the dispatcher receives useful feedback.
-
-Before sending, something like:
-
-```text
-Requesting Block A5 switch Reverse...
-```
-
-On success:
-
-```text
-Switch position request sent for Block A5: Reverse.
-```
-
-On failure:
-
-```text
-Unable to send switch request: <reason>
-```
-
-Follow the same exception-handling philosophy used by `CloseSelectedBlockAsync()` so a communication failure never crashes the WPF UI.
-
-Example conceptual structure:
-
-```csharp
-try
-{
-    await _ctc.SetSwitchPositionAsync(...);
-
-    CommunicationStatus =
-        $"Switch position request sent for Block {block.BlockId}: {requestedPosition}.";
-}
-catch (Exception ex)
-{
-    CommunicationStatus =
-        $"Unable to send switch request: {ex.Message}";
-}
-```
-
-Do not change `block.Switch` here.
-
----
-
-# 8. Make sure command availability refreshes correctly
-
-When:
-
-- `SelectedBlock` changes,
-- Maintenance Mode changes,
-- or an incoming `BlockStatusMessage` changes the switch position,
-
-the Toggle Switch button's `CanExecute` must be reevaluated.
-
-The project already uses:
-
-```csharp
-CommandManager.InvalidateRequerySuggested();
-```
-
-in relevant places.
-
-Use the existing mechanism rather than creating a new command framework.
-
-In particular, inspect the `SelectedBlock` setter. If selecting a different block does not currently cause commands to reevaluate immediately, fix that cleanly.
-
----
-
-# 9. Preserve inbound switch-state behavior
-
-`CTCService.ApplyBlockStatus(...)` already updates:
-
-```csharp
-block.Switch = message.Switch;
-```
-
-Do not break this.
-
-That remains the authoritative way that CTC learns the actual switch position.
-
-When a new `BlockStatusMessage` arrives:
-
-```text
-Normal -> Reverse
-```
-
-the selected block's displayed:
-
-```text
-Switch: Reverse
-```
-
-should update automatically through the existing `StateChanged` / `BlockViewModel.Refresh()` mechanism.
-
----
-
-# 10. Verify the TestUI captures the outbound message
-
-The TestUI already contains a fake Track Controller receiver which listens for actual messages sent by CTC.
-
-Do not create a fake TestUI-specific code path for Toggle Switch.
-
-The new switch request must travel through the same real:
-
-```text
-IMessageSender
-→ named pipe
-→ fake Track Controller receiver
-```
-
-path as the other CTC outputs.
-
-After implementation, pressing Toggle Switch should produce a captured message equivalent to:
-
-```text
-SwitchPositionRequestMessage
-BlockId = <selected block>
-RequestedPosition = Reverse
-```
-
-or:
-
-```text
-RequestedPosition = Normal
-```
-
-depending on the current state.
-
----
-
-# 11. Add tests
-
-Add Core tests for the actual async action, not just message construction.
-
-At minimum test:
-
-### Known Normal -> request Reverse
-
-Set a block's switch state to:
-
-```csharp
-SwitchPosition.Normal
-```
-
-Then verify that the appropriate service operation sends a:
-
-```csharp
-SwitchPositionRequestMessage
-```
-
-containing:
-
-```text
-BlockId = G2
-RequestedPosition = Reverse
-```
-
-The toggle decision itself may live in the WPF ViewModel, so if the Core API accepts an explicit requested position, Core only needs to verify the requested message is sent correctly.
-
-### Known Reverse -> request Normal
-
-Verify the opposite requested position is sent.
-
-### Block without switch
-
-Ensure the existing validation still rejects the request.
-
-### Unknown requested position
-
-Ensure `SwitchPosition.Unknown` cannot be sent.
-
-### Send failure
-
-If `FakeMessageSender` supports simulating failures, verify that a failed send does not falsely change the CTC's actual switch state.
-
----
-
-# 12. Manual acceptance test
-
-After implementing everything, perform or make possible this exact test:
-
-1. Start the CTC and CTC TestUI.
-2. Send the sample track layout.
-3. Select a block that has a switch.
-4. From TestUI, send a `BlockStatusMessage` giving that block:
-
-```text
-Switch = Normal
-```
-
-5. Confirm CTC displays:
-
-```text
-Switch: Normal
-```
-
-6. Turn CTC Maintenance Mode ON.
-7. Press `Toggle Switch`.
-8. CTC TestUI should capture an outbound:
-
-```text
-SwitchPositionRequestMessage
-RequestedPosition = Reverse
-```
-
-9. The CTC's actual switch status may still display:
-
-```text
-Normal
-```
-
-at this point. This is correct because the Track Controller has not yet reported the physical switch change.
-
-10. In TestUI, send a new `BlockStatusMessage` for the block with:
-
-```text
-Switch = Reverse
-```
-
-11. CTC should now display:
-
-```text
-Switch: Reverse
-```
-
-12. Press `Toggle Switch` again.
-13. The TestUI should capture:
-
-```text
-RequestedPosition = Normal
-```
-
-14. Send a new BlockStatusMessage with:
-
-```text
-Switch = Normal
-```
-
-15. The CTC display should return to:
-
-```text
-Switch: Normal
-```
-
-Also verify:
-
-- Toggle Switch is disabled when Maintenance Mode is OFF.
-- Toggle Switch is disabled for blocks without switches.
-- Toggle Switch is disabled if the switch position is Unknown.
-- Communication failures do not crash the application.
-- No switch state is falsely changed merely because an outbound message was sent.
-
----
-
-# Scope
-
-Keep this implementation focused.
-
-Do NOT:Implement the remaining CTC maintenance workflow on the current `Luke_CTC` branch.
-
-There are two related changes:
-
-1. Implement the existing **Reopen Block** button end-to-end.
-2. Extend the Track Controller -> CTC block status simulation so the Track Controller can report whether a block is actually **Open or Closed for maintenance**.
-
-Before making changes, inspect the current implementation, especially:
-
-- `src/CTC/CTC.Wpf/MainWindow.xaml`
-- `src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
-- `src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs`
-- `src/CTC/CTC.Core/Interfaces/ICTCService.cs`
-- `src/CTC/CTC.Core/Services/CTCService.cs`
-- `src/CTC/CTC.Core/Models/CtcBlockState.cs`
-- `src/CTC/CTC.Core/Dispatching/AuthorityManager.cs`
-- `src/Shared/TrainControl.Contracts/Messages/BlockStatusMessage.cs`
-- `src/Shared/TrainControl.Contracts/Messages/MaintenanceRequestMessage.cs`
-- `src/Shared/TrainControl.Contracts/Enums/MaintenanceState.cs`
-- `src/CTC/CTC.TestUI.Wpf/ViewModels/BlockStatusInputViewModel.cs`
-- `src/CTC/CTC.TestUI.Wpf/MainWindow.xaml`
-- existing CTC maintenance tests
-
-Do not redesign the architecture. Build on the existing Close Block and Toggle Switch patterns.
-
----
-
-# Goal / intended message flow
-
-Closing a block should work like:
-
-```text
-CTC operator presses Close Block
-        ↓
-CTC sends MaintenanceRequestMessage
-RequestedState = Closed
-        ↓
-TestUI captures outbound message
-        ↓
-TestUI simulates Track Controller confirmation
-BlockStatusMessage
-Maintenance = Closed
-        ↓
-CTC updates its confirmed block status
-        ↓
-UI displays Maintenance: Closed
-```
-
-Reopening should mirror it:
-
-```text
-CTC operator presses Reopen Block
-        ↓
-CTC sends MaintenanceRequestMessage
-RequestedState = Open
-        ↓
-TestUI captures outbound message
-        ↓
-TestUI simulates Track Controller confirmation
-BlockStatusMessage
-Maintenance = Open
-        ↓
-CTC updates its confirmed block status
-        ↓
-UI displays Maintenance: Open
-```
-
-The important architectural distinction is:
-
-```text
-RequestedMaintenanceState
-```
-
-means:
-
-> What CTC most recently successfully requested from the Track Controller.
-
-while the new actual/confirmed maintenance state means:
-
-> What the Track Controller most recently reported the block actually is.
-
-Do not collapse those two concepts.
-
----
-
-# 1. Add confirmed maintenance state to BlockStatusMessage
-
-The existing `BlockStatusMessage` already represents the current wayside state reported from:
-
-```text
-Track Controller -> CTC
-```
-
-It currently includes:
-
-- Occupancy
-- Signal
-- Switch
-- Crossing
-
-Add maintenance state to this same contract.
-
-Something equivalent to:
-
-```csharp
-public MaintenanceState Maintenance { get; set; } = MaintenanceState.Open;
-```
-
-Use an appropriate property name such as `Maintenance`, `MaintenanceState`, or `MaintenanceStatus`, consistent with the project.
-
-Do NOT create a separate maintenance-status message unless the current architecture absolutely requires it. This information logically belongs in `BlockStatusMessage`.
-
-Keep the existing `MaintenanceState` enum:
-
-```csharp
-Open
-Closed
-```
-
-unless there is a compelling implementation reason to change it.
-
----
-
-# 2. Track confirmed maintenance separately inside CtcBlockState
-
-Currently `CtcBlockState` only has:
-
-```csharp
-RequestedMaintenanceState
-```
-
-Add a separate property representing the latest state reported by the Track Controller, for example:
-
-```csharp
-public MaintenanceState Maintenance { get; set; }
-    = MaintenanceState.Open;
-```
-
-or:
-
-```csharp
-public MaintenanceState ConfirmedMaintenanceState { get; set; }
-    = MaintenanceState.Open;
-```
-
-Prefer a name that clearly distinguishes this value from:
-
-```csharp
-RequestedMaintenanceState
-```
-
-Update comments/documentation accordingly.
-
-The concepts must remain:
-
-```text
-RequestedMaintenanceState
-    CTC's latest successfully transmitted request
-
-Maintenance / ConfirmedMaintenanceState
-    Track Controller's latest reported physical/wayside state
-```
-
----
-
-# 3. Apply maintenance from BlockStatusMessage
+but the current `MainWindowViewModel` does not appear to implement the complete property/update behavior required for it.
 
 Update:
 
-```csharp
-CTCService.ApplyBlockStatus(...)
-```
+`src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
 
-so it also copies the incoming maintenance state into the block.
-
-Conceptually:
+Add a read-only property such as:
 
 ```csharp
-block.Occupancy = message.Occupancy;
-block.Signal = message.Signal;
-block.Switch = message.Switch;
-block.Crossing = message.Crossing;
-block.Maintenance = message.Maintenance;
+public int CurrentLineTicketSalesPerHour =>
+    SelectedLine?.TicketSalesPerHour ?? 0;
 ```
 
-The existing:
+Use the existing naming if the XAML already binds to `CurrentLineTicketSalesPerHour`.
+
+### Selected line changes
+
+When `SelectedLine` changes, notify that this computed property changed:
 
 ```csharp
-OnStateChanged(CtcStateChangeKind.BlockStatus, ...)
+OnPropertyChanged(nameof(CurrentLineTicketSalesPerHour));
 ```
 
-should continue to cause the WPF block adapter to refresh.
+This makes the displayed value correct when the selected line changes.
 
-Do not modify `RequestedMaintenanceState` when a `BlockStatusMessage` arrives.
+### TicketSales state changes
+
+`CTCService.ApplyTicketSales()` already raises:
+
+`CtcStateChangeKind.TicketSales`
+
+Handle that case inside the existing `OnCtcStateChanged(...)` switch.
+
+When a ticket-sales message arrives, notify:
+
+```csharp
+OnPropertyChanged(nameof(CurrentLineTicketSalesPerHour));
+```
+
+Do not rebuild the entire track layout or replace `CtcLineState` objects just to refresh ticket sales.
+
+The desired behavior is:
+
+- TicketSalesMessage arrives.
+- `CTCService` updates the existing selected line's `TicketSalesPerHour`.
+- StateChanged is raised with `TicketSales`.
+- `MainWindowViewModel` raises PropertyChanged for `CurrentLineTicketSalesPerHour`.
+- The bound CTC UI updates immediately.
 
 ---
 
-# 4. Change the CTC Block Status display to show confirmed maintenance
+# 3. Implement Ticket Sales input in the TestUI
 
-Currently the `Maintenance` row in the CTC selected-block UI is effectively showing CTC's requested state, e.g. `"Close requested"`.
+The existing TestUI has a section:
 
-Now that Track Controller confirmation exists, that row should display the actual/latest reported state:
+`Track Model -> CTC`
+
+and currently shows a placeholder similar to:
+
+`Ticket Sales (TicketSalesMessage): not implemented yet`
+
+Replace this placeholder with a real input.
+
+Follow the architecture already used by:
+
+- `TrackLayoutInputViewModel`
+- `BlockStatusInputViewModel`
+- `SystemTimeInputViewModel`
+- `CtcInputViewModelBase`
+
+Create a dedicated ViewModel:
+
+`src/CTC/CTC.TestUI.Wpf/ViewModels/TicketSalesInputViewModel.cs`
+
+It should inherit from:
+
+`CtcInputViewModelBase`
+
+The TestUI must NOT reference `CTC.Core`.
+
+It should construct a real shared:
+
+`TrainControl.Contracts.Messages.TicketSalesMessage`
+
+and send it using the existing `SendToCtcAsync(...)` mechanism.
+
+---
+
+# 4. TicketSalesInputViewModel requirements
+
+For now, support only the **Blue Line**.
+
+The existing sample track layout uses:
 
 ```text
-Maintenance: Open
+LineId = "BLUE"
+Name = "Blue Line"
 ```
 
-or:
+Keep this consistent.
+
+Expose enough state for the UI to have:
+
+- Line selector
+- Tickets Sold / Hour input
+- Send command
+- Result/status text
+
+For example:
 
 ```text
-Maintenance: Closed
+Line:
+[ Blue Line ▼ ]
+
+Tickets Sold / Hour:
+[ 125 ]
+
+[ Send Ticket Sales ]
 ```
 
-Update `BlockViewModel` accordingly.
+The line selector should currently contain only:
 
-Expose the actual enum value too if useful for command logic, e.g.:
+`Blue Line`
 
-```csharp
-public MaintenanceState MaintenanceState =>
-    _block.Maintenance;
-```
+Internally it must send:
 
-Do not parse display strings to determine state.
+`LineId = "BLUE"`
 
-`RequestedMaintenanceState` can remain exposed internally for command/pending-request logic, but the primary Block Status field should represent the Track Controller-reported state.
+Do not add Green Line or Red Line yet.
 
----
+Structure the ViewModel cleanly so adding more line options later would be straightforward, but do not overengineer it.
 
-# 5. Implement ReopenBlockAsync in ICTCService
+The tickets/hour value must be an integer because the existing contract uses an `int`.
 
-Add:
+Use a reasonable default such as `0`.
 
-```csharp
-Task ReopenBlockAsync(
-    string blockId,
-    CancellationToken cancellationToken = default);
-```
+Do not send invalid negative ticket counts.
 
-to `ICTCService`.
+Prefer command `CanExecute` validation or straightforward input validation consistent with the existing TestUI patterns.
 
-This should mirror the existing:
+The send operation should create:
 
 ```csharp
-CloseBlockAsync(...)
-```
-
-behavior.
-
----
-
-# 6. Implement ReopenBlockAsync in CTCService
-
-Implement the method using the existing `CreateMaintenanceRequest(...)`.
-
-Conceptually:
-
-```csharp
-public async Task ReopenBlockAsync(
-    string blockId,
-    CancellationToken cancellationToken = default)
+new TicketSalesMessage
 {
-    var block = GetBlock(blockId);
-
-    var request =
-        CreateMaintenanceRequest(
-            blockId,
-            MaintenanceState.Open);
-
-    await _messageSender.SendAsync(
-        request,
-        cancellationToken);
-
-    block.RequestedMaintenanceState =
-        MaintenanceState.Open;
-
-    OnStateChanged(
-        CtcStateChangeKind.MaintenanceRequest,
-        block.BlockId);
+    LineId = "BLUE",
+    TicketsPerHour = ...
 }
 ```
 
-As with Close Block:
-
-- validate the block through the existing mechanisms,
-- send through the real `IMessageSender`,
-- only update `RequestedMaintenanceState` after the send succeeds,
-- do NOT immediately change the confirmed maintenance state.
-
-If sending fails:
-
-```text
-RequestedMaintenanceState
-```
-
-must remain unchanged.
-
-Most importantly:
+and use:
 
 ```csharp
-block.Maintenance = MaintenanceState.Open;
+SendToCtcAsync(...)
 ```
 
-must NOT happen inside `ReopenBlockAsync`.
-
-The block does not become confirmed Open until a Track Controller `BlockStatusMessage` reports it.
+Do not bypass the named-pipe architecture and do not directly mutate CTC state.
 
 ---
 
-# 7. Implement ReopenSelectedBlockCommand
+# 5. Wire it into the TestUI root ViewModel
 
-The CTC XAML already contains the Reopen Block button. Wire up its missing ViewModel implementation.
+Update:
+
+`src/CTC/CTC.TestUI.Wpf/ViewModels/MainWindowViewModel.cs`
+
+Instantiate the new ticket-sales input alongside the existing simulated inputs.
+
+For example conceptually:
+
+```csharp
+TicketSalesInput = new TicketSalesInputViewModel(sender, Communication);
+```
+
+Expose it as:
+
+```csharp
+public TicketSalesInputViewModel TicketSalesInput { get; }
+```
+
+Maintain the existing organization where the root ViewModel composes individual simulated-input ViewModels.
+
+---
+
+# 6. Update the TestUI XAML
+
+Update:
+
+`src/CTC/CTC.TestUI.Wpf/MainWindow.xaml`
+
+Inside the existing:
+
+`Track Model -> CTC`
+
+GroupBox, keep the Track Layout controls and replace the ticket-sales placeholder with real controls.
 
 Add:
 
-```csharp
-public ICommand ReopenSelectedBlockCommand { get; }
+- Label: `Ticket Sales (TicketSalesMessage)`
+- Line label
+- ComboBox bound to the TicketSalesInput line options
+- Only `Blue Line` should currently appear
+- Tickets Sold / Hour label
+- TextBox or appropriate numeric input
+- `Send Ticket Sales` button
+- Result text bound to `TicketSalesInput.Result`
+
+Keep the visual layout consistent with the existing TestUI.
+
+Do not create an entirely new window or tab.
+
+---
+
+# 7. Expected end-to-end behavior
+
+I should be able to test this as follows:
+
+1. Launch `CTC.Wpf`.
+2. Launch `CTC.TestUI.Wpf`.
+3. In the TestUI, press `Send Sample Layout`.
+4. The Blue Line appears in CTC.
+5. In TestUI under `Track Model -> CTC`, select:
+   - Blue Line
+6. Enter:
+   - `150` Tickets Sold / Hour
+7. Press:
+   - `Send Ticket Sales`
+8. TestUI sends a real:
+
+```text
+TicketSalesMessage
+LineId = "BLUE"
+TicketsPerHour = 150
 ```
 
-and initialize it using the existing `AsyncRelayCommand` pattern.
+9. CTC receives the message through the existing named-pipe receiver.
+10. `CTCService.ApplyTicketSales()` updates the Blue Line.
+11. The real CTC Line Summary immediately displays:
 
-Add:
-
-```csharp
-private async Task ReopenSelectedBlockAsync()
+```text
+Tickets Sold / Hour    150
 ```
 
-which calls:
+No restart, layout reload, or line reselection should be required.
 
-```csharp
-await _ctc.ReopenBlockAsync(block.BlockId);
-```
+If another value such as `275` is sent, the display should immediately change to `275`.
 
-Use the same error-handling pattern as:
+---
 
-```csharp
-CloseSelectedBlockAsync()
-```
+# 8. Error behavior
 
-Update `CommunicationStatus`.
+Preserve the existing communication/result reporting style.
 
 Examples:
 
-Before:
+- If CTC is not running, the TestUI should report that the message could not be sent rather than crash.
+- If ticket sales are sent before the Blue Line layout exists, CTC may reject the message as an unknown line using the existing service validation. Do not silently create a line from a TicketSalesMessage.
+- Negative ticket counts should not be sent from the TestUI.
 
-```text
-Sending reopen request for Block A12...
-```
-
-Success:
-
-```text
-Reopen request sent for Block A12.
-```
-
-Failure:
-
-```text
-Unable to send reopen request: <reason>
-```
-
-Do not modify the confirmed maintenance status from the ViewModel.
+Do not add a complicated acknowledgement protocol for this iteration.
 
 ---
 
-# 8. Improve Close/Reopen CanExecute rules
+# 9. Scope constraints
 
-Now that we have both requested and confirmed maintenance states, use both to prevent duplicate or contradictory actions while waiting for Track Controller confirmation.
+Please keep this change small.
 
-Desired normal workflow:
+DO NOT:
 
-## Initially
+- redesign the communication architecture
+- make TestUI reference CTC.Core
+- duplicate `TicketSalesMessage`
+- duplicate `ApplyTicketSales`
+- directly mutate CTC state from TestUI
+- add Green or Red Line support yet
+- remove dispatch queue/dispatched train functionality just because those counts are being removed from Line Summary
+- rewrite unrelated CTC code
+- change the existing sample Blue Line ID from `"BLUE"`
 
-```text
-Confirmed = Open
-Requested = Open
-```
-
-Close enabled.
-Reopen disabled.
-
-## Immediately after Close request is successfully sent
-
-```text
-Confirmed = Open
-Requested = Closed
-```
-
-The request is pending.
-
-Close disabled.
-Reopen disabled.
-
-## After Track Controller reports Closed
-
-```text
-Confirmed = Closed
-Requested = Closed
-```
-
-Close disabled.
-Reopen enabled.
-
-## Immediately after Reopen request is successfully sent
-
-```text
-Confirmed = Closed
-Requested = Open
-```
-
-The reopen is pending.
-
-Close disabled.
-Reopen disabled.
-
-## After Track Controller reports Open
-
-```text
-Confirmed = Open
-Requested = Open
-```
-
-Close enabled.
-Reopen disabled.
-
-Both buttons still require:
-
-```text
-IsMaintenanceMode == true
-```
-
-Conceptually, the command checks can look like:
-
-```csharp
-private bool CanCloseSelectedBlock() =>
-    IsMaintenanceMode
-    && SelectedBlock is not null
-    && SelectedBlock.MaintenanceState == MaintenanceState.Open
-    && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Closed;
-```
-
-and:
-
-```csharp
-private bool CanReopenSelectedBlock() =>
-    IsMaintenanceMode
-    && SelectedBlock is not null
-    && SelectedBlock.MaintenanceState == MaintenanceState.Closed
-    && SelectedBlock.RequestedMaintenanceState != MaintenanceState.Open;
-```
-
-Use the actual property names chosen in the implementation.
-
-Make sure command availability reevaluates after:
-
-- Maintenance Mode changes
-- SelectedBlock changes
-- a Close/Reopen request succeeds
-- a `BlockStatusMessage` arrives
-
-The existing project already uses:
-
-```csharp
-CommandManager.InvalidateRequerySuggested();
-```
-
-so continue using that mechanism.
+Reuse the existing MVVM, shared-contract, named-pipe, and state-change patterns.
 
 ---
 
-# 9. IMPORTANT: update authority safety logic
-
-Inspect:
-
-```text
-CTC.Core/Dispatching/AuthorityManager.cs
-```
-
-This is important because it currently treats:
-
-```csharp
-RequestedMaintenanceState == MaintenanceState.Closed
-```
-
-as unsafe.
-
-Once Reopen exists, this alone is insufficient.
-
-Consider this state:
-
-```text
-Confirmed maintenance = Closed
-Requested maintenance = Open
-```
-
-That means CTC has SENT a reopen request, but Track Controller has NOT yet confirmed that the block physically reopened.
-
-The block must still be considered unsafe.
-
-Update `AuthorityManager.IsUnsafe(...)` so a block is unsafe when:
-
-```text
-Occupancy == Occupied
-
-OR
-
-confirmed maintenance state == Closed
-
-OR
-
-RequestedMaintenanceState == Closed
-```
-
-Conceptually:
-
-```csharp
-return block.Occupancy == OccupancyState.Occupied
-    || block.Maintenance == MaintenanceState.Closed
-    || block.RequestedMaintenanceState == MaintenanceState.Closed;
-```
-
-This intentionally handles both transitional states:
-
-### Close pending
-
-```text
-Confirmed = Open
-Requested = Closed
-```
-
-Unsafe.
-
-### Reopen pending
-
-```text
-Confirmed = Closed
-Requested = Open
-```
-
-Unsafe.
-
-Only when:
-
-```text
-Confirmed = Open
-Requested = Open
-```
-
-should maintenance no longer make the block unsafe.
-
-Update comments in `AuthorityManager` to describe this behavior clearly.
-
-Do not weaken the current dispatch protection.
-
----
-
-# 10. Add Maintenance Status to the CTC TestUI
-
-In the existing:
-
-```text
-Track Controller -> CTC
-Block Status (BlockStatusMessage)
-```
-
-section of the TestUI, add a maintenance selector.
-
-The current section already lets the user choose:
-
-```text
-Block ID
-Occupancy
-Signal
-Switch
-Crossing
-```
-
-Add:
-
-```text
-Maintenance
-```
-
-with a ComboBox containing:
-
-```text
-Open
-Closed
-```
-
-This does NOT need to be a completely separate message/input panel because it is part of the same block status message.
-
-Update `BlockStatusInputViewModel` with something equivalent to:
-
-```csharp
-private MaintenanceState _selectedMaintenance =
-    MaintenanceState.Open;
-
-public MaintenanceState[] MaintenanceOptions { get; } =
-    Enum.GetValues<MaintenanceState>();
-
-public MaintenanceState SelectedMaintenance
-{
-    get => _selectedMaintenance;
-    set => SetProperty(
-        ref _selectedMaintenance,
-        value);
-}
-```
-
-Then include it when constructing the message:
-
-```csharp
-var message = new BlockStatusMessage
-{
-    BlockId = BlockId.Trim(),
-    Occupancy = SelectedOccupancy,
-    Signal = SelectedSignal,
-    Switch = SelectedSwitch,
-    Crossing = SelectedCrossing,
-    Maintenance = SelectedMaintenance,
-};
-```
-
-Update the TestUI XAML Grid rows appropriately.
-
-Keep the TestUI simple. It is simulating what the real Track Controller will eventually report.
-
----
-
-# 11. Preserve the real communication paths
-
-Closing and reopening must use the real CTC outbound architecture:
-
-```text
-MainWindowViewModel
-      ↓
-ICTCService
-      ↓
-CTCService
-      ↓
-MaintenanceRequestMessage
-      ↓
-IMessageSender
-      ↓
-Track Controller pipe
-      ↓
-CTC TestUI fake Track Controller receiver
-```
-
-Do NOT make a TestUI-specific shortcut.
-
-Similarly, Track Controller maintenance confirmation should use:
-
-```text
-CTC TestUI
-      ↓
-BlockStatusMessage
-      ↓
-real CTC named-pipe endpoint
-      ↓
-CTCService.ApplyBlockStatus
-      ↓
-CtcBlockState
-      ↓
-MainWindowViewModel / BlockViewModel
-```
-
----
-
-# 12. Expected end-to-end manual test
-
-Verify this exact sequence.
-
-### Initial setup
-
-Start:
-
-```text
-CTC.Wpf
-CTC.TestUI.Wpf
-```
-
-Send the sample track layout.
-
-Select a block in CTC.
-
-From the TestUI send:
-
-```text
-BlockStatusMessage
-Maintenance = Open
-```
-
-CTC should display:
-
-```text
-Maintenance: Open
-```
-
-Turn Maintenance Mode ON.
-
-At this point:
-
-```text
-Close Block = enabled
-Reopen Block = disabled
-```
-
-### Close
-
-Press:
-
-```text
-Close Block
-```
-
-The TestUI captured outputs should show:
-
-```text
-MaintenanceRequestMessage
-BlockId = <selected block>
-RequestedState = Closed
-```
-
-The CTC should NOT immediately change the displayed maintenance status to Closed.
-
-Until confirmation it should still display:
-
-```text
-Maintenance: Open
-```
-
-and both Close/Reopen should be disabled because a close request is pending.
-
-Now use the TestUI to send:
-
-```text
-BlockStatusMessage
-Maintenance = Closed
-```
-
-CTC should update to:
-
-```text
-Maintenance: Closed
-```
-
-Now:
-
-```text
-Close Block = disabled
-Reopen Block = enabled
-```
-
-### Reopen
-
-Press:
-
-```text
-Reopen Block
-```
-
-The captured outputs should show:
-
-```text
-MaintenanceRequestMessage
-BlockId = <selected block>
-RequestedState = Open
-```
-
-The CTC should remain:
-
-```text
-Maintenance: Closed
-```
-
-until confirmation arrives.
-
-Both Close/Reopen should be disabled while the reopen is pending.
-
-Now send from TestUI:
-
-```text
-BlockStatusMessage
-Maintenance = Open
-```
-
-CTC should update to:
-
-```text
-Maintenance: Open
-```
-
-and:
-
-```text
-Close Block = enabled
-Reopen Block = disabled
-```
-
-Also verify Maintenance Mode OFF disables both controls regardless of block state.
-
----
-
-# 13. Tests
-
-Update/add automated tests for the new behavior.
-
-At minimum cover:
-
-```text
-ApplyBlockStatus
-- incoming Maintenance = Closed updates confirmed state
-- incoming Maintenance = Open updates confirmed state
-
-CloseBlockAsync
-- sends MaintenanceRequestMessage with Closed
-- successful send changes RequestedMaintenanceState to Closed
-- does NOT change confirmed maintenance state
-- failed send does not change requested or confirmed state
-
-ReopenBlockAsync
-- sends MaintenanceRequestMessage with Open
-- successful send changes RequestedMaintenanceState to Open
-- does NOT immediately change confirmed maintenance state
-- failed send leaves the previously requested state unchanged
-
-AuthorityManager
-- confirmed Closed is unsafe
-- close requested but not confirmed is unsafe
-- reopen requested but still confirmed Closed is unsafe
-- confirmed Open + requested Open is safe unless occupied
-```
-
-Reuse the existing `FakeMessageSender`.
-
-Do not write WPF UI tests unless the project already has an established pattern for them.
-
----
-
-# Scope constraints
-
-Keep this focused.
-
-Do NOT:
-
-- create a second maintenance status message unnecessarily
-- change the existing Maintenance Mode concept
-- combine maintenance and switch controls
-- make CTC assume a request succeeded physically merely because the message was transmitted
-- modify Track Controller implementation itself
-- add MBO logic
-- change unrelated schedule/dispatch functionality
-- redesign either UI
-- bypass named-pipe communication in the TestUI
-
-The intended principle is the same one now used for switch control:
-
-```text
-CTC request != physical confirmation
-```
-
-CTC sends the requested action first.
-
-The actual displayed state changes only when Track Controller reports it back.
-
-After implementing:
-
-1. Build the affected projects/solution.
-2. Run all CTC tests.
-3. Fix any compilation, binding, serialization, or test failures introduced by the change.
-4. Briefly summarize each modified file and its purpose.
-
-- redesign the Block Controls UI,
-- add new shared message types,
-- modify the TestUI to bypass the real message pipeline,
-- modify Track Controller code,
-- combine switch requests with maintenance requests,
-- have MainWindowViewModel construct contract messages,
-- or change unrelated dispatch/schedule functionality.
-
-Use the existing architecture.
-
-After completing the work:
-
-1. build the affected projects,
-2. run the CTC tests,
-3. fix any compilation/binding/test failures caused by the change,
-4. summarize exactly which files changed and why.
+# 10. Verification
+
+After implementation:
+
+1. Build the full solution.
+2. Fix any compile errors introduced by this change.
+3. Verify the TestUI and CTC bindings.
+4. Verify that `TicketSalesMessage` travels through the real named-pipe communication path.
+5. Verify that sending multiple ticket-sales values refreshes the CTC UI every time.
+6. Verify the CTC Line Summary contains only Tickets Sold / Hour.
+7. Verify existing Track Layout, Block Status, System Time, scheduling, dispatch, and maintenance functionality remains unchanged.
+
+At the end, give me a concise summary of:
+
+- files changed
+- what was added/removed
+- how ticket-sales data now flows from TestUI to CTC
+- any assumptions made

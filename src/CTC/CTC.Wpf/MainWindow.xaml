@@ -630,48 +630,16 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="28"/>
-                                        <RowDefinition Height="28"/>
-                                        <RowDefinition Height="28"/>
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Grid.Row="0"
-                                               Text="Queued Trains"
+                                    <TextBlock Text="Tickets Sold / Hour"
                                                Style="{StaticResource FieldLabelStyle}"/>
 
-                                    <TextBlock Grid.Row="0"
-                                               Grid.Column="1"
-                                               Text="{Binding QueuedTrainCount}"
-                                               Style="{StaticResource ValueStyle}"/>
-
-                                    <TextBlock Grid.Row="1"
-                                               Text="Dispatched Trains"
-                                               Style="{StaticResource FieldLabelStyle}"/>
-
-                                    <TextBlock Grid.Row="1"
-                                               Grid.Column="1"
-                                               Text="{Binding DispatchedTrainCount}"
-                                               Style="{StaticResource ValueStyle}"/>
-
-                                    <TextBlock Grid.Row="2"
-                                               Text="Tickets Sold / Hour"
-                                               Style="{StaticResource FieldLabelStyle}"/>
-
-                                    <TextBlock Grid.Row="2"
-                                               Grid.Column="1"
+                                    <TextBlock Grid.Column="1"
                                                Text="{Binding CurrentLineTicketSalesPerHour}"
                                                FontSize="18"
                                                FontWeight="Bold"
                                                Foreground="#111827"/>
 
                                 </Grid>
-
-                                <TextBlock Text="Ticket sales automatically change when the Current Line selection changes."
-                                           Foreground="#6B7280"
-                                           FontSize="10"
-                                           TextWrapping="Wrap"
-                                           Margin="0,8,0,0"/>
 
                             </StackPanel>
 

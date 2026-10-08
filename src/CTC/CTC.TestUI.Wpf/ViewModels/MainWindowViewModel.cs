@@ -25,6 +25,7 @@ public class MainWindowViewModel : ViewModelBase
 
         // Simulated inputs (other modules -> CTC).
         TrackLayoutInput = new TrackLayoutInputViewModel(sender, Communication);
+        TicketSalesInput = new TicketSalesInputViewModel(sender, Communication);
         BlockStatusInput = new BlockStatusInputViewModel(sender, Communication);
         SystemTimeInput = new SystemTimeInputViewModel(sender, Communication, shutdownToken);
     }
@@ -33,6 +34,8 @@ public class MainWindowViewModel : ViewModelBase
 
     // Simulated Input ViewModels
     public TrackLayoutInputViewModel TrackLayoutInput { get; }
+
+    public TicketSalesInputViewModel TicketSalesInput { get; }
 
     public SystemTimeInputViewModel SystemTimeInput { get; }
 

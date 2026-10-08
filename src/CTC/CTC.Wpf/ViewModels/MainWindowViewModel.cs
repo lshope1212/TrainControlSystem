@@ -62,6 +62,9 @@ public class MainWindowViewModel : ViewModelBase
 
     public int DispatchedTrainCount => DispatchedTrains.Count;
 
+    /// <summary>Tickets sold per hour on the selected line, as last reported by the Track Model.</summary>
+    public int CurrentLineTicketSalesPerHour => SelectedLine?.TicketSalesPerHour ?? 0;
+
     public string Title => "CTC Office";
 
     public string SystemTimeDisplay => _ctc.State.SystemTime.ToString(@"hh\:mm\:ss");
@@ -122,6 +125,7 @@ public class MainWindowViewModel : ViewModelBase
                 ScheduleBuilder.Line = value;
                 RebuildDispatchQueue();
                 RebuildDispatchedTrains();
+                OnPropertyChanged(nameof(CurrentLineTicketSalesPerHour));
             }
         }
     }
@@ -283,6 +287,11 @@ public class MainWindowViewModel : ViewModelBase
             case CtcStateChangeKind.SystemTime:
                 // Shows the time CTC actually received; CTC has no display timer of its own.
                 OnPropertyChanged(nameof(SystemTimeDisplay));
+                break;
+
+            case CtcStateChangeKind.TicketSales:
+                // CTCService updated the existing CtcLineState in place; just re-read it.
+                OnPropertyChanged(nameof(CurrentLineTicketSalesPerHour));
                 break;
 
             case CtcStateChangeKind.Schedule:
