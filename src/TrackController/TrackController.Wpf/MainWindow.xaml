@@ -396,9 +396,15 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <WrapPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
+                                        <ComboBox ItemsSource="{Binding SampleLines}"
+                                                  SelectedItem="{Binding SelectedSampleLine}"
+                                                  MinWidth="210"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,0,8,0"
+                                                  ToolTip="Line started by Load sample layout. Other lines load through Load deployment."/>
                                         <Button Content="Load sample layout"
                                                 Command="{Binding LoadSampleDeploymentCommand}"
-                                                ToolTip="Shared sample map with two named territories, both running on PC. Pause first."/>
+                                                ToolTip="Starts the selected line's sample deployment on the PC. Pause first."/>
                                         <Button Content="Load deployment…" Command="{Binding LoadDeploymentCommand}"/>
                                         <Button Content="Local preview"
                                                 Command="{Binding RestoreLocalDemoCommand}"

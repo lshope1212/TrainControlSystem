@@ -65,7 +65,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         LoadSamplePlcCommand = Command(() => LoadPlcFileAsync(Path.Combine(AppContext.BaseDirectory, "Samples", "wayside.plc")));
         LoadLayoutCommand = Command(ChooseLayoutAsync);
         LoadDeploymentCommand = Command(ChooseDeploymentAsync);
-        LoadSampleDeploymentCommand = Command(() => ReplaceDeploymentAsync(Path.Combine(AppContext.BaseDirectory, "Samples", "all-pc.deployment.json")));
+        LoadSampleDeploymentCommand = Command(() => ReplaceDeploymentAsync(Path.Combine(AppContext.BaseDirectory, "Samples", SelectedSampleLine.DeploymentFile)));
         ApplyExecutionCommand = Command(ApplyExecutionAsync);
         SaveExecutionCommand = Command(SaveExecutionAsync);
         RestoreLocalDemoCommand = Command(RestoreLocalDemoAsync);
@@ -234,19 +234,31 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             return;
         }
 
-        Update(ref _blockIds, Blocks.Select(blockStatus => blockStatus.BlockId).ToArray(), nameof(BlockIds));
+        bool layoutChanged = Update(ref _blockIds, Blocks.Select(blockStatus => blockStatus.BlockId).ToArray(), nameof(BlockIds));
         Update(ref _switchIds, Blocks.Where(blockStatus => blockStatus.HasSwitch).Select(blockStatus => blockStatus.BlockId).ToArray(), nameof(SwitchIds));
         Update(ref _signalIds, Blocks.Where(blockStatus => blockStatus.HasSignal).Select(blockStatus => blockStatus.BlockId).ToArray(), nameof(SignalIds));
         Update(ref _crossingIds, Blocks.Where(blockStatus => blockStatus.HasCrossing).Select(blockStatus => blockStatus.BlockId).ToArray(), nameof(CrossingIds));
-        void Update(ref string[] current, string[] next, string property)
+        if (layoutChanged)
+        {
+            // A different line may not contain the previous selection; its manual default is its first switch.
+            if (!_blockIds.Contains(SelectedBlockId))
+            {
+                SelectedBlockId = _blockIds[0];
+            }
+
+            ManualTarget = _switchIds.Length > 0 ? _switchIds[0] : _blockIds.Contains(ManualTarget) ? ManualTarget : _blockIds[0];
+        }
+
+        bool Update(ref string[] current, string[] next, string property)
         {
             if (current.SequenceEqual(next))
             {
-                return;
+                return false;
             }
 
             current = next;
             OnPropertyChanged(property);
+            return true;
         }
     }
 

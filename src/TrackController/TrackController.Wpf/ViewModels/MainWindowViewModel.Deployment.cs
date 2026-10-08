@@ -14,6 +14,27 @@ public sealed partial class MainWindowViewModel
     private string _programName = "wayside.plc";
     private readonly ObservableCollection<ExecutionRow> _executionRows = [];
 
+    private SampleLine _selectedSampleLine = SampleLines[0];
+
+    /// <summary>Built-in sample deployments offered by Load sample layout; any other line loads through Load deployment.</summary>
+    public static IReadOnlyList<SampleLine> SampleLines { get; } =
+    [
+        new("Green Line, illustrative 12 blocks", "all-pc.deployment.json"),
+        new("Blue Line, course prototype 15 blocks", "blue-line-all-pc.deployment.json")
+    ];
+
+    public SampleLine SelectedSampleLine
+    {
+        get => _selectedSampleLine;
+        set
+        {
+            if (value is not null)
+            {
+                SetProperty(ref _selectedSampleLine, value);
+            }
+        }
+    }
+
     private PreparedDeployment? ActivePlan => _plan;
 
     public ObservableCollection<ExecutionRow> ExecutionRows => _executionRows;
@@ -34,7 +55,7 @@ public sealed partial class MainWindowViewModel
 
     public bool CanSaveExecution => IsRoutedDeployment && !HasExecutionChanges;
 
-    public string ExecutionDraftStatus => !IsRoutedDeployment ? "Load sample layout to start with both territories on the PC." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement to the loaded deployment file.";
+    public string ExecutionDraftStatus => !IsRoutedDeployment ? "Choose a line, then Load sample layout to start its territories on the PC." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement to the loaded deployment file.";
 
     private async Task ChooseDeploymentAsync()
     {
