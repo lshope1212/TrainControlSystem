@@ -24,7 +24,10 @@ public sealed partial class TrackControllerService
     {
         var now = _clock.GetUtcNow();
         if (!_paused)
+        {
             _simulationSeconds += Math.Max(0, (now - _lastPulse).TotalSeconds) * _multiplier;
+        }
+
         _lastPulse = now;
         foreach (var block in _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId)))
         {
@@ -42,19 +45,26 @@ public sealed partial class TrackControllerService
                 var desired = block.DesiredSwitch == SwitchPosition.Unknown ? reported : block.DesiredSwitch;
                 bool safe = CanMoveSwitch(block);
                 if (_hardwareMode && _plc is not null)
+                {
                     desired = EvaluatePlc(false, safe, desired == SwitchPosition.Normal)["switch_normal"] ? SwitchPosition.Normal : SwitchPosition.Reverse;
+                }
+
                 block.CommandedSwitch = safe && (!_paused || _maintenanceMode) && (!_hardwareMode || _plc is not null) ? desired : reported;
             }
         }
 
         var candidates = _requests.Values.Select(Evaluate).ToList();
         foreach (var authorization in candidates.Where(authorization => authorization.AuthorizedAuthorityMeters > 0 && GetCoveredBlocks(authorization).All(id => !GetBlock(id).Definition.HasCrossing || GetBlock(id).Feedback?.Crossing == CrossingState.Closed)))
+        {
             foreach (string id in GetCoveredBlocks(authorization))
             {
                 var block = GetBlock(id);
                 if (block.Definition.HasSignal && !block.ManualRed)
+                {
                     block.CommandedSignal = authorization.AuthorizedAuthorityMeters < authorization.SuggestedAuthorityMeters ? SignalState.Yellow : SignalState.Green;
+                }
             }
+        }
 
         var blockStatuses = _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId)).Select(ToStatus).ToArray();
         var authorizations = new List<WaysideAuthorization>();
@@ -65,19 +75,30 @@ public sealed partial class TrackControllerService
             {
                 var block = GetBlock(id);
                 if (block.Definition.HasSignal && (block.CommandedSignal == SignalState.Yellow || block.Feedback?.Signal == SignalState.Yellow))
+                {
                     result = result with
                     {
                         AuthorizedSpeedMetersPerSecond = Math.Min(result.AuthorizedSpeedMetersPerSecond, 5),
                         Status = result.AuthorizedAuthorityMeters > 0 ? "Restricted" : "Withheld"
                     };
+                }
+
                 if (block.Definition.HasSignal && (block.ManualRed || block.Feedback?.Signal is not (SignalState.Green or SignalState.Yellow)))
+                {
                     result = Stop(result, $"Waiting for proceed signal feedback at block {id}.");
+                }
+
                 if (block.Definition.HasCrossing && block.Feedback?.Crossing != CrossingState.Closed)
+                {
                     result = Stop(result, $"Waiting for crossing {id} to report closed.");
+                }
             }
 
             if (!AuthorizationGuard.IsSafe(result, blockStatuses, _configuration))
+            {
                 result = Stop(result, "Independent safety check withheld authority.");
+            }
+
             authorizations.Add(result);
         }
 
@@ -86,16 +107,24 @@ public sealed partial class TrackControllerService
         {
             var requestExpiry = _requests[authorization.TargetBlockId].Received.AddSeconds(_configuration.RequestTimeoutSeconds);
             if (requestExpiry < validUntil)
+            {
                 validUntil = requestExpiry;
+            }
+
             foreach (string id in GetCoveredBlocks(authorization))
             {
                 var block = GetBlock(id);
                 var measuredExpiry = block.Feedback!.ObservedAtUtc.AddSeconds(_configuration.FeedbackTimeoutSeconds);
                 var receivedExpiry = block.Received.AddSeconds(_configuration.FeedbackTimeoutSeconds);
                 if (measuredExpiry < validUntil)
+                {
                     validUntil = measuredExpiry;
+                }
+
                 if (receivedExpiry < validUntil)
+                {
                     validUntil = receivedExpiry;
+                }
             }
         }
 
@@ -116,40 +145,72 @@ public sealed partial class TrackControllerService
         var request = receivedRequest.Value;
         var output = new WaysideAuthorization(request.RequestId, request.TrainId, request.TargetBlockId, request.EntryBlockId, request.FrontOffsetMeters!.Value, request.PathBlockIds.AsReadOnly(), request.SuggestedSpeedMetersPerSecond, request.SuggestedAuthorityMeters, 0, 0, "Withheld", "");
         if (_paused)
+        {
             return Stop(output, "Simulation paused.");
+        }
+
         if (_maintenanceMode)
+        {
             return Stop(output, "Maintenance mode is active.");
+        }
+
         if (_hardwareMode && _plc is null)
+        {
             return Stop(output, "No valid PLC program.");
+        }
+
         if (!IsActive(receivedRequest))
+        {
             return Stop(output, "CTC request expired; refresh its origin or submit a new position.");
+        }
+
         if (_retiredRequests.Contains(request.RequestId))
+        {
             return Stop(output, "Target block cleared; a new request and position are required.");
+        }
+
         if (GetBlock(request.TargetBlockId).Feedback?.Occupancy != OccupancyState.Occupied)
+        {
             return Stop(output, "Target block is not occupied. Submit a new origin after movement.");
+        }
+
         var path = GetRequestPath(receivedRequest).ToArray();
         if (_requests.Values.Any(other => other != receivedRequest && IsActive(other) && GetRequestPath(other).Intersect(path).Any()))
+        {
             return Stop(output, "Conflicting active movement requests overlap this route.");
+        }
+
         double distance = 0, speed = request.SuggestedSpeedMetersPerSecond;
         string reason = "Requested route protected.";
         for (int i = 0; i < path.Length; i++)
         {
             var block = GetBlock(path[i]);
             if (!IsFresh(block) || block.Feedback!.Occupancy == OccupancyState.Unknown)
+            {
                 return Stop(output, $"Block {path[i]} feedback is missing, stale, or unknown.");
+            }
+
             if (block.Feedback.IsFaulted)
+            {
                 return Stop(output, $"Block {path[i]} reports a fault.");
+            }
+
             if (block.Definition.NormalNextBlockId is not null)
             {
                 if (block.CommandedSwitch != block.Feedback.Switch || block.Feedback.Switch == SwitchPosition.Unknown)
+                {
                     return Stop(output, $"Waiting for switch {path[i]} alignment feedback.");
+                }
+
                 if (i + 1 < path.Length)
                 {
                     string? connected = block.Feedback.Switch == SwitchPosition.Normal ? block.Definition.NormalNextBlockId : block.Definition.ReverseNextBlockId;
                     string? previous = i > 0 ? path[i - 1] : request.EntryBlockId;
                     bool aligned = block.Definition.StemBlockId is { } stem ? (previous == stem && path[i + 1] == connected) || (previous == connected && path[i + 1] == stem) : connected == path[i + 1];
                     if (!aligned)
+                    {
                         return Stop(output, $"Switch {path[i]} connects to {connected}; this request needs {path[i + 1]} (verify entry and alignment).");
+                    }
                 }
             }
 
@@ -162,19 +223,29 @@ public sealed partial class TrackControllerService
             distance += block.Definition.LengthMeters - (i == 0 ? request.FrontOffsetMeters.Value : 0);
             speed = Math.Min(speed, block.Definition.SpeedLimitMetersPerSecond);
             if (block.Definition.HasSignal && block.Feedback.Signal == SignalState.Yellow)
+            {
                 speed = Math.Min(speed, 5);
+            }
+
             if (distance >= request.SuggestedAuthorityMeters)
+            {
                 break;
+            }
         }
 
         distance = Math.Min(distance, request.SuggestedAuthorityMeters);
         if (distance <= 0 || speed <= 0)
+        {
             return Stop(output, "Zero speed or no available authority.");
+        }
+
         if (_hardwareMode)
         {
             var values = EvaluatePlc(true);
             if (!values["allow_route"] || !values["signal_clear"])
+            {
                 return Stop(output, "PLC withholds movement permission.");
+            }
         }
 
         return output with
@@ -195,7 +266,10 @@ public sealed partial class TrackControllerService
         }.Concat(authorization.PathBlockIds))
         {
             if (remaining <= 0.000001)
+            {
                 yield break;
+            }
+
             yield return id;
             remaining -= GetBlock(id).Definition.LengthMeters - (id == authorization.TargetBlockId ? authorization.FrontOffsetMeters : 0);
         }
@@ -208,6 +282,7 @@ public sealed partial class TrackControllerService
         Status = "Withheld",
         Reason = reason
     };
+
     private WaysideBlockStatus ToStatus(Block block)
     {
         var blockDefinition = block.Definition;

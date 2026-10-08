@@ -12,11 +12,14 @@ namespace TrackController.Tests;
 public sealed class WaysideSafetyTests
 {
     private const string GoodPlc = "allow_route = route_safe and running\nswitch_normal = requested_normal\nsignal_clear = route_safe and running\ncrossing_close = crossing_required";
+
     private sealed class Clock : TimeProvider
     {
         public DateTimeOffset Now = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
+
         /// <summary>Returns the controlled test time for deterministic watchdog checks.</summary>
         public override DateTimeOffset GetUtcNow() => Now;
+
         /// <summary>Moves the test clock without delaying the test process.</summary>
         public void Advance(double seconds) => Now = Now.AddSeconds(seconds);
     }
@@ -24,19 +27,22 @@ public sealed class WaysideSafetyTests
     private sealed class Fixture
     {
         public Clock Clock { get; } = new();
-        public TrackControllerService Service
-        {
-            get;
-        }
+
+        public TrackControllerService Service { get; }
 
         /// <summary>Creates a deterministic controller scenario with an injected clock and fresh feedback.</summary>
         public Fixture(bool hardware = false, WaysideConfigurationMessage? configuration = null)
         {
             Service = new(configuration, Clock);
             if (hardware)
+            {
                 Service.LoadPlc("test.plc", GoodPlc);
+            }
             else
+            {
                 Service.SetHardwareMode(false);
+            }
+
             Feedback();
             Service.SetSimulation(new()
             {
@@ -67,6 +73,7 @@ public sealed class WaysideSafetyTests
             SuggestedSpeedMetersPerSecond = 12,
             SuggestedAuthorityMeters = 350
         };
+
         /// <summary>Submits a sample movement request and returns the resulting authorization.</summary>
         public WaysideAuthorization Submit(WaysideMovementRequestMessage? request = null)
         {
@@ -517,7 +524,9 @@ public sealed class WaysideSafetyTests
         {
             var other = configuration.Blocks.Single(blockDefinition => blockDefinition.BlockId == edge.To);
             if (!other.NextBlockIds.Contains(edge.From))
+            {
                 other.NextBlockIds.Add(edge.From);
+            }
         }
 
         return configuration;
@@ -659,7 +668,9 @@ public sealed class WaysideSafetyTests
         }
 
         )
+        {
             Assert.Throws<ArgumentException>(() => BooleanPlcProgram.Compile(bad));
+        }
     }
 
     /// <summary>Verifies that random occupancy never grants entry into an occupied block.</summary>

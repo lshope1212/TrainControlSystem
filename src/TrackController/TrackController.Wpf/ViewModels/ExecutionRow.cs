@@ -7,26 +7,17 @@ namespace TrackController.Wpf.ViewModels;
 public sealed class ExecutionRow : ViewModelBase
 {
     private string _target, _host, _port;
-    public string Id
-    {
-        get;
-    }
-    public string Name
-    {
-        get;
-    }
-    public string Blocks
-    {
-        get;
-    }
-    public string Neighbors
-    {
-        get;
-    }
-    public string AppliedTarget
-    {
-        get;
-    }
+
+    public string Id { get; }
+
+    public string Name { get; }
+
+    public string Blocks { get; }
+
+    public string Neighbors { get; }
+
+    public string AppliedTarget { get; }
+
     public string[] Targets { get; } = ["PC", "Pi"];
 
     public string Target
@@ -35,18 +26,24 @@ public sealed class ExecutionRow : ViewModelBase
         set
         {
             if (value is not null && SetProperty(ref _target, value))
+            {
                 OnPropertyChanged(nameof(IsPi));
+            }
         }
     }
 
     public bool IsPi => Target == "Pi";
+
     public string Host
     {
-        get => _host; set => SetProperty(ref _host, value);
+        get => _host;
+        set => SetProperty(ref _host, value);
     }
+
     public string Port
     {
-        get => _port; set => SetProperty(ref _port, value);
+        get => _port;
+        set => SetProperty(ref _port, value);
     }
 
     /// <summary>Copies applied placement into independently editable UI fields.</summary>
@@ -66,7 +63,10 @@ public sealed class ExecutionRow : ViewModelBase
     public TerritoryAssignment ToAssignment()
     {
         if (Target is not ("PC" or "Pi") || !int.TryParse(Port, out int port))
+        {
             throw new ArgumentException($"{Name}: choose PC/Pi and a numeric tunnel port.");
+        }
+
         return new()
         {
             TerritoryId = Id,

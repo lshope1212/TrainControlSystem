@@ -27,6 +27,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
     }
 
     private sealed record Request(WaysideMovementRequestMessage Value, DateTimeOffset Received);
+
     private sealed record RequestOrigin(string TargetBlockId, string? EntryBlockId, double FrontOffsetMeters, string[] PathBlockIds)
     {
         /// <summary>Checks that a repeated request retains its original front position and ordered route.</summary>
@@ -51,6 +52,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
     private double _simulationSeconds;
     private DateTimeOffset _lastPulse;
     private WaysideSnapshotMessage _snapshot = null!;
+
     /// <summary>Creates a paused controller with validated topology and an injectable watchdog clock.</summary>
     public TrackControllerService(WaysideConfigurationMessage? configuration = null, TimeProvider? clock = null)
     {
@@ -90,7 +92,10 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
                     WaysideId = _configuration.WaysideId
                 };
                 foreach (string id in _owned)
+                {
                     result.OwnedBlockIds.Add(id);
+                }
+
                 return result;
             }
         }
@@ -100,7 +105,9 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
     public WaysideConfigurationMessage GetConfiguration()
     {
         lock (_gate)
+        {
             return WaysideConfiguration.ValidateAndCopy(_configuration);
+        }
     }
 
     /// <summary>Reevaluates current inputs and returns outputs with a bounded validity interval.</summary>
@@ -120,7 +127,10 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
         lock (_gate)
         {
             if (_requests.Count > 0 || _blocks.Values.Any(block => block.Maintenance != "Open" || (block.Feedback is not null && (!IsFresh(block) || block.Feedback.Occupancy != OccupancyState.Clear))))
+            {
                 throw new InvalidOperationException("Cancel requests, confirm clear track, and reopen maintenance blocks before replacing the layout.");
+            }
+
             _configuration = copy;
             _paused = true;
             _plc = null;
@@ -176,11 +186,13 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
         {
             _maintenanceMode = enabled;
             if (!enabled)
+            {
                 foreach (var block in _blocks.Values)
                 {
                     block.ManualRed = false;
                     block.ManualCrossingClosed = false;
                 }
+            }
 
             Reevaluate();
         }
@@ -190,12 +202,18 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
     public void SetSimulation(WaysideSimulationMessage message)
     {
         if (!double.IsFinite(message.SpeedMultiplier) || message.SpeedMultiplier is < 1 or > 10)
-            throw new ArgumentException("Simulation speed must be 1â€“10Ã—.");
+        {
+            throw new ArgumentException("Simulation speed must be 1–10×.");
+        }
+
         lock (_gate)
         {
             Reevaluate();
             if (!message.IsPaused && _hardwareMode && _plc is null)
+            {
                 throw new InvalidOperationException("Load a valid PLC before resuming hardware mode.");
+            }
+
             _paused = message.IsPaused;
             _multiplier = message.SpeedMultiplier;
             Reevaluate();
@@ -209,21 +227,32 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
         lock (_gate)
         {
             if (message.Blocks is null || message.Blocks.Count > _blocks.Count || message.Blocks.Any(feedback => feedback is null) || message.Blocks.Select(feedback => feedback.BlockId).Distinct().Count() != message.Blocks.Count)
+            {
                 throw new ArgumentException("Feedback must contain distinct owned or observed blocks.");
+            }
+
             var now = _clock.GetUtcNow();
             foreach (var feedback in message.Blocks)
             {
                 if (!_owned.Contains(feedback.BlockId) && !_neighbors.Contains(feedback.BlockId))
+                {
                     throw new ArgumentException($"Block {feedback.BlockId} is neither owned nor an observed neighbor.");
+                }
+
                 if (!Enum.IsDefined(feedback.Occupancy) || !Enum.IsDefined(feedback.Signal) || !Enum.IsDefined(feedback.Switch) || !Enum.IsDefined(feedback.Crossing) || feedback.ObservedAtUtc > now.AddSeconds(1) || feedback.ObservedAtUtc == default || (feedback.ActualSpeedMetersPerSecond is double speed && (!double.IsFinite(speed) || speed < 0)))
+                {
                     throw new ArgumentException($"Block {feedback.BlockId}: invalid feedback values or timestamp.");
+                }
             }
 
             foreach (var feedback in message.Blocks)
             {
                 var block = GetBlock(feedback.BlockId);
                 if (block.Feedback is not null && feedback.ObservedAtUtc <= block.Feedback.ObservedAtUtc)
+                {
                     continue;
+                }
+
                 block.Feedback = new WaysideBlockFeedback
                 {
                     BlockId = feedback.BlockId,
@@ -238,9 +267,14 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
                 };
                 block.Received = now;
                 if (feedback.Occupancy == OccupancyState.Clear && _requests.TryGetValue(feedback.BlockId, out var request))
+                {
                     _retiredRequests.Add(request.Value.RequestId);
+                }
+
                 if (block.Maintenance == "Pending closure" && IsFresh(block) && feedback.Occupancy == OccupancyState.Clear)
+                {
                     block.Maintenance = "Closed";
+                }
             }
 
             Reevaluate();
@@ -265,6 +299,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
 
     /// <summary>Maps an existing team Track State message into the controller feedback boundary.</summary>
     public void ApplyTrackState(TrackStateMessage state) => ApplyFeedback(new WaysideFeedbackMessage { Blocks = [new WaysideBlockFeedback { BlockId = state.BlockId, ObservedAtUtc = _clock.GetUtcNow(), Occupancy = state.IsOccupied ? OccupancyState.Occupied : OccupancyState.Clear, Signal = state.Signal, Switch = state.Switch }] });
+
     /// <summary>Returns measured state for the requested block using the existing shared contract.</summary>
     public TrackStateMessage GetTrackState(string blockId)
     {
@@ -290,11 +325,15 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
     }
 
     private Block GetBlock(string id) => id is not null && _blocks.TryGetValue(id, out var block) ? block : throw new ArgumentException($"Block '{id}' is outside this territory.");
+
     private Block GetOwnedBlock(string id) => id is not null && _owned.Contains(id) ? GetBlock(id) : throw new ArgumentException($"Block '{id}' is not owned by {_configuration.WaysideId}; neighboring feedback does not grant control.");
+
     private bool IsFresh(Block block) => block.Feedback is not null && (_clock.GetUtcNow() - block.Received).TotalSeconds <= _configuration.FeedbackTimeoutSeconds && (_clock.GetUtcNow() - block.Feedback.ObservedAtUtc).TotalSeconds <= _configuration.FeedbackTimeoutSeconds;
+
     private bool IsActive(Request request) => (_clock.GetUtcNow() - request.Received).TotalSeconds <= _configuration.RequestTimeoutSeconds;
+
     private static IEnumerable<string> GetRequestPath(Request request) => new[]
-    {
+        {
         request.Value.TargetBlockId
     }.Concat(request.Value.PathBlockIds);
 }

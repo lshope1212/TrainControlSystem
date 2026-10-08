@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -58,6 +58,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrackController.Tests", "tests\TrackController.Tests\TrackController.Tests.csproj", "{D16C0D20-3C2E-4226-B4B0-3880D524F90B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrackController.Wpf.Tests", "tests\TrackController.Wpf.Tests\TrackController.Wpf.Tests.csproj", "{D6955A35-73D2-459B-AAAB-C86A38CCB901}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TrackController.TestUI.Wpf", "src\TrackController\TrackController.TestUI.Wpf\TrackController.TestUI.Wpf.csproj", "{B8FFB576-682F-4518-AC9D-4D0D2A250F88}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -309,6 +311,18 @@ Global
 		{D6955A35-73D2-459B-AAAB-C86A38CCB901}.Release|x64.Build.0 = Release|Any CPU
 		{D6955A35-73D2-459B-AAAB-C86A38CCB901}.Release|x86.ActiveCfg = Release|Any CPU
 		{D6955A35-73D2-459B-AAAB-C86A38CCB901}.Release|x86.Build.0 = Release|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Debug|x64.Build.0 = Debug|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Debug|x86.Build.0 = Debug|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Release|x64.ActiveCfg = Release|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Release|x64.Build.0 = Release|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Release|x86.ActiveCfg = Release|Any CPU
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -334,5 +348,6 @@ Global
 		{D01A86D8-5AC5-4A7C-A5FC-435D682DF69E} = {CE8BAEA8-DFEA-F433-DC14-E0731F9DB6FB}
 		{D16C0D20-3C2E-4226-B4B0-3880D524F90B} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{D6955A35-73D2-459B-AAAB-C86A38CCB901} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{B8FFB576-682F-4518-AC9D-4D0D2A250F88} = {CE8BAEA8-DFEA-F433-DC14-E0731F9DB6FB}
 	EndGlobalSection
 EndGlobal

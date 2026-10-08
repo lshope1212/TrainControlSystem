@@ -30,20 +30,31 @@ public static class WaysideConfiguration
     {
         ArgumentNullException.ThrowIfNull(input);
         if (string.IsNullOrWhiteSpace(input.WaysideId) || string.IsNullOrWhiteSpace(input.LineName) || input.Blocks is null || input.Blocks.Count is < 1 or > 500)
-            throw new ArgumentException("Provide a controller, line, and 1â€“500 blocks.");
+        {
+            throw new ArgumentException("Provide a controller, line, and 1–500 blocks.");
+        }
+
         if (!double.IsFinite(input.FeedbackTimeoutSeconds) || input.FeedbackTimeoutSeconds is < 1 or > 60 || !double.IsFinite(input.RequestTimeoutSeconds) || input.RequestTimeoutSeconds is < 1 or > 120)
-            throw new ArgumentException("Feedback timeout must be 1â€“60 s; request timeout must be 1â€“120 s.");
+        {
+            throw new ArgumentException("Feedback timeout must be 1–60 s; request timeout must be 1–120 s.");
+        }
+
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var blockDefinition in input.Blocks)
         {
             if (blockDefinition is null || string.IsNullOrWhiteSpace(blockDefinition.BlockId) || !ids.Add(blockDefinition.BlockId) || !double.IsFinite(blockDefinition.LengthMeters) || blockDefinition.LengthMeters <= 0 || !double.IsFinite(blockDefinition.SpeedLimitMetersPerSecond) || blockDefinition.SpeedLimitMetersPerSecond <= 0 || !double.IsFinite(blockDefinition.MapX) || !double.IsFinite(blockDefinition.MapY) || blockDefinition.MapX is < 0 or > 100000 || blockDefinition.MapY is < 0 or > 100000)
+            {
                 throw new ArgumentException("Block IDs must be unique and dimensions, limits, and map coordinates valid.");
+            }
         }
 
         foreach (var blockDefinition in input.Blocks)
         {
             if (blockDefinition.NextBlockIds is null || blockDefinition.SwitchProtectionBlockIds is null || blockDefinition.CrossingProtectionBlockIds is null || blockDefinition.NextBlockIds.Concat(blockDefinition.SwitchProtectionBlockIds).Concat(blockDefinition.CrossingProtectionBlockIds).Any(id => !ids.Contains(id)) || blockDefinition.NextBlockIds.Contains(blockDefinition.BlockId) || blockDefinition.NextBlockIds.Distinct().Count() != blockDefinition.NextBlockIds.Count)
+            {
                 throw new ArgumentException($"Block {blockDefinition.BlockId} has invalid connections or protection zones.");
+            }
+
             bool hasSwitch = blockDefinition.NormalNextBlockId is not null || blockDefinition.ReverseNextBlockId is not null;
             if (hasSwitch && (blockDefinition.NormalNextBlockId == blockDefinition.ReverseNextBlockId || blockDefinition.NormalNextBlockId is null || blockDefinition.ReverseNextBlockId is null || !blockDefinition.NextBlockIds.Contains(blockDefinition.NormalNextBlockId) || !blockDefinition.NextBlockIds.Contains(blockDefinition.ReverseNextBlockId) || !new[]
             {
@@ -51,21 +62,40 @@ public static class WaysideConfiguration
                 blockDefinition.NormalNextBlockId,
                 blockDefinition.ReverseNextBlockId
             }.All(blockDefinition.SwitchProtectionBlockIds.Contains)))
+            {
                 throw new ArgumentException($"Switch {blockDefinition.BlockId} needs two distinct connected exits and a complete protection zone.");
+            }
+
             if (blockDefinition.StemBlockId is not null && (!hasSwitch || !ids.Contains(blockDefinition.StemBlockId) || blockDefinition.StemBlockId == blockDefinition.BlockId || blockDefinition.StemBlockId == blockDefinition.NormalNextBlockId || blockDefinition.StemBlockId == blockDefinition.ReverseNextBlockId || !blockDefinition.SwitchProtectionBlockIds.Contains(blockDefinition.StemBlockId)))
+            {
                 throw new ArgumentException($"Switch {blockDefinition.BlockId} has an invalid stem or incomplete protection zone.");
+            }
+
             if (blockDefinition.NextBlockIds.Count > 2 && !hasSwitch)
+            {
                 throw new ArgumentException($"Branching block {blockDefinition.BlockId} must define its switch exits.");
+            }
+
             if (blockDefinition.HasCrossing && (!blockDefinition.CrossingProtectionBlockIds.Contains(blockDefinition.BlockId) || blockDefinition.CrossingProtectionBlockIds.Count < 2))
+            {
                 throw new ArgumentException($"Crossing {blockDefinition.BlockId} needs its block and approach blocks in its protection zone.");
+            }
         }
 
         if (input.OwnedBlockIds is { } owned && (owned.Count == 0 || owned.Distinct().Count() != owned.Count || owned.Any(id => !ids.Contains(id))))
+        {
             throw new ArgumentException("Territory ownership must contain distinct blocks from the shared track map.");
+        }
+
         var owners = GetOwnedIds(input);
         foreach (var block in input.Blocks.Where(blockDefinition => owners.Contains(blockDefinition.BlockId)))
+        {
             if (block.SwitchProtectionBlockIds.Concat(block.CrossingProtectionBlockIds).Any(id => !owners.Contains(id)))
+            {
                 throw new ArgumentException($"Keep block {block.BlockId} and its complete switch/crossing protection zone in one territory.");
+            }
+        }
+
         return new WaysideConfigurationMessage
         {
             WaysideId = input.WaysideId,
@@ -79,6 +109,7 @@ public static class WaysideConfiguration
 
     /// <summary>Returns the blocks this controller may command, including legacy full-map ownership.</summary>
     public static HashSet<string> GetOwnedIds(WaysideConfigurationMessage configuration) => new(configuration.OwnedBlockIds ?? configuration.Blocks.Select(blockDefinition => blockDefinition.BlockId).ToList(), StringComparer.Ordinal);
+
     /// <summary>Finds adjacent foreign blocks whose feedback is needed for boundary observation.</summary>
     public static HashSet<string> GetNeighborIds(WaysideConfigurationMessage configuration)
     {

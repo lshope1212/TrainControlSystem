@@ -10,39 +10,72 @@ public static class AuthorizationGuard
     public static bool IsSafe(WaysideAuthorization output, IReadOnlyList<WaysideBlockStatus> blocks, WaysideConfigurationMessage configuration)
     {
         if (!double.IsFinite(output.AuthorizedAuthorityMeters) || !double.IsFinite(output.AuthorizedSpeedMetersPerSecond) || output.AuthorizedAuthorityMeters < 0 || output.AuthorizedSpeedMetersPerSecond < 0)
-            return false;
-        if (output.AuthorizedAuthorityMeters == 0)
-            return output.AuthorizedSpeedMetersPerSecond == 0;
-        if (output.AuthorizedAuthorityMeters > output.SuggestedAuthorityMeters || output.AuthorizedSpeedMetersPerSecond > output.SuggestedSpeedMetersPerSecond)
-            return false;
-        var sequence = new[]
         {
+            return false;
+        }
+
+        if (output.AuthorizedAuthorityMeters == 0)
+        {
+            return output.AuthorizedSpeedMetersPerSecond == 0;
+        }
+
+        if (output.AuthorizedAuthorityMeters > output.SuggestedAuthorityMeters || output.AuthorizedSpeedMetersPerSecond > output.SuggestedSpeedMetersPerSecond)
+        {
+            return false;
+        }
+
+        var sequence = new[]
+                {
             output.TargetBlockId
         }.Concat(output.PathBlockIds).ToArray();
         var owned = TrackController.Core.Models.WaysideConfiguration.GetOwnedIds(configuration);
         if (sequence.Any(id => !owned.Contains(id)))
+        {
             return false;
+        }
+
         double remaining = output.AuthorizedAuthorityMeters;
         for (int i = 0; i < sequence.Length && remaining > 0.000001; i++)
         {
             var block = blocks.SingleOrDefault(blockStatus => blockStatus.BlockId == sequence[i]);
             if (block is null || !block.IsFresh || block.IsFaulted || block.Occupancy == OccupancyState.Unknown || (i == 0 ? block.Occupancy != OccupancyState.Occupied : block.Occupancy != OccupancyState.Clear) || block.Maintenance == "Closed" || (i > 0 && block.Maintenance != "Open") || output.AuthorizedSpeedMetersPerSecond > block.SpeedLimitMetersPerSecond)
+            {
                 return false;
+            }
+
             if (block.HasCrossing && (block.CommandedCrossing != CrossingState.Closed || block.ReportedCrossing != CrossingState.Closed))
+            {
                 return false;
+            }
+
             if (block.HasSignal && (block.CommandedSignal == SignalState.Red || block.ReportedSignal is SignalState.Red or SignalState.Unknown))
+            {
                 return false;
+            }
+
             if ((block.CommandedSignal == SignalState.Yellow || block.ReportedSignal == SignalState.Yellow) && block.HasSignal && output.AuthorizedSpeedMetersPerSecond > 5)
+            {
                 return false;
+            }
+
             if (i == 0 && (!double.IsFinite(output.FrontOffsetMeters) || output.FrontOffsetMeters < 0 || output.FrontOffsetMeters >= block.LengthMeters))
+            {
                 return false;
+            }
+
             remaining -= block.LengthMeters - (i == 0 ? output.FrontOffsetMeters : 0);
             if (remaining > 0.000001 && (i + 1 >= sequence.Length || !block.NextBlockIds.Contains(sequence[i + 1])))
+            {
                 return false;
+            }
+
             if (block.HasSwitch)
             {
                 if (block.CommandedSwitch == SwitchPosition.Unknown || block.CommandedSwitch != block.ReportedSwitch)
+                {
                     return false;
+                }
+
                 var definition = configuration.Blocks.Single(blockDefinition => blockDefinition.BlockId == block.BlockId);
                 var exit = block.ReportedSwitch == SwitchPosition.Normal ? definition.NormalNextBlockId : definition.ReverseNextBlockId;
                 if (remaining > 0.000001)
@@ -51,10 +84,14 @@ public static class AuthorizationGuard
                     if (definition.StemBlockId is { } stem)
                     {
                         if (!((entry == stem && sequence[i + 1] == exit) || (entry == exit && sequence[i + 1] == stem)))
+                        {
                             return false;
+                        }
                     }
                     else if (sequence[i + 1] != exit)
+                    {
                         return false;
+                    }
                 }
             }
         }

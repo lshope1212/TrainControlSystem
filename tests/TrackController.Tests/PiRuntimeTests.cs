@@ -16,6 +16,7 @@ public sealed class PiRuntimeTests
     {
         Blocks = configuration.Blocks.Select(blockDefinition => new WaysideBlockFeedback { BlockId = blockDefinition.BlockId, ObservedAtUtc = DateTimeOffset.UtcNow, Occupancy = blockDefinition.BlockId == occupied ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList()
     };
+
     internal static WaysideMovementRequestMessage Movement(string target = "5", params string[] path) => new()
     {
         RequestId = Guid.NewGuid().ToString("N"),
@@ -26,6 +27,7 @@ public sealed class PiRuntimeTests
         SuggestedSpeedMetersPerSecond = 11.176,
         SuggestedAuthorityMeters = 365.76
     };
+
     internal static async Task<WaysideAcknowledgementMessage> Send(IWaysideRuntime runtime, object message)
     {
         var result = await runtime.ReceiveAsync(RuntimeMessages.CreateEnvelope(message));
@@ -195,7 +197,9 @@ public sealed class PiRuntimeTests
         server.SnapshotProduced += snapshot =>
         {
             if (snapshot.PlcStatus.Contains("PC connection ended"))
+            {
                 stopped.TrySetResult(snapshot);
+            }
         };
         var config = WaysideConfiguration.CreateDemo();
         await using var remote = new PiWaysideRuntime("127.0.0.1", server.Port, config, "wayside.plc", ProgramSource);

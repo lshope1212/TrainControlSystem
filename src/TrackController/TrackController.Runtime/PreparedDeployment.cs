@@ -9,24 +9,18 @@ public sealed class PreparedDeployment
 {
     private string _source;
     private readonly WaysideDeployment _document;
-    public string SourcePath
-    {
-        get;
-    }
+
+    public string SourcePath { get; }
+
     public string Name => _document.Name;
-    public string LayoutDescription => _document.TrackFile is null ? "Legacy territory files" : $"Map: {_document.TrackFile} Â· Ownership: {_document.TerritoriesFile}";
-    public IReadOnlyList<PreparedTerritory> Territories
-    {
-        get;
-    }
-    public string ProgramName
-    {
-        get;
-    }
-    public string ProgramSource
-    {
-        get;
-    }
+
+    public string LayoutDescription => _document.TrackFile is null ? "Legacy territory files" : $"Map: {_document.TrackFile} · Ownership: {_document.TerritoriesFile}";
+
+    public IReadOnlyList<PreparedTerritory> Territories { get; }
+
+    public string ProgramName { get; }
+
+    public string ProgramSource { get; }
 
     internal PreparedDeployment(string path, string source, WaysideDeployment document, IReadOnlyList<PreparedTerritory> territories, string programName, string programSource)
     {
@@ -43,17 +37,20 @@ public sealed class PreparedDeployment
     {
         var choices = settings.ToArray();
         if (choices.Any(assignment => assignment is null) || !choices.Select(assignment => assignment.TerritoryId).Order().SequenceEqual(Territories.Select(territory => territory.Id).Order()))
-            throw new ArgumentException("Provide exactly one execution choice per territory.");
-        var territories = Territories.Select(territory =>
         {
-            var choice = choices.Single(assignment => assignment.TerritoryId == territory.Id);
-            return territory with
-            {
-                Execution = choice.Execution,
-                Host = choice.Host,
-                Port = choice.Port
-            };
-        }).ToArray();
+            throw new ArgumentException("Provide exactly one execution choice per territory.");
+        }
+
+        var territories = Territories.Select(territory =>
+                {
+                    var choice = choices.Single(assignment => assignment.TerritoryId == territory.Id);
+                    return territory with
+                    {
+                        Execution = choice.Execution,
+                        Host = choice.Host,
+                        Port = choice.Port
+                    };
+                }).ToArray();
         WaysideDeployment.ValidateTargets(territories);
         var document = JsonSerializer.Deserialize<WaysideDeployment>(JsonSerializer.Serialize(_document, WaysideDeployment.Json), WaysideDeployment.Json)!;
         foreach (var assignment in document.Territories)
@@ -78,7 +75,10 @@ public sealed class PreparedDeployment
     public void SaveExecution()
     {
         if (File.ReadAllText(SourcePath) != _source)
+        {
             throw new IOException("Deployment file changed on disk. Reload it before saving execution choices.");
+        }
+
         string text = JsonSerializer.Serialize(_document, WaysideDeployment.Json) + Environment.NewLine;
         string temporary = SourcePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -90,7 +90,9 @@ public sealed class PreparedDeployment
         finally
         {
             if (File.Exists(temporary))
+            {
                 File.Delete(temporary);
+            }
         }
     }
 
@@ -106,7 +108,9 @@ public sealed class PreparedDeployment
             {
                 IWaysideRuntime runtime;
                 if (territory.Execution == "Pi")
+                {
                     runtime = new PiWaysideRuntime(territory.Host, territory.Port, territory.Configuration, ProgramName, ProgramSource);
+                }
                 else
                 {
                     var service = new TrackControllerService(territory.Configuration);
@@ -125,7 +129,10 @@ public sealed class PreparedDeployment
         catch
         {
             foreach (var entry in entries)
+            {
                 entry.Runtime.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+
             throw;
         }
     }

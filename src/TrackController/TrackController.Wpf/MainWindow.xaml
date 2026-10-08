@@ -1,4 +1,17 @@
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:controls="clr-namespace:TrackController.Wpf.Controls" x:Class="TrackController.Wpf.MainWindow" Title="Track Controller" Width="1600" Height="900" MinWidth="1250" MinHeight="720" Background="#F3F4F6" Foreground="#1F2937" FontFamily="Segoe UI" FontSize="13" WindowStartupLocation="CenterScreen">
+<Window x:Class="TrackController.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:TrackController.Wpf.Controls"
+        Title="Track Controller"
+        Width="1600"
+        Height="900"
+        MinWidth="1250"
+        MinHeight="720"
+        Background="#F3F4F6"
+        Foreground="#1F2937"
+        FontFamily="Segoe UI"
+        FontSize="13"
+        WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
         <Style x:Key="Label" TargetType="TextBlock">
@@ -64,7 +77,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Surface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -128,7 +146,7 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="240"/>
-                    <ColumnDefinition Width="300"/>
+                    <ColumnDefinition Width="24"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="100"/>
                 </Grid.ColumnDefinitions>
@@ -136,48 +154,30 @@
                     <TextBlock Text="TRACK CONTROLLER" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
                     <TextBlock Text="Wayside control &amp; monitoring" Foreground="#D1D5DB" FontSize="11"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Live feedback" Command="{Binding UseLiveFeedbackCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource ModeButton}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsLive}" Value="True">
-                                        <Setter Property="Background" Value="White"/>
-                                        <Setter Property="Foreground" Value="#1F2937"/>
-                                        <Setter Property="BorderBrush" Value="White"/>
-                                        <Setter Property="FontWeight" Value="SemiBold"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <Button Content="Test UI" Command="{Binding UseTestUiCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource ModeButton}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsTest}" Value="True">
-                                        <Setter Property="Background" Value="White"/>
-                                        <Setter Property="Foreground" Value="#1F2937"/>
-                                        <Setter Property="BorderBrush" Value="White"/>
-                                        <Setter Property="FontWeight" Value="SemiBold"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Snapshot.LineName}" Foreground="#D1D5DB" FontSize="10"/>
                     <TextBlock Text="{Binding Snapshot.WaysideId}" Foreground="White" FontWeight="SemiBold"/>
                 </StackPanel>
                 <StackPanel Grid.Column="3" VerticalAlignment="Center">
                     <TextBlock Text="System time" Foreground="#D1D5DB" FontSize="10" HorizontalAlignment="Right"/>
-                    <TextBlock Text="{Binding SimulationTime}" Foreground="White" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                    <TextBlock Text="{Binding SimulationTime}"
+                               Foreground="White"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Right"/>
                 </StackPanel>
             </Grid>
         </Border>
-        <Border DockPanel.Dock="Bottom" Background="#F9FAFB" BorderThickness="0,1,0,0" BorderBrush="#D1D5DB" Padding="12,6">
-            <TextBlock Text="{Binding Connection}" FontSize="11" Foreground="#6B7280" TextTrimming="CharacterEllipsis" ToolTip="{Binding Connection}"/>
+        <Border DockPanel.Dock="Bottom"
+                Background="#F9FAFB"
+                BorderThickness="0,1,0,0"
+                BorderBrush="#D1D5DB"
+                Padding="12,6">
+            <TextBlock Text="{Binding Connection}"
+                       FontSize="11"
+                       Foreground="#6B7280"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding Connection}"/>
         </Border>
         <Grid DockPanel.Dock="Top" Margin="12,10">
             <Grid.ColumnDefinitions>
@@ -185,17 +185,28 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel>
-                <TextBlock Text="{Binding ModeDescription}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <TextBlock Text="Operator controls · receives inputs from CTC and Track Model, or the separate Test UI."
+                           FontWeight="SemiBold"
+                           TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding DataStatus}" Style="{StaticResource Hint}" Margin="0,4,12,0"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="{Binding SimulationStatus}" VerticalAlignment="Center" Margin="12,0"/>
                 <TextBlock Text="Speed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <ComboBox ItemsSource="{Binding SpeedMultipliers}" SelectedItem="{Binding SpeedMultiplier}" Width="55" ToolTip="Simulation speed multiplier" Margin="0,0,10,0"/>
+                <ComboBox ItemsSource="{Binding SpeedMultipliers}"
+                          SelectedItem="{Binding SpeedMultiplier}"
+                          Width="55"
+                          ToolTip="Simulation speed multiplier"
+                          Margin="0,0,10,0"/>
                 <Button Content="{Binding PauseResumeLabel}" Command="{Binding PauseResumeCommand}" MinWidth="82"/>
             </StackPanel>
         </Grid>
-        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E5E7EB" BorderThickness="0,1,0,1" Padding="12,7" Margin="0,0,0,8">
+        <Border DockPanel.Dock="Top"
+                Background="White"
+                BorderBrush="#E5E7EB"
+                BorderThickness="0,1,0,1"
+                Padding="12,7"
+                Margin="0,0,0,8">
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12"/>
         </Border>
         <Grid Margin="8,0,8,8">
@@ -231,25 +242,36 @@
                                 <TextBlock Text="□ Maintenance" Foreground="#BB721F"/>
                             </StackPanel>
                         </DockPanel>
-                        <controls:TerritoryMap Blocks="{Binding Blocks}" SelectedBlockId="{Binding SelectedBlockId}" Margin="8"/>
+                        <controls:TerritoryMap Blocks="{Binding Blocks}"
+                                               SelectedBlockId="{Binding SelectedBlockId}"
+                                               Margin="8"/>
                     </DockPanel>
                 </Border>
                 <Border Grid.Column="1" Style="{StaticResource Panel}">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedBlockId, StringFormat=Selected block • {0}}" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="{Binding SelectedBlockId, StringFormat=Selected block • {0}}"
+                                   Style="{StaticResource PanelTitle}"/>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="14,10">
-                                <DockPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Margin="0,0,0,8">
+                                <DockPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                                           Margin="0,0,0,8">
                                     <TextBlock Text="Execution" Foreground="#6B7280"/>
-                                    <TextBlock Text="{Binding SelectedExecutionTarget}" TextAlignment="Right" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding SelectedExecutionTarget}"
+                                               TextAlignment="Right"
+                                               FontWeight="SemiBold"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Text="Occupancy" Foreground="#6B7280"/>
-                                    <TextBlock Text="{Binding SelectedBlock.Occupancy}" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding SelectedBlock.Occupancy}"
+                                               FontWeight="SemiBold"
+                                               TextAlignment="Right"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Text="Maintenance" Foreground="#6B7280"/>
-                                    <TextBlock Text="{Binding SelectedBlock.Maintenance}" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding SelectedBlock.Maintenance}"
+                                               FontWeight="SemiBold"
+                                               TextAlignment="Right"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Text="Actual speed" Foreground="#6B7280"/>
@@ -258,15 +280,20 @@
                                 <Separator Background="#E5E7EB"/>
                                 <DockPanel Margin="0,8,0,7">
                                     <TextBlock Text="Suggested speed (mph)" Foreground="#6B7280"/>
-                                    <TextBlock Text="{Binding SelectedMovement.SuggestedSpeed, TargetNullValue=—}" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding SelectedMovement.SuggestedSpeed, TargetNullValue=—}"
+                                               TextAlignment="Right"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,7">
                                     <TextBlock Text="Authorized speed (mph)" Foreground="#6B7280"/>
-                                    <TextBlock Text="{Binding SelectedMovement.AuthorizedSpeed, TargetNullValue=—}" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding SelectedMovement.AuthorizedSpeed, TargetNullValue=—}"
+                                               FontWeight="SemiBold"
+                                               TextAlignment="Right"/>
                                 </DockPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Text="Authorized authority (ft)" Foreground="#6B7280"/>
-                                    <TextBlock Text="{Binding SelectedMovement.AuthorizedAuthority, TargetNullValue=—}" FontWeight="SemiBold" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding SelectedMovement.AuthorizedAuthority, TargetNullValue=—}"
+                                               FontWeight="SemiBold"
+                                               TextAlignment="Right"/>
                                 </DockPanel>
                                 <Border Background="#F3F4F6" Padding="8">
                                     <TextBlock Text="{Binding SelectedLimit}" Foreground="#2D61A8"/>
@@ -276,21 +303,39 @@
                     </DockPanel>
                 </Border>
             </Grid>
-            <TabControl Grid.Row="1" SelectedIndex="{Binding TabIndex}" Background="White" BorderBrush="#D1D5DB" Padding="12">
+            <TabControl Grid.Row="1"
+                        SelectedIndex="{Binding TabIndex}"
+                        Background="White"
+                        BorderBrush="#D1D5DB"
+                        Padding="12">
                 <TabItem Header="Movement permissions">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="CTC movement requests" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="CTC movement requests"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,12"/>
                         <DataGrid ItemsSource="{Binding Movements}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="CTC label" Binding="{Binding Train}" Width="100"/>
                                 <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="60"/>
                                 <DataGridTextColumn Header="Requested path" Binding="{Binding Path}" Width="135"/>
-                                <DataGridTextColumn Header="Suggested mph" Binding="{Binding SuggestedSpeed}" Width="100"/>
-                                <DataGridTextColumn Header="Requested ft" Binding="{Binding RequestedAuthority}" Width="95"/>
-                                <DataGridTextColumn Header="Authorized mph" Binding="{Binding AuthorizedSpeed}" Width="105"/>
-                                <DataGridTextColumn Header="Authorized ft" Binding="{Binding AuthorizedAuthority}" Width="100"/>
+                                <DataGridTextColumn Header="Suggested mph"
+                                                    Binding="{Binding SuggestedSpeed}"
+                                                    Width="100"/>
+                                <DataGridTextColumn Header="Requested ft"
+                                                    Binding="{Binding RequestedAuthority}"
+                                                    Width="95"/>
+                                <DataGridTextColumn Header="Authorized mph"
+                                                    Binding="{Binding AuthorizedSpeed}"
+                                                    Width="105"/>
+                                <DataGridTextColumn Header="Authorized ft"
+                                                    Binding="{Binding AuthorizedAuthority}"
+                                                    Width="100"/>
                                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="95"/>
-                                <DataGridTextColumn Header="Restriction reason" Binding="{Binding Reason}" Width="*" MinWidth="230"/>
+                                <DataGridTextColumn Header="Restriction reason"
+                                                    Binding="{Binding Reason}"
+                                                    Width="*"
+                                                    MinWidth="230"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </DockPanel>
@@ -302,7 +347,9 @@
                             <ColumnDefinition Width="340"/>
                         </Grid.ColumnDefinitions>
                         <DockPanel Margin="0,0,16,0">
-                            <TextBlock DockPanel.Dock="Top" Text="Commands and reported equipment state" Style="{StaticResource SectionHeading}"/>
+                            <TextBlock DockPanel.Dock="Top"
+                                       Text="Commands and reported equipment state"
+                                       Style="{StaticResource SectionHeading}"/>
                             <DataGrid ItemsSource="{Binding Equipment}">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Equipment" Binding="{Binding Equipment}" Width="*"/>
@@ -317,19 +364,27 @@
                             <StackPanel>
                                 <TextBlock Text="Manual equipment controls" Style="{StaticResource SectionHeading}"/>
                                 <StackPanel>
-                                    <CheckBox Content="Enable maintenance mode" IsChecked="{Binding IsMaintenanceMode}" Margin="0,0,0,8"/>
-                                    <TextBlock Text="Maintenance mode withholds automatic movement. Equipment protection still applies." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                                    <CheckBox Content="Enable maintenance mode"
+                                              IsChecked="{Binding IsMaintenanceMode}"
+                                              Margin="0,0,0,8"/>
+                                    <TextBlock Text="Maintenance mode withholds automatic movement. Equipment protection still applies."
+                                               Style="{StaticResource Hint}"
+                                               Margin="0,0,0,10"/>
                                     <UniformGrid Columns="2">
                                         <StackPanel Margin="0,0,10,10">
                                             <TextBlock Style="{StaticResource Label}" Text="Block / equipment"/>
-                                            <ComboBox ItemsSource="{Binding BlockIds}" SelectedItem="{Binding ManualTarget}"/>
+                                            <ComboBox ItemsSource="{Binding BlockIds}"
+                                                      SelectedItem="{Binding ManualTarget}"/>
                                         </StackPanel>
                                         <StackPanel Margin="0,0,10,10">
                                             <TextBlock Style="{StaticResource Label}" Text="Command"/>
-                                            <ComboBox ItemsSource="{Binding ManualActions}" SelectedItem="{Binding ManualAction}"/>
+                                            <ComboBox ItemsSource="{Binding ManualActions}"
+                                                      SelectedItem="{Binding ManualAction}"/>
                                         </StackPanel>
                                     </UniformGrid>
-                                    <Button Content="Send manual command" Command="{Binding SendManualCommand}" HorizontalAlignment="Left"/>
+                                    <Button Content="Send manual command"
+                                            Command="{Binding SendManualCommand}"
+                                            HorizontalAlignment="Left"/>
                                 </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
@@ -341,312 +396,150 @@
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <WrapPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
-                                        <Button Content="Load sample layout" Command="{Binding LoadSampleDeploymentCommand}" ToolTip="Shared sample map with two named territories, both running on PC. Pause first."/>
+                                        <Button Content="Load sample layout"
+                                                Command="{Binding LoadSampleDeploymentCommand}"
+                                                ToolTip="Shared sample map with two named territories, both running on PC. Pause first."/>
                                         <Button Content="Load deployment…" Command="{Binding LoadDeploymentCommand}"/>
-                                        <Button Content="Local preview" Command="{Binding RestoreLocalDemoCommand}" ToolTip="Return to the original single-controller preview. Pause first."/>
+                                        <Button Content="Local preview"
+                                                Command="{Binding RestoreLocalDemoCommand}"
+                                                ToolTip="Return to the original single-controller preview. Pause first."/>
+                                        <Button Content="Reset controller"
+                                                Command="{Binding ResetControllerCommand}"
+                                                ToolTip="Pauses and clears controller feedback and requests, retaining the applied deployment and PLC. Stop Test UI repeats first."/>
                                     </WrapPanel>
-                                    <TextBlock Text="Execution setup" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Execution setup"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
                                 </DockPanel>
-                                <TextBlock Text="{Binding LayoutDescription}" Style="{StaticResource Hint}" Margin="0,0,0,6" ToolTip="{Binding DeploymentFile}"/>
-                                <DataGrid ItemsSource="{Binding ExecutionRows}" AutoGenerateColumns="False" MinHeight="95" MaxHeight="200" CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" IsEnabled="{Binding CanEditExecution}" HeadersVisibility="Column" RowHeight="42">
+                                <TextBlock Text="{Binding LayoutDescription}"
+                                           Style="{StaticResource Hint}"
+                                           Margin="0,0,0,6"
+                                           ToolTip="{Binding DeploymentFile}"/>
+                                <DataGrid ItemsSource="{Binding ExecutionRows}"
+                                          AutoGenerateColumns="False"
+                                          MinHeight="95"
+                                          MaxHeight="200"
+                                          CanUserAddRows="False"
+                                          CanUserDeleteRows="False"
+                                          IsReadOnly="True"
+                                          IsEnabled="{Binding CanEditExecution}"
+                                          HeadersVisibility="Column"
+                                          RowHeight="42">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Territory" Binding="{Binding Name}" Width="1.2*"/>
-                                        <DataGridTextColumn Header="Owned blocks" Binding="{Binding Blocks}" Width="1.4*"/>
-                                        <DataGridTextColumn Header="Observe only" Binding="{Binding Neighbors}" Width="0.7*"/>
+                                        <DataGridTextColumn Header="Owned blocks"
+                                                            Binding="{Binding Blocks}"
+                                                            Width="1.4*"/>
+                                        <DataGridTextColumn Header="Observe only"
+                                                            Binding="{Binding Neighbors}"
+                                                            Width="0.7*"/>
                                         <DataGridTemplateColumn Header="Run on" Width="85">
                                             <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate><ComboBox ItemsSource="{Binding Targets}" SelectedItem="{Binding Target, UpdateSourceTrigger=PropertyChanged}" Padding="4,1" MinHeight="26" Margin="3"/></DataTemplate>
+                                                <DataTemplate>
+                                                    <ComboBox ItemsSource="{Binding Targets}"
+                                                              SelectedItem="{Binding Target, UpdateSourceTrigger=PropertyChanged}"
+                                                              Padding="4,1"
+                                                              MinHeight="26"
+                                                              Margin="3"/>
+                                                </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTextColumn Header="Applied" Binding="{Binding AppliedTarget}" Width="70"/>
+                                        <DataGridTextColumn Header="Applied"
+                                                            Binding="{Binding AppliedTarget}"
+                                                            Width="70"/>
                                         <DataGridTemplateColumn Header="Tunnel address" Width="140">
                                             <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate><TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsPi}" Padding="4,1" MinHeight="26" Margin="3" ToolTip="Windows loopback address for the SSH tunnel, usually 127.0.0.1."/></DataTemplate>
+                                                <DataTemplate>
+                                                    <TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
+                                                             IsEnabled="{Binding IsPi}"
+                                                             Padding="4,1"
+                                                             MinHeight="26"
+                                                             Margin="3"
+                                                             ToolTip="Windows loopback address for the SSH tunnel, usually 127.0.0.1."/>
+                                                </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
                                         <DataGridTemplateColumn Header="Port" Width="80">
                                             <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate><TextBox Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsPi}" Padding="4,1" MinHeight="26" Margin="3"/></DataTemplate>
+                                                <DataTemplate>
+                                                    <TextBox Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}"
+                                                             IsEnabled="{Binding IsPi}"
+                                                             Padding="4,1"
+                                                             MinHeight="26"
+                                                             Margin="3"/>
+                                                </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
                                     </DataGrid.Columns>
                                 </DataGrid>
                                 <DockPanel Margin="0,8,0,0">
                                     <WrapPanel DockPanel.Dock="Right">
-                                        <Button Content="Apply execution" Command="{Binding ApplyExecutionCommand}" IsEnabled="{Binding CanApplyExecution}" ToolTip="Requires pause. Restarts controllers with these targets; fresh feedback and explicit resume are required."/>
-                                        <Button Content="Save applied choices" Command="{Binding SaveExecutionCommand}" IsEnabled="{Binding CanSaveExecution}" ToolTip="Saves applied placement to the loaded deployment JSON. Track map and territory ownership are separate files."/>
+                                        <Button Content="Apply execution"
+                                                Command="{Binding ApplyExecutionCommand}"
+                                                IsEnabled="{Binding CanApplyExecution}"
+                                                ToolTip="Requires pause. Restarts controllers with these targets; fresh feedback and explicit resume are required."/>
+                                        <Button Content="Save applied choices"
+                                                Command="{Binding SaveExecutionCommand}"
+                                                IsEnabled="{Binding CanSaveExecution}"
+                                                ToolTip="Saves applied placement to the loaded deployment JSON. Track map and territory ownership are separate files."/>
                                     </WrapPanel>
-                                    <TextBlock Text="{Binding ExecutionDraftStatus}" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding ExecutionDraftStatus}"
+                                               Style="{StaticResource Hint}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,10,0"/>
                                 </DockPanel>
-                                <TextBlock Text="Pause to change execution. Test UI and live inputs each have their own deployment; changing input source never changes a territory’s owner." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+                                <TextBlock Text="Pause to change execution. Territory ownership is independent of PC/Pi placement. The separate Test UI sends inputs to this same controller."
+                                           Style="{StaticResource Hint}"
+                                           Margin="0,6,0,0"/>
                             </StackPanel>
                         </Border>
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="300"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="300"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,20,0">
                                 <StackPanel>
                                     <TextBlock Text="Controller logic" Style="{StaticResource SectionHeading}"/>
-                                    <ComboBox ItemsSource="{Binding ControllerModes}" SelectedItem="{Binding ControllerMode}" IsEnabled="{Binding CanChooseLogic}" Margin="0,0,0,8"/>
-                                    <TextBlock Text="PC and Pi territories run the same loaded PLC. Software logic is an alternate rule evaluator available in the local preview." Style="{StaticResource Hint}" Margin="0,0,0,8"/>
-                                    <TextBlock Text="{Binding Snapshot.PlcName}" FontWeight="SemiBold" Margin="0,8,0,8"/>
+                                    <ComboBox ItemsSource="{Binding ControllerModes}"
+                                              SelectedItem="{Binding ControllerMode}"
+                                              IsEnabled="{Binding CanChooseLogic}"
+                                              Margin="0,0,0,8"/>
+                                    <TextBlock Text="PC and Pi territories run the same loaded PLC. Software logic is an alternate rule evaluator available in the local preview."
+                                               Style="{StaticResource Hint}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="{Binding Snapshot.PlcName}"
+                                               FontWeight="SemiBold"
+                                               Margin="0,8,0,8"/>
                                     <TextBlock Text="{Binding PlcSummary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                    <WrapPanel><Button Content="Load PLC file…" Command="{Binding LoadPlcCommand}"/><Button Content="Load sample PLC" Command="{Binding LoadSamplePlcCommand}"/></WrapPanel>
+                                    <WrapPanel>
+                                        <Button Content="Load PLC file…" Command="{Binding LoadPlcCommand}"/>
+                                        <Button Content="Load sample PLC" Command="{Binding LoadSamplePlcCommand}"/>
+                                    </WrapPanel>
                                     <Separator Margin="0,12,0,12"/>
                                     <TextBlock Text="Local preview layout" Style="{StaticResource SectionHeading}"/>
-                                    <Button Content="Load territory…" Command="{Binding LoadLayoutCommand}" HorizontalAlignment="Left" IsEnabled="{Binding CanChooseLogic}"/>
+                                    <Button Content="Load territory…"
+                                            Command="{Binding LoadLayoutCommand}"
+                                            HorizontalAlignment="Left"
+                                            IsEnabled="{Binding CanChooseLogic}"/>
                                 </StackPanel>
                             </ScrollViewer>
                             <DockPanel Grid.Column="1">
-                                <TextBlock DockPanel.Dock="Top" Text="PLC source · read only" Style="{StaticResource SectionHeading}"/>
-                                <TextBox Text="{Binding PlcSource, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="13" Background="#F9FAFB" Padding="12" VerticalContentAlignment="Top" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+                                <TextBlock DockPanel.Dock="Top"
+                                           Text="PLC source · read only"
+                                           Style="{StaticResource SectionHeading}"/>
+                                <TextBox Text="{Binding PlcSource, Mode=OneWay}"
+                                         IsReadOnly="True"
+                                         FontFamily="Consolas"
+                                         FontSize="13"
+                                         Background="#F9FAFB"
+                                         Padding="12"
+                                         VerticalContentAlignment="Top"
+                                         TextWrapping="NoWrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         HorizontalScrollBarVisibility="Auto"/>
                             </DockPanel>
-                        </Grid>
-                    </DockPanel>
-                </TabItem>
-                <TabItem Header="Test inputs" Visibility="{Binding IsTest, Converter={StaticResource VisibleWhenTrue}}">
-                    <DockPanel>
-                        <Border DockPanel.Dock="Top" Style="{StaticResource Inset}" Margin="0,0,0,10">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="Test setup" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                                    <ComboBox ItemsSource="{Binding ControllerModes}" SelectedItem="{Binding ControllerMode}" Width="135" Margin="0,0,8,0" IsEnabled="{Binding CanChooseLogic}"/>
-                                    <Button Content="Load sample PLC" Command="{Binding LoadSamplePlcCommand}" ToolTip="Loads the sample Boolean program; resume when ready."/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Margin="18,0,10,0" VerticalAlignment="Center">
-                                    <CheckBox Content="Repeat sent inputs every second" IsChecked="{Binding ShouldRepeatInputs}"/>
-                                    <TextBlock Text="{Binding RepeatDescription}" Style="{StaticResource Hint}" FontSize="11" Margin="0,4,0,0"/>
-                                </StackPanel>
-                                <Button Grid.Column="2" Content="Reset test" Command="{Binding ResetTestCommand}" VerticalAlignment="Center" ToolTip="Clears test feedback and requests; restarts paused. Applied execution and the current valid PLC are retained. Live data is kept separate."/>
-                            </Grid>
-                        </Border>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="1.15*"/>
-                                <ColumnDefinition Width="1.05*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Border Style="{StaticResource Panel}" Margin="0,0,8,0">
-                                <DockPanel>
-                                    <StackPanel DockPanel.Dock="Top" Margin="12,12,12,0">
-                                        <TextBlock Text="1. Track feedback" Style="{StaticResource SectionHeading}"/>
-                                        <TextBlock Text="Simulate what Track Model reports to the controller." Style="{StaticResource Hint}" Margin="0,0,0,6"/>
-                                    </StackPanel>
-                                    <Border DockPanel.Dock="Bottom" Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0" Padding="12,9">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding FeedbackDraftStatus}" TextWrapping="Wrap" FontSize="11" Foreground="#6B7280" Margin="0,0,0,6"/>
-                                            <Button Content="Send feedback" Command="{Binding ApplyFeedbackCommand}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <DockPanel Margin="12,0,12,12">
-                                        <Border DockPanel.Dock="Top" Style="{StaticResource Inset}" Margin="0,0,0,12">
-                                            <StackPanel>
-                                                <DockPanel>
-                                                    <Button DockPanel.Dock="Right" Content="Load preset" Command="{Binding LoadScenarioCommand}" Margin="8,0,0,0" ToolTip="Fills both editor tabs without sending. Select Send feedback to apply the values."/>
-                                                    <ComboBox ItemsSource="{Binding Scenarios}" SelectedItem="{Binding Scenario}" ToolTip="{Binding ScenarioDescription}"/>
-                                                </DockPanel>
-                                            </StackPanel>
-                                        </Border>
-                                        <TabControl Padding="6" BorderBrush="#D1D5DB">
-                                            <TabItem Header="Blocks">
-                                                <DataGrid ItemsSource="{Binding FeedbackRows}" IsReadOnly="False" RowHeight="29">
-                                                    <DataGrid.Columns>
-                                                        <DataGridTextColumn Header="Block" Binding="{Binding BlockId}" IsReadOnly="True" Width="50"/>
-                                                        <DataGridTemplateColumn Header="Occupancy" Width="*">
-                                                            <DataGridTemplateColumn.CellTemplate>
-                                                                <DataTemplate>
-                                                                    <ComboBox MinHeight="24" Padding="3,0" ItemsSource="{Binding DataContext.Occupancies, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding Occupancy, UpdateSourceTrigger=PropertyChanged}"/>
-                                                                </DataTemplate>
-                                                            </DataGridTemplateColumn.CellTemplate>
-                                                        </DataGridTemplateColumn>
-                                                        <DataGridTemplateColumn Header="Fault" Width="50">
-                                                            <DataGridTemplateColumn.CellTemplate>
-                                                                <DataTemplate>
-                                                                    <CheckBox IsChecked="{Binding IsFaulted, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                                </DataTemplate>
-                                                            </DataGridTemplateColumn.CellTemplate>
-                                                        </DataGridTemplateColumn>
-                                                        <DataGridTemplateColumn Header="Reserved" Width="70">
-                                                            <DataGridTemplateColumn.CellTemplate>
-                                                                <DataTemplate>
-                                                                    <CheckBox IsThreeState="True" IsChecked="{Binding IsReserved, UpdateSourceTrigger=PropertyChanged}" ToolTip="Checked: reserved by CTC. Empty: not reserved. Dash: unknown." HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                                </DataTemplate>
-                                                            </DataGridTemplateColumn.CellTemplate>
-                                                        </DataGridTemplateColumn>
-                                                    </DataGrid.Columns>
-                                                </DataGrid>
-                                            </TabItem>
-                                            <TabItem Header="Equipment">
-                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                                    <StackPanel Margin="2,6">
-                                                        <TextBlock Text="Report actual equipment state; sending a command does not change these values." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                                                        <UniformGrid Columns="2">
-                                                            <StackPanel Margin="0,0,10,10">
-                                                                <TextBlock Style="{StaticResource Label}" Text="Switch"/>
-                                                                <ComboBox ItemsSource="{Binding SwitchIds}" SelectedItem="{Binding FeedbackSwitch}"/>
-                                                            </StackPanel>
-                                                            <StackPanel Margin="0,0,10,10">
-                                                                <TextBlock Style="{StaticResource Label}" Text="Actual position"/>
-                                                                <ComboBox ItemsSource="{Binding SwitchPositions}" SelectedItem="{Binding ReportedSwitch}"/>
-                                                            </StackPanel>
-                                                            <StackPanel Margin="0,0,10,10">
-                                                                <TextBlock Style="{StaticResource Label}" Text="Signal"/>
-                                                                <ComboBox ItemsSource="{Binding SignalIds}" SelectedItem="{Binding FeedbackSignal}"/>
-                                                            </StackPanel>
-                                                            <StackPanel Margin="0,0,10,10">
-                                                                <TextBlock Style="{StaticResource Label}" Text="Actual aspect"/>
-                                                                <ComboBox ItemsSource="{Binding SignalStates}" SelectedItem="{Binding ReportedSignal}"/>
-                                                            </StackPanel>
-                                                            <StackPanel Margin="0,0,10,10">
-                                                                <TextBlock Style="{StaticResource Label}" Text="Crossing"/>
-                                                                <ComboBox ItemsSource="{Binding CrossingIds}" SelectedItem="{Binding FeedbackCrossing}"/>
-                                                            </StackPanel>
-                                                            <StackPanel Margin="0,0,10,10">
-                                                                <TextBlock Style="{StaticResource Label}" Text="Actual state"/>
-                                                                <ComboBox ItemsSource="{Binding CrossingStates}" SelectedItem="{Binding ReportedCrossing}"/>
-                                                            </StackPanel>
-                                                        </UniformGrid>
-                                                    </StackPanel>
-                                                </ScrollViewer>
-                                            </TabItem>
-                                        </TabControl>
-                                    </DockPanel>
-                                </DockPanel>
-                            </Border>
-                            <Border Grid.Column="1" Style="{StaticResource Panel}" Margin="0,0,8,0">
-                                <DockPanel>
-                                    <StackPanel DockPanel.Dock="Top" Margin="12,12,12,0">
-                                        <TextBlock Text="2. CTC requests" Style="{StaticResource SectionHeading}"/>
-                                        <TextBlock Text="Request movement using the track feedback you sent." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                                    </StackPanel>
-                                    <Border DockPanel.Dock="Bottom" Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0" Padding="12,9">
-                                        <WrapPanel>
-                                            <Button Content="Send movement request" Command="{Binding SendMovementCommand}" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/>
-                                            <Button Content="Cancel request" Command="{Binding CancelMovementCommand}" HorizontalAlignment="Left"/>
-                                        </WrapPanel>
-                                    </Border>
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <StackPanel Margin="12,0,12,12">
-                                            <UniformGrid Columns="2">
-                                                <StackPanel Margin="0,0,10,10">
-                                                    <TextBlock Style="{StaticResource Label}" Text="Occupied target block"/>
-                                                    <ComboBox ItemsSource="{Binding BlockIds}" SelectedItem="{Binding TargetBlock}"/>
-                                                </StackPanel>
-                                                <StackPanel Margin="0,0,10,10">
-                                                    <TextBlock Style="{StaticResource Label}" Text="Train label (optional)"/>
-                                                    <TextBox Text="{Binding TrainLabel, UpdateSourceTrigger=PropertyChanged}"/>
-                                                </StackPanel>
-                                                <StackPanel Margin="0,0,10,10">
-                                                    <TextBlock Style="{StaticResource Label}" Text="Suggested speed (mph)"/>
-                                                    <TextBox Text="{Binding SuggestedSpeed, UpdateSourceTrigger=PropertyChanged}"/>
-                                                </StackPanel>
-                                                <StackPanel Margin="0,0,10,10">
-                                                    <TextBlock Style="{StaticResource Label}" Text="Requested authority (ft)"/>
-                                                    <TextBox Text="{Binding RequestedAuthority, UpdateSourceTrigger=PropertyChanged}"/>
-                                                </StackPanel>
-                                            </UniformGrid>
-                                            <StackPanel Margin="0,0,10,10">
-                                                <TextBlock Style="{StaticResource Label}" Text="Front offset in target block (ft)"/>
-                                                <TextBox Text="{Binding FrontOffset, UpdateSourceTrigger=PropertyChanged}"/>
-                                            </StackPanel>
-                                            <StackPanel Margin="0,0,10,10">
-                                                <TextBlock Style="{StaticResource Label}" Text="Next blocks in route (e.g. 6, 7, 8)"/>
-                                                <TextBox Text="{Binding RequestedPath, UpdateSourceTrigger=PropertyChanged}"/>
-                                            </StackPanel>
-                                            <Expander Header="Switch entry (if target is a switch)" Margin="0,0,0,10">
-                                                <StackPanel Margin="0,10,0,0">
-                                                    <StackPanel Margin="0,0,10,10">
-                                                        <TextBlock Style="{StaticResource Label}" Text="Block the train enters from"/>
-                                                        <TextBox Text="{Binding EntryBlock, UpdateSourceTrigger=PropertyChanged}"/>
-                                                    </StackPanel>
-                                                </StackPanel>
-                                            </Expander>
-                                            <Separator Margin="0,14,0,10"/>
-                                            <Expander Header="Switch request" Margin="0,0,0,12">
-                                                <StackPanel Margin="0,10,0,0">
-                                                    <TextBlock Text="Requests a switch change. Report its actual position in Track feedback separately." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                                                    <UniformGrid Columns="2">
-                                                        <StackPanel Margin="0,0,10,10">
-                                                            <TextBlock Style="{StaticResource Label}" Text="Switch"/>
-                                                            <ComboBox ItemsSource="{Binding SwitchIds}" SelectedItem="{Binding SwitchTarget}"/>
-                                                        </StackPanel>
-                                                        <StackPanel Margin="0,0,10,10">
-                                                            <TextBlock Style="{StaticResource Label}" Text="Requested position"/>
-                                                            <ComboBox ItemsSource="{Binding SwitchPositions}" SelectedItem="{Binding RequestedSwitch}"/>
-                                                        </StackPanel>
-                                                    </UniformGrid>
-                                                    <Button Content="Send switch request" Command="{Binding SendSwitchCommand}" HorizontalAlignment="Left"/>
-                                                </StackPanel>
-                                            </Expander>
-                                            <Expander Header="Block closure request">
-                                                <StackPanel Margin="0,10,0,0">
-                                                    <TextBlock Text="Ask the controller to close or reopen a block." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                                                    <UniformGrid Columns="2">
-                                                        <StackPanel Margin="0,0,10,10">
-                                                            <TextBlock Style="{StaticResource Label}" Text="Block"/>
-                                                            <ComboBox ItemsSource="{Binding BlockIds}" SelectedItem="{Binding MaintenanceTarget}"/>
-                                                        </StackPanel>
-                                                        <StackPanel Margin="0,0,10,10">
-                                                            <TextBlock Style="{StaticResource Label}" Text="Requested state"/>
-                                                            <ComboBox ItemsSource="{Binding MaintenanceStates}" SelectedItem="{Binding RequestedMaintenance}"/>
-                                                        </StackPanel>
-                                                    </UniformGrid>
-                                                    <Button Content="Send closure request" Command="{Binding SendMaintenanceCommand}" HorizontalAlignment="Left"/>
-                                                </StackPanel>
-                                            </Expander>
-                                        </StackPanel>
-                                    </ScrollViewer>
-                                </DockPanel>
-                            </Border>
-                            <Border Grid.Column="2" Style="{StaticResource Panel}">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <StackPanel Margin="12">
-                                        <TextBlock Text="3. Controller response" Style="{StaticResource SectionHeading}"/>
-                                        <TextBlock Text="Read-only results returned by the test controller." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                                        <Border Style="{StaticResource Inset}" Margin="0,0,0,14">
-                                            <TextBlock Text="{Binding LastResult}" TextWrapping="Wrap" LineHeight="21"/>
-                                        </Border>
-                                        <TextBlock Text="Equipment" Style="{StaticResource SectionHeading}"/>
-                                        <TextBlock Text="Command = controller output. Reported = Track Model input." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                                        <DataGrid ItemsSource="{Binding Equipment}" MinHeight="175" MaxHeight="255">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Equipment" Binding="{Binding Equipment}" Width="*"/>
-                                                <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="85"/>
-                                                <DataGridTextColumn Header="Reported" Binding="{Binding Feedback}" Width="85"/>
-                                            </DataGrid.Columns>
-                                        </DataGrid>
-                                        <Expander Header="Manual equipment controls" Margin="0,16,0,0">
-                                            <StackPanel Margin="0,10,0,0">
-                                                <StackPanel>
-                                                    <CheckBox Content="Enable maintenance mode" IsChecked="{Binding IsMaintenanceMode}" Margin="0,0,0,8"/>
-                                                    <TextBlock Text="Maintenance mode withholds automatic movement. Equipment protection still applies." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                                                    <UniformGrid Columns="2">
-                                                        <StackPanel Margin="0,0,10,10">
-                                                            <TextBlock Style="{StaticResource Label}" Text="Block / equipment"/>
-                                                            <ComboBox ItemsSource="{Binding BlockIds}" SelectedItem="{Binding ManualTarget}"/>
-                                                        </StackPanel>
-                                                        <StackPanel Margin="0,0,10,10">
-                                                            <TextBlock Style="{StaticResource Label}" Text="Command"/>
-                                                            <ComboBox ItemsSource="{Binding ManualActions}" SelectedItem="{Binding ManualAction}"/>
-                                                        </StackPanel>
-                                                    </UniformGrid>
-                                                    <Button Content="Send manual command" Command="{Binding SendManualCommand}" HorizontalAlignment="Left"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Expander>
-                                        <Expander Header="Connection details" Margin="0,14,0,0">
-                                            <StackPanel Margin="0,10,0,0">
-                                                <TextBlock Text="{Binding Connection}" Style="{StaticResource Hint}"/>
-                                                <TextBlock Text="{Binding LastReceipt}" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
-                                            </StackPanel>
-                                        </Expander>
-                                    </StackPanel>
-                                </ScrollViewer>
-                            </Border>
                         </Grid>
                     </DockPanel>
                 </TabItem>

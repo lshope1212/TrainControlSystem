@@ -1,5 +1,3 @@
-
-
 namespace TrackController.Core.Exceptions;
 
 /// <summary>

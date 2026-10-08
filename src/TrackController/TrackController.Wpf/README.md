@@ -1,61 +1,52 @@
-# Track Controller
+# TrackController.Wpf
 
-The Track Controller now has an executable WPF/MVVM implementation: territory monitoring, movement permissions, equipment commands and feedback, external Boolean PLC loading, and an isolated test UI. It targets the solution's existing .NET 10 / Visual Studio setup.
+Operator application for the Track Controller. It owns one controller host and
+receives CTC and Track Model inputs through the team's named-pipe transport.
+The [separate Test UI](../TrackController.TestUI.Wpf/README.md) simulates those peers.
 
-Use **Controller setup â†’ Load sample layout** to start named territories on the PC, or **Load deploymentâ€¦** for a saved plan. The [territory guide](TrackController-Territories.md) explains the shared map, ownership lists, and PC/Pi execution editor. The [Pi 5 guide](TrackController-Pi5.md) covers Ethernet/SSH, runtime deployment, and LEDs. Selecting **PLC program** alone is a local preview; it does not connect hardware.
+## Running it
 
-## Run an independent demonstration
+Set **TrackController.Wpf** as the startup project in Visual Studio, or run:
 
-1. Open `TrainControlSystem.sln`, set `TrackController.Wpf` as the startup project, and build/run.
-2. Select **Test UI** in the header. This switches modes and opens **Test inputs** in one action. Every tab now shows an isolated instance of the production controller and pipe host. Test peers send and receive real messages; only their pipe addresses differ. Select **Live feedback** in the header to return to CTC and Track Model data.
-3. In **Test setup**, choose **PLC program** and **Load sample PLC**, or choose **Software logic** to run without a PLC. Loading any PLC pauses operation until you explicitly resume. **Controller setup** also provides file loading and the read-only PLC source.
-4. Under **1. Track feedback**, choose **Clear route** and **Load preset**. This fills the **Blocks** and **Equipment** editor tabs without sending anything. Review or edit the values, then select **Send feedback**. The draft label shows whether changes are unsent. Presets use the bundled 12-block territory. Select **Resume** in the top toolbar.
-5. Select **Send movement request** with the initial values: target 5, front offset 0 ft, path `6, 7, 8`, suggested speed 25 mph, requested authority 1,200 ft. The result should be 25 mph and 1,200 ft.
-6. Under **3. Controller response**, inspect the returned decision. Load the **Switch mismatch** preset, then **Send feedback**. Authority becomes zero because the switch connects 6â€“10 while the request needs 6â€“7. Loading and sending **Clear route** restores permission if the request is still current.
-7. Try **Occupied route**, **Track fault**, and **Crossing awaiting feedback**. The first limits authority before the occupied block; the latter two withhold it.
-8. Uncheck **Repeat sent inputs every second** to exercise timeouts. Feedback expires after 5 seconds; requests expire after 10 seconds. Sending valid feedback and a current request recovers operation.
-9. Inspect **Movement permissions** and **Wayside equipment**. Click a block on the schematic for its details. Commanded and reported equipment states remain separate.
-
-The test checkbox repeats only previously sent feedback and the last submitted movement request once per second, through the same shared serializer and named-pipe transport on every send. Editing fields or loading a preset does not transmit them or change the repeated values. **Send feedback** is the single action that sends the feedback editor. Switch and block closure requests are expandable sections under **CTC requests**; manual controls are under **Controller response** and on **Wayside equipment**. A controller command and reported equipment state remain separate.
-
-**Reset test** stops the test host, clears inputs and captured outputs, and restarts paused. It retains applied execution and the current valid PLC, discards unapplied execution drafts, and creates fresh Pi sessions. Load a valid PLC before resetting a routed deployment whose replacement program failed. This is test setup/teardown, not a simulated module message. Switching between **Test UI** and **Live feedback** pauses the outgoing controller; resume the selected mode explicitly when ready. The header mode selection applies to all tabs, and test input controls are hidden in live mode. Routine receipts appear under **Connection details** so repeating inputs do not continually replace the action status.
-
-To move the demo switch, first cancel the movement request and report blocks 5, 6, 7, and 10 clear, fault-free, and unreserved. Send the switch request, then separately report its actual position. A command does not simulate an equipment acknowledgement.
-
-## Architecture
-
-- `TrackController.Core`: validated topology, controller state, route evaluation, a separate authorization guard, maintenance and crossing protection, and the bounded Boolean PLC interpreter. No WPF, file I/O, or transport dependencies.
-- `TrackController.Wpf`: views, view models, unit formatting, file dialogs, independent test inputs, message routing, and named-pipe transport. The application creates the controller instances and owns shutdown; window code-behind only initializes the view and assigns its data context; the custom map is presentation code. Asynchronous commands keep transport work off the UI thread.
-- `TrackController.Runtime`: the shared application-message receiver, local/Pi runtime boundary, explicit territory-owner router, and Pi connection protocol. The same receiver/controller/program runs on both execution targets.
-- `TrackController.Pi`: Linux ARM64 console host for the assigned hardware territory, with an optional Python GPIO Zero indication display. It has no WPF dependency.
-- `TrackController.Contracts/Messages/WaysideMessages.cs`: private data definitions shared by the controller core, PC/Pi runtime, and built-in test peers, with SI values. They are not an agreed interface for other team modules; those modules continue to depend on `TrainControl.Contracts`. Boolean C# properties use `Is...` names; explicit JSON names retain the existing wire fields. All wire framing and I/O use the team's `TrainControl.Common.Communication.MessageSerializer` and `NamedPipeTransport`.
-- `tests/TrackController.Tests`: controller-owned domain, malformed-input, network, and WPF integration tests. Only this project targets `net10.0-windows`; the teamâ€™s `TrainControl.Tests` project retains its original `net10.0` target and references.
-
-The default territory is an illustrative Green Line wayside with directed blocks 1â€“9 and a branch 6â€“10â€“11â€“12. Blocks are 100 m long, the main route limit is 15 m/s, and the branch limit is 8 m/s. It is not an imported Pittsburgh track layout. Load a JSON territory using **Load territoryâ€¦**; a complete example is bundled beside the PLC. A layout replacement clears feedback and the PLC and pauses execution. Active requests or protected/occupied track prevent replacing a used layout.
-
-## What the Test UI actually tests
-
-Every movement request, switch request, maintenance request, feedback batch, repeating input, and manual command follows this path:
-
-```text
-Test UI form / repeating input
-  -> existing team message or controller extension
-  -> Common.MessageSerializer + Common.NamedPipeTransport.SendAsync
-  -> actual named pipe
-  -> Common.NamedPipeTransport.ListenAsync
-  -> WaysideMessageRouter
-  -> production TrackControllerService
-  -> production publisher
-  -> output named pipes
-  -> fake CTC / Track Model receivers
-  -> observed outputs in the UI
+```powershell
+dotnet run --project src/TrackController/TrackController.Wpf
 ```
 
-PLC loading, controller mode, maintenance mode, simulation control, and territory loading also have controller-local message contracts and use that same receiver. The test connection cannot call the controller, read its private state, or silently bypass a failed connection. The read-only Test UI output comes from deserialized `WaysideSnapshotMessage` packets on the Track Model output pipe. It also captures CTC's actual `BlockStatusMessage` and `TrainAuthorizationStatusMessage` outputs. The footer reports sent messages and received outputs for both peers. An expired/missing output lease displays unavailable commands instead of a stale approval.
+For a demonstration, also start **TrackController.TestUI.Wpf**. In the operator
+window choose **Controller setup → Load sample layout**. The sample starts two
+territories on the PC with the sample PLC loaded and operation paused. In the
+Test UI load **Clear route** and select **Send feedback**, then select **Resume**
+in this window and **Send movement request** in the Test UI.
 
-Live and isolated hosts run exactly the same receiver, router, controller class, and output publisher. The isolated host uses a per-run prefix such as `TrainControl.TrackController.Test.<id>` for its input, CTC output, and Track Model output pipes. This allows genuine transport testing without interfering with running live modules. The test does not claim to exercise another teammate's complete application; it impersonates that application's documented interface. The bundled 12-block scenario is still illustrative data.
+PLC loading, controller logic, maintenance mode, manual equipment commands,
+Pause/Resume, and PC/Pi placement belong to the operator window. The Test UI
+contains simulated measurements, CTC requests, and captured controller outputs.
+There is no Test/Live switch: either the real modules or their test replacements
+connect to the same controller interface.
 
-A completed send only confirms transport delivery, just as in CTC's shared sender. Controller acceptance/rejection is a separate `WaysideAcknowledgementMessage` on its normal Track Model output stream; authorized movement and equipment feedback remain separate from that receipt.
+**Reset controller** pauses and clears feedback and movement requests. It retains
+the applied deployment and PLC. Stop Test UI repeats before resetting; otherwise
+the external simulator will continue sending measurements. Send fresh feedback
+and resume explicitly afterward.
+
+## Project organization
+
+- `TrackController.Core`: domain state, topology validation, route/equipment
+  protection, authorization guard, and Boolean PLC interpreter. No WPF or I/O.
+- `TrackController.Wpf`: views, view models, operator commands, file dialogs,
+  named-pipe host, and application startup/shutdown.
+- `TrackController.Runtime`: local/Pi execution and territory routing. See its
+  [territory guide](../TrackController.Runtime/README.md).
+- `TrackController.Pi`: console host and optional indication LEDs. Its
+  [README](../TrackController.Pi/README.md) and `scripts` directory cover deployment.
+- `TrackController.Contracts`: private PC/Pi and prototype message definitions.
+  Other team modules continue to reference `TrainControl.Contracts`.
+- `TrackController.TestUI.Wpf`: external-module simulator. It has no reference to
+  the controller core, runtime, or operator application.
+
+Automated tests remain in the existing repository `tests` directory:
+`TrackController.Tests` targets `net10.0` for core/runtime tests;
+`TrackController.Wpf.Tests` targets `net10.0-windows` for UI/transport tests.
 
 ## Movement and protection rules
 
@@ -69,7 +60,7 @@ A completed send only confirms transport delivery, just as in CTC's shared sende
 - Signals default red. A protected route requests a proceed aspect; red/unknown reported signals withhold movement. A Yellow command or feedback caps speed at 5 m/s. That is a documented prototype default, not a braking-distance model.
 - Manual commands require maintenance mode, which withholds automatic movement. Switch protection still applies. A manual signal may be set to Red; a proceed aspect requires automatic route protection. A crossing cannot be manually opened over an active protection condition.
 - A separate guard rechecks every positive authorization against the resulting block/equipment snapshot and topology. This is a simulation safety implementation, not a certified vital controller, redundant hardware platform, or formal safety proof.
-- Watchdogs use wall time, independent of pause and the 1Ã—â€“10Ã— simulation clock. Defaults: feedback 5 s, request 10 s. Configuration accepts feedback 1â€“60 s and request 1â€“120 s.
+- Watchdogs use wall time, independent of pause and the 1×–10× simulation clock. Defaults: feedback 5 s, request 10 s. Configuration accepts feedback 1–60 s and request 1–120 s.
 
 ## Boolean PLC files
 
@@ -94,9 +85,9 @@ The live input pipe is `TrainControl.TrackController`. It accepts one UTF-8, new
 {"messageType":"MaintenanceRequestMessage","payload":{"blockId":"12","requestedState":"Closed"}}
 ```
 
-Supported inputs (identical in live and test hosts): `WaysideConfigurationMessage`, `WaysideFeedbackMessage`, `WaysideMovementRequestMessage`, `WaysideSimulationMessage`, `WaysideManualCommandMessage`, `WaysideMaintenanceModeMessage`, `WaysideControllerModeMessage`, `WaysidePlcProgramMessage`, `WaysideSnapshotRequest`, and the existing `MaintenanceRequestMessage`, `SwitchPositionRequestMessage`, `BlockStatusMessage`, and `TrackStateMessage`. Live transport never exposes test reset.
+Supported inputs (identical in the production host): `WaysideConfigurationMessage`, `WaysideFeedbackMessage`, `WaysideMovementRequestMessage`, `WaysideSimulationMessage`, `WaysideManualCommandMessage`, `WaysideMaintenanceModeMessage`, `WaysideControllerModeMessage`, `WaysidePlcProgramMessage`, `WaysideSnapshotRequest`, and the existing `MaintenanceRequestMessage`, `SwitchPositionRequestMessage`, `BlockStatusMessage`, and `TrackStateMessage`. Live transport never exposes test reset.
 
-The `Wayside*` inputs and outputs are controller extensions used by the built-in test peers and Pi runtime. They are exposed identically on live and isolated test hosts, but are not yet agreed inter-module contracts. Adopting them for CTC or Track Model requires a team-approved shared contract or an adapter inside Track Controller; other modules should not reference `TrackController.Contracts`.
+The `Wayside*` inputs and outputs are controller extensions used by the external Test UI peers and Pi runtime. They are exposed identically on the production host, but are not yet agreed inter-module contracts. Adopting them for CTC or Track Model requires a team-approved shared contract or an adapter inside Track Controller; other modules should not reference `TrackController.Contracts`.
 
 Use the Common serializer rather than building JSON by hand. Existing shared feedback is timestamped on arrival; it cannot provide reservation confirmation or all richer fault data. The test/Pi extension `WaysideFeedbackMessage` carries explicit measurement timestamps, optional actual speed, reservation status, and equipment feedback. Mode/program requests are operator/simulation controls; they still pass through the same validation boundary in the test UI.
 

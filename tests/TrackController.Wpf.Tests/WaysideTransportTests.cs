@@ -5,6 +5,7 @@ using TrackController.Contracts.Messages;
 using TrackController.Core.Services;
 using TrackController.Runtime;
 using TrackController.Wpf.Services;
+using TrackController.TestUI.Wpf.Services;
 using TrainControl.Common.Communication;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
@@ -18,16 +19,15 @@ public sealed class WaysideTransportTests
     private sealed class NetworkFixture : IAsyncDisposable
     {
         public WaysideEndpoints Endpoints { get; } = WaysideEndpoints.CreateIsolated();
-        public WaysideTestConnection Peers
-        {
-            get;
-        }
+
+        public WaysideTestConnection Peers { get; }
 
         private WaysidePipeHost? _host;
+
         /// <summary>Creates an isolated production pipe host and simulated external peers.</summary>
         public NetworkFixture()
         {
-            Peers = new(Endpoints);
+            Peers = new(Endpoints.Input, Endpoints.CtcOutput, Endpoints.TrackModelOutput);
             Peers.Start();
             _host = new WaysidePipeHost(new TrackControllerService(), Endpoints);
             _host.Start();
@@ -85,14 +85,18 @@ public sealed class WaysideTransportTests
         SuggestedSpeedMetersPerSecond = 11.176,
         SuggestedAuthorityMeters = 365.76
     };
+
     private static async Task UntilAsync(Func<bool> predicate)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
         while (!predicate())
+        {
             await Task.Delay(15, deadline.Token);
+        }
     }
 
     private static IEnumerable<WaysideAcknowledgementMessage> Results(WaysideTestConnection peers) => peers.RecentMessages.Where(envelope => envelope.MessageType == nameof(WaysideAcknowledgementMessage)).Select(MessageSerializer.DeserializePayload<WaysideAcknowledgementMessage>);
+
     /// <summary>Verifies that legacy train only request is rejected without guessing occupancy.</summary>
     [TestMethod]
     public void Receive_TrainOnlyMovement_RejectsWithoutGuessingPosition()
@@ -118,7 +122,9 @@ public sealed class WaysideTransportTests
         }
 
         )
+        {
             Assert.IsFalse(((WaysideAcknowledgementMessage)router.Receive(json)).IsAccepted);
+        }
     }
 
     /// <summary>Verifies that test client uses actual input and both output pipes.</summary>
@@ -245,7 +251,7 @@ public sealed class WaysideTransportTests
         var endpoints = WaysideEndpoints.CreateIsolated();
         await using var host = new WaysidePipeHost(new TrackControllerService(), endpoints);
         host.Start();
-        await using var peers = new WaysideTestConnection(endpoints); // Deliberately do not start output listeners.
+        await using var peers = new WaysideTestConnection(endpoints.Input, endpoints.CtcOutput, endpoints.TrackModelOutput); // Deliberately do not start output listeners.
         await peers.SendAsync(new MaintenanceRequestMessage { BlockId = "12", RequestedState = MaintenanceState.Closed });
         Assert.IsNull(peers.LatestSnapshot);
         Assert.IsFalse(peers.IsSnapshotCurrent);

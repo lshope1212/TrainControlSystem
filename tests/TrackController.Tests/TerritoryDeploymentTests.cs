@@ -14,6 +14,7 @@ namespace TrackController.Tests;
 public sealed class TerritoryDeploymentTests
 {
     internal static TerritoryAssignment[] Choices(PreparedDeployment plan, string second = "Local", int port = 11405) => plan.Territories.Select((territory, index) => new TerritoryAssignment { TerritoryId = territory.Id, Execution = index == 1 ? second : "Local", Host = "127.0.0.1", Port = index == 1 ? port : 11406 }).ToArray();
+
     /// <summary>Verifies that shared map preserves boundary and every block has one command owner.</summary>
     [TestMethod]
     public async Task Read_SharedTrackMap_PreservesEdgesAndAssignsOneOwner()
@@ -53,11 +54,20 @@ public sealed class TerritoryDeploymentTests
                 var first = json["territories"]![0]!["blockIds"]!.AsArray();
                 var second = json["territories"]![1]!["blockIds"]!.AsArray();
                 if (fault == "missing")
+                {
                     first.RemoveAt(0);
+                }
+
                 if (fault == "duplicate")
+                {
                     second.Add("1");
+                }
+
                 if (fault == "unknown")
+                {
                     first.Add("999");
+                }
+
                 if (fault == "split switch")
                 {
                     first.Add("5");
@@ -145,7 +155,10 @@ public sealed class TerritoryDeploymentTests
         changed.SaveExecution();
         Assert.AreEqual("Pi", files.Read().Territories[1].Execution);
         foreach (var file in original)
+        {
             Assert.AreEqual(file.Value, File.ReadAllText(files.PathFor(file.Key)));
+        }
+
         files.Edit("all-pc.deployment.json", json => json["name"] = "External edit");
         Assert.ThrowsExactly<IOException>(changed.SaveExecution);
         Assert.AreEqual("External edit", files.Read().Name);
@@ -225,7 +238,9 @@ public sealed class TerritoryDeploymentTests
         server.StatusChanged += status =>
         {
             if (status.Contains("initialization required"))
+            {
                 rejected.TrySetResult();
+            }
         };
         using var invalid = new System.Net.Sockets.TcpClient();
         await invalid.ConnectAsync("127.0.0.1", server.Port);

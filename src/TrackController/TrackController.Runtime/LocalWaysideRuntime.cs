@@ -9,10 +9,8 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
 {
     private readonly ITrackControllerService _controller;
     private readonly WaysideMessageRouter _receiver;
-    public WaysideSnapshotMessage LatestSnapshot
-    {
-        get; private set;
-    }
+
+    public WaysideSnapshotMessage LatestSnapshot { get; private set; }
 
     /// <summary>Wraps an existing controller without creating a second copy of its state.</summary>
     public LocalWaysideRuntime(ITrackControllerService controller)

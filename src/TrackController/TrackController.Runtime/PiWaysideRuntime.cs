@@ -22,17 +22,18 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
     private TimeSpan _clockOffset;
     private DateTimeOffset _retryAfter;
     private bool _disposed;
-    public WaysideSnapshotMessage LatestSnapshot
-    {
-        get; private set;
-    }
+
+    public WaysideSnapshotMessage LatestSnapshot { get; private set; }
 
     /// <summary>Configures the loopback SSH-tunnel endpoint and the territory used for a new Pi session.</summary>
     public PiWaysideRuntime(string host, int port, WaysideConfigurationMessage configuration, string programName, string programSource)
     {
         // The device link is authenticated/encrypted by SSH, not an unauthenticated campus-network socket.
         if (!IPAddress.TryParse(host, out var address) || !IPAddress.IsLoopback(address) || port is < 1 or > 65535)
+        {
             throw new ArgumentException("Pi endpoints must be a loopback IP and port reached through the SSH tunnel.");
+        }
+
         _host = host;
         _port = port;
         _configuration = WaysideConfiguration.ValidateAndCopy(configuration);
@@ -48,7 +49,10 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
         try
         {
             if (_disposed)
+            {
                 throw new ObjectDisposedException(nameof(PiWaysideRuntime));
+            }
+
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
             timeout.CancelAfter(1500);
             if (message.MessageType == nameof(WaysidePlcProgramMessage))
@@ -65,7 +69,10 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
             {
                 var feedback = MessageSerializer.DeserializePayload<WaysideFeedbackMessage>(message);
                 foreach (var block in feedback.Blocks)
+                {
                     block.ObservedAtUtc += _clockOffset;
+                }
+
                 message = RuntimeMessages.CreateEnvelope(feedback);
             }
 
@@ -76,15 +83,24 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
             {
                 var snapshot = MessageSerializer.DeserializePayload<WaysideSnapshotMessage>(envelope);
                 if (snapshot.Blocks is null || snapshot.Authorizations is null || snapshot.Blocks.Any(blockStatus => blockStatus is null) || snapshot.Authorizations.Any(authorization => authorization is null) || snapshot.WaysideId != _configuration.WaysideId || !snapshot.Blocks.Select(blockStatus => blockStatus.BlockId).Order().SequenceEqual(WaysideConfiguration.GetOwnedIds(_configuration).Order()) || snapshot.NeighborObservations is null || snapshot.NeighborObservations.Any(neighbor => neighbor is null) || !snapshot.NeighborObservations.Select(neighbor => neighbor.BlockId).Order().SequenceEqual(WaysideConfiguration.GetNeighborIds(_configuration).Order()))
+                {
                     throw new InvalidDataException("Pi returned a different territory.");
+                }
+
                 var evaluated = snapshot.EvaluatedAtUtc - _clockOffset;
                 var validUntil = snapshot.ValidUntilUtc - _clockOffset;
                 // Never extend a lease by network/queue delay, even if host clocks differ.
                 var conservativeLimit = sentAt + (snapshot.ValidUntilUtc - snapshot.EvaluatedAtUtc);
                 if (validUntil > conservativeLimit)
+                {
                     validUntil = conservativeLimit;
+                }
+
                 if (validUntil <= DateTimeOffset.UtcNow || validUntil > sentAt.AddSeconds(1.5))
+                {
                     throw new InvalidDataException("Pi output expired before receipt.");
+                }
+
                 LatestSnapshot = snapshot with
                 {
                     EvaluatedAtUtc = evaluated,
@@ -94,7 +110,10 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
             }
 
             if (envelope.MessageType != nameof(WaysideAcknowledgementMessage))
+            {
                 throw new InvalidDataException("Unexpected Pi response.");
+            }
+
             var result = MessageSerializer.DeserializePayload<WaysideAcknowledgementMessage>(envelope);
             return result;
         }
@@ -102,10 +121,16 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
         {
             DropConnection();
             if (DateTimeOffset.UtcNow >= _retryAfter)
+            {
                 _retryAfter = DateTimeOffset.UtcNow.AddSeconds(1);
+            }
+
             LatestSnapshot = UnavailableOutput.CreateStopSnapshot(LatestSnapshot, $"Pi unavailable: {ex.Message}");
             if (cancellationToken.IsCancellationRequested)
+            {
                 throw;
+            }
+
             return RuntimeMessages.CreateRejection(message.MessageType, LatestSnapshot.PlcStatus);
         }
         finally
@@ -124,9 +149,15 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
     private async Task ConnectAsync(CancellationToken cancellationToken)
     {
         if (_protocol is not null)
+        {
             return;
+        }
+
         if (DateTimeOffset.UtcNow < _retryAfter)
+        {
             throw new IOException("Waiting to reconnect to the Pi.");
+        }
+
         _socket = new TcpClient
         {
             NoDelay = true
@@ -136,20 +167,34 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
         _protocol = new(_socket.GetStream());
         var helloEnvelope = await _protocol.ReadAsync(cancellationToken);
         if (helloEnvelope.MessageType == nameof(WaysideAcknowledgementMessage))
+        {
             throw new IOException(MessageSerializer.DeserializePayload<WaysideAcknowledgementMessage>(helloEnvelope).Detail);
+        }
+
         if (helloEnvelope.MessageType != nameof(PiHello))
+        {
             throw new InvalidDataException("Not a Track Controller Pi endpoint.");
+        }
+
         var hello = MessageSerializer.DeserializePayload<PiHello>(helloEnvelope);
         if (hello.Version != PiProtocol.Version)
+        {
             throw new InvalidDataException("Pi protocol version mismatch. Deploy the matching runtime.");
+        }
+
         _clockOffset = hello.ServerTimeUtc - (before + (DateTimeOffset.UtcNow - before) / 2);
         await _protocol.WriteAsync(new PiSessionStart(_configuration, _programName, _programSource), cancellationToken);
         var response = await _protocol.ReadAsync(cancellationToken);
         if (response.MessageType != nameof(WaysideAcknowledgementMessage))
+        {
             throw new InvalidDataException("Missing Pi initialization response.");
+        }
+
         var receipt = MessageSerializer.DeserializePayload<WaysideAcknowledgementMessage>(response);
         if (!receipt.IsAccepted)
+        {
             throw new IOException(receipt.Detail);
+        }
     }
 
     private void DropConnection()
@@ -164,7 +209,10 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
+        {
             return;
+        }
+
         _disposed = true;
         await _stop.CancelAsync();
         await _io.WaitAsync();

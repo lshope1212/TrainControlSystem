@@ -1,110 +1,67 @@
-using System.Windows.Threading;
-using TrackController.Core.Services;
-using TrackController.Wpf.Commands;
-using TrackController.Wpf.Services;
-using TrackController.Wpf.ViewModels;
+using static TrackController.Wpf.Tests.UiTestSession;
 
 namespace TrackController.Wpf.Tests;
 
-/// <summary>Exercises TrackControllerTestUi behavior without changing live controller state.</summary>
+/// <summary>Verifies the external simulator observes the production controller through module pipes.</summary>
 [TestClass]
 public sealed class TrackControllerTestUiTests
 {
-    /// <summary>Verifies that actual test ui commands drive controller and observe published outputs.</summary>
+    /// <summary>Checks requests, unsent drafts, repeated inputs, and feedback restrictions.</summary>
     [TestMethod]
-    public async Task SendMovementCommand_TestMode_ObservesPublishedControllerOutput()
+    public Task SendMovementCommand_ExternalTestUi_ObservesProductionOutput() => RunAsync(async session =>
     {
-        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
-        {
-            var dispatcher = Dispatcher.CurrentDispatcher;
-            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
-            dispatcher.BeginInvoke(async () =>
-            {
-                MainWindowViewModel? model = null;
-                Exception? failure = null;
-                try
-                {
-                    // Only addresses are injected. This runs the actual application's command/view-model code.
-                    model = new MainWindowViewModel(new TrackControllerService(), new TrackControllerService(), WaysideEndpoints.CreateIsolated());
-                    Assert.IsTrue(model.IsLive);
-                    Assert.IsFalse(model.ApplyFeedbackCommand.CanExecute(null));
-                    await ((AsyncRelayCommand)model.UseTestUiCommand).ExecuteAsync();
-                    Assert.IsTrue(model.IsTest);
-                    Assert.AreEqual(3, model.TabIndex);
-                    model.IsHardwareMode = false;
-                    await UntilAsync(() => !model.Snapshot.IsHardwareMode);
-                    model.Scenario = "Clear route";
-                    await ((AsyncRelayCommand)model.LoadScenarioCommand).ExecuteAsync();
-                    await Task.Delay(650);
-                    Assert.IsTrue(model.HasUnsentFeedback);
-                    Assert.IsTrue(model.Blocks.All(blockStatus => !blockStatus.IsFresh), "Loading a preset must not send feedback.");
-                    await ((AsyncRelayCommand)model.ApplyFeedbackCommand).ExecuteAsync();
-                    await UntilAsync(() => model.Blocks.All(blockStatus => blockStatus.IsFresh));
-                    Assert.IsFalse(model.HasUnsentFeedback);
-                    await ((AsyncRelayCommand)model.PauseResumeCommand).ExecuteAsync();
-                    await UntilAsync(() => !model.Snapshot.IsPaused);
-                    await ((AsyncRelayCommand)model.SendMovementCommand).ExecuteAsync();
-                    await UntilAsync(() => model.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
-                    Assert.AreEqual(365.76, model.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
-                    StringAssert.Contains(model.Connection, "Test pipe transport");
-                    model.Scenario = "Switch mismatch";
-                    await ((AsyncRelayCommand)model.LoadScenarioCommand).ExecuteAsync();
-                    await Task.Delay(1250); // A repeat must use the sent values, never the unsent preset.
-                    Assert.IsTrue(model.HasUnsentFeedback);
-                    Assert.IsGreaterThan(0, model.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters);
-                    await ((AsyncRelayCommand)model.ApplyFeedbackCommand).ExecuteAsync();
-                    await UntilAsync(() => model.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
-                    StringAssert.Contains(model.LastResult, "Withheld");
-                    model.FeedbackRows[0].IsFaulted = true;
-                    Assert.IsTrue(model.HasUnsentFeedback, "Custom edits must be marked as unsent too.");
-                    await ((AsyncRelayCommand)model.UseLiveFeedbackCommand).ExecuteAsync();
-                    Assert.IsTrue(model.IsLive);
-                    Assert.AreEqual(0, model.TabIndex);
-                    Assert.IsFalse(model.SendMovementCommand.CanExecute(null));
-                    Assert.IsEmpty(model.Snapshot.Authorizations, "Test requests must not appear in live mode.");
-                    await ((AsyncRelayCommand)model.UseTestUiCommand).ExecuteAsync();
-                    await UntilAsync(() => model.Snapshot.IsPaused);
-                    Assert.AreEqual(3, model.TabIndex);
-                }
-                catch (Exception ex)
-                {
-                    failure = ex;
-                }
-                finally
-                {
-                    if (model is not null)
-                        try
-                        {
-                            await model.DisposeAsync();
-                        }
-                        catch (Exception ex)
-                        {
-                            failure ??= ex;
-                        }
+        var inputs = session.Inputs;
+        var controller = session.Controller;
+        controller.IsHardwareMode = false;
+        await UntilAsync(() => !inputs.Snapshot.IsHardwareMode);
+        await ExecuteAsync(inputs.LoadScenarioCommand);
+        await Task.Delay(650);
+        Assert.IsTrue(inputs.HasUnsentFeedback);
+        Assert.IsTrue(inputs.Blocks.All(block => !block.IsFresh), "A preset edits drafts only.");
+        await ExecuteAsync(inputs.ApplyFeedbackCommand);
+        await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
+        Assert.IsFalse(inputs.HasUnsentFeedback);
+        await ExecuteAsync(controller.PauseResumeCommand);
+        await UntilAsync(() => !inputs.Snapshot.IsPaused);
+        await ExecuteAsync(inputs.SendMovementCommand);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
+        Assert.AreEqual(365.76, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
+        await UntilAsync(() => controller.Snapshot.Authorizations.Count == 1);
+        Assert.AreEqual(inputs.Snapshot.Authorizations.Single().RequestId, controller.Snapshot.Authorizations.Single().RequestId);
+        inputs.Scenario = "Switch mismatch";
+        await ExecuteAsync(inputs.LoadScenarioCommand);
+        await Task.Delay(1250);
+        Assert.IsTrue(inputs.HasUnsentFeedback);
+        Assert.IsGreaterThan(0, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters);
+        await ExecuteAsync(inputs.ApplyFeedbackCommand);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
+        StringAssert.Contains(inputs.LastResult, "Withheld");
+        inputs.FeedbackRows[0].IsFaulted = true;
+        Assert.IsTrue(inputs.HasUnsentFeedback);
+        await ExecuteAsync(inputs.ClearInputsCommand);
+        Assert.IsFalse(inputs.ShouldRepeatInputs);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 0);
+        Assert.IsFalse(controller.Snapshot.IsPaused, "Clearing drafts must not reset the controller.");
+    });
 
-                    if (failure is null)
-                        completed.TrySetResult();
-                    else
-                        completed.TrySetException(failure);
-                    dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
-                }
-            });
-            Dispatcher.Run();
-        })
-        {
-            IsBackground = true,
-            Name = "Track controller test UI dispatcher"
-        };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        await completed.Task.WaitAsync(TimeSpan.FromSeconds(20));
+    /// <summary>Ensures the Test UI cannot host controller logic or reuse the operator application.</summary>
+    [TestMethod]
+    public void TestUiAssembly_References_ExcludeControllerImplementations()
+    {
+        var references = typeof(TestUI.Wpf.ViewModels.MainWindowViewModel).Assembly.GetReferencedAssemblies();
+        Assert.IsFalse(references.Any(reference => reference.Name is "TrackController.Core" or "TrackController.Runtime" or "TrackController.Wpf"));
     }
 
-    private static async Task UntilAsync(Func<bool> predicate)
+    /// <summary>Ensures disconnected outputs expire and sends have no in-process fallback.</summary>
+    [TestMethod]
+    public Task SendFeedback_ControllerStopped_ReportsFailureAndExpiresOutput() => RunAsync(async session =>
     {
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-        while (!predicate())
-            await Task.Delay(15, deadline.Token);
-    }
+        session.Inputs.ShouldRepeatInputs = false;
+        await session.StopControllerAsync();
+        await UntilAsync(() => session.Inputs.LastResult.Contains("No current controller output"));
+        await ExecuteAsync(session.Inputs.ApplyFeedbackCommand);
+        Assert.IsTrue(session.Inputs.HasUnsentFeedback);
+        Assert.DoesNotStartWith("Track feedback sent", session.Inputs.Status);
+        Assert.IsTrue(session.Inputs.Blocks.All(block => !block.IsFresh));
+    });
 }

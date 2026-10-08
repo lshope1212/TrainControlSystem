@@ -1,8 +1,8 @@
-# Track Controller: PC routing and Raspberry Pi 5
+# TrackController.Pi
 
 The Windows application owns the UI, test inputs, and routing. Each block has one controller owner. A software territory runs locally on the PC; a hardware territory runs on the Pi. Both execute the same `TrackController.Core` code, Boolean interpreter, and `wayside.plc` source. They control different territories; they are not redundant copies voting on one territory.
 
-The original **PLC program** option was only a local preview. To execute on hardware, use **Controller setup → Execution setup**. One shared track map, named territory ownership lists, and editable PC/Pi placement are explained in the [territory guide](TrackController-Territories.md). The selected block inspector shows its execution target.
+The original **PLC program** option was only a local preview. To execute on hardware, use **Controller setup → Execution setup**. One shared track map, named territory ownership lists, and editable PC/Pi placement are explained in the [territory guide](../TrackController.Runtime/README.md). The selected block inspector shows its execution target.
 
 ## What the PLC file means
 
@@ -70,8 +70,8 @@ Check the host-key fingerprint at first login against the Pi, then accept it. If
 From the repository root in PowerShell:
 
 ```powershell
-.\scripts\Publish-TrackControllerPi.ps1
-scp .\artifacts\track-controller-pi5.tar.gz yourname@192.168.50.2:~/
+.\src\TrackController\TrackController.Pi\scripts\Publish-TrackControllerPi.ps1
+scp .\src\TrackController\TrackController.Pi\artifacts\track-controller-pi5.tar.gz yourname@192.168.50.2:~/
 ```
 
 The script publishes a **self-contained Linux ARM64** application, including the .NET runtime. The Pi does not need Visual Studio or a .NET SDK. This is Microsoft's supported [ARM deployment approach](https://learn.microsoft.com/en-us/dotnet/iot/deployment). The first publish needs internet access on the PC to download the ARM64 runtime pack.
@@ -91,24 +91,24 @@ Keep that terminal open. The runtime reports that it is waiting for the PC route
 In a second Windows PowerShell terminal, open the encrypted tunnel:
 
 ```powershell
-.\scripts\Connect-TrackControllerPi.ps1 -User yourname -PiAddress 192.168.50.2
+.\src\TrackController\TrackController.Pi\scripts\Connect-TrackControllerPi.ps1 -User yourname -PiAddress 192.168.50.2
 ```
 
 Keep this terminal open too. It forwards `127.0.0.1:11405` on Windows to the Pi's local runtime. SSH handles authentication/encryption. The deployment JSON intentionally contains `127.0.0.1`, not the Pi's Ethernet address.
 
-## Use the built-in Test UI with the actual Pi
+## Use the separate Test UI with the actual Pi
 
-1. Start `TrackController.Wpf` in Visual Studio.
-2. Select **Test UI** and stay paused.
+1. Start `TrackController.Wpf` and `TrackController.TestUI.Wpf` as separate startup projects.
+2. In the controller window, stay paused.
 3. Open **Controller setup → Load deployment…** and select `Samples/pc-and-pi.deployment.json` from the application's output folder. The file dialog starts in that folder. Alternatively, **Load sample layout** starts both territories on PC; change the junction's **Run on** to **Pi** and select **Apply execution**.
 4. The example assigns **West approach (1–3) to PC** and **Junction and crossing (4–12) to Pi**. Both reference the same track map and load the shared `wayside.plc`; no separate manual PLC transfer is needed. Hardware placement is editable without changing territory ownership.
-5. Return to **Test inputs**, load **Clear route**, then **Send feedback**. Wait for 12/12 current blocks. If only the PC blocks are current, inspect the Pi terminal and SSH tunnel.
-6. Select **Resume**, then **Send movement request** with target 5, route `6, 7, 8`, 25 mph, and 1,200 ft. The request is routed to the Pi; the returned approval appears in **Controller response**.
+5. In the Test UI, load **Clear route**, then **Send feedback**. Wait for 12/12 current blocks. If only the PC blocks are current, inspect the Pi terminal and SSH tunnel.
+6. Select **Resume** in the controller window, then **Send movement request** in the Test UI with target 5, route `6, 7, 8`, 25 mph, and 1,200 ft. The request is routed to the Pi; the returned approval appears in **Controller response**.
 7. Load **Switch mismatch**, then **Send feedback**. The Pi should return zero movement authority.
 8. To demonstrate local execution, use a clear preset, report block 1 occupied in the Blocks editor, send feedback, and submit a request from 1 over `2, 3` with a distinct train label. The PC evaluates it. One request must stay within its assigned territory.
 9. Disconnect the SSH tunnel. The Pi territory becomes unavailable and its last authorizations become zero. The LED monitor treats expired outputs as stopped. Reconnect: the Pi session starts paused, with no old requests or feedback. Send fresh feedback and explicitly resume. If the PC territory is still running, select **Pause**, then **Resume** to resume both together.
 
-Each Pi runtime permits one owner at a time. Loading the same Pi endpoint into live and test modes simultaneously does not make independent hardware instances: the second session is refused. To transfer use, pause and change that territory to **PC**, then **Apply execution**, in the mode currently owning the Pi. You can then assign the endpoint in the other mode. Use another runtime and tunnel port for another independent territory on the same Pi. This update uses protocol version 2; copy the newly built package to replace an older device installation.
+Each Pi runtime permits one owner at a time. The external Test UI talks to the existing PC controller; it does not open a second Pi session. Use a separate runtime and tunnel port for each independent Pi territory. This deployment uses protocol version 2.
 
 Local testing without a Pi is also possible: run `TrackController.Pi` on Windows as a second application, then load the same deployment with no SSH tunnel. This verifies the network/runtime path, but it is not hardware validation.
 
@@ -156,5 +156,5 @@ The LED monitor reads the runtime's atomic status file and checks its output exp
 - CTC/Track Model continue using the same Windows named-pipe messages. The PC's internal Pi link uses those same JSON envelopes over an ordered request/reply TCP stream protected by SSH. The other modules do not need to know the Pi address.
 - Reconnection creates a new paused controller session rather than replaying old movement commands. A missing Pi never causes its territory to run on a local substitute.
 - The transport estimates the PC/Pi clock offset during connection and translates feedback timestamps and output leases. Received leases are also bounded from the local request start so network delay cannot extend permission.
-- CTC must still supply block/route-aware movement requests, and Track Model needs its snapshot/actuator adapter, as described in `TrackController.md`.
+- CTC must still supply block/route-aware movement requests, and Track Model needs its snapshot/actuator adapter, as described in the [module integration notes](../TrackController.Wpf/README.md#module-integration).
 - This is a course prototype. It does not implement redundant vital hardware or certify physical equipment operation.

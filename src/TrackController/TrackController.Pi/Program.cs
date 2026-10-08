@@ -13,11 +13,17 @@ string statusFile = Path.GetFullPath("status.json");
 for (int i = 0; i < args.Length; i++)
 {
     if (args[i] == "--port" && i + 1 < args.Length && int.TryParse(args[++i], out int selected) && selected is > 0 and <= 65535)
+    {
         port = selected;
+    }
     else if (args[i] == "--status-file" && i + 1 < args.Length)
+    {
         statusFile = Path.GetFullPath(args[++i]);
+    }
     else
+    {
         throw new ArgumentException("Use --port NUMBER and/or --status-file PATH. See --help.");
+    }
 }
 
 using var stop = new CancellationTokenSource();

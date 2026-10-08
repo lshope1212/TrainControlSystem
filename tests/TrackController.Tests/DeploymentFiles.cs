@@ -12,13 +12,17 @@ internal sealed class DeploymentFiles : IDisposable
     {
         Directory.CreateDirectory(Folder);
         foreach (string path in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "PiSamples")))
+        {
             File.Copy(path, Path.Combine(Folder, Path.GetFileName(path)));
+        }
     }
 
     /// <summary>Resolves a fixture filename inside this test’s temporary directory.</summary>
     public string PathFor(string name) => Path.Combine(Folder, name);
+
     /// <summary>Loads and validates deployment files before any controller connection is opened.</summary>
     public PreparedDeployment Read(string name = "all-pc.deployment.json") => WaysideDeployment.Read(PathFor(name));
+
     /// <summary>Changes a copied deployment fixture while leaving the repository samples untouched.</summary>
     public void Edit(string name, Action<JsonObject> edit)
     {

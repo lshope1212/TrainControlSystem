@@ -90,5 +90,5 @@ public sealed class WaysideMessageRouter(ITrackControllerService controller)
     }
 
     private static T Read<T>(MessageEnvelope envelope)
-        where T : class => MessageSerializer.DeserializePayload<T>(envelope);
+            where T : class => MessageSerializer.DeserializePayload<T>(envelope);
 }

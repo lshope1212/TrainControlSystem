@@ -1,20 +1,9 @@
 # TrainControl System
 
 `TrainControlSystem.sln` is the overall Visual Studio solution for the train
-control / simulation project. Modules are being developed independently. The
-Track Controller has a working WPF/MVVM implementation with route protection,
-Boolean PLC execution, independent test inputs, and local named-pipe communication.
-See [Track Controller setup, demo, and integration notes](docs/TrackController.md).
-For assigned PC/Pi territories, the shared PLC program, Ethernet/SSH deployment,
-and indication LEDs, see [Raspberry Pi 5 setup](docs/TrackController-Pi5.md).
-For the shared track map, named ownership territories, and the PC/Pi execution editor,
-see [Territory and execution setup](docs/TrackController-Territories.md).
-Track Controllerâ€™s private PC/Pi/test message types live in `src/TrackController/TrackController.Contracts`;
-its core/runtime tests live in `tests/TrackController.Tests`, with WPF integration
-tests in `tests/TrackController.Wpf.Tests`. Team shared sources and the shared
-test projectâ€™s target framework remain unchanged. Other modules continue to use
-`TrainControl.Contracts`; movement and actuator integration remains incomplete.
-Other modules still contain a mixture of implementations and placeholders.
+control / simulation project. This repository currently contains an **architecture
+skeleton only** — every class is a placeholder. No physics, no hardware
+communication, no networking, and no database are implemented yet.
 
 ## The launcher
 
@@ -53,10 +42,7 @@ What this means:
 - **Subsystem communication happens through shared contracts** sent over local
   Windows named pipes: one newline-delimited JSON envelope (`messageType` + `payload`)
   per connection. The envelope format, transport and endpoint names live in
-  `TrainControl.Common/Communication`.
-  Track Controller uses this same transport for live and test inputs and outputs;
-  its internal hardware link routes assigned territories over TCP through SSH to
-  the Pi. The other modules keep their local named-pipe interfaces.
+  `TrainControl.Common/Communication`. No networking, sockets, or message bus.
 - **Process launching and subsystem communication are two separate concerns.**
   Starting an executable says nothing about how the running programs will talk to
   each other. Do not let the launcher grow into a message broker.
@@ -75,7 +61,7 @@ project directory:
 
 ```
 <repo root>\src\TrainModel\TrainModel.Wpf\bin\Debug\net10.0-windows\TrainModel.Wpf.exe
-            â””â”€â”€â”€â”€â”€â”€â”€â”€ from ModuleInfo â”€â”€â”€â”€â”€â”€â”€â”€â”˜â””â”€ same suffix the launcher â”€â”˜
+            └──────── from ModuleInfo ────────┘└─ same suffix the launcher ─┘
                                                   was built into
 ```
 
@@ -84,7 +70,7 @@ framework changes.
 
 **Limitations of this development-time approach:**
 
-- It only works from a build tree. Build the **whole solution** at least once â€”
+- It only works from a build tree. Build the **whole solution** at least once —
   building only the launcher leaves the other `bin` folders empty and *Launch* will
   report that the executable was not found.
 - Launcher and modules must share a configuration. Running the launcher from `Debug`
@@ -101,7 +87,7 @@ framework changes.
 | Suffix     | What it is                                                                   |
 | ---------- | ---------------------------------------------------------------------------- |
 | `.Core`    | Class library holding domain models, business logic, and simulation logic.    |
-| `.Wpf`     | Runnable WPF desktop application â€” the UI for one subsystem, or the launcher. |
+| `.Wpf`     | Runnable WPF desktop application — the UI for one subsystem, or the launcher. |
 
 Rules the team should keep to:
 
@@ -113,9 +99,9 @@ Rules the team should keep to:
 
 ## Shared projects
 
-- **`TrainControl.Contracts`** â€” defines the data exchanged *between* subsystems:
+- **`TrainControl.Contracts`** — defines the data exchanged *between* subsystems:
   messages, shared enums, and cross-subsystem interfaces.
-- **`TrainControl.Common`** â€” generic shared functionality (unit conversion, timing
+- **`TrainControl.Common`** — generic shared functionality (unit conversion, timing
   abstractions, validation helpers) that is not specific to any subsystem.
 
 Subsystems communicate **through shared contracts**, not by referencing each other's
@@ -150,52 +136,48 @@ subsystems' `.Core` projects.
 
 ```
 TrainControlSystem
-â”‚
-â”œâ”€â”€ Shared
-â”‚   â”œâ”€â”€ TrainControl.Contracts
-â”‚   â””â”€â”€ TrainControl.Common
-â”‚
-â”œâ”€â”€ Launcher
-â”‚   â””â”€â”€ TrainControlSystem.Launcher.Wpf
-â”‚
-â”œâ”€â”€ TrainModel
-â”‚   â”œâ”€â”€ TrainModel.Core
-â”‚   â””â”€â”€ TrainModel.Wpf
-â”‚
-â”œâ”€â”€ TrackModel
-â”‚   â”œâ”€â”€ TrackModel.Core
-â”‚   â””â”€â”€ TrackModel.Wpf
-â”‚
-â”œâ”€â”€ TrainController
-â”‚   â”œâ”€â”€ TrainController.Core
-â”‚   â””â”€â”€ TrainController.Wpf
-â”‚
-â”œâ”€â”€ TrackController
-â”‚   â”œâ”€â”€ TrackController.Contracts
-â”‚   â”œâ”€â”€ TrackController.Core
-â”‚   â”œâ”€â”€ TrackController.Runtime
-â”‚   â”œâ”€â”€ TrackController.Pi
-â”‚   â””â”€â”€ TrackController.Wpf
-â”‚
-â”œâ”€â”€ CTC
-â”‚   â”œâ”€â”€ CTC.Core
-â”‚   â”œâ”€â”€ CTC.Wpf
-â”‚   â””â”€â”€ CTC.TestUI.Wpf   (development-only external-module simulator)
-â”‚
-â””â”€â”€ Tests
-    â”œâ”€â”€ TrainControl.Tests
-    â””â”€â”€ TrackController.Tests
+│
+├── Shared
+│   ├── TrainControl.Contracts
+│   └── TrainControl.Common
+│
+├── Launcher
+│   └── TrainControlSystem.Launcher.Wpf
+│
+├── TrainModel
+│   ├── TrainModel.Core
+│   └── TrainModel.Wpf
+│
+├── TrackModel
+│   ├── TrackModel.Core
+│   └── TrackModel.Wpf
+│
+├── TrainController
+│   ├── TrainController.Core
+│   └── TrainController.Wpf
+│
+├── TrackController
+│   ├── TrackController.Core
+│   └── TrackController.Wpf
+│
+├── CTC
+│   ├── CTC.Core
+│   ├── CTC.Wpf
+│   └── CTC.TestUI.Wpf   (development-only external-module simulator)
+│
+└── Tests
+    └── TrainControl.Tests
 ```
 
 Those are Visual Studio **solution folders**. On disk the projects live under
 `/src/<Subsystem>/<Project>`, `/src/Launcher/TrainControlSystem.Launcher.Wpf`, and
-`/tests/<TestProject>`.
+`/tests/TrainControl.Tests`.
 
 ## Running the applications
 
 ### Set the launcher as the Startup Project
 
-In Solution Explorer, right-click **TrainControlSystem.Launcher.Wpf** â†’
+In Solution Explorer, right-click **TrainControlSystem.Launcher.Wpf** →
 *Set as Startup Project*.
 
 This is a per-developer Visual Studio setting stored in the `.vs` folder, which is
@@ -204,10 +186,10 @@ not committed, so **each team member needs to do this once** after cloning.
 - **Pressing F5 with the launcher set as Startup Project** starts the central system
   launcher. From there you can start individual modules or all of them.
 - **Each subsystem WPF project can still be set as the Startup Project and run by
-  itself** â€” right-click it â†’ *Set as Startup Project* â†’ F5. Nothing about the
+  itself** — right-click it → *Set as Startup Project* → F5. Nothing about the
   launcher makes the subsystems dependent on it.
-- **Visual Studio's Multiple Startup Projects feature** (right-click the solution â†’
-  *Configure Startup Projectsâ€¦* â†’ *Multiple startup projects*) can also be used
+- **Visual Studio's Multiple Startup Projects feature** (right-click the solution →
+  *Configure Startup Projects…* → *Multiple startup projects*) can also be used
   during integration and debugging, when you want the debugger attached to several
   subsystems at once. The launcher starts modules as plain processes, so modules
   started *through* the launcher are not debugged by your Visual Studio session.
@@ -236,7 +218,7 @@ dotnet test  TrainControlSystem.sln
 ```
 
 - Target framework: `net10.0` for libraries and tests, `net10.0-windows` for the
-  WPF applications and `TrackController.Wpf.Tests`, which exercises WPF commands.
+  WPF applications.
 - Test framework: MSTest.
 
 ## MVVM conventions
@@ -249,12 +231,12 @@ Each WPF application follows the same minimal pattern:
 - `ViewModels/ViewModelBase.cs` provides `INotifyPropertyChanged`.
 - `Commands/RelayCommand.cs` is a plain `ICommand` implementation.
 - `Views/` is for future `UserControl`s, not for a second main window.
-- No simulation or business logic in ViewModels â€” that belongs in `.Core`.
+- No simulation or business logic in ViewModels — that belongs in `.Core`.
 
 The launcher follows the same pattern: its `MainWindowViewModel` exposes an
 `ObservableCollection<ModuleInfo>` plus `LaunchModuleCommand`, `LaunchAllCommand`,
 `PauseCommand`, and `ResumeCommand`. All process work lives in
-`Services/ModuleLauncherService.cs` â€” **never** in `MainWindow.xaml.cs`.
+`Services/ModuleLauncherService.cs` — **never** in `MainWindow.xaml.cs`.
 
 `ViewModelBase` and `RelayCommand` are deliberately duplicated across the six WPF
 projects rather than extracted into a shared presentation library. A few duplicate

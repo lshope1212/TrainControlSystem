@@ -12,18 +12,24 @@ namespace TrackController.Wpf.Services;
 public sealed class WaysidePipeHost : IAsyncDisposable
 {
     private readonly IWaysideRuntime _runtime;
+
     public WaysideSnapshotMessage LatestSnapshot => _runtime.LatestSnapshot;
 
     /// <summary>Reads current runtime state before allowing deployment or placement changes.</summary>
     public Task<WaysideSnapshotMessage> PollForSetupAsync(CancellationToken cancellationToken) => _runtime.PollAsync(cancellationToken);
+
     /// <summary>Returns the applied controller and execution target for a block.</summary>
     public string GetOwnerDescription(string blockId) => _runtime is TerritoryRuntimeRouter router ? router.GetOwnerDescription(blockId) : "Local PC preview";
+
     private readonly WaysideEndpoints _endpoints;
     private readonly CancellationTokenSource _stop = new();
     private Task[]? _workers;
     private readonly HashSet<string> _knownTrainLabels = [];
+
     public event Action<string>? StatusChanged;
+
     public event Action<string>? InputReceived;
+
     /// <summary>Connects a runtime to the production named-pipe receiver and output publishers.</summary>
     public WaysidePipeHost(ITrackControllerService controller, WaysideEndpoints? endpoints = null) : this(new LocalWaysideRuntime(controller), endpoints)
     {
@@ -40,7 +46,10 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     public void Start()
     {
         if (_workers is not null)
+        {
             throw new InvalidOperationException("Pipe host already started.");
+        }
+
         _workers = [NamedPipeTransport.ListenAsync(_endpoints.Input, HandleAsync, ex => InputReceived?.Invoke($"Input connection: {ex.Message}"), _stop.Token), PublishAsync(false, _stop.Token), PublishAsync(true, _stop.Token)];
     }
 
@@ -89,6 +98,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     {
         // Match the team's current CTC receiver contracts; reported equipment is never replaced by commands.
         foreach (var blockStatus in snapshot.Blocks)
+        {
             yield return new BlockStatusMessage
             {
                 BlockId = blockStatus.BlockId,
@@ -97,9 +107,14 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                 Switch = blockStatus.IsFresh ? blockStatus.ReportedSwitch : SwitchPosition.Unknown,
                 Crossing = blockStatus.IsFresh ? blockStatus.ReportedCrossing : CrossingState.Unknown
             };
+        }
+
         var current = snapshot.Authorizations.Where(authorization => !string.IsNullOrWhiteSpace(authorization.TrainId)).GroupBy(authorization => authorization.TrainId).ToDictionary(group => group.Key, group => group.ToArray());
         foreach (string label in current.Keys)
+        {
             _knownTrainLabels.Add(label);
+        }
+
         foreach (string label in _knownTrainLabels)
         {
             // An absent/cancelled request revokes the previous indication. Ambiguous labels fail closed.
@@ -133,7 +148,10 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     {
         await _stop.CancelAsync();
         if (_workers is not null)
+        {
             await Task.WhenAll(_workers);
+        }
+
         await _runtime.DisposeAsync();
         _stop.Dispose();
     }

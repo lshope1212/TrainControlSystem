@@ -1,4 +1,4 @@
-# Track map, territory ownership, and PC/Pi execution
+# TrackController.Runtime
 
 The track controller separates three decisions:
 
@@ -12,11 +12,11 @@ Territory names do not imply hardware or software. The same territory can run on
 
 ## Change PC/Pi placement in the UI
 
-1. Select **Test UI** or **Live feedback** and pause that mode.
+1. Pause the controller in **TrackController.Wpf**.
 2. Open **Controller setup → Load sample layout**. It starts two named territories on the PC, without needing a Pi. Use **Load deployment…** for a saved plan instead.
 3. Under **Execution setup**, inspect **Owned blocks** and **Observe only**. Choose **PC** or **Pi** in **Run on** for each territory.
-4. For a Pi, use its local SSH tunnel endpoint. The default junction endpoint is `127.0.0.1:11405`; see [Pi setup](TrackController-Pi5.md). Each additional Pi territory needs a separate runtime/tunnel port. Two territories cannot share one runtime process.
-5. Select **Apply execution**. This validates the choices, verifies that all selected-mode controllers are paused, and replaces the deployment. Feedback and movement requests are cleared; the current valid PLC source is retained. It restarts paused, and a missing Pi stays unavailable.
+4. For a Pi, use its local SSH tunnel endpoint. The default junction endpoint is `127.0.0.1:11405`; see [Pi setup](../TrackController.Pi/README.md). Each additional Pi territory needs a separate runtime/tunnel port. Two territories cannot share one runtime process.
+5. Select **Apply execution**. This validates the choices, verifies that all controllers are paused, and replaces the deployment. Feedback and movement requests are cleared; the current valid PLC source is retained. It restarts paused, and a missing Pi stays unavailable.
 6. Send fresh feedback and explicitly resume. Test UI requests still enter through the normal module message interface.
 7. Optionally select **Save applied choices**. This writes only execution placement to the deployment JSON that was loaded. The shared map, ownership file, and PLC file are unchanged. **Apply** by itself does not save to disk.
 
@@ -51,11 +51,16 @@ The controller-owned `TrackController.Contracts.Messages.WaysideConfigurationMes
 
 Neighbor observations currently provide context; they do not grant cross-boundary movement. Requests whose target and future path span owners are rejected. A previous entry block may be an observed neighbor if the actual map connects it to the target, but all newly authorized distance remains within the target's territory. Continuous inter-territory movement still needs a coordinated handoff protocol. Do not interpret a physical edge or a clear neighboring block as permission to cross it.
 
-## Test/live independence and resets
+## External test inputs and resets
 
-Input source is separate from placement. You can use Test UI or live module inputs with all-PC or mixed PC/Pi execution. Each mode retains its own applied deployment and execution drafts; switching modes pauses the outgoing controllers. A single physical Pi runtime still permits only one owning session, so give up that endpoint in one mode before assigning it to the other.
+Input source is independent of placement. The separate `TrackController.TestUI.Wpf`
+application sends to the same controller pipes used by CTC and Track Model, with
+either all-PC or mixed PC/Pi execution. It does not create a second deployment.
 
-**Reset test** clears test inputs and requests, retains the applied execution and current valid PLC, and creates paused sessions. It discards unapplied execution drafts and leaves the live deployment alone. If a PLC replacement was invalid, load a valid program before resetting or changing execution. A lost Pi connection never transfers its blocks to a local controller.
+Stop repeated test inputs before **Reset controller** in the operator window.
+Reset clears feedback and requests, retains applied placement and the current
+valid PLC, and creates paused sessions. A lost Pi never transfers its blocks to
+a local controller. Fresh feedback and an explicit resume are required afterward.
 
 ## Compatibility and verification
 
@@ -63,4 +68,4 @@ Older deployments that reference `configurationFile` still load. `legacy-pc-and-
 
 The Pi protocol is now version 2 because configuration distinguishes topology from ownership and snapshots include read-only neighbor observations. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected rather than running an older controller that could misunderstand ownership.
 
-Automated checks cover intact boundary edges, exclusive command ownership, invalid partitions and split protection zones, feedback fan-out, direct Pi ownership enforcement, equivalent local/Pi decisions, explicit placement saving, and the actual WPF Test UI changing execution through the module pipes. Device-level Pi/LED verification and cross-territory handoff remain separate integration work.
+Automated checks cover intact boundary edges, exclusive command ownership, invalid partitions and split protection zones, feedback fan-out, direct Pi ownership enforcement, equivalent local/Pi decisions, explicit placement saving, and the operator execution editor receiving external Test UI inputs through module pipes. Device-level Pi/LED verification and cross-territory handoff remain separate integration work.

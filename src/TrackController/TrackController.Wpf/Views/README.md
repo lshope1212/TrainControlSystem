@@ -1,4 +1,4 @@
-﻿# Views
+# Views
 
 Future `UserControl` views for the Track Controller application go here, for example:
 

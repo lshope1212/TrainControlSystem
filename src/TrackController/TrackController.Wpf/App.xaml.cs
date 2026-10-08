@@ -6,16 +6,17 @@ using TrackController.Wpf.ViewModels;
 namespace TrackController.Wpf;
 
 /// <summary>
-/// Creates the controller instances and closes their connections before the UI exits.
+/// Creates the controller instance and closes its connections before the UI exits.
 /// </summary>
 public partial class App : Application
 {
     private MainWindowViewModel? _viewModel;
     private bool _closing;
+
     protected override void OnStartup(StartupEventArgs eventArgs)
     {
         base.OnStartup(eventArgs);
-        _viewModel = new MainWindowViewModel(new TrackControllerService(), new TrackControllerService());
+        _viewModel = new MainWindowViewModel(new TrackControllerService());
         var window = new MainWindow(_viewModel);
         window.Closing += OnWindowClosing;
         MainWindow = window;

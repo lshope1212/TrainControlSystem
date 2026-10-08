@@ -1,135 +1,60 @@
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Threading;
-using TrackController.Core.Services;
 using TrackController.Runtime;
 using TrackController.Tests;
-using TrackController.Wpf.Commands;
-using TrackController.Wpf.Services;
-using TrackController.Wpf.ViewModels;
+using static TrackController.Wpf.Tests.UiTestSession;
 
 namespace TrackController.Wpf.Tests;
 
-/// <summary>Exercises ExecutionSetupUi behavior without changing live controller state.</summary>
+/// <summary>Exercises operator deployment changes while a separate simulator supplies inputs.</summary>
 [TestClass]
 public sealed class ExecutionSetupUiTests
 {
-    /// <summary>Verifies that apply moves execution only after pause and keeps test live deployments separate.</summary>
+    /// <summary>Checks paused placement changes, saving, and resetting an applied PC/Pi deployment.</summary>
     [TestMethod]
-    public async Task ApplyExecution_RunningOrTestMode_RequiresPauseAndKeepsLiveStateSeparate()
+    public async Task ApplyExecution_RunningController_RequiresPauseAndRetainsPlacement()
     {
         using var files = new DeploymentFiles();
         await using var server = new PiRuntimeServer(0);
         server.Start();
-        await OnDispatcher(async model =>
+        await RunAsync(async session =>
         {
-            await Execute(model.UseTestUiCommand);
-            await model.LoadDeploymentAsync(files.PathFor("all-pc.deployment.json"));
-            await Until(() => model.Snapshot.WaysideId == "Shared track demonstration" && model.Blocks.Count == 12);
-            Assert.HasCount(2, model.ExecutionRows);
-            Assert.IsTrue(model.ExecutionRows.All(row => row.AppliedTarget == "PC"));
-            var junction = model.ExecutionRows.Single(row => row.Id == "wayside-b");
-            var choices = new ComboBox
-            {
-                DataContext = junction
-            };
+            var controller = session.Controller;
+            var inputs = session.Inputs;
+            await controller.LoadDeploymentAsync(files.PathFor("all-pc.deployment.json"));
+            await UntilAsync(() => inputs.Snapshot.WaysideId == "Shared track demonstration" && inputs.Blocks.Count == 12);
+            Assert.HasCount(2, controller.ExecutionRows);
+            var junction = controller.ExecutionRows.Single(row => row.Id == "wayside-b");
+            var choices = new ComboBox { DataContext = junction };
             choices.SetBinding(ComboBox.ItemsSourceProperty, new Binding(nameof(junction.Targets)));
             choices.SetBinding(ComboBox.SelectedItemProperty, new Binding(nameof(junction.Target)) { Mode = BindingMode.TwoWay });
             choices.SelectedItem = "Pi";
             junction.Port = server.Port.ToString();
-            Assert.IsTrue(model.HasExecutionChanges);
+            Assert.IsTrue(controller.HasExecutionChanges);
             Assert.AreEqual("PC", junction.AppliedTarget);
-            StringAssert.Contains(model.SelectedExecutionTarget, "Local PC");
             Assert.IsTrue(files.Read().Territories.All(territory => territory.Execution == "Local"));
-            await Execute(model.ApplyExecutionCommand);
-            await Until(() => model.Blocks.Count == 12 && model.Snapshot.IsPaused);
-            Assert.IsFalse(model.HasExecutionChanges);
-            StringAssert.Contains(model.SelectedExecutionTarget, "Pi 5");
-            Assert.AreEqual("Pi", model.ExecutionRows.Single(row => row.Id == "wayside-b").AppliedTarget);
-            await Execute(model.SaveExecutionCommand);
+            await ExecuteAsync(controller.ApplyExecutionCommand);
+            Assert.IsFalse(controller.HasExecutionChanges);
+            StringAssert.Contains(controller.SelectedExecutionTarget, "Pi 5");
+            await ExecuteAsync(controller.SaveExecutionCommand);
             Assert.AreEqual("Pi", files.Read().Territories[1].Execution);
-            await Execute(model.LoadScenarioCommand);
-            await Execute(model.ApplyFeedbackCommand);
-            await Until(() => model.Blocks.All(blockStatus => blockStatus.IsFresh));
-            await Execute(model.PauseResumeCommand);
-            await Until(() => !model.Snapshot.IsPaused);
-            await Execute(model.SendMovementCommand);
-            await Until(() => model.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
-            junction = model.ExecutionRows.Single(row => row.Id == "wayside-b");
-            junction.Target = "PC";
-            await Execute(model.ApplyExecutionCommand);
-            StringAssert.Contains(model.Status, "Pause the selected mode");
-            StringAssert.Contains(model.SelectedExecutionTarget, "Pi 5");
-            Assert.AreEqual("Pi", model.ExecutionRows.Single(row => row.Id == "wayside-b").AppliedTarget);
-            await Execute(model.UseLiveFeedbackCommand);
-            Assert.IsFalse(model.IsRoutedDeployment);
-            Assert.IsEmpty(model.ExecutionRows);
-            await Execute(model.UseTestUiCommand);
-            Assert.IsTrue(model.IsRoutedDeployment);
-            Assert.IsTrue(model.HasExecutionChanges);
-            await Execute(model.ResetTestCommand);
-            await Until(() => model.Blocks.Count == 12 && model.Snapshot.IsPaused && model.Snapshot.Authorizations.Count == 0);
-            Assert.AreEqual("Pi", model.ExecutionRows.Single(row => row.Id == "wayside-b").AppliedTarget, "Reset keeps applied execution, not an unapplied draft.");
-            Assert.IsFalse(model.HasExecutionChanges);
-            CollectionAssert.Contains(model.Blocks.Single(blockStatus => blockStatus.BlockId == "3").NextBlockIds.ToArray(), "4");
+            await ExecuteAsync(inputs.LoadScenarioCommand);
+            await ExecuteAsync(inputs.ApplyFeedbackCommand);
+            await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
+            await ExecuteAsync(controller.PauseResumeCommand);
+            await UntilAsync(() => !inputs.Snapshot.IsPaused);
+            await ExecuteAsync(inputs.SendMovementCommand);
+            await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
+            controller.ExecutionRows.Single(row => row.Id == "wayside-b").Target = "PC";
+            await ExecuteAsync(controller.ApplyExecutionCommand);
+            StringAssert.Contains(controller.Status, "Pause the controller");
+            Assert.AreEqual("Pi", controller.ExecutionRows.Single(row => row.Id == "wayside-b").AppliedTarget);
+            await ExecuteAsync(inputs.ClearInputsCommand);
+            await ExecuteAsync(controller.ResetControllerCommand);
+            await UntilAsync(() => inputs.Blocks.Count == 12 && inputs.Snapshot.IsPaused && inputs.Snapshot.Authorizations.Count == 0 && inputs.Blocks.All(block => !block.IsFresh));
+            Assert.AreEqual("Pi", controller.ExecutionRows.Single(row => row.Id == "wayside-b").AppliedTarget);
+            Assert.IsFalse(controller.HasExecutionChanges);
+            CollectionAssert.Contains(inputs.Blocks.Single(block => block.BlockId == "3").NextBlockIds.ToArray(), "4");
         });
-    }
-
-    private static Task Execute(System.Windows.Input.ICommand command) => ((AsyncRelayCommand)command).ExecuteAsync();
-    private static async Task Until(Func<bool> condition)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-        while (!condition())
-            await Task.Delay(15, timeout.Token);
-    }
-
-    private static async Task OnDispatcher(Func<MainWindowViewModel, Task> action)
-    {
-        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
-        {
-            var dispatcher = Dispatcher.CurrentDispatcher;
-            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
-            dispatcher.BeginInvoke(async () =>
-            {
-                MainWindowViewModel? model = null;
-                Exception? failure = null;
-                try
-                {
-                    model = new MainWindowViewModel(new TrackControllerService(), new TrackControllerService(), WaysideEndpoints.CreateIsolated());
-                    await action(model);
-                }
-                catch (Exception ex)
-                {
-                    failure = ex;
-                }
-                finally
-                {
-                    if (model is not null)
-                        try
-                        {
-                            await model.DisposeAsync();
-                        }
-                        catch (Exception ex)
-                        {
-                            failure ??= ex;
-                        }
-
-                    if (failure is null)
-                        finished.TrySetResult();
-                    else
-                        finished.TrySetException(failure);
-                    dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
-                }
-            });
-            Dispatcher.Run();
-        })
-        {
-            IsBackground = true,
-            Name = "Execution setup test"
-        };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        await finished.Task.WaitAsync(TimeSpan.FromSeconds(35));
     }
 }
