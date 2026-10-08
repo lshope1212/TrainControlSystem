@@ -1,6 +1,6 @@
 # October 8 TestUI interface corrections
 
-Implemented Derrick's six requested corrections on local branch `derrick-track-model-review`. Nothing pushed.
+Implemented Derrick's six requested corrections on local branch `derrick-track-model-review`. Derrick subsequently requested larger fonts and publication of the accumulated changes to the GitHub `Derrick` branch.
 
 ## Final interface
 
@@ -44,3 +44,9 @@ Native Windows checks were performed against the rebuilt dashboard and TestUI, u
 | Open captured layout physical and equipment tabs | Fifteen Blue Line blocks rendered correctly; equipment tab opened without a heater column or a crash. |
 
 After inspection, the dashboard and TestUI were restarted with the clean default profile for Derrick's manual testing.
+
+## Larger-font follow-up
+
+TestUI body text increased from 16 to 20, buttons from 14 to 18, and section headings from 19 to 23. Input/output rows and table rows grew to fit. Main, captured-layout and message-log windows use larger initial sizes; layout columns size to their content with extra space for direction and beacon values. Passenger action buttons and failure controls wrap in narrower windows; vertical scrolling remains available.
+
+The rebuilt TestUI passed compilation with no warnings/errors. All 23 existing WPF workflow/rendering tests passed again after the typography changes. Native inspection checked larger labels, input controls, output values, layout tables and scrolling.
