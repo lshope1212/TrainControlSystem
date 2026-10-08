@@ -103,8 +103,8 @@ public class ScheduleBuilderViewModel : ViewModelBase
 
         ShowTemplate(ScheduleTemplateFactory.Create(Line, trainCount));
         StatusMessage = $"Generated a {trainCount}-train template for {Line.Name}. "
-            + $"Enter the time each train enters each block on its route as {ScheduleTemplateConverter.TimeFormat}, "
-            + "starting at the route start block; leave blocks the train does not use blank.";
+            + $"Enter each train's route start time and the time it enters any later blocks (e.g. stations) as {ScheduleTemplateConverter.TimeFormat}; "
+            + "CTC routes the train through the blank blocks in between.";
     }
 
     private void QueueSchedule()
@@ -131,7 +131,9 @@ public class ScheduleBuilderViewModel : ViewModelBase
         try
         {
             _ctc.QueueSchedule(result.Trains);
-            StatusMessage = $"Queued {result.Trains.Count} train(s) for {Line.Name}.";
+            // Show the routes CTC worked out, so the dispatcher can check the blank blocks were filled in as intended.
+            var routes = result.Trains.Select(train => $"{train.TrainId}: {string.Join(" → ", train.Route.Select(block => block.BlockId))}");
+            StatusMessage = $"Queued {result.Trains.Count} train(s) for {Line.Name}. {string.Join("; ", routes)}";
         }
         catch (ArgumentException ex)
         {

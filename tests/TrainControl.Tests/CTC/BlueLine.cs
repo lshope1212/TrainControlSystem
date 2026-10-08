@@ -63,15 +63,26 @@ internal static class BlueLine
 
     /// <summary>
     /// A train entering each block of <paramref name="route"/> <paramref name="secondsPerBlock"/>
-    /// seconds after the previous one, starting at <paramref name="departure"/>.
+    /// seconds after the previous one, starting at <paramref name="departure"/>. Only the
+    /// <paramref name="timedBlocks"/> carry a time (default: every block); the others are routed through.
     /// </summary>
-    public static ScheduledTrain Train(string trainId, TimeSpan departure, double secondsPerBlock = 4, string[]? route = null)
+    public static ScheduledTrain Train(
+        string trainId,
+        TimeSpan departure,
+        double secondsPerBlock = 4,
+        string[]? route = null,
+        string[]? timedBlocks = null)
     {
         var train = new ScheduledTrain { TrainId = trainId, LineId = LineId };
         var blocks = route ?? BranchB;
         for (int i = 0; i < blocks.Length; i++)
         {
-            train.BlockTimes.Add(new ScheduledBlockTime { BlockId = blocks[i], ArrivalTime = departure + TimeSpan.FromSeconds(secondsPerBlock * i) });
+            bool isTimed = timedBlocks is null || timedBlocks.Contains(blocks[i]);
+            train.Route.Add(new ScheduledRouteBlock
+            {
+                BlockId = blocks[i],
+                ArrivalTime = isTimed ? departure + TimeSpan.FromSeconds(secondsPerBlock * i) : null,
+            });
         }
 
         return train;

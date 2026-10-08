@@ -73,6 +73,22 @@ public class CtcDispatchTests
     }
 
     [TestMethod]
+    public async Task Dispatch_SparseSchedule_UsesWholeRoutedPath()
+    {
+        // Only A1 and B10 timed: speed targets B10 (450 m in 36 s) and authority covers the routed-through blocks.
+        var sender = new FakeMessageSender();
+        var service = BlueLine.CreateService(sender);
+        service.QueueSchedule([BlueLine.Train("Train 1", At(12, 0, 5), secondsPerBlock: 4, timedBlocks: ["A1", "B10"])]);
+
+        await service.SetSystemTimeAsync(At(12, 0, 5));
+
+        var suggestion = MovementSuggestions(sender).Single();
+        Assert.AreEqual(12.5, suggestion.SuggestedSpeedMetersPerSecond, 1e-9);
+        Assert.AreEqual(500.0, suggestion.SuggestedAuthorityMeters);
+        Assert.HasCount(1, MovementRequests(sender));
+    }
+
+    [TestMethod]
     public async Task Dispatch_StoresSuggestedSpeedAndAuthority()
     {
         var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));

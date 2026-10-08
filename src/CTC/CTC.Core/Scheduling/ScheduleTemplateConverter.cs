@@ -32,8 +32,10 @@ public sealed class ScheduleConversionResult
 /// </summary>
 /// <remarks>
 /// A train's time in a block row is the time it ENTERS that block; the route-start row's
-/// time is therefore its departure time. A blank cell means the train does not use that
-/// block, so a train on a branching line simply leaves the other branch blank. Physical
+/// time is therefore its departure time. The dispatcher only times the blocks that matter
+/// (e.g. stations); the timed blocks are taken in time order and CTC routes the train
+/// between them through the connected blank blocks. Blank blocks not on that path are not
+/// used, so on a branching line timing any block on a branch selects that branch. Physical
 /// feasibility (speed) is checked later by CTC when the schedule is queued, because it
 /// needs the live track layout.
 /// </remarks>
@@ -95,8 +97,9 @@ public static class ScheduleTemplateConverter
             return $"{trainId} has an invalid route start time '{startText.Trim()}'. Use {TimeFormat}.";
         }
 
-        // Every nonblank cell is a block on this train's route; blank cells are blocks it does not use.
-        var scheduled = new Dictionary<string, (ScheduleTemplateRow Row, TimeSpan Time)>();
+        // Every nonblank cell is a timed waypoint. Blank cells are either blocks the train
+        // passes through between waypoints (CTC fills those in below) or blocks it does not use.
+        var waypoints = new List<(ScheduleTemplateRow Row, TimeSpan Time)>();
         foreach (var row in template.Rows)
         {
             string text = row.TrainTimes[column];
@@ -110,58 +113,66 @@ public static class ScheduleTemplateConverter
                 return $"{trainId} has an invalid time '{text.Trim()}' at {row.BlockId}. Use {TimeFormat}.";
             }
 
-            scheduled[row.BlockId] = (row, time);
+            waypoints.Add((row, time));
         }
 
-        // Rows are in layout order, not travel order, so the route is recovered by walking the
-        // topology from the start block: each step must go to a CONNECTED block that has a time.
-        var route = new List<(ScheduleTemplateRow Row, TimeSpan Time)> { scheduled[startRow.BlockId] };
-        var visited = new HashSet<string> { startRow.BlockId };
-        while (true)
+        var start = waypoints.Single(waypoint => waypoint.Row == startRow);
+        var stops = waypoints.Where(waypoint => waypoint.Row != startRow).OrderBy(waypoint => waypoint.Time).ToList();
+        if (stops.Count == 0)
         {
-            var current = route[^1];
-            var nextIds = current.Row.ConnectedBlockIds
-                .Where(id => !visited.Contains(id) && scheduled.ContainsKey(id))
-                .Distinct()
-                .ToList();
-
-            if (nextIds.Count == 0)
-            {
-                break;
-            }
-
-            if (nextIds.Count > 1)
-            {
-                return $"{trainId} has times at both {nextIds[0]} and {nextIds[1]} after {current.Row.BlockId}. "
-                    + "A train can follow only one branch; leave the other blank.";
-            }
-
-            var next = scheduled[nextIds[0]];
-
-            // Crossing a block takes time, so the next block must be entered strictly later
-            // (a zero-length block may be entered and left at the same second).
-            bool tooEarly = current.Row.LengthMeters > 0 ? next.Time <= current.Time : next.Time < current.Time;
-            if (tooEarly)
-            {
-                return $"{trainId} enters {next.Row.BlockId} at {Format(next.Time)}, which is not later than it enters "
-                    + $"{current.Row.BlockId} at {Format(current.Time)}. Times must increase along the route.";
-            }
-
-            route.Add(next);
-            visited.Add(next.Row.BlockId);
+            return $"{trainId} has only a route start time. Enter the time it enters at least one more block.";
         }
 
-        // Anything not reached is not connected to the route (a gap, a jump, or the other branch).
-        var stray = template.Rows.FirstOrDefault(row => scheduled.ContainsKey(row.BlockId) && !visited.Contains(row.BlockId));
-        if (stray is not null)
+        // Rows are in layout order, not travel order; travel order is time order.
+        if (stops[0].Time <= start.Time)
         {
-            return $"{trainId} has a time at {stray.BlockId}, which is not connected to its route ending at {route[^1].Row.BlockId}. "
-                + "Consecutive scheduled blocks must be connected.";
+            return $"{trainId} is scheduled to enter {stops[0].Row.BlockId} at {Format(stops[0].Time)}, "
+                + $"which is not later than its departure from {start.Row.BlockId} at {Format(start.Time)}.";
         }
 
-        if (route.Count < 2)
+        for (int i = 1; i < stops.Count; i++)
         {
-            return $"{trainId} has only a route start time. Enter the time it enters at least the next block.";
+            if (stops[i].Time == stops[i - 1].Time)
+            {
+                return $"{trainId} is scheduled to enter both {stops[i - 1].Row.BlockId} and {stops[i].Row.BlockId} "
+                    + $"at {Format(stops[i].Time)}. Times must increase along the route.";
+            }
+        }
+
+        // Connect each waypoint to the next through the track topology, routing through blocks
+        // that have no time. A block is never used twice, so a train cannot reverse onto the
+        // other branch of a switch.
+        var rowsById = template.Rows.ToDictionary(row => row.BlockId);
+        var timeByBlockId = waypoints.ToDictionary(waypoint => waypoint.Row.BlockId, waypoint => waypoint.Time);
+        var route = new List<ScheduledRouteBlock> { new() { BlockId = start.Row.BlockId, ArrivalTime = start.Time } };
+        var used = new HashSet<string> { start.Row.BlockId };
+
+        foreach (var stop in stops)
+        {
+            string fromId = route[^1].BlockId;
+            var path = FindPath(rowsById, fromId, stop.Row.BlockId, used);
+            if (path is null)
+            {
+                return $"{trainId} cannot reach {stop.Row.BlockId} from {fromId} along connected blocks without reversing. "
+                    + "Check the times are in travel order and on one branch.";
+            }
+
+            // The path passes a block the dispatcher timed for LATER, so the times are out of order.
+            var passed = path.SkipLast(1).FirstOrDefault(timeByBlockId.ContainsKey);
+            if (passed is not null)
+            {
+                return $"{trainId} passes {passed} on the way from {fromId} to {stop.Row.BlockId}, but is scheduled to enter "
+                    + $"{passed} later, at {Format(timeByBlockId[passed])}. Times must increase along the route.";
+            }
+
+            foreach (var blockId in path.SkipLast(1))
+            {
+                route.Add(new ScheduledRouteBlock { BlockId = blockId });
+                used.Add(blockId);
+            }
+
+            route.Add(new ScheduledRouteBlock { BlockId = stop.Row.BlockId, ArrivalTime = stop.Time });
+            used.Add(stop.Row.BlockId);
         }
 
         var scheduledTrain = new ScheduledTrain
@@ -170,12 +181,60 @@ public static class ScheduleTemplateConverter
             LineId = template.LineId,
         };
 
-        foreach (var (row, time) in route)
+        foreach (var block in route)
         {
-            scheduledTrain.BlockTimes.Add(new ScheduledBlockTime { BlockId = row.BlockId, ArrivalTime = time });
+            scheduledTrain.Route.Add(block);
         }
 
         train = scheduledTrain;
+        return null;
+    }
+
+    /// <summary>
+    /// Shortest path (fewest blocks) from <paramref name="fromId"/> to <paramref name="toId"/>
+    /// over <see cref="ScheduleTemplateRow.ConnectedBlockIds"/>, never entering a block in
+    /// <paramref name="used"/>. Returns the blocks after <paramref name="fromId"/>, ending with
+    /// <paramref name="toId"/>, or null when there is no such path.
+    /// </summary>
+    /// <remarks>
+    /// On a line with loops more than one path can exist; the dispatcher picks a specific one
+    /// by timing a block on it.
+    /// </remarks>
+    private static List<string>? FindPath(IReadOnlyDictionary<string, ScheduleTemplateRow> rowsById, string fromId, string toId, IReadOnlySet<string> used)
+    {
+        var previous = new Dictionary<string, string> { [fromId] = fromId };
+        var frontier = new Queue<string>();
+        frontier.Enqueue(fromId);
+
+        while (frontier.Count > 0)
+        {
+            string current = frontier.Dequeue();
+            if (current == toId)
+            {
+                var path = new List<string>();
+                for (string blockId = toId; blockId != fromId; blockId = previous[blockId])
+                {
+                    path.Add(blockId);
+                }
+
+                path.Reverse();
+                return path;
+            }
+
+            if (!rowsById.TryGetValue(current, out var row))
+            {
+                continue;
+            }
+
+            foreach (var next in row.ConnectedBlockIds)
+            {
+                if (!used.Contains(next) && rowsById.ContainsKey(next) && previous.TryAdd(next, current))
+                {
+                    frontier.Enqueue(next);
+                }
+            }
+        }
+
         return null;
     }
 

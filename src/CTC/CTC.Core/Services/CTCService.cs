@@ -230,20 +230,20 @@ public class CTCService : ICTCService
         dispatched.CurrentBlockId = scheduledTrain.StartBlockId;
 
         return speed.IsLate
-            ? $"{scheduledTrain.TrainId} is behind schedule for {route[1].BlockId}; suggested the maximum permitted speed."
+            ? $"{scheduledTrain.TrainId} is behind schedule for {speed.TargetBlockId}; suggested the maximum permitted speed."
             : null;
     }
 
     /// <summary>
-    /// The line's blocks for <paramref name="train"/>'s route, aligned with its block times;
+    /// The line's blocks for <paramref name="train"/>'s route, aligned with <see cref="ScheduledTrain.Route"/>;
     /// null if any scheduled block is not on the line.
     /// </summary>
     private static List<CtcBlockState>? ResolveRoute(ScheduledTrain train, CtcLineState line)
     {
         var route = new List<CtcBlockState>();
-        foreach (var blockTime in train.BlockTimes)
+        foreach (var routeBlock in train.Route)
         {
-            var block = line.Blocks.FirstOrDefault(block => block.BlockId == blockTime.BlockId);
+            var block = line.Blocks.FirstOrDefault(block => block.BlockId == routeBlock.BlockId);
             if (block is null)
             {
                 return null;
@@ -286,13 +286,21 @@ public class CTCService : ICTCService
             var line = State.FindLine(train.LineId)
                 ?? throw new ArgumentException($"Unknown line '{train.LineId}'.", nameof(scheduledTrains));
 
-            if (train.BlockTimes.Count < 2)
+            if (train.Route.Count < 2 || !train.Route[0].IsTimed || !train.Route[^1].IsTimed)
             {
-                throw new ArgumentException($"{train.TrainId} needs at least a route start block and the next block it enters.", nameof(scheduledTrains));
+                throw new ArgumentException($"{train.TrainId} needs a timed route start block and at least one later timed block.", nameof(scheduledTrains));
             }
 
             var route = ResolveRoute(train, line)
                 ?? throw new ArgumentException($"{train.TrainId} uses a block that is not on {line.Name}.", nameof(scheduledTrains));
+
+            for (int i = 0; i + 1 < route.Count; i++)
+            {
+                if (!route[i].ConnectedBlockIds.Contains(route[i + 1].BlockId))
+                {
+                    throw new ArgumentException($"{train.TrainId}'s route goes from {route[i].BlockId} to {route[i + 1].BlockId}, which are not connected.", nameof(scheduledTrains));
+                }
+            }
 
             // An impossible schedule is rejected outright; it is never accepted with its speed clamped.
             // No parameter name, so the message stays dispatcher-readable as it is.

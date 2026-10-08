@@ -748,9 +748,10 @@
 
 
                         <!-- Schedule matrix. Every block cell accepts the time
-                             (HH:mm:ss) the train ENTERS that block; blank means
-                             the train does not use the block. Length and speed
-                             limit are read-only track data. -->
+                             (HH:mm:ss) the train ENTERS that block. Only some
+                             blocks need a time: CTC routes the train between
+                             timed blocks through the blank ones. Length and
+                             speed limit are read-only track data. -->
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding Rows}"
                                   behaviors:DataGridTrainColumns.Source="{Binding TrainColumns}"

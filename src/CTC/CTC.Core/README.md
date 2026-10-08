@@ -25,7 +25,7 @@ calls the matching `ICTCService` method.
 WPF types) so the UI can refresh when messages arrive from other modules.
 
 - `Models/` holds CTC's own state (`CtcSystemState`, `CtcLineState`, `CtcBlockState`,
-  `ScheduledTrain`, `ScheduledBlockTime`, `DispatchQueueEntry`, `DispatchedTrainState`).
+  `ScheduledTrain`, `ScheduledRouteBlock`, `DispatchQueueEntry`, `DispatchedTrainState`).
   Contract messages are never stored as domain state.
 - `Services/CTCService` is the boundary between contracts and the domain model.
 - `Dispatching/` holds the speed and authority rules used at dispatch:
@@ -33,8 +33,10 @@ WPF types) so the UI can refresh when messages arrive from other modules.
   initial suggested speed) and `AuthorityManager` (initial fixed-block authority).
   `RouteManager` is still a placeholder.
 
-A scheduled train is an ordered list of route blocks, each with the time the train
-ENTERS it. When its departure time is reached CTC sends a `MovementSuggestionMessage`
+A scheduled train is an ordered list of route blocks. The dispatcher times only some of
+them (the time the train ENTERS the block); CTC routes the train between timed blocks
+through the connected untimed ones, and checks each timed span is reachable within the
+speed limits. When its departure time is reached CTC sends a `MovementSuggestionMessage`
 (initial suggested speed/authority) and then a `MovementRequestMessage` to the Track
 Controller; the train leaves the queue only after both sends succeed.
 

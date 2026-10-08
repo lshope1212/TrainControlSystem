@@ -64,7 +64,8 @@ public sealed class ScheduleTemplateRow
 
     /// <summary>
     /// Time text per train column, as entered (expected HH:mm:ss): the time the train ENTERS
-    /// this block. Every row accepts a time. Blank means the train does not use this block.
+    /// this block. Every row accepts a time. Blank means no time is scheduled here: the train
+    /// either passes through (when the block lies between two timed blocks) or does not use it.
     /// </summary>
     public string[] TrainTimes { get; }
 }

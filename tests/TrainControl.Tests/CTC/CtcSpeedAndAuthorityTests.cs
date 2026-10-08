@@ -19,7 +19,7 @@ public class CtcSpeedAndAuthorityTests
     private static List<CtcBlockState> Route(int count) => Enumerable.Range(1, count).Select(n => Block($"B{n}")).ToList();
 
     private static List<CtcBlockState> BlueRoute(CtcSystemState state, ScheduledTrain train) =>
-        train.BlockTimes.Select(blockTime => state.FindBlock(blockTime.BlockId)!).ToList();
+        train.Route.Select(block => state.FindBlock(block.BlockId)!).ToList();
 
     // ---- Permitted speed ----
 
@@ -85,7 +85,7 @@ public class CtcSpeedAndAuthorityTests
     {
         var service = BlueLine.CreateService();
         var train = BlueLine.Train("Train 2", Noon, secondsPerBlock: 4);
-        train.BlockTimes[3].ArrivalTime = train.BlockTimes[2].ArrivalTime + TimeSpan.FromSeconds(3);
+        train.Route[3].ArrivalTime = train.Route[2].ArrivalTime + TimeSpan.FromSeconds(3);
 
         var ex = Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([train]));
 
@@ -122,11 +122,45 @@ public class CtcSpeedAndAuthorityTests
     {
         var service = BlueLine.CreateService();
         var train = BlueLine.Train("Train 1", Noon);
-        train.BlockTimes[1].ArrivalTime = Noon;
+        train.Route[1].ArrivalTime = Noon;
 
         var ex = Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([train]));
 
         Assert.AreEqual("Train 1 must enter A2 later than it enters A1.", ex.Message);
+    }
+
+    [TestMethod]
+    public void QueueSchedule_SparseFeasibleSpan_IsAccepted()
+    {
+        // A1 -> B10 timed only at the ends: 9 blocks x 50 m = 450 m in 36 s = 12.5 m/s = 45 km/h.
+        var service = BlueLine.CreateService();
+
+        service.QueueSchedule([BlueLine.Train("Train 1", Noon, secondsPerBlock: 4, timedBlocks: ["A1", "B10"])]);
+
+        Assert.HasCount(1, service.State.DispatchQueue);
+    }
+
+    [TestMethod]
+    public void QueueSchedule_SparseSpanTooFast_IsRejectedForWholeSpan()
+    {
+        // 450 m in 27 s = 60 km/h > 50 km/h; the message names the timed blocks, not a routed-through one.
+        var service = BlueLine.CreateService();
+
+        var ex = Assert.ThrowsExactly<ArgumentException>(
+            () => service.QueueSchedule([BlueLine.Train("Train 1", Noon, secondsPerBlock: 3, timedBlocks: ["A1", "B10"])]));
+
+        Assert.AreEqual(
+            "Train 1 cannot travel from A1 to B10 in the scheduled time. Required: 60.0 km/h. Maximum allowed: 50.0 km/h.",
+            ex.Message);
+    }
+
+    [TestMethod]
+    public void MaxPermittedSpeed_OverSpan_IsLowestLimitInSpan()
+    {
+        double max = SpeedPlanner.GetMaxPermittedSpeedMetersPerSecond(
+            Block("A1", speedLimitKph: 60), Block("A2", speedLimitKph: 30), Block("A3", speedLimitKph: 60));
+
+        Assert.AreEqual(30.0 / 3.6, max, 1e-9);
     }
 
     [TestMethod]
@@ -151,6 +185,20 @@ public class CtcSpeedAndAuthorityTests
 
         Assert.AreEqual(12.5, speed.SpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(45.0, speed.SpeedMetersPerSecond * 3.6, 1e-9);
+        Assert.IsFalse(speed.IsLate);
+    }
+
+    [TestMethod]
+    public void InitialSpeed_TargetsNextTimedBlock()
+    {
+        // Next timed block is A5: 4 blocks x 50 m = 200 m in 20 s = 10 m/s.
+        var service = BlueLine.CreateService();
+        var train = BlueLine.Train("Train 1", Noon, secondsPerBlock: 5, timedBlocks: ["A1", "A5", "B10"]);
+
+        var speed = SpeedPlanner.CalculateInitialSpeed(train, BlueRoute(service.State, train), Noon);
+
+        Assert.AreEqual(10.0, speed.SpeedMetersPerSecond, 1e-9);
+        Assert.AreEqual("A5", speed.TargetBlockId);
         Assert.IsFalse(speed.IsLate);
     }
 

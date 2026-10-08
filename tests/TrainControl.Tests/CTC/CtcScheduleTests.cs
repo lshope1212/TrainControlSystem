@@ -25,7 +25,7 @@ public class CtcScheduleTests
         }
     }
 
-    private static string[] RouteOf(ScheduledTrain train) => train.BlockTimes.Select(blockTime => blockTime.BlockId).ToArray();
+    private static string[] RouteOf(ScheduledTrain train) => train.Route.Select(block => block.BlockId).ToArray();
 
     [TestMethod]
     public void Create_ThreeTrains_ProducesThreeTrainColumns()
@@ -71,7 +71,7 @@ public class CtcScheduleTests
     }
 
     [TestMethod]
-    public void Convert_TimeOnEveryRouteBlock_BecomesOrderedBlockTimes()
+    public void Convert_TimeOnEveryRouteBlock_BecomesTimedRoute()
     {
         // Every block row, station or not, accepts a time.
         var template = CreateTemplate(1);
@@ -84,7 +84,8 @@ public class CtcScheduleTests
         Assert.AreEqual("Train 1", train.TrainId);
         Assert.AreEqual("BLUE", train.LineId);
         CollectionAssert.AreEqual(BlueLine.BranchB, RouteOf(train));
-        Assert.AreEqual(new TimeSpan(12, 0, 8), train.BlockTimes[2].ArrivalTime);
+        Assert.IsTrue(train.Route.All(block => block.IsTimed));
+        Assert.AreEqual(new TimeSpan(12, 0, 8), train.Route[2].ArrivalTime!.Value);
     }
 
     [TestMethod]
@@ -97,16 +98,51 @@ public class CtcScheduleTests
 
         Assert.AreEqual("A1", train.StartBlockId);
         Assert.AreEqual(new TimeSpan(12, 0, 30), train.DepartureTime);
-        Assert.AreEqual(train.BlockTimes[0].ArrivalTime, train.DepartureTime);
     }
 
     [TestMethod]
-    public void Convert_BlankRows_AreBlocksNotOnTheRoute()
+    public void Convert_SparseTimes_RoutesThroughBlankBlocks()
     {
-        // Train 1 takes branch B and Train 2 branch C; each leaves the other branch blank.
+        // Only the start and the end station are timed.
+        var template = CreateTemplate(1);
+        Row(template, "A1").TrainTimes[0] = "12:00:00";
+        Row(template, "B10").TrainTimes[0] = "12:00:36";
+
+        var result = ScheduleTemplateConverter.Convert(template);
+
+        Assert.IsTrue(result.IsSuccess, result.ErrorMessage);
+        var train = result.Trains.Single();
+        CollectionAssert.AreEqual(BlueLine.BranchB, RouteOf(train));
+        Assert.AreEqual(new TimeSpan(12, 0, 0), train.Route[0].ArrivalTime!.Value);
+        Assert.AreEqual(new TimeSpan(12, 0, 36), train.Route[^1].ArrivalTime!.Value);
+        Assert.IsTrue(train.Route.Skip(1).SkipLast(1).All(block => !block.IsTimed));
+    }
+
+    [TestMethod]
+    public void Convert_SeveralWaypoints_KeepsTheirTimes()
+    {
+        var template = CreateTemplate(1);
+        Row(template, "A1").TrainTimes[0] = "12:00:00";
+        Row(template, "A4").TrainTimes[0] = "12:00:12";
+        Row(template, "B8").TrainTimes[0] = "12:00:28";
+
+        var train = ScheduleTemplateConverter.Convert(template).Trains.Single();
+
+        CollectionAssert.AreEqual(new[] { "A1", "A2", "A3", "A4", "A5", "B6", "B7", "B8" }, RouteOf(train));
+        CollectionAssert.AreEqual(
+            new[] { "A1", "A4", "B8" },
+            train.Route.Where(block => block.IsTimed).Select(block => block.BlockId).ToArray());
+    }
+
+    [TestMethod]
+    public void Convert_TimedBlockOnBranch_SelectsThatBranch()
+    {
+        // Train 1 is timed at B10 and Train 2 at C15; each leaves the other branch out.
         var template = CreateTemplate(2);
-        FillRoute(template, 0, BlueLine.BranchB);
-        FillRoute(template, 1, BlueLine.BranchC, startSecond: 60);
+        Row(template, "A1").TrainTimes[0] = "12:00:00";
+        Row(template, "B10").TrainTimes[0] = "12:00:36";
+        Row(template, "A1").TrainTimes[1] = "12:01:00";
+        Row(template, "C15").TrainTimes[1] = "12:01:36";
 
         var result = ScheduleTemplateConverter.Convert(template);
 
@@ -116,10 +152,11 @@ public class CtcScheduleTests
     }
 
     [TestMethod]
-    public void Convert_PartialRoute_IsAllowed()
+    public void Convert_RouteEndsAtLastTimedBlock()
     {
         var template = CreateTemplate(1);
-        FillRoute(template, 0, ["A1", "A2", "A3"]);
+        Row(template, "A1").TrainTimes[0] = "12:00:00";
+        Row(template, "A3").TrainTimes[0] = "12:00:08";
 
         var result = ScheduleTemplateConverter.Convert(template);
 
@@ -128,49 +165,56 @@ public class CtcScheduleTests
     }
 
     [TestMethod]
-    public void Convert_UnconnectedConsecutiveBlocks_Fails()
+    public void Convert_BothBranches_Fails()
     {
-        // A3 is skipped, so the train would jump from A2 to A4.
+        // B10 then C15 would mean reversing back through the switch at A5.
         var template = CreateTemplate(1);
-        FillRoute(template, 0, ["A1", "A2", "A4", "A5"]);
+        Row(template, "A1").TrainTimes[0] = "12:00:00";
+        Row(template, "B10").TrainTimes[0] = "12:00:36";
+        Row(template, "C15").TrainTimes[0] = "12:01:30";
 
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(
-            "Train 1 has a time at A4, which is not connected to its route ending at A2. Consecutive scheduled blocks must be connected.",
+            "Train 1 cannot reach C15 from B10 along connected blocks without reversing. Check the times are in travel order and on one branch.",
             result.ErrorMessage);
         Assert.IsEmpty(result.Trains);
     }
 
     [TestMethod]
-    public void Convert_BothBranches_Fails()
+    public void Convert_JumpingBetweenBranches_Fails()
     {
+        // C11 is timed between A5 and B6, so the train would have to come back from C11 to B6.
         var template = CreateTemplate(1);
         FillRoute(template, 0, BlueLine.BranchB);
-        Row(template, "C11").TrainTimes[0] = "12:01:00";
+        Row(template, "C11").TrainTimes[0] = "12:00:18";
 
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.Contains("times at both B6 and C11 after A5", result.ErrorMessage!);
+        Assert.Contains("cannot reach B6 from C11", result.ErrorMessage!);
     }
 
     [TestMethod]
-    public void Convert_RouteJumpingBetweenBranches_Fails()
+    public void Convert_TimesOutOfTravelOrder_Fails()
     {
-        // Ends of both branches, as if B10 led straight into C15.
+        // A4 is timed before A2, but the train must pass A2 to reach A4.
         var template = CreateTemplate(1);
-        FillRoute(template, 0, [.. BlueLine.BranchB, "C15"]);
+        Row(template, "A1").TrainTimes[0] = "12:00:00";
+        Row(template, "A2").TrainTimes[0] = "12:00:20";
+        Row(template, "A4").TrainTimes[0] = "12:00:10";
 
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.Contains("time at C15, which is not connected to its route ending at B10", result.ErrorMessage!);
+        Assert.AreEqual(
+            "Train 1 passes A2 on the way from A1 to A4, but is scheduled to enter A2 later, at 12:00:20. Times must increase along the route.",
+            result.ErrorMessage);
     }
 
     [TestMethod]
-    public void Convert_EqualConsecutiveTimes_Fails()
+    public void Convert_EqualTimes_Fails()
     {
         var template = CreateTemplate(1);
         FillRoute(template, 0, BlueLine.BranchB);
@@ -179,13 +223,11 @@ public class CtcScheduleTests
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.AreEqual(
-            "Train 1 enters A3 at 12:00:04, which is not later than it enters A2 at 12:00:04. Times must increase along the route.",
-            result.ErrorMessage);
+        Assert.AreEqual("Train 1 is scheduled to enter both A2 and A3 at 12:00:04. Times must increase along the route.", result.ErrorMessage);
     }
 
     [TestMethod]
-    public void Convert_DecreasingTimes_Fails()
+    public void Convert_TimeBeforeDeparture_Fails()
     {
         var template = CreateTemplate(1);
         FillRoute(template, 0, BlueLine.BranchB);
@@ -194,7 +236,9 @@ public class CtcScheduleTests
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.Contains("enters B7 at 11:59:00, which is not later than it enters B6", result.ErrorMessage!);
+        Assert.AreEqual(
+            "Train 1 is scheduled to enter B7 at 11:59:00, which is not later than its departure from A1 at 12:00:00.",
+            result.ErrorMessage);
     }
 
     [TestMethod]
@@ -314,6 +358,26 @@ public class CtcScheduleTests
             () => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0), route: ["A1", "X9"])]));
 
         Assert.Contains("uses a block that is not on Blue Line", ex.Message);
+    }
+
+    [TestMethod]
+    public void QueueSchedule_UnconnectedConsecutiveBlocks_Throws()
+    {
+        var service = BlueLine.CreateService();
+
+        var ex = Assert.ThrowsExactly<ArgumentException>(
+            () => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0), route: ["A1", "A2", "A4"])]));
+
+        Assert.Contains("goes from A2 to A4, which are not connected", ex.Message);
+    }
+
+    [TestMethod]
+    public void QueueSchedule_UntimedLastBlock_Throws()
+    {
+        var service = BlueLine.CreateService();
+
+        Assert.ThrowsExactly<ArgumentException>(
+            () => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0), route: ["A1", "A2", "A3"], timedBlocks: ["A1", "A2"])]));
     }
 
     [TestMethod]
