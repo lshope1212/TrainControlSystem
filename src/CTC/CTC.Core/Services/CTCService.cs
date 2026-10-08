@@ -421,6 +421,21 @@ public class CTCService : ICTCService
         OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
     }
 
+    /// <summary>
+    /// Sends a request to the Track Controller to move a block's switch.
+    /// </summary>
+    /// <exception cref="ArgumentException">The block is unknown, has no switch, or the position is Unknown.</exception>
+    /// <exception cref="Exceptions.MessageSendException">The request could not be delivered.</exception>
+    public async Task SetSwitchPositionAsync(string blockId, SwitchPosition requestedPosition, CancellationToken cancellationToken = default)
+    {
+        var request = CreateSwitchPositionRequest(blockId, requestedPosition);
+
+        // The block's Switch is deliberately left untouched, even on success: it is the
+        // wayside-reported position, which changes only through ApplyBlockStatus once the
+        // Track Controller has actually moved the switch.
+        await _messageSender.SendAsync(request, cancellationToken);
+    }
+
     private void OnStateChanged(CtcStateChangeKind kind, string? blockId = null, string? trainId = null, string? message = null) =>
         StateChanged?.Invoke(this, new CtcStateChangedEventArgs(kind, blockId, trainId, message));
 

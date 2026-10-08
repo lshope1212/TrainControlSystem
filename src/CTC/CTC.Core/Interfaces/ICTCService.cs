@@ -58,4 +58,11 @@ public interface ICTCService
     /// Requests that the Track Controller close <paramref name="blockId"/> for maintenance.
     /// </summary>
     Task CloseBlockAsync(string blockId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Requests that the Track Controller move the switch in <paramref name="blockId"/> to
+    /// <paramref name="requestedPosition"/>. Does not change the block's switch state; that
+    /// changes only when the Track Controller reports it via <see cref="ApplyBlockStatus"/>.
+    /// </summary>
+    Task SetSwitchPositionAsync(string blockId, SwitchPosition requestedPosition, CancellationToken cancellationToken = default);
 }

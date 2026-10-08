@@ -39,6 +39,9 @@ public class BlockViewModel : ViewModelBase
     public string MaintenanceStatus =>
         _block.RequestedMaintenanceState == MaintenanceState.Closed ? "Close requested" : "Open";
 
+    /// <summary>Latest switch position reported by the Track Controller.</summary>
+    public SwitchPosition SwitchPosition => _block.Switch;
+
     public string? SwitchStatus => _block.HasSwitch ? _block.Switch.ToString() : null;
 
     public string? SignalStatus => _block.HasSignal ? _block.Signal.ToString() : null;

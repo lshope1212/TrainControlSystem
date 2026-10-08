@@ -32,6 +32,7 @@ public class MainWindowViewModel : ViewModelBase
 
         ToggleMaintenanceModeCommand = new RelayCommand(_ => IsMaintenanceMode = !IsMaintenanceMode);
         CloseSelectedBlockCommand = new AsyncRelayCommand(_ => CloseSelectedBlockAsync(), _ => CanCloseSelectedBlock());
+        ToggleSelectedBlockSwitchCommand = new AsyncRelayCommand(_ => ToggleSelectedBlockSwitchAsync(), _ => CanToggleSelectedBlockSwitch());
 
         //TODO other command implementations
 
@@ -85,7 +86,14 @@ public class MainWindowViewModel : ViewModelBase
     public BlockViewModel? SelectedBlock
     {
         get => _selectedBlock;
-        set => SetProperty(ref _selectedBlock, value);
+        set
+        {
+            if (SetProperty(ref _selectedBlock, value))
+            {
+                // Block-control availability depends on the selected block.
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
     }
 
     /// <summary>Result of the most recent request sent to another subsystem.</summary>
@@ -168,6 +176,42 @@ public class MainWindowViewModel : ViewModelBase
         finally
         {
             block.Refresh();
+        }
+    }
+
+    public ICommand ToggleSelectedBlockSwitchCommand { get; }
+
+    // Unknown means CTC has no reported position to toggle from, so nothing is requested.
+    private bool CanToggleSelectedBlockSwitch() =>
+        IsMaintenanceMode
+        && SelectedBlock is not null
+        && SelectedBlock.HasSwitch
+        && SelectedBlock.SwitchPosition != SwitchPosition.Unknown;
+
+    private async Task ToggleSelectedBlockSwitchAsync()
+    {
+        var block = SelectedBlock;
+        if (block is null || !block.HasSwitch || block.SwitchPosition == SwitchPosition.Unknown)
+        {
+            return;
+        }
+
+        var requestedPosition = block.SwitchPosition == SwitchPosition.Normal ? SwitchPosition.Reverse : SwitchPosition.Normal;
+
+        CommunicationStatus = $"Requesting Block {block.BlockId} switch {requestedPosition}...";
+
+        try
+        {
+            // The displayed switch position is not changed here; it updates only when the
+            // Track Controller reports the new position in a BlockStatusMessage.
+            await _ctc.SetSwitchPositionAsync(block.BlockId, requestedPosition);
+            CommunicationStatus = $"Switch position request sent for Block {block.BlockId}: {requestedPosition}.";
+        }
+        catch (Exception ex)
+        {
+            // Everything is caught because this runs from an async void command and must
+            // never crash the UI.
+            CommunicationStatus = $"Unable to send switch request: {ex.Message}";
         }
     }
 
