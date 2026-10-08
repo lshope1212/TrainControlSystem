@@ -31,7 +31,8 @@ public sealed class BlueLineUiTests
         var other = (System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For("Violet Line");
         Assert.AreNotEqual(blue.Color, green.Color);
         Assert.AreNotEqual(blue.Color, other.Color);
-        Assert.AreEqual(other.Color, ((System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For(null)).Color);
+        Assert.AreEqual(other.Color, ((System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For("Preferred Line")).Color);
+        Assert.AreEqual(other.Color,((System.Windows.Media.SolidColorBrush)TrackController.Wpf.ViewModels.LineAccent.For(null)).Color);
     }
 
     /// <summary>Checks the Blue Line drafts, a granted switch route, and a withheld mismatched switch.</summary>

@@ -16,7 +16,7 @@ public static class LineAccent
         _ => Other
     };
 
-    private static bool Has(string? text, string word) => text?.Contains(word, StringComparison.OrdinalIgnoreCase) == true;
+    private static bool Has(string? text, string word) => text?.Split([' ', '-', '_', '.', ','], StringSplitOptions.RemoveEmptyEntries).Contains(word, StringComparer.OrdinalIgnoreCase) == true;
 
     private static Brush Frozen(string hex)
     {
