@@ -54,6 +54,7 @@ public sealed class CtcNamedPipeReceiver
 
         if (apply is null)
         {
+            // The raw type name is kept here: it is what a developer needs to diagnose the sender.
             await ReportOnUiThreadAsync($"Ignored inbound message of unknown type '{envelope.MessageType}'.");
             return;
         }
@@ -61,13 +62,14 @@ public sealed class CtcNamedPipeReceiver
         // CTC state backs WPF bindings, so it is only ever mutated on the UI thread. The
         // service call is awaited to completion (including any dispatch sends it makes), so
         // inbound messages are applied strictly one after another.
+        var displayName = MessageDisplayNameFormatter.ToDisplayName(envelope.MessageType);
         await _dispatcher.InvokeAsync(async () =>
         {
             string status;
             try
             {
                 await apply(_ctc);
-                status = $"Received {envelope.MessageType}.";
+                status = $"Received {displayName}.";
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -76,7 +78,7 @@ public sealed class CtcNamedPipeReceiver
             catch (Exception ex)
             {
                 // E.g. a BlockStatusMessage for a block that is not in the current layout.
-                status = $"Rejected {envelope.MessageType}: {ex.Message}";
+                status = $"Rejected {displayName}: {ex.Message}";
             }
 
             Report(status);

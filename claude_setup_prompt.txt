@@ -1,422 +1,548 @@
-You are working in the TrainControlSystem repository, primarily on the `Luke_CTC` branch and the CTC module.
+You are working in the `TrainControlSystem` repository, primarily on the current `Luke_CTC` branch.
 
-Before changing anything, inspect the current implementation and preserve the existing architecture. This is a small iteration change, not a redesign.
+There is one small UI/communication-display cleanup needed.
 
 ## Goal
 
-Make two related changes:
+Anywhere the application displays a message type to a human, it should display a **normal English name** rather than the C# contract class name.
 
-1. Simplify the **Line Summary** in the real CTC UI so it displays only:
-   - `Tickets Sold / Hour`
+For example:
 
-2. Finish the existing **Track Model -> CTC** Ticket Sales simulator in `CTC.TestUI.Wpf` so the user can enter a tickets-per-hour value for the Blue Line and send a real `TicketSalesMessage` to the running CTC.
-
-The value should then immediately appear in the CTC Line Summary.
-
----
-
-## Important: much of the backend already exists
-
-Do NOT create duplicate contracts or duplicate ticket-sales logic.
-
-The repository already contains:
-
-### Shared contract
-
-`src/Shared/TrainControl.Contracts/Messages/TicketSalesMessage.cs`
-
-It already represents:
-
-`Track Model -> CTC`
-
-and contains roughly:
-
-- `LineId`
-- `TicketsPerHour`
-
-Use this existing contract.
-
-### CTC line state
-
-`src/CTC/CTC.Core/Models/CtcLineState.cs`
-
-already contains:
-
-`TicketSalesPerHour`
-
-Use this existing property.
-
-### CTC service handling
-
-`src/CTC/CTC.Core/Services/CTCService.cs`
-
-already has:
-
-`ApplyTicketSales(TicketSalesMessage message)`
-
-It already:
-
-- finds the line by `LineId`
-- assigns `line.TicketSalesPerHour = message.TicketsPerHour`
-- raises `CtcStateChangeKind.TicketSales`
-
-Preserve this implementation unless a very small correction is required.
-
-### CTC named-pipe receiver
-
-`src/CTC/CTC.Wpf/Services/CtcNamedPipeReceiver.cs`
-
-already routes:
-
-`TicketSalesMessage -> ICTCService.ApplyTicketSales(...)`
-
-Do not create another communication path.
-
-The intended flow must remain:
-
-`CTC.TestUI.Wpf`
-→ real `TicketSalesMessage`
-→ CTC named pipe
-→ `CtcNamedPipeReceiver`
-→ `CTCService.ApplyTicketSales`
-→ `CtcLineState.TicketSalesPerHour`
-→ `MainWindowViewModel`
-→ CTC Line Summary
-
----
-
-# 1. Simplify the CTC "Line Summary"
-
-File:
-
-`src/CTC/CTC.Wpf/MainWindow.xaml`
-
-Find the existing **Line Summary** section.
-
-It currently displays things such as:
-
-- Queued Trains
-- Dispatched Trains
-- Tickets Sold / Hour
-
-For this iteration, Line Summary should display **ONLY**:
-
-`Tickets Sold / Hour    <value>`
-
-Remove the other rows from the Line Summary UI.
-
-Do NOT remove the actual dispatch queue, dispatched train collections, counts, or related backend logic. Those are still used elsewhere in the CTC application.
-
-This is only a change to what the **Line Summary panel displays**.
-
-Keep the existing visual style (`InsetPanelStyle`, `FieldLabelStyle`, `ValueStyle`, etc.) and make the panel clean/compact now that it only has one value.
-
----
-
-# 2. Make the existing ticket-sales binding actually update
-
-The existing XAML already appears to reference:
-
-`CurrentLineTicketSalesPerHour`
-
-but the current `MainWindowViewModel` does not appear to implement the complete property/update behavior required for it.
-
-Update:
-
-`src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
-
-Add a read-only property such as:
-
-```csharp
-public int CurrentLineTicketSalesPerHour =>
-    SelectedLine?.TicketSalesPerHour ?? 0;
-```
-
-Use the existing naming if the XAML already binds to `CurrentLineTicketSalesPerHour`.
-
-### Selected line changes
-
-When `SelectedLine` changes, notify that this computed property changed:
-
-```csharp
-OnPropertyChanged(nameof(CurrentLineTicketSalesPerHour));
-```
-
-This makes the displayed value correct when the selected line changes.
-
-### TicketSales state changes
-
-`CTCService.ApplyTicketSales()` already raises:
-
-`CtcStateChangeKind.TicketSales`
-
-Handle that case inside the existing `OnCtcStateChanged(...)` switch.
-
-When a ticket-sales message arrives, notify:
-
-```csharp
-OnPropertyChanged(nameof(CurrentLineTicketSalesPerHour));
-```
-
-Do not rebuild the entire track layout or replace `CtcLineState` objects just to refresh ticket sales.
-
-The desired behavior is:
-
-- TicketSalesMessage arrives.
-- `CTCService` updates the existing selected line's `TicketSalesPerHour`.
-- StateChanged is raised with `TicketSales`.
-- `MainWindowViewModel` raises PropertyChanged for `CurrentLineTicketSalesPerHour`.
-- The bound CTC UI updates immediately.
-
----
-
-# 3. Implement Ticket Sales input in the TestUI
-
-The existing TestUI has a section:
-
-`Track Model -> CTC`
-
-and currently shows a placeholder similar to:
-
-`Ticket Sales (TicketSalesMessage): not implemented yet`
-
-Replace this placeholder with a real input.
-
-Follow the architecture already used by:
-
-- `TrackLayoutInputViewModel`
-- `BlockStatusInputViewModel`
-- `SystemTimeInputViewModel`
-- `CtcInputViewModelBase`
-
-Create a dedicated ViewModel:
-
-`src/CTC/CTC.TestUI.Wpf/ViewModels/TicketSalesInputViewModel.cs`
-
-It should inherit from:
-
-`CtcInputViewModelBase`
-
-The TestUI must NOT reference `CTC.Core`.
-
-It should construct a real shared:
-
-`TrainControl.Contracts.Messages.TicketSalesMessage`
-
-and send it using the existing `SendToCtcAsync(...)` mechanism.
-
----
-
-# 4. TicketSalesInputViewModel requirements
-
-For now, support only the **Blue Line**.
-
-The existing sample track layout uses:
+Current:
 
 ```text
-LineId = "BLUE"
-Name = "Blue Line"
+Inbound: Received TicketSalesMessage.
 ```
 
-Keep this consistent.
+Desired:
 
-Expose enough state for the UI to have:
+```text
+Inbound: Received Ticket sales.
+```
 
-- Line selector
-- Tickets Sold / Hour input
-- Send command
-- Result/status text
+Similarly, the CTC TestUI should not show message class names such as:
+
+```text
+MovementSuggestionMessage
+MaintenanceRequestMessage
+BlockStatusMessage
+```
+
+in its communication status or captured outbound-message table.
+
+Instead display:
+
+```text
+Movement suggestion
+Maintenance request
+Block status
+```
+
+This is strictly a **presentation/display change**.
+
+DO NOT rename the actual message classes.
+
+DO NOT change `MessageEnvelope.MessageType`.
+
+DO NOT change serialization/deserialization behavior.
+
+The internal communication layer should continue using class names such as `TicketSalesMessage` exactly as it does now.
+
+---
+
+# 1. Add one centralized message-display-name formatter
+
+Do not scatter string replacements throughout CTC.Wpf and CTC.TestUI.Wpf.
+
+Create a small reusable helper in an appropriate shared location, preferably under:
+
+```text
+src/Shared/TrainControl.Common/Communication/
+```
 
 For example:
 
 ```text
-Line:
-[ Blue Line ▼ ]
-
-Tickets Sold / Hour:
-[ 125 ]
-
-[ Send Ticket Sales ]
+MessageDisplayNameFormatter.cs
 ```
 
-The line selector should currently contain only:
+or a similarly clear name.
 
-`Blue Line`
-
-Internally it must send:
-
-`LineId = "BLUE"`
-
-Do not add Green Line or Red Line yet.
-
-Structure the ViewModel cleanly so adding more line options later would be straightforward, but do not overengineer it.
-
-The tickets/hour value must be an integer because the existing contract uses an `int`.
-
-Use a reasonable default such as `0`.
-
-Do not send invalid negative ticket counts.
-
-Prefer command `CanExecute` validation or straightforward input validation consistent with the existing TestUI patterns.
-
-The send operation should create:
+It should take the internal message type name as a string:
 
 ```csharp
-new TicketSalesMessage
-{
-    LineId = "BLUE",
-    TicketsPerHour = ...
-}
+string ToDisplayName(string messageType)
 ```
 
-and use:
+and return the human-readable name.
+
+This allows both the real CTC application and the TestUI to use the same conversion logic.
+
+The shared formatter should NOT change the internal message type.
+
+For example:
 
 ```csharp
-SendToCtcAsync(...)
+MessageDisplayNameFormatter.ToDisplayName("TicketSalesMessage")
 ```
 
-Do not bypass the named-pipe architecture and do not directly mutate CTC state.
-
----
-
-# 5. Wire it into the TestUI root ViewModel
-
-Update:
-
-`src/CTC/CTC.TestUI.Wpf/ViewModels/MainWindowViewModel.cs`
-
-Instantiate the new ticket-sales input alongside the existing simulated inputs.
-
-For example conceptually:
-
-```csharp
-TicketSalesInput = new TicketSalesInputViewModel(sender, Communication);
-```
-
-Expose it as:
-
-```csharp
-public TicketSalesInputViewModel TicketSalesInput { get; }
-```
-
-Maintain the existing organization where the root ViewModel composes individual simulated-input ViewModels.
-
----
-
-# 6. Update the TestUI XAML
-
-Update:
-
-`src/CTC/CTC.TestUI.Wpf/MainWindow.xaml`
-
-Inside the existing:
-
-`Track Model -> CTC`
-
-GroupBox, keep the Track Layout controls and replace the ticket-sales placeholder with real controls.
-
-Add:
-
-- Label: `Ticket Sales (TicketSalesMessage)`
-- Line label
-- ComboBox bound to the TicketSalesInput line options
-- Only `Blue Line` should currently appear
-- Tickets Sold / Hour label
-- TextBox or appropriate numeric input
-- `Send Ticket Sales` button
-- Result text bound to `TicketSalesInput.Result`
-
-Keep the visual layout consistent with the existing TestUI.
-
-Do not create an entirely new window or tab.
-
----
-
-# 7. Expected end-to-end behavior
-
-I should be able to test this as follows:
-
-1. Launch `CTC.Wpf`.
-2. Launch `CTC.TestUI.Wpf`.
-3. In the TestUI, press `Send Sample Layout`.
-4. The Blue Line appears in CTC.
-5. In TestUI under `Track Model -> CTC`, select:
-   - Blue Line
-6. Enter:
-   - `150` Tickets Sold / Hour
-7. Press:
-   - `Send Ticket Sales`
-8. TestUI sends a real:
+returns:
 
 ```text
-TicketSalesMessage
-LineId = "BLUE"
-TicketsPerHour = 150
+Ticket sales
 ```
 
-9. CTC receives the message through the existing named-pipe receiver.
-10. `CTCService.ApplyTicketSales()` updates the Blue Line.
-11. The real CTC Line Summary immediately displays:
+---
+
+# 2. Human-readable mappings
+
+Inspect all actual message contracts under:
 
 ```text
-Tickets Sold / Hour    150
+src/Shared/TrainControl.Contracts/Messages/
 ```
 
-No restart, layout reload, or line reselection should be required.
+and ensure message types that can appear to the user have readable names.
 
-If another value such as `275` is sent, the display should immediately change to `275`.
+At minimum, the current messages should display approximately as:
+
+```text
+AuthorityMessage              -> Authority
+BlockStatusMessage            -> Block status
+MaintenanceRequestMessage     -> Maintenance request
+MovementRequestMessage        -> Movement request
+MovementSuggestionMessage     -> Movement suggestion
+SpeedCommandMessage           -> Speed command
+SwitchPositionRequestMessage  -> Switch position request
+SystemTimeMessage             -> System time
+TicketSalesMessage            -> Ticket sales
+TrackLayoutMessage            -> Track layout
+```
+
+If there are additional actual message contracts in the repository, include them as well.
+
+Classes such as `TrackBlockDefinition` and `TrackLineDefinition` that are nested data definitions rather than independently transmitted messages do not necessarily need special mappings unless they are actually shown as message types somewhere.
 
 ---
 
-# 8. Error behavior
+# 3. Provide a safe fallback
 
-Preserve the existing communication/result reporting style.
+Do not return the ugly raw class name for a new/unknown message if possible.
 
-Examples:
+The formatter should have a reasonable fallback that:
 
-- If CTC is not running, the TestUI should report that the message could not be sent rather than crash.
-- If ticket sales are sent before the Blue Line layout exists, CTC may reject the message as an unknown line using the existing service validation. Do not silently create a line from a TicketSalesMessage.
-- Negative ticket counts should not be sent from the TestUI.
+1. removes a trailing `Message`
+2. splits PascalCase words
+3. produces readable sentence-style text
 
-Do not add a complicated acknowledgement protocol for this iteration.
+For example:
+
+```text
+SomeFutureStatusMessage
+```
+
+could become:
+
+```text
+Some future status
+```
+
+That way adding a new contract later does not immediately put raw C# class names into the UI.
+
+Explicit mappings are still preferred for current message types where wording matters.
 
 ---
 
-# 9. Scope constraints
+# 4. Update CTC inbound status
 
-Please keep this change small.
+Inspect:
+
+```text
+src/CTC/CTC.Wpf/Services/CtcNamedPipeReceiver.cs
+```
+
+Currently, after a message is successfully processed, it reports approximately:
+
+```csharp
+status = $"Received {envelope.MessageType}.";
+```
+
+This is what eventually appears through `MainWindowViewModel.InboundStatus` in the real CTC status bar.
+
+Change the **display text only** so it uses the human-readable message name.
+
+Example:
+
+```text
+Received TicketSalesMessage.
+```
+
+becomes:
+
+```text
+Received Ticket sales.
+```
+
+And:
+
+```text
+Received BlockStatusMessage.
+```
+
+becomes:
+
+```text
+Received Block status.
+```
+
+Likewise, if an inbound message is rejected, do not show an ugly class name.
+
+Current conceptual form:
+
+```text
+Rejected BlockStatusMessage: ...
+```
+
+Desired:
+
+```text
+Rejected Block status: ...
+```
+
+Unknown-message diagnostic behavior can retain the raw type internally if that is useful for debugging, but anything intended for the normal user-facing CTC status bar should be readable English.
+
+Do not modify the switch statement that routes messages based on:
+
+```csharp
+nameof(BlockStatusMessage)
+nameof(TrackLayoutMessage)
+...
+```
+
+Those names are part of the internal communication protocol and should remain unchanged.
+
+---
+
+# 5. Update TestUI send-result messages
+
+Inspect:
+
+```text
+src/CTC/CTC.TestUI.Wpf/ViewModels/CtcInputViewModelBase.cs
+```
+
+It currently gets:
+
+```csharp
+var messageType = typeof(TMessage).Name;
+```
+
+and uses it in results such as:
+
+```text
+TicketSalesMessage sent to CTC.
+```
+
+Keep `typeof(TMessage).Name` available internally if needed, but convert it before showing it to the user.
+
+Desired examples:
+
+```text
+Ticket sales sent to CTC.
+Block status sent to CTC for Block A1.
+Track layout sent to CTC.
+System time sent to CTC.
+```
+
+Errors should also use the readable name.
+
+Instead of:
+
+```text
+Unable to send TicketSalesMessage: ...
+```
+
+display:
+
+```text
+Unable to send Ticket sales: ...
+```
+
+Continue using the existing `CommunicationStatusViewModel.ReportCtcSend(...)` flow.
+
+---
+
+# 6. Update TestUI communication-status area
+
+Inspect:
+
+```text
+src/CTC/CTC.TestUI.Wpf/ViewModels/CommunicationStatusViewModel.cs
+```
+
+The fake Track Controller listener currently displays something conceptually like:
+
+```text
+Last received: MovementSuggestionMessage at 11:15:03.
+```
+
+Change it to:
+
+```text
+Last received: Movement suggestion at 11:15:03.
+```
+
+Likewise:
+
+```text
+Last received: Maintenance request at ...
+Last received: Movement request at ...
+```
+
+Use the same centralized formatter.
+
+---
+
+# 7. Update Captured CTC Outputs table
+
+The TestUI's outbound/captured section is especially important.
+
+Inspect:
+
+```text
+src/CTC/CTC.TestUI.Wpf/Models/RecordedMessage.cs
+```
+
+and:
+
+```text
+src/CTC/CTC.TestUI.Wpf/ViewModels/CapturedOutputsViewModel.cs
+```
+
+Currently `RecordedMessage.FromEnvelope(...)` uses:
+
+```csharp
+envelope.MessageType
+```
+
+directly as the displayed `MessageType`.
+
+As a result, the TestUI table shows class names such as:
+
+```text
+MovementSuggestionMessage
+MovementRequestMessage
+MaintenanceRequestMessage
+SwitchPositionRequestMessage
+```
+
+Change the **displayed value** to the readable equivalent:
+
+```text
+Movement suggestion
+Movement request
+Maintenance request
+Switch position request
+```
+
+For example, `RecordedMessage.FromEnvelope(...)` could convert:
+
+```csharp
+envelope.MessageType
+```
+
+through the centralized formatter before assigning the displayed `MessageType`.
+
+It is fine for `RecordedMessage.MessageType` to remain a string property; it should simply contain the readable presentation value.
+
+Do NOT modify the actual `MessageEnvelope`.
+
+---
+
+# 8. Keep the payload information intact
+
+The Captured CTC Outputs table currently has columns similar to:
+
+```text
+#
+Captured At
+Message Type
+Payload
+```
+
+Keep the payload information.
+
+The main purpose of this task is to replace raw **message class/type names** with readable English.
+
+Do not remove useful payload details such as train ID, authority, requested state, etc.
+
+If there are extremely obvious user-facing property labels that can be made more readable without changing behavior, that is acceptable, but do not turn this into a large payload-formatting redesign.
+
+The priority is:
+
+```text
+MovementSuggestionMessage
+```
+
+must no longer be exposed directly to the user.
+
+---
+
+# 9. Expected examples
+
+After this change, examples throughout the UI should look like:
+
+### Real CTC inbound status
+
+```text
+Inbound: Received Track layout.
+```
+
+```text
+Inbound: Received Block status.
+```
+
+```text
+Inbound: Received Ticket sales.
+```
+
+```text
+Inbound: Received System time.
+```
+
+### TestUI sending to CTC
+
+```text
+Ticket sales sent to CTC.
+```
+
+```text
+Block status sent to CTC for Block A1.
+```
+
+```text
+Track layout sent to CTC.
+```
+
+### TestUI fake Track Controller status
+
+Instead of:
+
+```text
+Last received: MovementSuggestionMessage at 11:20:04.
+```
+
+show:
+
+```text
+Last received: Movement suggestion at 11:20:04.
+```
+
+### Captured CTC Outputs table
+
+Instead of:
+
+```text
+Message Type
+MovementSuggestionMessage
+MovementRequestMessage
+MaintenanceRequestMessage
+```
+
+show:
+
+```text
+Message Type
+Movement suggestion
+Movement request
+Maintenance request
+```
+
+---
+
+# 10. Architecture constraints
+
+This is a presentation-layer cleanup.
 
 DO NOT:
 
-- redesign the communication architecture
-- make TestUI reference CTC.Core
-- duplicate `TicketSalesMessage`
-- duplicate `ApplyTicketSales`
-- directly mutate CTC state from TestUI
-- add Green or Red Line support yet
-- remove dispatch queue/dispatched train functionality just because those counts are being removed from Line Summary
-- rewrite unrelated CTC code
-- change the existing sample Blue Line ID from `"BLUE"`
+- rename any shared message classes
+- rename `MessageEnvelope.MessageType`
+- modify JSON serialization identifiers
+- modify named-pipe routing identifiers
+- replace `nameof(SomeMessage)` in receiver routing with display strings
+- change the actual inter-module communication protocol
+- duplicate separate message-name dictionaries throughout the projects
+- change CTC business behavior
+- change scheduling, dispatch, maintenance, ticket sales, track-layout, or block-status logic
 
-Reuse the existing MVVM, shared-contract, named-pipe, and state-change patterns.
+The important distinction is:
+
+```text
+Internal/protocol name:
+TicketSalesMessage
+
+Human-readable display name:
+Ticket sales
+```
+
+The internal name stays exactly the same.
 
 ---
 
-# 10. Verification
+# 11. Prefer one reusable solution
+
+Please search for every place in the CTC and CTC TestUI projects where any of these are directly displayed:
+
+```csharp
+envelope.MessageType
+typeof(TMessage).Name
+nameof(...Message)
+```
+
+Also search for string interpolation involving message type/class names.
+
+Any value used for routing, serialization, logging/debugging, or type comparisons should remain unchanged.
+
+Any value presented to an end user should use the common human-readable formatter.
+
+Do not perform blind replacements.
+
+---
+
+# 12. Verification
 
 After implementation:
 
 1. Build the full solution.
 2. Fix any compile errors introduced by this change.
-3. Verify the TestUI and CTC bindings.
-4. Verify that `TicketSalesMessage` travels through the real named-pipe communication path.
-5. Verify that sending multiple ticket-sales values refreshes the CTC UI every time.
-6. Verify the CTC Line Summary contains only Tickets Sold / Hour.
-7. Verify existing Track Layout, Block Status, System Time, scheduling, dispatch, and maintenance functionality remains unchanged.
+3. Launch CTC.Wpf and CTC.TestUI.Wpf if practical.
+4. Send the sample Track Layout.
+5. Send a Block Status.
+6. Send Ticket Sales.
+7. Send/System-time updates.
+8. Cause CTC to dispatch a train so Movement Suggestion and Movement Request are captured.
+9. Exercise a maintenance or switch request.
+
+Verify that no normal user-facing CTC/TestUI display shows values like:
+
+```text
+TicketSalesMessage
+BlockStatusMessage
+TrackLayoutMessage
+SystemTimeMessage
+MovementSuggestionMessage
+MovementRequestMessage
+MaintenanceRequestMessage
+SwitchPositionRequestMessage
+```
+
+They should all appear as readable English.
 
 At the end, give me a concise summary of:
 
 - files changed
-- what was added/removed
-- how ticket-sales data now flows from TestUI to CTC
-- any assumptions made
+- where the shared formatter was placed
+- which message mappings were added
+- every UI/status location changed
+- confirmation that protocol/serialization names were not changed
