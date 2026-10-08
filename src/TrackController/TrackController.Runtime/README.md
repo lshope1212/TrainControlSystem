@@ -8,7 +8,9 @@ The track controller separates three decisions:
 | `territories.json` | Named territories and the block IDs each owns. |
 | `all-pc.deployment.json` or `pc-and-pi.deployment.json` | References those two files and the shared PLC, then chooses PC/Pi execution per territory. |
 
-Territory names do not imply hardware or software. The same territory can run on either target, using the same logic. Changing execution does not move blocks between owners or edit connections. The examples use the illustrative 12-block map, not the team's final track data.
+Territory names do not imply hardware or software. The same territory can run on either target, using the same logic. Changing execution does not move blocks between owners or edit connections. The unprefixed examples use the illustrative 12-block Green Line map, not the team's final track data.
+
+The `blue-line-*` files are the same three decisions for the course Blue Line prototype (15 blocks, switch 5, crossing 3, signals 6 and 11): `blue-line-track-map.json`, `blue-line-territories.json` (two territories) or `blue-line-territories-single.json` (one), and `blue-line-all-pc.deployment.json` or `blue-line-pc-and-pi.deployment.json`. See the [operator README](../TrackController.Wpf/README.md#blue-line-prototype) for the layout and why the single-territory file is used for full routes. They share `wayside.plc` unchanged.
 
 ## Change PC/Pi placement in the UI
 

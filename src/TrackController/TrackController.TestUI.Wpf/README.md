@@ -24,13 +24,20 @@ dotnet run --project src/TrackController/TrackController.TestUI.Wpf
 Keep the real CTC/Track Model applications and other peer simulators closed during
 this test; only one process can own each named pipe.
 
-1. Controller: **Controller setup → Load sample layout**. Both territories run on PC.
+1. Controller: **Controller setup**, choose a line, then **Load sample layout**.
+   Green Line territories run on PC; so does the single Blue Line territory.
 2. Test UI: choose **Clear route**, then **Load preset**. This only edits the draft.
-3. Test UI: **Send feedback**. Wait for all 12 feedback blocks to become current.
+3. Test UI: **Send feedback**. Wait for every feedback block (12 on Green, 15 on Blue) to become current.
 4. Controller: **Resume**.
-5. Test UI: **Send movement request**. The defaults request 25 mph and 1,200 ft
-   from block 5 over blocks 6, 7, and 8. Inspect **Controller response**.
+5. Test UI: **Send movement request**. The defaults request 25 mph and 1,200 ft.
+   Green: from block 5 over blocks 6, 7, and 8. Blue: from block 4 over blocks 5, 6,
+   and 7, which is 656 ft of track, so authority is limited to that. Inspect **Controller response**.
 6. Test UI: load **Switch mismatch** and send feedback. The controller withholds authority.
+
+The block IDs, route, and equipment in the drafts and presets come from the layout the
+controller reports: the route is the first switch, the block that leads into it, and the
+two blocks after its normal exit. Layouts without a switch have no presets; edit the
+feedback rows directly.
 
 ## Inputs and observations
 

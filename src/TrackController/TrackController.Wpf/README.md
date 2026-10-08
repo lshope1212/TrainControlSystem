@@ -13,10 +13,47 @@ dotnet run --project src/TrackController/TrackController.Wpf
 ```
 
 For a demonstration, also start **TrackController.TestUI.Wpf**. In the operator
-window choose **Controller setup → Load sample layout**. The sample starts two
-territories on the PC with the sample PLC loaded and operation paused. In the
+window choose **Controller setup**, pick a line in the selector, and select
+**Load sample layout**. The Green Line sample starts two territories on the PC;
+the Blue Line sample starts one. Both load the sample PLC and start paused. In the
 Test UI load **Clear route** and select **Send feedback**, then select **Resume**
 in this window and **Send movement request** in the Test UI.
+
+## Blue Line prototype
+
+The Iteration 2 course track is bundled as `Samples/blue-line-*.json`. It follows
+the Blue Line sheet of `Track Layout & Vehicle Data vF5.xlsx` and the Track
+Model's `blue-line.json`: fifteen 50 m blocks at 50 km/h, with the same block IDs
+(`1`–`15`) and line name (`Blue Line`) the Track Model publishes.
+
+| Feature | Blocks |
+| --- | --- |
+| Yard side, then straight run | 1 → 2 → 3 → 4 → 5 |
+| Railway crossing | 3 (protection zone 2, 3, 4) |
+| Switch | 5 (stem 4, **Normal → 6**, **Reverse → 11**; zone 4, 5, 6, 11) |
+| Signals ("lights") | 6 and 11, one per branch |
+| Upper branch, ends at Station B | 6 → 7 → 8 → 9 → 10 |
+| Lower branch, ends at Station C | 11 → 12 → 13 → 14 → 15 |
+
+| Deployment file | Territories |
+| --- | --- |
+| `blue-line-all-pc.deployment.json` | One territory, all 15 blocks, on the PC. Any route to either station is possible. |
+| `blue-line-pc-and-pi.deployment.json` | `wayside-a` (blocks 12–15, PC) and `wayside-b` (blocks 1–11, Pi). |
+
+The switch zone (4, 5, 6, 11) and crossing zone (2, 3, 4) overlap at block 4, so
+blocks 2–6 and 11 must share an owner. The split keeps the yard, junction and
+Station B on one territory; a route to Station C ends at the territory boundary
+because requests spanning owners are rejected (see the
+[territory guide](../TrackController.Runtime/README.md#change-territory-boundaries)).
+
+The map is outbound only (block 1 toward the stations), because the workbook has no
+direction column; the Track Model lists the same blocks as bidirectional. The
+controller, shared PLC and Test UI contain no Blue-specific code: the Test UI
+derives its presets from the switch and its approach block, so **Clear route** is
+a train on block 4 requesting `5, 6, 7`. For Station C, the switch must move
+while its zone is clear: with blocks 4, 5, 6 and 11 clear, send the switch
+request for block 5 as Reverse and report the switch Reverse, then occupy block 4
+and request `5, 11, 12`.
 
 PLC loading, controller logic, maintenance mode, manual equipment commands,
 Pause/Resume, and PC/Pi placement belong to the operator window. The Test UI
