@@ -91,6 +91,11 @@ public sealed class TerritoryMap : FrameworkElement
                 DrawText(blockStatus.IsFresh ? blockStatus.ReportedSignal.ToString() : "Unknown", PointAt(blockStatus.MapX + 20, blockStatus.MapY - 23), 11 * scale, Color("#253140"));
             }
 
+            if (!string.IsNullOrWhiteSpace(blockStatus.StationName))
+            {
+                DrawText(blockStatus.StationName, PointAt(blockStatus.MapX + 20, blockStatus.MapY - 23), 11 * scale, Color("#253140"));
+            }
+
             if (blockStatus.HasCrossing)
             {
                 DrawText($"Crossing {(blockStatus.IsFresh ? blockStatus.ReportedCrossing : CrossingState.Unknown)}", PointAt(blockStatus.MapX - 2, blockStatus.MapY + 72), 11 * scale, Color("#253140"));

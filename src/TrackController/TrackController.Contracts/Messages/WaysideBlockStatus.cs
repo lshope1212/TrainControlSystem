@@ -25,4 +25,5 @@ public sealed record WaysideBlockStatus(
     CrossingState CommandedCrossing,
     CrossingState ReportedCrossing,
     double? ActualSpeedMetersPerSecond,
-    string Status);
+    string Status,
+    string? StationName = null);

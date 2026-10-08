@@ -99,6 +99,19 @@ public sealed class BlueLineTests
         Assert.AreEqual("6", junction.NormalNextBlockId);
         Assert.AreEqual("11", junction.ReverseNextBlockId);
         CollectionAssert.AreEquivalent(new[] { "10", "15" }, configuration.Blocks.Where(block => block.NextBlockIds.Count == 0).Select(block => block.BlockId).ToArray());
+        Assert.AreEqual("Station B", configuration.Blocks.Single(block => block.BlockId == "10").StationName);
+        Assert.AreEqual("Station C", configuration.Blocks.Single(block => block.BlockId == "15").StationName);
+        Assert.HasCount(2, configuration.Blocks.Where(block => block.StationName is not null).ToArray());
+    }
+
+    /// <summary>Verifies that station names reach the controller snapshot the map draws from.</summary>
+    [TestMethod]
+    public void GetSnapshot_StationBlocks_CarryStationNames()
+    {
+        var fixture = new Fixture();
+        Assert.AreEqual("Station B", fixture.Block("10").StationName);
+        Assert.AreEqual("Station C", fixture.Block("15").StationName);
+        Assert.IsNull(fixture.Block("9").StationName);
     }
 
     /// <summary>Verifies that every Blue Line territory choice gives each block exactly one owner and keeps zones whole.</summary>
@@ -303,6 +316,7 @@ public sealed class BlueLineTests
             Assert.AreEqual(expected.GetProperty("hasSignal").GetBoolean(), block.HasSignal, id);
             Assert.AreEqual(expected.GetProperty("hasCrossing").GetBoolean(), block.HasCrossing, id);
             Assert.AreEqual(expected.GetProperty("hasSwitch").GetBoolean(), block.NormalNextBlockId is not null, id);
+            Assert.AreEqual(expected.GetProperty("stationName").GetString() ?? "", block.StationName ?? "", id);
             var connected = expected.GetProperty("connectedBlockIds").EnumerateArray().Select(element => element.GetString()!).ToArray();
             Assert.IsTrue(block.NextBlockIds.All(connected.Contains), $"Block {id} has an edge the Track Model lacks.");
             if (block.NormalNextBlockId is not null)

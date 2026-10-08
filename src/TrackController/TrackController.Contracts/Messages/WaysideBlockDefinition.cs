@@ -31,4 +31,7 @@ public sealed class WaysideBlockDefinition
     public double MapX { get; set; }
 
     public double MapY { get; set; }
+
+    /// <summary>Optional platform name shown on the territory map, such as Station B.</summary>
+    public string? StationName { get; set; }
 }

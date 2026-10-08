@@ -180,7 +180,8 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 984,
-      "mapY": 60
+      "mapY": 60,
+      "stationName": "Station B"
     },
     {
       "blockId": "11",
@@ -263,7 +264,8 @@
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
       "mapX": 984,
-      "mapY": 260
+      "mapY": 260,
+      "stationName": "Station C"
     }
   ]
 }

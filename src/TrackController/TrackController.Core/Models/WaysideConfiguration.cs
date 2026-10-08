@@ -103,7 +103,7 @@ public static class WaysideConfiguration
             FeedbackTimeoutSeconds = input.FeedbackTimeoutSeconds,
             RequestTimeoutSeconds = input.RequestTimeoutSeconds,
             OwnedBlockIds = input.OwnedBlockIds is null ? null : [.. input.OwnedBlockIds],
-            Blocks = input.Blocks.Select(block => new WaysideBlockDefinition { BlockId = block.BlockId, LengthMeters = block.LengthMeters, SpeedLimitMetersPerSecond = block.SpeedLimitMetersPerSecond, NextBlockIds = [.. block.NextBlockIds], HasSignal = block.HasSignal, NormalNextBlockId = block.NormalNextBlockId, ReverseNextBlockId = block.ReverseNextBlockId, StemBlockId = block.StemBlockId, SwitchProtectionBlockIds = [.. block.SwitchProtectionBlockIds], HasCrossing = block.HasCrossing, CrossingProtectionBlockIds = [.. block.CrossingProtectionBlockIds], MapX = block.MapX, MapY = block.MapY }).ToList()
+            Blocks = input.Blocks.Select(block => new WaysideBlockDefinition { BlockId = block.BlockId, LengthMeters = block.LengthMeters, SpeedLimitMetersPerSecond = block.SpeedLimitMetersPerSecond, NextBlockIds = [.. block.NextBlockIds], HasSignal = block.HasSignal, NormalNextBlockId = block.NormalNextBlockId, ReverseNextBlockId = block.ReverseNextBlockId, StemBlockId = block.StemBlockId, SwitchProtectionBlockIds = [.. block.SwitchProtectionBlockIds], HasCrossing = block.HasCrossing, CrossingProtectionBlockIds = [.. block.CrossingProtectionBlockIds], MapX = block.MapX, MapY = block.MapY, StationName = block.StationName }).ToList()
         };
     }
 
