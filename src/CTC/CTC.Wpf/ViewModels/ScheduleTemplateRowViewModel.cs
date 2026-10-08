@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CTC.Core.Scheduling;
+using TrainControl.Common.Utilities;
 
 namespace CTC.Wpf.ViewModels;
 
@@ -32,10 +33,11 @@ public class ScheduleTemplateRowViewModel
 
     public string Infrastructure => Row.Infrastructure;
 
-    public double LengthMeters => Row.LengthMeters;
+    /// <summary>Track data, shown read-only in feet; the row stores it in meters.</summary>
+    public double LengthFeet => UnitConversion.MetersToFeet(Row.LengthMeters);
 
-    /// <summary>Track data, shown read-only.</summary>
-    public double SpeedLimitKilometersPerHour => Row.SpeedLimitKilometersPerHour;
+    /// <summary>Track data, shown read-only in mph; the row stores it in km/h.</summary>
+    public double SpeedLimitMilesPerHour => UnitConversion.KilometersPerHourToMilesPerHour(Row.SpeedLimitKilometersPerHour);
 
     public bool IsStartBlock => Row.IsRouteStart;
 

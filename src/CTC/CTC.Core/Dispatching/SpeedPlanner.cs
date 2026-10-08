@@ -57,7 +57,7 @@ public static class SpeedPlanner
 
         if (route.FirstOrDefault(block => block.SpeedLimitKilometersPerHour <= 0) is { } unlimited)
         {
-            return $"{train.TrainId} cannot be scheduled through {unlimited.BlockId}: the track layout gives it no speed limit.";
+            return $"{TrainIds.DisplayName(train.TrainId)} cannot be scheduled through {unlimited.BlockId}: the track layout gives it no speed limit.";
         }
 
         int spanStart = 0;
@@ -78,12 +78,12 @@ public static class SpeedPlanner
                 // Nothing to cross, so any non-negative time works.
                 if (travelSeconds < 0)
                 {
-                    return $"{train.TrainId} is scheduled to enter {to.BlockId} before it enters {from.BlockId}.";
+                    return $"{TrainIds.DisplayName(train.TrainId)} is scheduled to enter {to.BlockId} before it enters {from.BlockId}.";
                 }
             }
             else if (travelSeconds <= 0)
             {
-                return $"{train.TrainId} must enter {to.BlockId} later than it enters {from.BlockId}.";
+                return $"{TrainIds.DisplayName(train.TrainId)} must enter {to.BlockId} later than it enters {from.BlockId}.";
             }
             else
             {
@@ -94,7 +94,7 @@ public static class SpeedPlanner
                     return string.Format(
                         CultureInfo.InvariantCulture,
                         "{0} cannot travel from {1} to {2} in the scheduled time. Required: {3:F1} km/h. Maximum allowed: {4:F1} km/h.",
-                        train.TrainId,
+                        TrainIds.DisplayName(train.TrainId),
                         from.BlockId,
                         to.BlockId,
                         UnitConversion.MetersPerSecondToKilometersPerHour(requiredSpeed),
@@ -124,7 +124,7 @@ public static class SpeedPlanner
         int target = Enumerable.Range(1, Math.Max(0, route.Count - 1)).FirstOrDefault(i => train.Route[i].IsTimed);
         if (target == 0)
         {
-            throw new InvalidOperationException($"{train.TrainId} has no next timed block to plan a speed toward.");
+            throw new InvalidOperationException($"{TrainIds.DisplayName(train.TrainId)} has no next timed block to plan a speed toward.");
         }
 
         string targetBlockId = route[target].BlockId;

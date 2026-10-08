@@ -1,184 +1,215 @@
-I am working on the CTC module of this repository:
+Continue working on the current `Luke_CTC` branch of:
 
 https://github.com/lshope1212/TrainControlSystem
 
-Work on the current `Luke_CTC` branch and inspect the existing implementation before making changes.
+The previous changes for three-digit train IDs and mph speed-limit display have already been implemented or are in progress. Do not regress those changes.
 
-I want to make two relatively small improvements to the CTC module. Please preserve the existing architecture, MVVM structure, formatting/style, and current dispatch behavior. Do not unnecessarily refactor unrelated code.
+I want one additional presentation-layer unit conversion:
 
-## 1. Change "Current Block" to "Last Known Block" for dispatched trains
+**Keep all track/block lengths stored internally in meters, but display them to the user in feet everywhere they appear in the CTC WPF UI.**
 
-Currently, when a train is dispatched, `DispatchedTrainState.CurrentBlockId` is initialized to the train's scheduled starting block.
+## Important architecture rule
 
-For example, a train starting at A1 will continue to display:
+Do NOT change backend/core storage units.
 
-`Current Block: A1`
-
-even after it has theoretically moved.
-
-This is misleading during our current isolated-module implementation.
-
-The Track Controller reports block occupancy using `BlockStatusMessage`, but this message intentionally does NOT identify which train is occupying a block. Therefore CTC cannot reliably infer that a particular dispatched train has moved from one block to another.
-
-We are intentionally leaving actual train-location tracking for later system integration.
-
-### Desired behavior
-
-Replace the concept exposed to the UI as "Current Block" with:
-
-`Last Known Block`
-
-When a train is initially dispatched, its last known block should still be initialized to its scheduled start block because that is the last location CTC can authoritatively associate with the train.
-
-For now it should remain at that value indefinitely.
-
-Later, once the integrated system provides a reliable train-position message containing a train identity and location, this field can be updated.
-
-### Implementation requirements
-
-Please inspect:
-
-- `CTC.Core/Models/DispatchedTrainState.cs`
-- `CTC.Core/Services/CTCService.cs`
-- `CTC.Wpf/ViewModels/DispatchedTrainViewModel.cs`
-- the dispatched-train DataGrid/table in `CTC.Wpf/MainWindow.xaml`
-- any tests or other references to `CurrentBlockId`
-
-Make the naming consistent through the relevant CTC code.
-
-I would prefer the core model property to become something like:
+Properties such as:
 
 ```csharp
-public string LastKnownBlockId { get; set; } = string.Empty;
+CtcBlockState.LengthMeters
+ScheduleTemplateRow.LengthMeters
+TrackBlockDefinition.LengthMeters
 ```
 
-instead of retaining the misleading `CurrentBlockId` name.
+must remain in meters.
 
-Update the dispatch logic so:
+Any authority calculations or other backend logic that uses meters must also remain unchanged.
 
-```csharp
-dispatched.LastKnownBlockId = scheduledTrain.StartBlockId;
-```
+This is strictly a UI/presentation conversion.
 
-Update comments/XML documentation to clearly explain:
-
-- this is the last location CTC can authoritatively associate with the train;
-- initially it is the scheduled route start block;
-- Track Controller occupancy alone cannot update it because `BlockStatusMessage` contains no `TrainId`;
-- true train-position updates are deferred until module integration.
-
-Update the WPF ViewModel/property names as appropriate and change the dispatched-trains UI column header from:
-
-`Current Block`
-
-to:
-
-`Last Known Block`
-
-Do NOT implement any logic that guesses a train's location based on block occupancy transitions.
-
-Do NOT modify `BlockStatusMessage` to add a train ID.
-
-Do NOT add fake movement simulation to CTC.
-
-The purpose of this change is simply to accurately represent what CTC actually knows.
-
----
-
-## 2. Add a "Clear Template" button to the Schedule Builder
-
-Currently, once a schedule template has been generated in the Schedule Builder, there is no obvious way for the dispatcher to completely clear it and return to the initial empty state without restarting/changing state elsewhere.
-
-`ScheduleBuilderViewModel` already has a private `ClearTemplate()` helper that clears:
-
-- `_template`
-- `Rows`
-- `TrainColumns`
-
-I want this functionality exposed to the user.
-
-### Desired behavior
-
-Add a button to the Schedule Builder UI labeled:
-
-`Clear Template`
-
-The button should clear the currently generated schedule template so that the schedule grid returns to its empty/pre-generated state.
-
-It should NOT:
-
-- clear the imported track layout;
-- clear dispatched trains;
-- remove an already queued schedule from CTC;
-- reset system time;
-- modify any other CTC state.
-
-It should only clear the editable Schedule Builder template currently shown in the UI.
-
-After clearing, update `StatusMessage` to something clear, such as:
-
-`Schedule template cleared. Enter the number of trains and generate a new template.`
-
-The user should then be able to immediately generate another template.
-
-### MVVM implementation
-
-Follow the existing command pattern in `ScheduleBuilderViewModel`.
-
-Add something along the lines of:
-
-```csharp
-public ICommand ClearTemplateCommand { get; }
-```
-
-Initialize it alongside `GenerateTemplateCommand`, `QueueScheduleCommand`, and `UploadScheduleCommand`.
-
-The command should call a small public-facing/private command handler rather than putting UI logic into code-behind.
-
-The existing `ClearTemplate()` helper can continue doing the actual collection clearing.
-
-The command should only be enabled when a template currently exists if that fits cleanly with the existing RelayCommand implementation.
-
-Place the button logically alongside the existing Schedule Builder controls such as Generate/Queue/Upload rather than creating a new unrelated panel.
-
-Match the existing WPF styling.
-
----
-
-## 3. Preserve and verify the existing occupied-start-block dispatch protection
-
-Do NOT remove or weaken the existing dispatch safety behavior.
-
-The current system should behave as follows:
-
-1. Sample Blue Line layout is loaded.
-2. Track Controller/TestUI sends a `BlockStatusMessage` marking A1 as occupied.
-3. A schedule is built for a train whose route starts at A1.
-4. The train reaches its scheduled departure time.
-5. `AuthorityManager.CalculateInitialAuthorityMeters()` should return zero because the first route block is unsafe.
-6. CTC must NOT send the movement suggestion/release for that train.
-7. The train must remain queued.
-8. The CTC UI should tell the dispatcher that dispatch failed because the starting block is occupied or closed for maintenance.
-9. The train should remain eligible to retry on a future system-time update after the block becomes clear.
-
-The existing implementation appears to already provide this behavior through `AuthorityManager`, `DispatchTrainAsync`, `DispatchFailed`, and `MainWindowViewModel`.
-
-Please verify it remains intact after your changes.
-
-If there is already an appropriate automated test for this case, preserve it.
-
-If there is no test, add a focused unit test covering at least:
+The existing shared utility:
 
 ```text
-Start block occupied
-→ initial authority = 0
-→ train is not moved into DispatchedTrains
-→ train remains in DispatchQueue
+TrainControl.Common.Utilities.UnitConversion
 ```
 
-If practical within the existing test architecture, also verify that the dispatch-failure event contains an informative message mentioning the occupied start block.
+already contains:
 
-Do not change the behavior to reject the schedule when it is initially built. Occupancy is live state and may change between schedule creation and departure, so the safety check belongs at dispatch time as it currently does.
+```csharp
+MetersToFeet(double meters)
+```
+
+Reuse that method. Do not duplicate the conversion formula elsewhere.
+
+---
+
+## 1. Schedule Builder
+
+The Schedule Builder currently shows a read-only length column using `LengthMeters`.
+
+It likely appears similar to:
+
+```text
+Length (m)
+```
+
+Change this user-facing column to:
+
+```text
+Length (ft)
+```
+
+The underlying `ScheduleTemplateRow.LengthMeters` should remain unchanged.
+
+Update `ScheduleTemplateRowViewModel` to expose a presentation property such as:
+
+```csharp
+public double LengthFeet =>
+    UnitConversion.MetersToFeet(Row.LengthMeters);
+```
+
+Then update the Schedule Builder DataGrid binding to use the feet property.
+
+Use reasonable formatting, preferably one decimal place.
+
+Example:
+
+```text
+100 meters -> 328.1 ft
+```
+
+---
+
+## 2. Search for every other CTC UI length display
+
+Search the CTC WPF project for:
+
+```text
+LengthMeters
+Length (m)
+meters
+Length
+```
+
+Inspect every user-facing location that displays physical track/block length.
+
+Any visible track/block length should be shown in feet.
+
+Do not blindly rename legitimate backend properties or XML documentation that describe stored SI units.
+
+The distinction should remain:
+
+```text
+Core / contracts / calculations:
+meters
+
+WPF UI:
+feet
+```
+
+If `BlockViewModel` or another presentation ViewModel exposes `LengthMeters` directly, add a feet property there instead of modifying the underlying state.
+
+For example:
+
+```csharp
+public double LengthFeet =>
+    UnitConversion.MetersToFeet(_block.LengthMeters);
+```
+
+If the Selected Block panel displays track length now or is designed to display it, make sure that value is shown in feet as well.
+
+---
+
+## 3. Do not alter authority units internally
+
+This is especially important.
+
+Authority calculations currently use meters internally.
+
+Do NOT modify:
+
+```text
+AuthorityManager
+SuggestedAuthorityMeters
+route length calculations
+block length calculations
+```
+
+just because block lengths are displayed in feet.
+
+The Dispatched Trains UI already converts suggested authority from meters to feet. Preserve that existing behavior.
+
+Do not double-convert it.
+
+---
+
+## 4. Naming
+
+Prefer explicit ViewModel property names such as:
+
+```csharp
+LengthFeet
+```
+
+rather than keeping a property named `LengthMeters` that actually returns feet.
+
+Keep Core property names explicit and unchanged:
+
+```csharp
+LengthMeters
+```
+
+This should make it obvious where conversion occurs.
+
+---
+
+## 5. Tests
+
+Add or update a focused unit test for the existing `MetersToFeet` conversion if one does not already exist.
+
+For example:
+
+```text
+100 m -> approximately 328.084 ft
+```
+
+Use a reasonable floating-point tolerance.
+
+If ViewModel tests exist, add/update one to verify:
+
+```text
+Row.LengthMeters = 100
+ScheduleTemplateRowViewModel.LengthFeet ≈ 328.084
+```
+
+---
+
+## 6. Expected UI
+
+The Schedule Builder should now conceptually look like:
+
+```text
+Section | Block | Infrastructure | Length (ft) | Speed Limit (mph) | Train 000 Arrival Time | ...
+```
+
+rather than:
+
+```text
+Length (m) | Speed Limit (km/h)
+```
+
+For example:
+
+```text
+Length: 328.1 ft
+Speed Limit: 43.5 mph
+```
+
+while the backend still stores:
+
+```text
+LengthMeters = 100
+SpeedLimitKilometersPerHour = 70
+```
 
 ---
 
@@ -186,26 +217,24 @@ Do not change the behavior to reject the schedule when it is initially built. Oc
 
 Keep this change small and focused.
 
-Do not redesign the CTC architecture.
+Do not alter backend units.
 
-Do not implement post-dispatch train tracking yet.
+Do not change contracts.
 
-Do not infer train identity from occupancy.
+Do not alter scheduling, speed planning, authority calculations, dispatch behavior, train IDs, or occupancy logic.
 
-Do not alter the existing initial suggested speed/authority algorithms except where necessary to preserve compilation after renaming.
+Reuse `UnitConversion.MetersToFeet()`.
 
-Do not introduce code-behind for the new button if an MVVM command can be used.
+Search for all user-facing meter-based track-length displays and update them consistently.
 
-Update comments/documentation where names change.
+After the changes:
 
-Search the entire solution for references to `CurrentBlockId`, `Current Block`, and related properties so no stale naming remains.
-
-Build the affected projects/solution and fix any compile errors caused by the rename.
-
-Run relevant tests after the changes.
-
-At the end, give me a concise summary of:
-1. files changed,
-2. what changed in each,
-3. whether the occupied-A1 dispatch test passed,
-4. any behavior you intentionally left for future integration.
+1. Build the affected projects.
+2. Run relevant tests.
+3. Fix any compile/test failures caused by the change.
+4. Give me a concise summary of:
+   - files changed,
+   - UI locations converted to feet,
+   - ViewModel properties added or renamed,
+   - tests updated,
+   - confirmation that Core still stores meters.

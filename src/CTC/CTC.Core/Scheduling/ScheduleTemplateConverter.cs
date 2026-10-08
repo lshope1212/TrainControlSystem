@@ -84,17 +84,18 @@ public static class ScheduleTemplateConverter
     {
         train = null;
         string trainId = template.TrainIds[column];
+        string trainName = TrainIds.DisplayName(trainId);
 
         // DepartureTime is not entered separately: it is the train's time at the route-start block.
         string startText = startRow.TrainTimes[column];
         if (string.IsNullOrWhiteSpace(startText))
         {
-            return $"{trainId} is missing a route start time.";
+            return $"{trainName} is missing a route start time.";
         }
 
         if (!TryParseTime(startText, out _))
         {
-            return $"{trainId} has an invalid route start time '{startText.Trim()}'. Use {TimeFormat}.";
+            return $"{trainName} has an invalid route start time '{startText.Trim()}'. Use {TimeFormat}.";
         }
 
         // Every nonblank cell is a timed waypoint. Blank cells are either blocks the train
@@ -110,7 +111,7 @@ public static class ScheduleTemplateConverter
 
             if (!TryParseTime(text, out var time))
             {
-                return $"{trainId} has an invalid time '{text.Trim()}' at {row.BlockId}. Use {TimeFormat}.";
+                return $"{trainName} has an invalid time '{text.Trim()}' at {row.BlockId}. Use {TimeFormat}.";
             }
 
             waypoints.Add((row, time));
@@ -120,13 +121,13 @@ public static class ScheduleTemplateConverter
         var stops = waypoints.Where(waypoint => waypoint.Row != startRow).OrderBy(waypoint => waypoint.Time).ToList();
         if (stops.Count == 0)
         {
-            return $"{trainId} has only a route start time. Enter the time it enters at least one more block.";
+            return $"{trainName} has only a route start time. Enter the time it enters at least one more block.";
         }
 
         // Rows are in layout order, not travel order; travel order is time order.
         if (stops[0].Time <= start.Time)
         {
-            return $"{trainId} is scheduled to enter {stops[0].Row.BlockId} at {Format(stops[0].Time)}, "
+            return $"{trainName} is scheduled to enter {stops[0].Row.BlockId} at {Format(stops[0].Time)}, "
                 + $"which is not later than its departure from {start.Row.BlockId} at {Format(start.Time)}.";
         }
 
@@ -134,7 +135,7 @@ public static class ScheduleTemplateConverter
         {
             if (stops[i].Time == stops[i - 1].Time)
             {
-                return $"{trainId} is scheduled to enter both {stops[i - 1].Row.BlockId} and {stops[i].Row.BlockId} "
+                return $"{trainName} is scheduled to enter both {stops[i - 1].Row.BlockId} and {stops[i].Row.BlockId} "
                     + $"at {Format(stops[i].Time)}. Times must increase along the route.";
             }
         }
@@ -153,7 +154,7 @@ public static class ScheduleTemplateConverter
             var path = FindPath(rowsById, fromId, stop.Row.BlockId, used);
             if (path is null)
             {
-                return $"{trainId} cannot reach {stop.Row.BlockId} from {fromId} along connected blocks without reversing. "
+                return $"{trainName} cannot reach {stop.Row.BlockId} from {fromId} along connected blocks without reversing. "
                     + "Check the times are in travel order and on one branch.";
             }
 
@@ -161,7 +162,7 @@ public static class ScheduleTemplateConverter
             var passed = path.SkipLast(1).FirstOrDefault(timeByBlockId.ContainsKey);
             if (passed is not null)
             {
-                return $"{trainId} passes {passed} on the way from {fromId} to {stop.Row.BlockId}, but is scheduled to enter "
+                return $"{trainName} passes {passed} on the way from {fromId} to {stop.Row.BlockId}, but is scheduled to enter "
                     + $"{passed} later, at {Format(timeByBlockId[passed])}. Times must increase along the route.";
             }
 

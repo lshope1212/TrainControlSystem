@@ -19,6 +19,9 @@ public class DispatchedTrainViewModel : ViewModelBase
 
     public string TrainId => _train.TrainId;
 
+    /// <summary>Dispatcher-facing label, e.g. "Train 000".</summary>
+    public string TrainDisplayName => TrainIds.DisplayName(_train.TrainId);
+
     /// <summary>CTC's initial suggested speed, in mph.</summary>
     public double SuggestedSpeed => UnitConversion.MetersPerSecondToMilesPerHour(_train.SuggestedSpeedMetersPerSecond);
 

@@ -512,8 +512,8 @@
 
                                     <TextBlock Grid.Row="6"
                                                Grid.Column="1"
-                                               Text="{Binding SelectedBlock.SpeedLimitKilometersPerHour,
-                                                              StringFormat={}{0:F0} km/h,
+                                               Text="{Binding SelectedBlock.SpeedLimitMilesPerHour,
+                                                              StringFormat={}{0:F1} mph,
                                                               FallbackValue=--}"
                                                Style="{StaticResource ValueStyle}"/>
 
@@ -791,13 +791,13 @@
                                                     IsReadOnly="True"
                                                     Width="200"/>
 
-                                <DataGridTextColumn Header="Length (m)"
-                                                    Binding="{Binding LengthMeters}"
+                                <DataGridTextColumn Header="Length (ft)"
+                                                    Binding="{Binding LengthFeet, StringFormat={}{0:F1}}"
                                                     IsReadOnly="True"
                                                     Width="75"/>
 
-                                <DataGridTextColumn Header="Speed Limit (km/h)"
-                                                    Binding="{Binding SpeedLimitKilometersPerHour}"
+                                <DataGridTextColumn Header="Speed Limit (mph)"
+                                                    Binding="{Binding SpeedLimitMilesPerHour, StringFormat={}{0:F1}}"
                                                     IsReadOnly="True"
                                                     Width="115"/>
 
@@ -870,7 +870,7 @@
                             <DataGrid.Columns>
 
                                 <DataGridTextColumn Header="Train ID"
-                                                    Binding="{Binding TrainId}"
+                                                    Binding="{Binding TrainDisplayName}"
                                                     Width="160"/>
 
                                 <DataGridTextColumn Header="Departure Time"
@@ -915,7 +915,7 @@
                             <DataGrid.Columns>
 
                                 <DataGridTextColumn Header="Train ID"
-                                                    Binding="{Binding TrainId}"
+                                                    Binding="{Binding TrainDisplayName}"
                                                     Width="120"/>
 
                                 <DataGridTextColumn Header="Suggested Speed"

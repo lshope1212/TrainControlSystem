@@ -49,6 +49,45 @@ public class CtcUiMarkupTests
     }
 
     [TestMethod]
+    public void TrainGrids_ShowTrainDisplayName()
+    {
+        string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
+
+        Assert.DoesNotContain("{Binding TrainId}", xaml);
+        Assert.Contains("{Binding TrainDisplayName}", xaml);
+    }
+
+    [TestMethod]
+    public void TrackSpeedLimits_AreShownInMph()
+    {
+        string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
+
+        Assert.Contains("SelectedBlock.SpeedLimitMilesPerHour", xaml);
+        Assert.Contains("Header=\"Speed Limit (mph)\"", xaml);
+        Assert.DoesNotContain("km/h", xaml);
+        Assert.DoesNotContain("SpeedLimitKilometersPerHour", xaml);
+    }
+
+    [TestMethod]
+    public void TrackLengths_AreShownInFeet()
+    {
+        string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
+
+        Assert.Contains("Header=\"Length (ft)\"", xaml);
+        Assert.Contains("{Binding LengthFeet", xaml);
+        Assert.DoesNotContain("Length (m)", xaml);
+        Assert.DoesNotContain("LengthMeters", xaml);
+    }
+
+    [TestMethod]
+    public void ScheduleBuilder_TrainColumnHeadersSayArrivalTime()
+    {
+        string behavior = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "Behaviors", "DataGridTrainColumns.cs"));
+
+        Assert.Contains("$\"{TrainIds.DisplayName(trainId)} Arrival Time\"", behavior);
+    }
+
+    [TestMethod]
     public void ScheduleBuilder_HasClearTemplateButton()
     {
         string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));

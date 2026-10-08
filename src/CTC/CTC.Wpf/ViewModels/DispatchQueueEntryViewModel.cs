@@ -17,6 +17,9 @@ public class DispatchQueueEntryViewModel
 
     public string TrainId { get; }
 
+    /// <summary>Dispatcher-facing label, e.g. "Train 000".</summary>
+    public string TrainDisplayName => TrainIds.DisplayName(TrainId);
+
     /// <summary>Formatted HH:mm:ss.</summary>
     public string DepartureTime { get; }
 }

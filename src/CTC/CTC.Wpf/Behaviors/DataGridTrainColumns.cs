@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using CTC.Core.Models;
 
 namespace CTC.Wpf.Behaviors;
 
@@ -51,8 +52,8 @@ public static class DataGridTrainColumns
     // Every block row accepts a time, so all cells are editable.
     private static DataGridColumn CreateTrainColumn(string trainId, int column) => new DataGridTextColumn
     {
-        Header = trainId,
-        Width = new DataGridLength(90),
+        Header = $"{TrainIds.DisplayName(trainId)} Arrival Time",
+        Width = new DataGridLength(150),
         Binding = new Binding($"TrainTimes[{column}].TimeText")
         {
             Mode = BindingMode.TwoWay,

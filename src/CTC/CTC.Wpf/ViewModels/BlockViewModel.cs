@@ -1,4 +1,5 @@
 using CTC.Core.Models;
+using TrainControl.Common.Utilities;
 using TrainControl.Contracts.Enums;
 
 namespace CTC.Wpf.ViewModels;
@@ -22,8 +23,11 @@ public class BlockViewModel : ViewModelBase
 
     public bool HasSwitch => _block.HasSwitch;
 
-    /// <summary>Track speed limit from the layout, in km/h. Read-only: the dispatcher cannot change it.</summary>
-    public double SpeedLimitKilometersPerHour => _block.SpeedLimitKilometersPerHour;
+    /// <summary>
+    /// Track speed limit, in mph for display. CTC stores it in km/h as received from the layout.
+    /// Read-only: the dispatcher cannot change it.
+    /// </summary>
+    public double SpeedLimitMilesPerHour => UnitConversion.KilometersPerHourToMilesPerHour(_block.SpeedLimitKilometersPerHour);
 
     public MaintenanceState RequestedMaintenanceState => _block.RequestedMaintenanceState;
 

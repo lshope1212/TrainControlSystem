@@ -19,4 +19,7 @@ public static class UnitConversion
 
     public static double MetersPerSecondToKilometersPerHour(double metersPerSecond) =>
         metersPerSecond * 3600.0 / 1000.0;
+
+    public static double KilometersPerHourToMilesPerHour(double kilometersPerHour) =>
+        MetersPerSecondToMilesPerHour(KilometersPerHourToMetersPerSecond(kilometersPerHour));
 }

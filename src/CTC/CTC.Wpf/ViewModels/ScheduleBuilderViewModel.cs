@@ -104,7 +104,18 @@ public class ScheduleBuilderViewModel : ViewModelBase
             return;
         }
 
-        ShowTemplate(ScheduleTemplateFactory.Create(Line, trainCount));
+        // Number after every train CTC already knows, so a new template never reuses a train ID.
+        int firstTrainNumber = TrainIds.NextAvailableNumber(_ctc.State);
+        try
+        {
+            ShowTemplate(ScheduleTemplateFactory.Create(Line, trainCount, firstTrainNumber));
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = $"Schedule template not generated: {ex.Message}";
+            return;
+        }
+
         StatusMessage = $"Generated a {trainCount}-train template for {Line.Name}. "
             + $"Enter each train's route start time and the time it enters any later blocks (e.g. stations) as {ScheduleTemplateConverter.TimeFormat}; "
             + "CTC routes the train through the blank blocks in between.";
@@ -135,7 +146,7 @@ public class ScheduleBuilderViewModel : ViewModelBase
         {
             _ctc.QueueSchedule(result.Trains);
             // Show the routes CTC worked out, so the dispatcher can check the blank blocks were filled in as intended.
-            var routes = result.Trains.Select(train => $"{train.TrainId}: {string.Join(" → ", train.Route.Select(block => block.BlockId))}");
+            var routes = result.Trains.Select(train => $"{TrainIds.DisplayName(train.TrainId)}: {string.Join(" → ", train.Route.Select(block => block.BlockId))}");
             StatusMessage = $"Queued {result.Trains.Count} train(s) for {Line.Name}. {string.Join("; ", routes)}";
         }
         catch (ArgumentException ex)

@@ -179,12 +179,12 @@ public class CTCService : ICTCService
     private async Task<string?> DispatchTrainAsync(DispatchQueueEntry entry, CancellationToken cancellationToken)
     {
         var scheduledTrain = State.ScheduledTrains.FirstOrDefault(train => train.TrainId == entry.TrainId && train.LineId == entry.LineId)
-            ?? throw new InvalidOperationException($"Train '{entry.TrainId}' is queued but no longer scheduled.");
+            ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} is queued but no longer scheduled.");
 
         var line = State.FindLine(scheduledTrain.LineId)
-            ?? throw new InvalidOperationException($"Train '{entry.TrainId}' is scheduled on unknown line '{scheduledTrain.LineId}'.");
+            ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} is scheduled on unknown line '{scheduledTrain.LineId}'.");
         var route = ResolveRoute(scheduledTrain, line)
-            ?? throw new InvalidOperationException($"Train '{entry.TrainId}' uses a block that is no longer in the track layout.");
+            ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} uses a block that is no longer in the track layout.");
 
         // Releasing a train with zero authority would leave it stranded, because CTC cannot
         // recalculate authority later. Hold it in the queue instead; it is retried next tick.
@@ -231,7 +231,7 @@ public class CTCService : ICTCService
         dispatched.LastKnownBlockId =scheduledTrain.StartBlockId;
 
         return speed.IsLate
-            ? $"{scheduledTrain.TrainId} is behind schedule for {speed.TargetBlockId}; suggested the maximum permitted speed."
+            ? $"{TrainIds.DisplayName(scheduledTrain.TrainId)} is behind schedule for {speed.TargetBlockId}; suggested the maximum permitted speed."
             : null;
     }
 
@@ -281,7 +281,7 @@ public class CTCService : ICTCService
 
             if (!trainIds.Add(train.TrainId))
             {
-                throw new ArgumentException($"Train '{train.TrainId}' is scheduled more than once.", nameof(scheduledTrains));
+                throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} is scheduled more than once.", nameof(scheduledTrains));
             }
 
             var line = State.FindLine(train.LineId)
@@ -289,17 +289,17 @@ public class CTCService : ICTCService
 
             if (train.Route.Count < 2 || !train.Route[0].IsTimed || !train.Route[^1].IsTimed)
             {
-                throw new ArgumentException($"{train.TrainId} needs a timed route start block and at least one later timed block.", nameof(scheduledTrains));
+                throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} needs a timed route start block and at least one later timed block.", nameof(scheduledTrains));
             }
 
             var route = ResolveRoute(train, line)
-                ?? throw new ArgumentException($"{train.TrainId} uses a block that is not on {line.Name}.", nameof(scheduledTrains));
+                ?? throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} uses a block that is not on {line.Name}.", nameof(scheduledTrains));
 
             for (int i = 0; i + 1 < route.Count; i++)
             {
                 if (!route[i].ConnectedBlockIds.Contains(route[i + 1].BlockId))
                 {
-                    throw new ArgumentException($"{train.TrainId}'s route goes from {route[i].BlockId} to {route[i + 1].BlockId}, which are not connected.", nameof(scheduledTrains));
+                    throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)}'s route goes from {route[i].BlockId} to {route[i + 1].BlockId}, which are not connected.", nameof(scheduledTrains));
                 }
             }
 

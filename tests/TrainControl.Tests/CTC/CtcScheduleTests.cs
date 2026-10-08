@@ -32,7 +32,7 @@ public class CtcScheduleTests
     {
         var template = CreateTemplate(3);
 
-        CollectionAssert.AreEqual(new[] { "Train 1", "Train 2", "Train 3" }, template.TrainIds.ToArray());
+        CollectionAssert.AreEqual(new[] { "000", "001", "002" }, template.TrainIds.ToArray());
         Assert.HasCount(15, template.Rows);
         Assert.IsTrue(template.Rows.All(row => row.TrainTimes.Length == 3 && row.TrainTimes.All(string.IsNullOrEmpty)));
     }
@@ -81,7 +81,7 @@ public class CtcScheduleTests
 
         Assert.IsTrue(result.IsSuccess, result.ErrorMessage);
         var train = result.Trains.Single();
-        Assert.AreEqual("Train 1", train.TrainId);
+        Assert.AreEqual("000", train.TrainId);
         Assert.AreEqual("BLUE", train.LineId);
         CollectionAssert.AreEqual(BlueLine.BranchB, RouteOf(train));
         Assert.IsTrue(train.Route.All(block => block.IsTimed));
@@ -137,7 +137,7 @@ public class CtcScheduleTests
     [TestMethod]
     public void Convert_TimedBlockOnBranch_SelectsThatBranch()
     {
-        // Train 1 is timed at B10 and Train 2 at C15; each leaves the other branch out.
+        // Train 000 is timed at B10 and Train 001 at C15; each leaves the other branch out.
         var template = CreateTemplate(2);
         Row(template, "A1").TrainTimes[0] = "12:00:00";
         Row(template, "B10").TrainTimes[0] = "12:00:36";
@@ -177,7 +177,7 @@ public class CtcScheduleTests
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(
-            "Train 1 cannot reach C15 from B10 along connected blocks without reversing. Check the times are in travel order and on one branch.",
+            "Train 000 cannot reach C15 from B10 along connected blocks without reversing. Check the times are in travel order and on one branch.",
             result.ErrorMessage);
         Assert.IsEmpty(result.Trains);
     }
@@ -209,7 +209,7 @@ public class CtcScheduleTests
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(
-            "Train 1 passes A2 on the way from A1 to A4, but is scheduled to enter A2 later, at 12:00:20. Times must increase along the route.",
+            "Train 000 passes A2 on the way from A1 to A4, but is scheduled to enter A2 later, at 12:00:20. Times must increase along the route.",
             result.ErrorMessage);
     }
 
@@ -223,7 +223,7 @@ public class CtcScheduleTests
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.AreEqual("Train 1 is scheduled to enter both A2 and A3 at 12:00:04. Times must increase along the route.", result.ErrorMessage);
+        Assert.AreEqual("Train 000 is scheduled to enter both A2 and A3 at 12:00:04. Times must increase along the route.", result.ErrorMessage);
     }
 
     [TestMethod]
@@ -237,7 +237,7 @@ public class CtcScheduleTests
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(
-            "Train 1 is scheduled to enter B7 at 11:59:00, which is not later than its departure from A1 at 12:00:00.",
+            "Train 000 is scheduled to enter B7 at 11:59:00, which is not later than its departure from A1 at 12:00:00.",
             result.ErrorMessage);
     }
 
@@ -251,7 +251,7 @@ public class CtcScheduleTests
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.AreEqual("Train 2 is missing a route start time.", result.ErrorMessage);
+        Assert.AreEqual("Train 001 is missing a route start time.", result.ErrorMessage);
         Assert.IsEmpty(result.Trains);
     }
 
@@ -265,7 +265,7 @@ public class CtcScheduleTests
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.AreEqual("Train 1 has an invalid time '12:8' at A4. Use HH:mm:ss.", result.ErrorMessage);
+        Assert.AreEqual("Train 000 has an invalid time '12:8' at A4. Use HH:mm:ss.", result.ErrorMessage);
     }
 
     [TestMethod]
@@ -285,7 +285,7 @@ public class CtcScheduleTests
     {
         var service = BlueLine.CreateService();
 
-        service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0)), BlueLine.Train("Train 2", new TimeSpan(12, 3, 0))]);
+        service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0)), BlueLine.Train("001", new TimeSpan(12, 3, 0))]);
 
         Assert.HasCount(2, service.State.ScheduledTrains);
         Assert.HasCount(2, service.State.DispatchQueue);
@@ -299,13 +299,13 @@ public class CtcScheduleTests
 
         service.QueueSchedule(
         [
-            BlueLine.Train("Train 1", new TimeSpan(12, 6, 0)),
-            BlueLine.Train("Train 2", new TimeSpan(12, 0, 0)),
-            BlueLine.Train("Train 3", new TimeSpan(12, 3, 0)),
+            BlueLine.Train("000", new TimeSpan(12, 6, 0)),
+            BlueLine.Train("001", new TimeSpan(12, 0, 0)),
+            BlueLine.Train("002", new TimeSpan(12, 3, 0)),
         ]);
 
         CollectionAssert.AreEqual(
-            new[] { "Train 2", "Train 3", "Train 1" },
+            new[] { "001", "002", "000" },
             service.State.DispatchQueue.Select(entry => entry.TrainId).ToArray());
     }
 
@@ -313,9 +313,9 @@ public class CtcScheduleTests
     public void QueueSchedule_ReplacesPreviousScheduleForLine()
     {
         var service = BlueLine.CreateService();
-        service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0)), BlueLine.Train("Train 2", new TimeSpan(12, 3, 0))]);
+        service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0)), BlueLine.Train("001", new TimeSpan(12, 3, 0))]);
 
-        service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(13, 0, 0))]);
+        service.QueueSchedule([BlueLine.Train("000", new TimeSpan(13, 0, 0))]);
 
         Assert.HasCount(1, service.State.ScheduledTrains);
         Assert.AreEqual(new TimeSpan(13, 0, 0), service.State.DispatchQueue.Single().DepartureTime);
@@ -328,7 +328,7 @@ public class CtcScheduleTests
         var changes = new List<CtcStateChangeKind>();
         service.StateChanged += (_, e) => changes.Add(e.Kind);
 
-        service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0))]);
+        service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0))]);
 
         CollectionAssert.AreEqual(new[] { CtcStateChangeKind.Schedule, CtcStateChangeKind.DispatchQueue }, changes);
     }
@@ -339,10 +339,10 @@ public class CtcScheduleTests
         var service = BlueLine.CreateService();
         var changes = new List<CtcStateChangeKind>();
         service.StateChanged += (_, e) => changes.Add(e.Kind);
-        var unknownLine = BlueLine.Train("Train 2", new TimeSpan(12, 3, 0));
+        var unknownLine = BlueLine.Train("001", new TimeSpan(12, 3, 0));
         unknownLine.LineId = "RED";
 
-        Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0)), unknownLine]));
+        Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0)), unknownLine]));
 
         Assert.IsEmpty(service.State.ScheduledTrains);
         Assert.IsEmpty(service.State.DispatchQueue);
@@ -355,7 +355,7 @@ public class CtcScheduleTests
         var service = BlueLine.CreateService();
 
         var ex = Assert.ThrowsExactly<ArgumentException>(
-            () => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0), route: ["A1", "X9"])]));
+            () => service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0), route: ["A1", "X9"])]));
 
         Assert.Contains("uses a block that is not on Blue Line", ex.Message);
     }
@@ -366,7 +366,7 @@ public class CtcScheduleTests
         var service = BlueLine.CreateService();
 
         var ex = Assert.ThrowsExactly<ArgumentException>(
-            () => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0), route: ["A1", "A2", "A4"])]));
+            () => service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0), route: ["A1", "A2", "A4"])]));
 
         Assert.Contains("goes from A2 to A4, which are not connected", ex.Message);
     }
@@ -377,7 +377,7 @@ public class CtcScheduleTests
         var service = BlueLine.CreateService();
 
         Assert.ThrowsExactly<ArgumentException>(
-            () => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0), route: ["A1", "A2", "A3"], timedBlocks: ["A1", "A2"])]));
+            () => service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0), route: ["A1", "A2", "A3"], timedBlocks: ["A1", "A2"])]));
     }
 
     [TestMethod]
@@ -386,6 +386,6 @@ public class CtcScheduleTests
         var service = BlueLine.CreateService();
 
         Assert.ThrowsExactly<ArgumentException>(
-            () => service.QueueSchedule([BlueLine.Train("Train 1", new TimeSpan(12, 0, 0), route: ["A1"])]));
+            () => service.QueueSchedule([BlueLine.Train("000", new TimeSpan(12, 0, 0), route: ["A1"])]));
     }
 }

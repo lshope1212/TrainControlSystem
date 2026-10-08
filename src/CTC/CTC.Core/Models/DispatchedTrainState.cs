@@ -5,9 +5,7 @@ namespace CTC.Core.Models;
 /// </summary>
 public class DispatchedTrainState
 {
-    // TODO: TrainId is still the schedule's placeholder ("Train 1", ...). Mapping it to the
-    // real Train Model train ID needs the integrated system, so the same placeholder on two
-    // lines would currently refer to one DispatchedTrainState.
+    /// <summary>Three-digit train ID assigned when the schedule was built, e.g. "000" (see <see cref="TrainIds"/>).</summary>
     public string TrainId { get; set; } = string.Empty;
 
     /// <summary>Line the train was dispatched on.</summary>

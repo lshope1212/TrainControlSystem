@@ -10,14 +10,24 @@ public static class ScheduleTemplateFactory
 {
     /// <summary>
     /// Creates a template with one row per block of <paramref name="line"/> and
-    /// <paramref name="trainCount"/> blank train columns.
+    /// <paramref name="trainCount"/> blank train columns, with consecutive train IDs starting
+    /// at <paramref name="firstTrainNumber"/> (see <see cref="TrainIds.NextAvailableNumber"/>).
     /// </summary>
-    public static ScheduleTemplate Create(CtcLineState line, int trainCount)
+    /// <exception cref="InvalidOperationException">The train IDs would go past <see cref="TrainIds.MaxNumber"/>.</exception>
+    public static ScheduleTemplate Create(CtcLineState line, int trainCount, int firstTrainNumber = 0)
     {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(trainCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(firstTrainNumber);
 
-        var trainIds = Enumerable.Range(1, trainCount).Select(CreateTrainId);
+        int available = TrainIds.MaxNumber + 1 - firstTrainNumber;
+        if (trainCount > available)
+        {
+            throw new InvalidOperationException(
+                $"Only {Math.Max(0, available)} more train ID(s) are available; train IDs end at {TrainIds.Format(TrainIds.MaxNumber)}.");
+        }
+
+        var trainIds = Enumerable.Range(firstTrainNumber, trainCount).Select(TrainIds.Format);
         var startBlock = GetRouteStartBlock(line);
 
         var rows = line.Blocks.Select(block => new ScheduleTemplateRow(trainCount)
@@ -36,12 +46,6 @@ public static class ScheduleTemplateFactory
 
         return new ScheduleTemplate(line.LineId, trainIds, rows);
     }
-
-    /// <summary>
-    /// Train ID for the Nth train column (1-based). Placeholder until scheduled trains
-    /// are mapped to real Train Model train IDs.
-    /// </summary>
-    public static string CreateTrainId(int trainNumber) => $"Train {trainNumber}";
 
     /// <summary>
     /// The block every train on <paramref name="line"/> starts its route from.

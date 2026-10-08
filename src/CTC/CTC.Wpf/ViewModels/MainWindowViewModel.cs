@@ -182,13 +182,13 @@ public class MainWindowViewModel : ViewModelBase
             case CtcStateChangeKind.TrainDispatched:
                 RebuildDispatchQueue();
                 RebuildDispatchedTrains();
-                CommunicationStatus = $"{e.TrainId} dispatched at {SystemTimeDisplay} (movement suggestion and request sent)."
+                CommunicationStatus = $"{TrainIds.DisplayName(e.TrainId ?? string.Empty)} dispatched at {SystemTimeDisplay} (movement suggestion and request sent)."
                     + (e.Message is null ? string.Empty : $" Warning: {e.Message}");
                 break;
 
             case CtcStateChangeKind.DispatchFailed:
                 // The train is still queued; CTC retries on the next system time update.
-                CommunicationStatus = $"Unable to dispatch {e.TrainId}: {e.Message} Will retry on the next time update.";
+                CommunicationStatus = $"Unable to dispatch {TrainIds.DisplayName(e.TrainId ?? string.Empty)}: {e.Message} Will retry on the next time update.";
                 break;
         }
 

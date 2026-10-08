@@ -37,7 +37,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task BeforeDeparture_NothingDispatched()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
 
         await service.SetSystemTimeAsync(At(11, 59, 59));
         await service.SetSystemTimeAsync(At(12, 0, 4));
@@ -50,7 +50,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task ExactDeparture_SendsSuggestionThenReleaseAndMovesTrain()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
@@ -59,15 +59,15 @@ public class CtcDispatchTests
         var suggestion = (MovementSuggestionMessage)sender.SentMessages[0];
         var request = (MovementRequestMessage)sender.SentMessages[1];
 
-        Assert.AreEqual("Train 1", suggestion.TrainId);
+        Assert.AreEqual("000", suggestion.TrainId);
         Assert.AreEqual(12.5, suggestion.SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(500.0, suggestion.SuggestedAuthorityMeters);
-        Assert.AreEqual("Train 1", request.TrainId);
+        Assert.AreEqual("000", request.TrainId);
         Assert.AreEqual(MovementRequestType.ReleaseTrain, request.RequestType);
         Assert.IsEmpty(service.State.DispatchQueue);
 
         var dispatched = service.State.DispatchedTrains.Single();
-        Assert.AreEqual("Train 1", dispatched.TrainId);
+        Assert.AreEqual("000", dispatched.TrainId);
         Assert.AreEqual("BLUE", dispatched.LineId);
         Assert.AreEqual("A1", dispatched.LastKnownBlockId);
     }
@@ -78,7 +78,7 @@ public class CtcDispatchTests
         // Only A1 and B10 timed: speed targets B10 (450 m in 36 s) and authority covers the routed-through blocks.
         var sender = new FakeMessageSender();
         var service = BlueLine.CreateService(sender);
-        service.QueueSchedule([BlueLine.Train("Train 1", At(12, 0, 5), secondsPerBlock: 4, timedBlocks: ["A1", "B10"])]);
+        service.QueueSchedule([BlueLine.Train("000", At(12, 0, 5), secondsPerBlock: 4, timedBlocks: ["A1", "B10"])]);
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
@@ -91,7 +91,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task Dispatch_StoresSuggestedSpeedAndAuthority()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         service.ApplyBlockStatus(new BlockStatusMessage { BlockId = "A4", Occupancy = OccupancyState.Occupied });
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
@@ -107,7 +107,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task Dispatch_OccupiedRouteBlock_LimitsAuthority()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         service.ApplyBlockStatus(new BlockStatusMessage { BlockId = "A3", Occupancy = OccupancyState.Occupied });
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
@@ -118,7 +118,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task Dispatch_MaintenanceClosedRouteBlock_LimitsAuthority()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         await service.CloseBlockAsync("B7");
         sender.SentMessages.Clear();
 
@@ -131,7 +131,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task Dispatch_BlockOnOtherBranch_DoesNotLimitAuthority()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         service.ApplyBlockStatus(new BlockStatusMessage { BlockId = "C11", Occupancy = OccupancyState.Occupied });
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
@@ -142,7 +142,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task Dispatch_UnsafeStartBlock_KeepsTrainQueuedWithoutSending()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         service.ApplyBlockStatus(new BlockStatusMessage { BlockId = "A1", Occupancy = OccupancyState.Occupied });
         var changes = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => changes.Add(e);
@@ -167,7 +167,7 @@ public class CtcDispatchTests
     public async Task LateDispatch_UsesPermittedMaximumAndWarns()
     {
         // Next block (A2) was due at 12:00:09; released at 12:00:10.
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         var changes = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => changes.Add(e);
 
@@ -182,7 +182,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task OnTimeDispatch_HasNoWarning()
     {
-        var (service, _) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, _) = CreateService(("000", At(12, 0, 5)));
         var changes = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => changes.Add(e);
 
@@ -194,7 +194,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task LaterTicks_DoNotDispatchAgain()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
         await service.SetSystemTimeAsync(At(12, 0, 6));
@@ -210,15 +210,15 @@ public class CtcDispatchTests
     {
         // Queued out of order on purpose.
         var (service, sender) = CreateService(
-            ("Train 3", At(12, 0, 6)),
-            ("Train 1", At(12, 0, 2)),
-            ("Train 2", At(12, 0, 4)));
+            ("002", At(12, 0, 6)),
+            ("000", At(12, 0, 2)),
+            ("001", At(12, 0, 4)));
         await service.SetSystemTimeAsync(At(12, 0, 0));
 
         await service.SetSystemTimeAsync(At(12, 0, 10));
 
         CollectionAssert.AreEqual(
-            new[] { "Train 1", "Train 2", "Train 3" },
+            new[] { "000", "001", "002" },
             MovementRequests(sender).Select(request => request.TrainId).ToArray());
         Assert.IsEmpty(service.State.DispatchQueue);
         Assert.HasCount(3, service.State.DispatchedTrains);
@@ -227,20 +227,20 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task FutureTrain_StaysQueued()
     {
-        var (service, _) = CreateService(("Train 1", At(12, 0, 5)), ("Train 2", At(12, 1, 0)));
+        var (service, _) = CreateService(("000", At(12, 0, 5)), ("001", At(12, 1, 0)));
 
         await service.SetSystemTimeAsync(At(12, 0, 10));
 
-        Assert.AreEqual("Train 1", service.State.DispatchedTrains.Single().TrainId);
+        Assert.AreEqual("000", service.State.DispatchedTrains.Single().TrainId);
         var queued = service.State.DispatchQueue.Single();
-        Assert.AreEqual("Train 2", queued.TrainId);
+        Assert.AreEqual("001", queued.TrainId);
         Assert.AreEqual(DispatchQueueStatus.Queued, queued.QueueStatus);
     }
 
     [TestMethod]
     public async Task FailedSend_LeavesTrainQueuedAndReportsFailure()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         sender.ExceptionToThrow = new MessageSendException("Track Controller is not connected.");
         var changes = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => changes.Add(e);
@@ -252,7 +252,7 @@ public class CtcDispatchTests
         Assert.IsEmpty(service.State.DispatchedTrains);
 
         var failure = changes.Single(change => change.Kind == CtcStateChangeKind.DispatchFailed);
-        Assert.AreEqual("Train 1", failure.TrainId);
+        Assert.AreEqual("000", failure.TrainId);
         Assert.AreEqual("Track Controller is not connected.", failure.Message);
         Assert.IsFalse(changes.Any(change => change.Kind == CtcStateChangeKind.TrainDispatched));
     }
@@ -260,9 +260,9 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task FailedReleaseAfterSuggestion_LeavesTrainQueued()
     {
-        var sender = new SelectiveFailingSender("Train 1");
+        var sender = new SelectiveFailingSender("000");
         var service = BlueLine.CreateService(sender);
-        service.QueueSchedule([Train("Train 1", At(12, 0, 5))]);
+        service.QueueSchedule([Train("000", At(12, 0, 5))]);
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
@@ -274,7 +274,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task FailedSend_IsRetriedOnNextTimeUpdate()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)));
         sender.ExceptionToThrow = new MessageSendException("Track Controller is not connected.");
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
@@ -291,40 +291,40 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task FailedSend_DoesNotStopOtherDueTrains()
     {
-        var sender = new SelectiveFailingSender("Train 1");
+        var sender = new SelectiveFailingSender("000");
         var service = BlueLine.CreateService(sender);
-        service.QueueSchedule([Train("Train 1", At(12, 0, 2)), Train("Train 2", At(12, 0, 4))]);
+        service.QueueSchedule([Train("000", At(12, 0, 2)), Train("001", At(12, 0, 4))]);
 
         await service.SetSystemTimeAsync(At(12, 0, 10));
 
-        Assert.AreEqual("Train 1", service.State.DispatchQueue.Single().TrainId);
-        Assert.AreEqual("Train 2", service.State.DispatchedTrains.Single().TrainId);
+        Assert.AreEqual("000", service.State.DispatchQueue.Single().TrainId);
+        Assert.AreEqual("001", service.State.DispatchedTrains.Single().TrainId);
     }
 
     [TestMethod]
     public async Task QueueSchedule_DoesNotRequeueDispatchedTrain()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)), ("Train 2", At(12, 0, 10)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)), ("001", At(12, 0, 10)));
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
-        service.QueueSchedule([Train("Train 1", At(12, 0, 5)), Train("Train 2", At(12, 0, 10))]);
+        service.QueueSchedule([Train("000", At(12, 0, 5)), Train("001", At(12, 0, 10))]);
         await service.SetSystemTimeAsync(At(12, 0, 6));
 
-        Assert.AreEqual("Train 2", service.State.DispatchQueue.Single().TrainId);
-        Assert.AreEqual("Train 1", service.State.DispatchedTrains.Single().TrainId);
+        Assert.AreEqual("001", service.State.DispatchQueue.Single().TrainId);
+        Assert.AreEqual("000", service.State.DispatchedTrains.Single().TrainId);
         Assert.HasCount(1, MovementRequests(sender));
     }
 
     [TestMethod]
     public async Task ClockMovingBackward_DoesNotUndoDispatch()
     {
-        var (service, sender) = CreateService(("Train 1", At(12, 0, 5)), ("Train 2", At(12, 0, 10)));
+        var (service, sender) = CreateService(("000", At(12, 0, 5)), ("001", At(12, 0, 10)));
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
         await service.SetSystemTimeAsync(At(11, 59, 0));
 
-        Assert.AreEqual("Train 1", service.State.DispatchedTrains.Single().TrainId);
-        Assert.AreEqual("Train 2", service.State.DispatchQueue.Single().TrainId);
+        Assert.AreEqual("000", service.State.DispatchedTrains.Single().TrainId);
+        Assert.AreEqual("001", service.State.DispatchQueue.Single().TrainId);
         Assert.HasCount(1, MovementRequests(sender));
     }
 
@@ -341,7 +341,7 @@ public class CtcDispatchTests
     [TestMethod]
     public async Task Dispatch_RaisesSystemTimeThenTrainDispatched()
     {
-        var (service, _) = CreateService(("Train 1", At(12, 0, 5)));
+        var (service, _) = CreateService(("000", At(12, 0, 5)));
         var changes = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => changes.Add(e);
 
@@ -350,7 +350,7 @@ public class CtcDispatchTests
         CollectionAssert.AreEqual(
             new[] { CtcStateChangeKind.SystemTime, CtcStateChangeKind.TrainDispatched },
             changes.Select(change => change.Kind).ToArray());
-        Assert.AreEqual("Train 1", changes[1].TrainId);
+        Assert.AreEqual("000", changes[1].TrainId);
     }
 
     [TestMethod]
@@ -360,13 +360,13 @@ public class CtcDispatchTests
         // its send; the in-flight train must not be picked up or re-queued.
         var sender = new BlockingSender();
         var service = BlueLine.CreateService(sender);
-        service.QueueSchedule([Train("Train 1", At(12, 0, 5))]);
+        service.QueueSchedule([Train("000", At(12, 0, 5))]);
 
         var first = service.SetSystemTimeAsync(At(12, 0, 5));
         Assert.AreEqual(DispatchQueueStatus.Dispatching, service.State.DispatchQueue.Single().QueueStatus);
 
         await service.SetSystemTimeAsync(At(12, 0, 6));
-        service.QueueSchedule([Train("Train 1", At(12, 0, 5))]);
+        service.QueueSchedule([Train("000", At(12, 0, 5))]);
         sender.Release();
         await first;
 
