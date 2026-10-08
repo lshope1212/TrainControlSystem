@@ -16,6 +16,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\TrainController\TrainController.Abstractions\TrainController.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\TrainController\TrainController.Integration\TrainController.Integration.csproj" />
+    <ProjectReference Include="..\..\src\TrainController\TrainController.Hardware.Pi\TrainController.Hardware.Pi.csproj" />
     <ProjectReference Include="..\..\src\TrainModel\TrainModel.Core\TrainModel.Core.csproj" />
     <ProjectReference Include="..\..\src\TrackModel\TrackModel.Core\TrackModel.Core.csproj" />
     <ProjectReference Include="..\..\src\TrainController\TrainController.Core\TrainController.Core.csproj" />

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Train Controller application/integration layer (no WPF, no control law):
+      fixed routing, per-train state registry, Test Mode / Test Simulation control,
+      backend abstractions + Software/Hardware backends, Named Pipe adapters (future
+      Train Model link), TCP client + framing to the Raspberry Pi, and output routing.
+    Control-law code lives in TrainController.Core (Software) and
+    TrainController.Hardware.Pi (Hardware) only.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrainController.Abstractions\TrainController.Abstractions.csproj" />
+    <ProjectReference Include="..\TrainController.Core\TrainController.Core.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
