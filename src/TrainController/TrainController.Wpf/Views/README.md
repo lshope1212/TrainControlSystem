@@ -1,10 +1,11 @@
-﻿# Views
+# Views
 
-Future `UserControl` views for the Train Controller application go here, for example:
+Reusable view pieces for the Train Controller windows:
 
-- `TrainStatusView.xaml`
-- `TrainControlsView.xaml`
-- `FailureControlsView.xaml`
+- `Controls/KeyValueRow` — "label …… value" status row; value colored by `DisplayTone`.
+- `Controls/GuidanceBar` — horizontal station / brake point / authority distance bar.
+- `Controls/TextToDisplayValueConverter` — wraps plain text for `KeyValueRow`.
 
-The single application window is `MainWindow.xaml` in the project root — do **not**
-add another `MainWindow.xaml` here.
+Both windows (`MainWindow.xaml`, `TestWindow.xaml`) live in the project root. They are
+PEERS: neither is a child of the other (documented exception to the one-window convention).
+All colors and styles live in `Resources/Theme.xaml`.

@@ -1,26 +1,363 @@
 <Window x:Class="TrainController.Wpf.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Train Controller" Height="360" Width="560">
-    <StackPanel Margin="24">
-        <TextBlock Text="{Binding Title}" FontSize="24" FontWeight="Bold" />
-        <TextBlock Text="{Binding Status}" Margin="0,4,0,20" TextWrapping="Wrap" Foreground="Gray" />
+        xmlns:controls="clr-namespace:TrainController.Wpf.Views.Controls"
+        Title="Train Controller — Main UI (Driver / Engineer)"
+        Width="1500" Height="920" MinWidth="1200" MinHeight="760"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource PageBrush}"
+        FontFamily="{StaticResource UiFont}">
 
-        <Grid>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- header -->
+            <RowDefinition Height="*"/>      <!-- body -->
+            <RowDefinition Height="230"/>    <!-- fleet / alerts / log -->
+            <RowDefinition Height="24"/>     <!-- status bar -->
+        </Grid.RowDefinitions>
+
+        <!-- ============================== HEADER ============================== -->
+        <Border Grid.Row="0" Style="{StaticResource HeaderBar}">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,32,0">
+                    <TextBlock Text="TRAIN CONTROLLER" Style="{StaticResource HeaderTitle}"/>
+                    <TextBlock Text="Driver / Engineer" Style="{StaticResource HeaderSubtitle}"/>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,20,0">
+                    <TextBlock Text="Selected train" Style="{StaticResource HeaderLabel}"/>
+                    <ComboBox Width="190"
+                              ItemsSource="{Binding Trains}"
+                              SelectedItem="{Binding SelectedTrain}"
+                              DisplayMemberPath="Display"/>
+                </StackPanel>
+
+                <Border DockPanel.Dock="Left">
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource HeaderBadge}">
+                            <Setter Property="Background" Value="{StaticResource GoodBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Status.IsHardware}" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource InfoBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding Status.ControllerSource}" Style="{StaticResource HeaderBadgeText}"/>
+                </Border>
+
+                <Border DockPanel.Dock="Left" Style="{StaticResource HeaderBadge}">
+                    <TextBlock Text="{Binding InputSourceText}" Style="{StaticResource HeaderBadgeText}"/>
+                </Border>
+
+                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <TextBlock Text="Simulation time" Style="{StaticResource HeaderLabel}" HorizontalAlignment="Right"/>
+                    <TextBlock Text="{Binding HeaderTimeText}" Style="{StaticResource HeaderClock}" HorizontalAlignment="Right"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ============================== BODY ============================== -->
+        <Grid Grid.Row="1" Margin="8,8,8,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="360"/>
             </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Commanded speed (m/s):" Margin="0,0,12,6" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CommandedSpeedMetersPerSecond}" Margin="0,0,0,6" />
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Authority (m):" Margin="0,0,12,6" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AuthorityMeters}" Margin="0,0,0,6" />
+                <!-- Station & authority guidance -->
+                <Border Grid.Row="0" Style="{StaticResource Panel}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeader}">
+                            <DockPanel>
+                                <TextBlock Text="Station &amp; Authority Guidance" Style="{StaticResource PanelTitle}"/>
+                                <StackPanel Orientation="Horizontal" Margin="24,0,0,0" VerticalAlignment="Center">
+                                    <Ellipse Style="{StaticResource LegendDot}" Fill="{StaticResource InfoBrush}"/>
+                                    <TextBlock Text="Train" Style="{StaticResource LegendText}" Foreground="{StaticResource InfoBrush}"/>
+                                    <Ellipse Style="{StaticResource LegendDot}" Fill="{StaticResource WarningBrush}"/>
+                                    <TextBlock Text="Brake point" Style="{StaticResource LegendText}" Foreground="{StaticResource WarningBrush}"/>
+                                    <Ellipse Style="{StaticResource LegendDot}" Fill="{StaticResource DangerBrush}"/>
+                                    <TextBlock Text="Authority end" Style="{StaticResource LegendText}" Foreground="{StaticResource DangerBrush}"/>
+                                    <Ellipse Style="{StaticResource LegendDot}" Fill="{StaticResource PlatformBrush}"/>
+                                    <TextBlock Text="Station" Style="{StaticResource LegendText}" Foreground="{StaticResource PlatformBrush}"/>
+                                </StackPanel>
+                                <TextBlock DataContext="{Binding Status.StationGuidance}" Style="{StaticResource ToneText}"
+                                           HorizontalAlignment="Right" FontSize="13"/>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock DockPanel.Dock="Bottom" Margin="10,0,10,6" Style="{StaticResource MutedText}">
+                            <Run Text="Manual: guidance is advisory — the driver brakes. Automatic: the controller brakes for the station. Authority protection is always automatic."/>
+                        </TextBlock>
+                        <controls:GuidanceBar Model="{Binding Status.Guidance}" Height="120" Margin="8,4"/>
+                    </DockPanel>
+                </Border>
+
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Speed readouts -->
+                    <Border Grid.Column="0" Style="{StaticResource Panel}">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeader}">
+                                <DockPanel>
+                                    <TextBlock Text="Speed" Style="{StaticResource PanelTitle}"/>
+                                    <TextBlock DataContext="{Binding Status.TrainState}" Style="{StaticResource ToneText}" HorizontalAlignment="Right"/>
+                                </DockPanel>
+                            </Border>
+                            <StackPanel Margin="14,10">
+                                <TextBlock Text="Actual speed" Style="{StaticResource KeyLabelText}"/>
+                                <TextBlock Text="{Binding Status.ActualSpeed.Text}" Style="{StaticResource BigValueText}" FontSize="34" Margin="0,0,0,10"/>
+                                <UniformGrid Columns="2">
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="Effective target" Style="{StaticResource KeyLabelText}"/>
+                                        <TextBlock Text="{Binding Status.EffectiveTargetSpeed.Text}" Style="{StaticResource BigValueText}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="limited by " Style="{StaticResource MutedText}"/>
+                                            <TextBlock DataContext="{Binding Status.TargetLimitedBy}" Style="{StaticResource ToneText}" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="Authorized speed" Style="{StaticResource KeyLabelText}"/>
+                                        <TextBlock Text="{Binding Status.AuthorizedSpeed.Text}" Style="{StaticResource BigValueText}"/>
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="Driver requested" Style="{StaticResource KeyLabelText}"/>
+                                        <TextBlock Text="{Binding Status.DriverRequestedSpeed.Text}" Style="{StaticResource BigValueText}"/>
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="Commanded power" Style="{StaticResource KeyLabelText}"/>
+                                        <TextBlock Text="{Binding Status.CommandedPower.Text}" Style="{StaticResource BigValueText}"/>
+                                        <TextBlock DataContext="{Binding Status.PowerStatus}" Style="{StaticResource ToneText}" FontSize="11"/>
+                                    </StackPanel>
+                                </UniformGrid>
+                                <TextBlock Text="{Binding Status.GainsWarning}" Style="{StaticResource WarningText}" Margin="0,14,0,0"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Driver controls -->
+                    <Border Grid.Column="2" Style="{StaticResource Panel}">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeader}">
+                                <TextBlock Text="Driver Controls" Style="{StaticResource PanelTitle}"/>
+                            </Border>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="14,8">
+                                    <TextBlock Text="CONTROL MODE" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Content="Manual" GroupName="Mode" IsChecked="{Binding IsManual}" Style="{StaticResource FlatToggleButton}" MinWidth="90"/>
+                                        <RadioButton Content="Automatic" GroupName="Mode" IsChecked="{Binding IsAutomatic}" Style="{StaticResource FlatToggleButton}" MinWidth="90"/>
+                                    </StackPanel>
+
+                                    <TextBlock Text="REQUESTED SPEED (MANUAL ONLY)" Style="{StaticResource SectionLabel}"/>
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding IsManual}">
+                                        <TextBox Width="80" TextAlignment="Right"
+                                                 Text="{Binding RequestedSpeedText, UpdateSourceTrigger=PropertyChanged}">
+                                            <TextBox.InputBindings>
+                                                <KeyBinding Key="Enter" Command="{Binding ApplyRequestedSpeedCommand}"/>
+                                            </TextBox.InputBindings>
+                                        </TextBox>
+                                        <TextBlock Text="mph" Style="{StaticResource KeyLabelText}" Margin="6,0,10,0"/>
+                                        <Button Content="Set" Command="{Binding ApplyRequestedSpeedCommand}" Style="{StaticResource FlatButton}"/>
+                                        <TextBlock Text="{Binding NominalMaxSpeedText}" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock DataContext="{Binding RequestedSpeedMessage}" Style="{StaticResource ToneText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock Style="{StaticResource MutedText}" Margin="0,2,0,0"
+                                               Text="The request is one constraint: the controller's effective target also obeys authorized speed, authority and safety limits. Automatic mode ignores it."/>
+
+                                    <TextBlock Text="BRAKES" Style="{StaticResource SectionLabel}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ToggleButton Content="Service brake" IsChecked="{Binding ServiceBrakeRequested}" Style="{StaticResource FlatToggleButton}"/>
+                                        <Button Content="EMERGENCY BRAKE" Command="{Binding EmergencyBrakeCommand}" Style="{StaticResource DangerButton}"/>
+                                        <Button Content="E-brake reset" Command="{Binding EmergencyBrakeResetCommand}" Style="{StaticResource FlatButton}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding PendingPressText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+
+                                    <TextBlock Text="DOORS / LIGHTS" Style="{StaticResource SectionLabel}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ToggleButton Content="Left doors open" IsChecked="{Binding LeftDoorsOpenRequested}" IsEnabled="{Binding IsManual}" Style="{StaticResource FlatToggleButton}"/>
+                                        <ToggleButton Content="Right doors open" IsChecked="{Binding RightDoorsOpenRequested}" IsEnabled="{Binding IsManual}" Style="{StaticResource FlatToggleButton}"/>
+                                        <ToggleButton Content="Exterior lights" IsChecked="{Binding ExteriorLightsRequested}" Style="{StaticResource FlatToggleButton}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Automatic mode: station logic controls the doors. Doors never open while moving." Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+
+                                    <TextBlock Text="ANNOUNCEMENT" Style="{StaticResource SectionLabel}"/>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Announce" Command="{Binding AnnounceCommand}" Style="{StaticResource FlatButton}" Margin="6,0,0,0"/>
+                                        <TextBox Text="{Binding AnnouncementText, UpdateSourceTrigger=PropertyChanged}">
+                                            <TextBox.InputBindings>
+                                                <KeyBinding Key="Enter" Command="{Binding AnnounceCommand}"/>
+                                            </TextBox.InputBindings>
+                                        </TextBox>
+                                    </DockPanel>
+                                    <TextBlock Text="{Binding Status.PendingAnnouncement}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+                                    <TextBlock Style="{StaticResource MutedText}" Margin="0,2,0,0"
+                                               Text="Sent once on the next tick, in Manual or Automatic. Automatic announcements: once when a new beacon names the next station, once on arrival."/>
+
+                                    <TextBlock Text="CABIN TEMPERATURE" Style="{StaticResource SectionLabel}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBox Width="70" Text="{Binding CabinSetpointText}"/>
+                                        <TextBlock Text="°F" Style="{StaticResource KeyLabelText}" Margin="4,0,10,0"/>
+                                        <Button Content="Set" Command="{Binding ApplyCabinSetpointCommand}" Style="{StaticResource FlatButton}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding InputMessage}" Style="{StaticResource WarningText}" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- Right: Train Status cards (like "Line Status") -->
+            <Border Grid.Column="2" Style="{StaticResource Panel}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource PanelHeader}">
+                        <StackPanel>
+                            <TextBlock Text="Train Status" Style="{StaticResource PanelTitle}"/>
+                            <TextBlock Text="{Binding SelectedTrainId}" Style="{StaticResource MutedText}"/>
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="8">
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Controller" Style="{StaticResource CardTitle}"/>
+                                    <controls:KeyValueRow Label="Source" Display="{Binding Status.ControllerSource, Converter={x:Static controls:TextToDisplayValueConverter.Instance}}"/>
+                                    <controls:KeyValueRow Label="Pi link" Display="{Binding Status.HardwareLink}"/>
+                                    <controls:KeyValueRow Label="Train" Display="{Binding Status.TrainState}"/>
+                                    <controls:KeyValueRow Label="Fault" Display="{Binding Status.Fault}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Movement" Style="{StaticResource CardTitle}"/>
+                                    <controls:KeyValueRow Label="Actual speed" Display="{Binding Status.ActualSpeed}"/>
+                                    <controls:KeyValueRow Label="Driver requested" Display="{Binding Status.DriverRequestedSpeed}"/>
+                                    <controls:KeyValueRow Label="Authorized speed" Display="{Binding Status.AuthorizedSpeed}"/>
+                                    <controls:KeyValueRow Label="Effective target" Display="{Binding Status.EffectiveTargetSpeed}"/>
+                                    <controls:KeyValueRow Label="Target limited by" Display="{Binding Status.TargetLimitedBy}"/>
+                                    <controls:KeyValueRow Label="Remaining authority" Display="{Binding Status.RemainingAuthority}"/>
+                                    <controls:KeyValueRow Label="Commanded power" Display="{Binding Status.CommandedPower}"/>
+                                    <controls:KeyValueRow Label="Power status" Display="{Binding Status.PowerStatus}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Brakes" Style="{StaticResource CardTitle}"/>
+                                    <controls:KeyValueRow Label="Service brake" Display="{Binding Status.ServiceBrake}"/>
+                                    <controls:KeyValueRow Label="Emergency brake" Display="{Binding Status.EmergencyBrake}"/>
+                                    <controls:KeyValueRow Label="Emergency causes" Display="{Binding Status.EmergencyCauses}"/>
+                                    <controls:KeyValueRow Label="E-brake reset" Display="{Binding Status.EmergencyReset}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Station" Style="{StaticResource CardTitle}"/>
+                                    <controls:KeyValueRow Label="Next station" Display="{Binding Status.NextStation}"/>
+                                    <controls:KeyValueRow Label="Distance" Display="{Binding Status.DistanceToStation}"/>
+                                    <controls:KeyValueRow Label="Platform side" Display="{Binding Status.PlatformSide}"/>
+                                    <controls:KeyValueRow Label="Guidance" Display="{Binding Status.StationGuidance}"/>
+                                    <controls:KeyValueRow Label="Brake point" Display="{Binding Status.BrakePoint}"/>
+                                    <controls:KeyValueRow Label="Last announcement" Display="{Binding Status.Announcement}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Equipment" Style="{StaticResource CardTitle}"/>
+                                    <controls:KeyValueRow Label="Left doors" Display="{Binding Status.LeftDoors}"/>
+                                    <controls:KeyValueRow Label="Right doors" Display="{Binding Status.RightDoors}"/>
+                                    <controls:KeyValueRow Label="Exterior lights" Display="{Binding Status.ExteriorLights}"/>
+                                    <controls:KeyValueRow Label="Cabin" Display="{Binding Status.CabinTemperature}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Engineer  ·  Controller Gains (SI)" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock Style="{StaticResource MutedText}" Margin="0,0,0,6"
+                                               Text="Per-train PI gains in SI units: speed error in m/s → power in W. Gains are not converted to imperial units; both Software and Hardware controllers use this SI meaning."/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="Kp  [W per (m/s)]" Style="{StaticResource KeyLabelText}" Margin="0,2,10,2"/>
+                                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding KpText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"/>
+                                        <TextBlock Grid.Row="1" Text="Ki  [W per (m/s·s)]" Style="{StaticResource KeyLabelText}" Margin="0,2,10,2"/>
+                                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding KiText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"/>
+                                    </Grid>
+                                    <DockPanel Margin="0,6,0,0">
+                                        <Button DockPanel.Dock="Right" Content="Apply" Command="{Binding ApplyGainsCommand}" Style="{StaticResource FlatButton}" Margin="0"/>
+                                        <TextBlock Text="{Binding GainsMessage}" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                                    </DockPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
         </Grid>
-    </StackPanel>
+
+        <!-- ============================== BOTTOM: FLEET / ALERTS / LOG ============================== -->
+        <Border Grid.Row="2" Style="{StaticResource Panel}" Margin="8,8,8,4">
+            <TabControl BorderThickness="0" Background="{StaticResource PanelBrush}">
+                <TabItem Header="Fleet (all trains)">
+                    <DataGrid ItemsSource="{Binding Fleet}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Train" Binding="{Binding TrainId}" Width="110"/>
+                            <DataGridTextColumn Header="Controller" Binding="{Binding Controller}" Width="100"/>
+                            <DataGridTemplateColumn Header="State" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><TextBlock DataContext="{Binding State}" Style="{StaticResource ToneText}"/></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Actual speed" Binding="{Binding ActualSpeed}" Width="110"/>
+                            <DataGridTextColumn Header="Power" Binding="{Binding Power}" Width="100"/>
+                            <DataGridTemplateColumn Header="Brakes" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><TextBlock DataContext="{Binding Brakes}" Style="{StaticResource ToneText}"/></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Status" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><TextBlock DataContext="{Binding Status}" Style="{StaticResource ToneText}" TextTrimming="CharacterEllipsis"/></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Alerts (selected train)">
+                    <ListBox ItemsSource="{Binding Alerts}" BorderThickness="0" Foreground="{StaticResource WarningBrush}" FontSize="12"/>
+                </TabItem>
+                <TabItem Header="Event log">
+                    <DataGrid ItemsSource="{Binding EventLog}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Time" Binding="{Binding Timestamp, StringFormat={}{0:HH:mm:ss.f}}" Width="90"/>
+                            <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="80"/>
+                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100"/>
+                            <DataGridTextColumn Header="Train" Binding="{Binding TrainId}" Width="100"/>
+                            <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+            </TabControl>
+        </Border>
+
+        <!-- ============================== STATUS BAR ============================== -->
+        <TextBlock Grid.Row="3" Text="{Binding StatusBarText}" Style="{StaticResource StatusBarText}"/>
+    </Grid>
 </Window>

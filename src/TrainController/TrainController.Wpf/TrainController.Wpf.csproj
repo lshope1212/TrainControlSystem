@@ -1,6 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\TrainController.Integration\TrainController.Integration.csproj" />
+    <ProjectReference Include="..\TrainController.Abstractions\TrainController.Abstractions.csproj" />
     <ProjectReference Include="..\TrainController.Core\TrainController.Core.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
@@ -13,5 +15,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
 </Project>

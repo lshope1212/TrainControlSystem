@@ -1,0 +1,32 @@
+<Window x:Class="TrackModel.TestUI.Wpf.LayoutWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Track Model — Captured Layout" Style="{StaticResource {x:Type Window}}"
+ Width="1360" Height="840" MinWidth="900" MinHeight="500" WindowStartupLocation="CenterOwner">
+ <DockPanel Margin="14">
+  <TextBlock DockPanel.Dock="Top" Text="Captured track layout · SI units" FontSize="28" FontWeight="Bold" Margin="0,0,0,12"/>
+  <TabControl>
+   <TabItem Header="Physical properties"><DataGrid ItemsSource="{Binding OutputBlocks}"><DataGrid.Columns>
+    <DataGridTextColumn Header="Block" Binding="{Binding Id}" Width="Auto"/>
+    <DataGridTextColumn Header="Section" Binding="{Binding Definition.Section}" Width="Auto"/>
+    <DataGridTextColumn Header="Length (m)" Binding="{Binding Definition.LengthMeters, StringFormat=0.##}" Width="Auto"/>
+    <DataGridTextColumn Header="Grade (%)" Binding="{Binding Definition.GradePercent, StringFormat=0.##}" Width="Auto"/>
+    <DataGridTextColumn Header="Elevation (m)" Binding="{Binding Definition.ElevationMeters, StringFormat=0.##}" Width="Auto"/>
+    <DataGridTextColumn Header="Limit (m/s)" Binding="{Binding Definition.SpeedLimitMetersPerSecond, StringFormat=0.###}" Width="Auto"/>
+    <DataGridTextColumn Header="Direction" Binding="{Binding Definition.TravelDirection}" Width="Auto" MinWidth="170"/>
+    <DataGridTextColumn Header="Station" Binding="{Binding Definition.StationName}" Width="*"/>
+   </DataGrid.Columns></DataGrid></TabItem>
+   <TabItem Header="Equipment and connections"><DataGrid ItemsSource="{Binding OutputBlocks}"><DataGrid.Columns>
+    <DataGridTextColumn Header="Block" Binding="{Binding Id}" Width="Auto"/>
+    <DataGridCheckBoxColumn Header="Switch" Binding="{Binding HasSwitch, Mode=OneWay}" Width="Auto"/>
+    <DataGridTextColumn Header="Normal" Binding="{Binding Definition.NormalNextBlockId}" Width="Auto"/>
+    <DataGridTextColumn Header="Reverse" Binding="{Binding Definition.ReverseNextBlockId}" Width="Auto"/>
+    <DataGridCheckBoxColumn Header="Signal" Binding="{Binding HasSignal, Mode=OneWay}" Width="Auto"/>
+    <DataGridCheckBoxColumn Header="Crossing" Binding="{Binding HasCrossing, Mode=OneWay}" Width="Auto"/>
+    <DataGridTextColumn Header="Beacon" Binding="{Binding Definition.Beacon}" Width="Auto" MinWidth="150"/>
+    <DataGridTextColumn Header="Target" Binding="{Binding Definition.BeaconTargetBlockId}" Width="Auto" MinWidth="90"/>
+    <DataGridTextColumn Header="Connected blocks" Binding="{Binding Connections}" Width="*"/>
+   </DataGrid.Columns></DataGrid></TabItem>
+  </TabControl>
+ </DockPanel>
+</Window>
