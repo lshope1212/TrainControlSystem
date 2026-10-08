@@ -103,7 +103,9 @@
                                 <ComboBox Grid.Row="2"
                                           Grid.Column="1"
                                           ItemsSource="{Binding BlockStatusInput.SignalOptions}"
-                                          SelectedItem="{Binding BlockStatusInput.SelectedSignal}"
+                                          DisplayMemberPath="Value"
+                                          SelectedValuePath="Key"
+                                          SelectedValue="{Binding BlockStatusInput.SelectedSignal}"
                                           Margin="0,0,0,6"/>
 
 

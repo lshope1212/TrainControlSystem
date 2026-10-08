@@ -47,7 +47,7 @@ public class BlockViewModel : ViewModelBase
 
     public string? SwitchStatus => _block.HasSwitch ? _block.Switch.ToString() : null;
 
-    public string? SignalStatus => _block.HasSignal ? _block.Signal.ToString() : null;
+    public string? SignalStatus => _block.HasSignal ? _block.Signal.ToDisplayName() : null;
 
     public string? CrossingStatus => _block.HasCrossing ? _block.Crossing.ToString() : null;
 
