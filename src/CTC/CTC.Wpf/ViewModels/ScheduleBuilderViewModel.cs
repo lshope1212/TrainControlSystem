@@ -1,9 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.IO;
 using System.Windows.Input;
 using CTC.Core.Interfaces;
 using CTC.Core.Models;
 using CTC.Core.Scheduling;
 using CTC.Wpf.Commands;
+using Microsoft.Win32;
 
 namespace CTC.Wpf.ViewModels;
 
@@ -27,7 +30,7 @@ public class ScheduleBuilderViewModel : ViewModelBase
 
         GenerateTemplateCommand = new RelayCommand(_ => GenerateTemplate(), _ => Line is not null);
         QueueScheduleCommand = new RelayCommand(_ => QueueSchedule(), _ => _template is not null);
-        UploadScheduleCommand = new RelayCommand(_ => UploadSchedule());
+        UploadScheduleCommand = new RelayCommand(_ => UploadSchedule(), _ => Line is not null);
         ClearTemplateCommand = new RelayCommand(_ => ClearTemplateAndReport(), _ => _template is not null);
     }
 
@@ -155,11 +158,57 @@ public class ScheduleBuilderViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Loads a CSV schedule into the builder for the dispatcher to review. It is NOT queued:
+    /// the dispatcher still presses Queue Schedule, which validates it like a manual schedule.
+    /// The current template is kept if the dialog is canceled or the file is rejected.
+    /// </summary>
     private void UploadSchedule()
     {
-        // PLACEHOLDER: spreadsheet import is not implemented yet. It should fill a
-        // ScheduleTemplate and go through ScheduleTemplateConverter like the manual builder.
-        StatusMessage = "Upload Schedule is not implemented yet.";
+        if (Line is null)
+        {
+            StatusMessage = "Select a line before uploading a schedule.";
+            return;
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "Upload Schedule",
+            Filter = "CSV Schedule (*.csv)|*.csv|All files (*.*)|*.*",
+            CheckFileExists = true,
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string fileName = Path.GetFileName(dialog.FileName);
+        string csv;
+        try
+        {
+            csv = File.ReadAllText(dialog.FileName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusMessage = $"Schedule upload failed: could not read {fileName}. {ex.Message}";
+            return;
+        }
+
+        // Number after every train CTC already knows, so an imported schedule never reuses a train ID.
+        int firstTrainNumber = TrainIds.NextAvailableNumber(_ctc.State);
+        var result = ScheduleCsvImporter.Import(Line, csv, firstTrainNumber);
+        if (!result.IsSuccess)
+        {
+            StatusMessage = $"Schedule upload failed: {result.ErrorMessage}";
+            return;
+        }
+
+        var template = result.Template!;
+        ShowTemplate(template);
+        NumberOfTrainsText = template.TrainIds.Count.ToString(CultureInfo.InvariantCulture);
+        StatusMessage = $"Loaded {template.TrainIds.Count}-train schedule for {Line.Name} from {fileName}. "
+            + "Review the schedule, then press Queue Schedule.";
     }
 
     /// <summary>

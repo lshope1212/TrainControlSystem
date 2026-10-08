@@ -1,0 +1,4 @@
+Line,Section,Block Number,Train 1,Train 2,Train 3,Train 4
+Blue,A,1,12:00:00,12:03:00,12:06:00,12:09:00
+Blue,B,10,12:00:36,,12:06:36,
+Blue,C,15,,12:03:36,,12:09:36

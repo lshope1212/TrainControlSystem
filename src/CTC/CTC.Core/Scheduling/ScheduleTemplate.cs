@@ -2,8 +2,8 @@ namespace CTC.Core.Scheduling;
 
 /// <summary>
 /// A schedule in spreadsheet form: one row per block of a line, one time column per
-/// train. Both the manual Schedule Builder and a future spreadsheet import fill one of
-/// these, and <see cref="ScheduleTemplateConverter"/> turns it into the normalized
+/// train. Both the manual Schedule Builder and the CSV import
+/// (<see cref="ScheduleCsvImporter"/>) fill one of these, and <see cref="ScheduleTemplateConverter"/> turns it into the normalized
 /// <see cref="Models.ScheduledTrain"/> objects CTC actually stores. The template itself
 /// is an input format only; it is never kept in <see cref="Models.CtcSystemState"/>.
 /// </summary>

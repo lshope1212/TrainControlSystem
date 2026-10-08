@@ -1,548 +1,774 @@
-You are working in the `TrainControlSystem` repository, primarily on the current `Luke_CTC` branch.
+I need you to implement CSV schedule uploading for the CTC module in the TrainControlSystem repository.
 
-There is one small UI/communication-display cleanup needed.
+Work against the current state of my `Luke_CTC` branch and inspect the existing implementation before making changes.
+
+Repository:
+`lshope1212/TrainControlSystem`
+
+Focus primarily on:
+
+- `src/CTC/CTC.Core/Scheduling/`
+- `src/CTC/CTC.Wpf/ViewModels/ScheduleBuilderViewModel.cs`
+- the existing Schedule Builder UI in `CTC.Wpf/MainWindow.xaml`
+- existing CTC schedule tests under `tests/TrainControl.Tests/CTC/`
 
 ## Goal
 
-Anywhere the application displays a message type to a human, it should display a **normal English name** rather than the C# contract class name.
+The existing CTC Schedule Builder already supports:
 
-For example:
+1. Generating a `ScheduleTemplate`
+2. Manually entering times into the table
+3. Converting the template using `ScheduleTemplateConverter`
+4. Queueing the resulting schedule with `ICTCService.QueueSchedule(...)`
+5. Clearing the current builder
 
-Current:
+There is also already an `UploadScheduleCommand`, but `UploadSchedule()` is currently only a placeholder.
 
-```text
-Inbound: Received TicketSalesMessage.
-```
+Implement this command so a dispatcher can select a `.csv` schedule file and have it populate the existing Schedule Builder table.
 
-Desired:
+**Uploading a schedule must NOT immediately queue or dispatch it.**
 
-```text
-Inbound: Received Ticket sales.
-```
-
-Similarly, the CTC TestUI should not show message class names such as:
+The required workflow is:
 
 ```text
-MovementSuggestionMessage
-MaintenanceRequestMessage
-BlockStatusMessage
+CSV file
+   ↓
+parse CSV
+   ↓
+create normal ScheduleTemplate from current track layout
+   ↓
+overlay imported schedule times
+   ↓
+ShowTemplate(...)
+   ↓
+dispatcher reviews/edits schedule
+   ↓
+existing "Queue Schedule" button
+   ↓
+existing ScheduleTemplateConverter
+   ↓
+CTC queue
 ```
 
-in its communication status or captured outbound-message table.
+Do not create a second scheduling or routing system.
 
-Instead display:
-
-```text
-Movement suggestion
-Maintenance request
-Block status
-```
-
-This is strictly a **presentation/display change**.
-
-DO NOT rename the actual message classes.
-
-DO NOT change `MessageEnvelope.MessageType`.
-
-DO NOT change serialization/deserialization behavior.
-
-The internal communication layer should continue using class names such as `TicketSalesMessage` exactly as it does now.
+The existing `ScheduleTemplateFactory`, `ScheduleTemplate`, `ScheduleTemplateConverter`, and `ICTCService.QueueSchedule()` must remain the single scheduling pipeline.
 
 ---
 
-# 1. Add one centralized message-display-name formatter
+# CSV FORMAT
 
-Do not scatter string replacements throughout CTC.Wpf and CTC.TestUI.Wpf.
+For this iteration, schedules use this format:
 
-Create a small reusable helper in an appropriate shared location, preferably under:
+```csv
+Line,Section,Block Number,Train 1,Train 2,Train 3,Train 4
+Blue,A,1,12:00:00,12:03:00,12:06:00,12:09:00
+Blue,B,10,12:00:36,,12:06:36,
+Blue,C,15,,12:03:36,,12:09:36
+```
+
+The first three columns are required:
 
 ```text
-src/Shared/TrainControl.Common/Communication/
+Line
+Section
+Block Number
 ```
 
-For example:
-
-```text
-MessageDisplayNameFormatter.cs
-```
-
-or a similarly clear name.
-
-It should take the internal message type name as a string:
-
-```csharp
-string ToDisplayName(string messageType)
-```
-
-and return the human-readable name.
-
-This allows both the real CTC application and the TestUI to use the same conversion logic.
-
-The shared formatter should NOT change the internal message type.
-
-For example:
-
-```csharp
-MessageDisplayNameFormatter.ToDisplayName("TicketSalesMessage")
-```
-
-returns:
-
-```text
-Ticket sales
-```
-
----
-
-# 2. Human-readable mappings
-
-Inspect all actual message contracts under:
-
-```text
-src/Shared/TrainControl.Contracts/Messages/
-```
-
-and ensure message types that can appear to the user have readable names.
-
-At minimum, the current messages should display approximately as:
-
-```text
-AuthorityMessage              -> Authority
-BlockStatusMessage            -> Block status
-MaintenanceRequestMessage     -> Maintenance request
-MovementRequestMessage        -> Movement request
-MovementSuggestionMessage     -> Movement suggestion
-SpeedCommandMessage           -> Speed command
-SwitchPositionRequestMessage  -> Switch position request
-SystemTimeMessage             -> System time
-TicketSalesMessage            -> Ticket sales
-TrackLayoutMessage            -> Track layout
-```
-
-If there are additional actual message contracts in the repository, include them as well.
-
-Classes such as `TrackBlockDefinition` and `TrackLineDefinition` that are nested data definitions rather than independently transmitted messages do not necessarily need special mappings unless they are actually shown as message types somewhere.
-
----
-
-# 3. Provide a safe fallback
-
-Do not return the ugly raw class name for a new/unknown message if possible.
-
-The formatter should have a reasonable fallback that:
-
-1. removes a trailing `Message`
-2. splits PascalCase words
-3. produces readable sentence-style text
+Every remaining column represents one train.
 
 For example:
 
 ```text
-SomeFutureStatusMessage
+Train 1
+Train 2
+Train 3
+Train 4
 ```
 
-could become:
+The actual text of the train column headers is only descriptive.
 
-```text
-Some future status
-```
+DO NOT use those strings as the real CTC TrainIds.
 
-That way adding a new contract later does not immediately put raw C# class names into the UI.
-
-Explicit mappings are still preferred for current message types where wording matters.
-
----
-
-# 4. Update CTC inbound status
-
-Inspect:
-
-```text
-src/CTC/CTC.Wpf/Services/CtcNamedPipeReceiver.cs
-```
-
-Currently, after a message is successfully processed, it reports approximately:
+CTC must continue generating TrainIds using its existing mechanism:
 
 ```csharp
-status = $"Received {envelope.MessageType}.";
-```
-
-This is what eventually appears through `MainWindowViewModel.InboundStatus` in the real CTC status bar.
-
-Change the **display text only** so it uses the human-readable message name.
-
-Example:
-
-```text
-Received TicketSalesMessage.
-```
-
-becomes:
-
-```text
-Received Ticket sales.
-```
-
-And:
-
-```text
-Received BlockStatusMessage.
-```
-
-becomes:
-
-```text
-Received Block status.
-```
-
-Likewise, if an inbound message is rejected, do not show an ugly class name.
-
-Current conceptual form:
-
-```text
-Rejected BlockStatusMessage: ...
-```
-
-Desired:
-
-```text
-Rejected Block status: ...
-```
-
-Unknown-message diagnostic behavior can retain the raw type internally if that is useful for debugging, but anything intended for the normal user-facing CTC status bar should be readable English.
-
-Do not modify the switch statement that routes messages based on:
-
-```csharp
-nameof(BlockStatusMessage)
-nameof(TrackLayoutMessage)
-...
-```
-
-Those names are part of the internal communication protocol and should remain unchanged.
-
----
-
-# 5. Update TestUI send-result messages
-
-Inspect:
-
-```text
-src/CTC/CTC.TestUI.Wpf/ViewModels/CtcInputViewModelBase.cs
-```
-
-It currently gets:
-
-```csharp
-var messageType = typeof(TMessage).Name;
-```
-
-and uses it in results such as:
-
-```text
-TicketSalesMessage sent to CTC.
-```
-
-Keep `typeof(TMessage).Name` available internally if needed, but convert it before showing it to the user.
-
-Desired examples:
-
-```text
-Ticket sales sent to CTC.
-Block status sent to CTC for Block A1.
-Track layout sent to CTC.
-System time sent to CTC.
-```
-
-Errors should also use the readable name.
-
-Instead of:
-
-```text
-Unable to send TicketSalesMessage: ...
-```
-
-display:
-
-```text
-Unable to send Ticket sales: ...
-```
-
-Continue using the existing `CommunicationStatusViewModel.ReportCtcSend(...)` flow.
-
----
-
-# 6. Update TestUI communication-status area
-
-Inspect:
-
-```text
-src/CTC/CTC.TestUI.Wpf/ViewModels/CommunicationStatusViewModel.cs
-```
-
-The fake Track Controller listener currently displays something conceptually like:
-
-```text
-Last received: MovementSuggestionMessage at 11:15:03.
-```
-
-Change it to:
-
-```text
-Last received: Movement suggestion at 11:15:03.
-```
-
-Likewise:
-
-```text
-Last received: Maintenance request at ...
-Last received: Movement request at ...
-```
-
-Use the same centralized formatter.
-
----
-
-# 7. Update Captured CTC Outputs table
-
-The TestUI's outbound/captured section is especially important.
-
-Inspect:
-
-```text
-src/CTC/CTC.TestUI.Wpf/Models/RecordedMessage.cs
+TrainIds.NextAvailableNumber(_ctc.State)
 ```
 
 and:
 
-```text
-src/CTC/CTC.TestUI.Wpf/ViewModels/CapturedOutputsViewModel.cs
+```csharp
+ScheduleTemplateFactory.Create(...)
 ```
 
-Currently `RecordedMessage.FromEnvelope(...)` uses:
+For example, if four train IDs are currently available starting at 000, the imported columns become:
+
+```text
+Train 000
+Train 001
+Train 002
+Train 003
+```
+
+regardless of the CSV header labels.
+
+---
+
+# IMPORTANT: SPARSE SCHEDULE FORMAT
+
+The CSV intentionally does NOT need one row for every track block.
+
+It contains only blocks at which the dispatcher explicitly specifies a time.
+
+For example, the provided Blue Line schedule contains:
+
+```text
+A1
+B10
+C15
+```
+
+but the actual Blue Line contains all 15 blocks.
+
+The importer must therefore:
+
+1. Generate a complete `ScheduleTemplate` using the current selected line and `ScheduleTemplateFactory`.
+2. Match each CSV row to its corresponding generated template row.
+3. Copy the train times from the CSV into that row's `TrainTimes[]`.
+4. Leave every other generated block row blank.
+
+This allows the existing `ScheduleTemplateConverter` to determine the route through the untimed intermediate blocks.
+
+DO NOT construct routes in the CSV importer.
+
+Routing remains the responsibility of the existing scheduling code.
+
+---
+
+# CURRENT BLUE LINE
+
+The TestUI currently sends the Blue Line.
+
+It contains:
+
+```text
+A1
+A2
+A3
+A4
+A5
+
+B6
+B7
+B8
+B9
+B10   Station B
+
+C11
+C12
+C13
+C14
+C15   Station C
+```
+
+A5 branches to either:
+
+```text
+A5 -> B6 -> B7 -> B8 -> B9 -> B10
+```
+
+or:
+
+```text
+A5 -> C11 -> C12 -> C13 -> C14 -> C15
+```
+
+The uploaded sample therefore deliberately sends some trains to B10 and some to C15.
+
+Do not hardcode any of this topology into the CSV importer.
+
+The current `CtcLineState` / generated `ScheduleTemplate` is the source of truth.
+
+---
+
+# CORE IMPORTER
+
+Create a small CSV importer in:
+
+```text
+src/CTC/CTC.Core/Scheduling/
+```
+
+A reasonable design would be something such as:
+
+```text
+ScheduleCsvImporter.cs
+ScheduleCsvImportResult.cs
+```
+
+Use whatever naming fits the existing codebase, but keep parsing and schedule construction out of the WPF ViewModel as much as practical.
+
+The importer should conceptually accept:
 
 ```csharp
-envelope.MessageType
+CtcLineState line
+string csv contents
+int firstTrainNumber
 ```
 
-directly as the displayed `MessageType`.
-
-As a result, the TestUI table shows class names such as:
+and return either:
 
 ```text
-MovementSuggestionMessage
-MovementRequestMessage
-MaintenanceRequestMessage
-SwitchPositionRequestMessage
+successful ScheduleTemplate
 ```
 
-Change the **displayed value** to the readable equivalent:
+or:
 
 ```text
-Movement suggestion
-Movement request
-Maintenance request
-Switch position request
+clear dispatcher-readable error message
 ```
 
-For example, `RecordedMessage.FromEnvelope(...)` could convert:
+Follow the same general result-oriented style already used by `ScheduleTemplateConverter` if that fits naturally.
+
+Do not modify CTC system state from the importer.
+
+---
+
+# IMPORT PROCESS
+
+The importer should do approximately this:
+
+## 1. Parse header
+
+Require at least:
+
+```text
+Line,Section,Block Number,<one train column>
+```
+
+There must be at least one train column.
+
+All columns after `Block Number` represent trains.
+
+Ignore leading/trailing whitespace around textual fields.
+
+Blank lines in the CSV should be ignored.
+
+---
+
+## 2. Validate line
+
+The CSV's Line field must correspond to the currently selected line.
+
+For this iteration the selected line will normally be:
+
+```text
+LineId = BLUE
+Name = Blue Line
+```
+
+The CSV uses:
+
+```text
+Blue
+```
+
+Accept reasonable case-insensitive equivalents such as:
+
+```text
+Blue
+BLUE
+Blue Line
+```
+
+Do not allow a Red or Green schedule to populate the Blue Line builder.
+
+Return a clear error such as:
+
+```text
+Schedule is for Red Line, but Blue Line is currently selected.
+```
+
+---
+
+## 3. Determine train count
+
+The number of train columns determines the number of trains.
+
+Example:
+
+```text
+Line,Section,Block Number,Train 1,Train 2,Train 3,Train 4
+```
+
+means:
+
+```text
+trainCount = 4
+```
+
+---
+
+## 4. Generate the real template
+
+Use the existing factory:
 
 ```csharp
-envelope.MessageType
+int firstTrainNumber = TrainIds.NextAvailableNumber(_ctc.State);
+
+ScheduleTemplate template =
+    ScheduleTemplateFactory.Create(
+        line,
+        trainCount,
+        firstTrainNumber);
 ```
 
-through the centralized formatter before assigning the displayed `MessageType`.
+Do not manually duplicate track information from the CSV.
 
-It is fine for `RecordedMessage.MessageType` to remain a string property; it should simply contain the readable presentation value.
+Properties such as:
 
-Do NOT modify the actual `MessageEnvelope`.
+- BlockId
+- Section
+- block number
+- length
+- infrastructure
+- station name
+- speed limit
+- connections
+- route start
+
+must continue coming from the currently loaded CTC track layout.
 
 ---
 
-# 8. Keep the payload information intact
+## 5. Match CSV rows to blocks
 
-The Captured CTC Outputs table currently has columns similar to:
-
-```text
-#
-Captured At
-Message Type
-Payload
-```
-
-Keep the payload information.
-
-The main purpose of this task is to replace raw **message class/type names** with readable English.
-
-Do not remove useful payload details such as train ID, authority, requested state, etc.
-
-If there are extremely obvious user-facing property labels that can be made more readable without changing behavior, that is acceptable, but do not turn this into a large payload-formatting redesign.
-
-The priority is:
+Each CSV row identifies a block using:
 
 ```text
-MovementSuggestionMessage
+Section + Block Number
 ```
 
-must no longer be exposed directly to the user.
-
----
-
-# 9. Expected examples
-
-After this change, examples throughout the UI should look like:
-
-### Real CTC inbound status
+For example:
 
 ```text
-Inbound: Received Track layout.
+A,1
+B,10
+C,15
 ```
 
-```text
-Inbound: Received Block status.
-```
+Find the corresponding generated `ScheduleTemplateRow`.
 
-```text
-Inbound: Received Ticket sales.
-```
-
-```text
-Inbound: Received System time.
-```
-
-### TestUI sending to CTC
-
-```text
-Ticket sales sent to CTC.
-```
-
-```text
-Block status sent to CTC for Block A1.
-```
-
-```text
-Track layout sent to CTC.
-```
-
-### TestUI fake Track Controller status
-
-Instead of:
-
-```text
-Last received: MovementSuggestionMessage at 11:20:04.
-```
-
-show:
-
-```text
-Last received: Movement suggestion at 11:20:04.
-```
-
-### Captured CTC Outputs table
-
-Instead of:
-
-```text
-Message Type
-MovementSuggestionMessage
-MovementRequestMessage
-MaintenanceRequestMessage
-```
-
-show:
-
-```text
-Message Type
-Movement suggestion
-Movement request
-Maintenance request
-```
-
----
-
-# 10. Architecture constraints
-
-This is a presentation-layer cleanup.
-
-DO NOT:
-
-- rename any shared message classes
-- rename `MessageEnvelope.MessageType`
-- modify JSON serialization identifiers
-- modify named-pipe routing identifiers
-- replace `nameof(SomeMessage)` in receiver routing with display strings
-- change the actual inter-module communication protocol
-- duplicate separate message-name dictionaries throughout the projects
-- change CTC business behavior
-- change scheduling, dispatch, maintenance, ticket sales, track-layout, or block-status logic
-
-The important distinction is:
-
-```text
-Internal/protocol name:
-TicketSalesMessage
-
-Human-readable display name:
-Ticket sales
-```
-
-The internal name stays exactly the same.
-
----
-
-# 11. Prefer one reusable solution
-
-Please search for every place in the CTC and CTC TestUI projects where any of these are directly displayed:
+Do not assume BlockId format unless necessary. Prefer matching the existing row using its:
 
 ```csharp
-envelope.MessageType
-typeof(TMessage).Name
-nameof(...Message)
+Section
+BlockNumber
 ```
 
-Also search for string interpolation involving message type/class names.
+properties.
 
-Any value used for routing, serialization, logging/debugging, or type comparisons should remain unchanged.
-
-Any value presented to an end user should use the common human-readable formatter.
-
-Do not perform blind replacements.
+Matching Section should be case-insensitive.
 
 ---
 
-# 12. Verification
+## 6. Copy train times
 
-After implementation:
+For every train column:
 
-1. Build the full solution.
-2. Fix any compile errors introduced by this change.
-3. Launch CTC.Wpf and CTC.TestUI.Wpf if practical.
-4. Send the sample Track Layout.
-5. Send a Block Status.
-6. Send Ticket Sales.
-7. Send/System-time updates.
-8. Cause CTC to dispatch a train so Movement Suggestion and Movement Request are captured.
-9. Exercise a maintenance or switch request.
-
-Verify that no normal user-facing CTC/TestUI display shows values like:
-
-```text
-TicketSalesMessage
-BlockStatusMessage
-TrackLayoutMessage
-SystemTimeMessage
-MovementSuggestionMessage
-MovementRequestMessage
-MaintenanceRequestMessage
-SwitchPositionRequestMessage
+```csharp
+templateRow.TrainTimes[column] = importedValue;
 ```
 
-They should all appear as readable English.
+Blank cells should remain:
 
-At the end, give me a concise summary of:
+```csharp
+string.Empty
+```
 
-- files changed
-- where the shared formatter was placed
-- which message mappings were added
-- every UI/status location changed
-- confirmation that protocol/serialization names were not changed
+Do not invent or interpolate arrival times.
+
+Do not calculate intermediate block times.
+
+Do not build routes here.
+
+That is handled by the existing converter.
+
+---
+
+# STRUCTURAL IMPORT VALIDATION
+
+The importer should reject clearly malformed files.
+
+Handle at least:
+
+### Missing required columns
+
+Example:
+
+```text
+Schedule upload failed: required columns Line, Section, and Block Number were not found.
+```
+
+### No train columns
+
+```text
+Schedule upload failed: the schedule contains no train columns.
+```
+
+### Invalid block number
+
+```text
+Schedule upload failed: 'ABC' is not a valid block number.
+```
+
+### Unknown block
+
+Example:
+
+```text
+Schedule upload failed: block B99 does not exist on Blue Line.
+```
+
+### Duplicate block rows
+
+Example:
+
+```text
+Schedule upload failed: block B10 appears more than once.
+```
+
+### Wrong line
+
+Example:
+
+```text
+Schedule upload failed: schedule is for Red Line, but Blue Line is selected.
+```
+
+### Inconsistent row column counts / malformed CSV
+
+Return a readable error rather than crashing the application.
+
+---
+
+# TIME VALIDATION
+
+Do NOT duplicate all scheduling validation in the CSV parser.
+
+The importer primarily validates the CSV's STRUCTURE.
+
+The existing `ScheduleTemplateConverter` should remain responsible for validating scheduling semantics when the user presses Queue Schedule, including things such as:
+
+- `HH:mm:ss` formatting
+- missing route-start time
+- times increasing properly
+- unreachable blocks
+- using both branches incorrectly
+- route continuity
+
+This means an imported value such as:
+
+```text
+12:8
+```
+
+may populate the editable Schedule Builder, but pressing Queue Schedule should produce the existing converter error.
+
+This preserves one source of scheduling validation.
+
+---
+
+# WPF FILE PICKER
+
+Implement the existing:
+
+```csharp
+UploadSchedule()
+```
+
+in `ScheduleBuilderViewModel`.
+
+When the user presses **Upload Schedule**:
+
+1. Require a selected line.
+2. Open a normal WPF file selection dialog.
+3. Filter primarily to:
+
+```text
+CSV Schedule (*.csv)|*.csv
+```
+
+4. If the user cancels, leave the current schedule untouched.
+5. Read the selected file.
+6. Run it through the CSV importer.
+7. If import succeeds:
+   - call the existing `ShowTemplate(template)`
+   - set `NumberOfTrainsText` to the imported train count
+   - show an appropriate success message
+8. If import fails:
+   - display the importer error through `StatusMessage`
+   - DO NOT destroy the schedule currently being edited
+
+A good success message would be something like:
+
+```text
+Loaded 4-train schedule for Blue Line from BlueLineSampleSchedule.csv. Review the schedule, then press Queue Schedule.
+```
+
+The uploader must never crash the WPF app because of a bad file.
+
+Handle file access exceptions and show a readable message.
+
+---
+
+# IMPORTANT USER EXPERIENCE BEHAVIOR
+
+Uploading a valid schedule should immediately populate the existing Schedule Builder grid.
+
+For the supplied example, after upload the grid should still contain all 15 Blue Line rows generated from the track layout.
+
+The visible train columns should be the normal generated CTC train IDs.
+
+The imported values should appear approximately as:
+
+```text
+             Train 000   Train 001   Train 002   Train 003
+
+A1           12:00:00    12:03:00    12:06:00    12:09:00
+
+B10          12:00:36                12:06:36
+
+C15                      12:03:36                12:09:36
+```
+
+All other block/time cells should be blank.
+
+The user may then manually edit those values before pressing Queue Schedule.
+
+---
+
+# QUEUE BEHAVIOR
+
+Do not change the existing Queue Schedule architecture.
+
+The existing flow should remain:
+
+```csharp
+var result = ScheduleTemplateConverter.Convert(_template);
+
+if (result.IsSuccess)
+{
+    _ctc.QueueSchedule(result.Trains);
+}
+```
+
+The uploaded schedule should behave identically to one manually created in the Schedule Builder.
+
+---
+
+# EXISTING TEMPLATE HANDLING
+
+If a valid CSV is uploaded while another template is currently displayed:
+
+- replace the existing builder template with the imported one.
+
+If the import FAILS:
+
+- preserve the currently displayed template.
+
+If the file picker is canceled:
+
+- preserve the currently displayed template.
+
+The existing Clear Schedule functionality should continue working normally after an import.
+
+---
+
+# CSV PARSING IMPLEMENTATION
+
+Do not add a heavy Excel or spreadsheet dependency.
+
+Do not add support for `.xlsx`.
+
+Only `.csv` is required for this iteration.
+
+Prefer built-in .NET functionality and avoid adding a NuGet package solely for this small parser.
+
+However, do not implement parsing with a naive:
+
+```csharp
+line.Split(',')
+```
+
+if that makes quoted CSV fields break.
+
+Use a lightweight correct CSV parsing approach available in the existing .NET environment, or implement a small focused parser that correctly handles standard quoted CSV values.
+
+Keep the implementation understandable for a student engineering project.
+
+---
+
+# SAMPLE FILE
+
+Also add a sample file to the repository for documentation/manual testing, somewhere logical such as:
+
+```text
+src/CTC/CTC.Wpf/SampleData/BlueLineSampleSchedule.csv
+```
+
+with exactly:
+
+```csv
+Line,Section,Block Number,Train 1,Train 2,Train 3,Train 4
+Blue,A,1,12:00:00,12:03:00,12:06:00,12:09:00
+Blue,B,10,12:00:36,,12:06:36,
+Blue,C,15,,12:03:36,,12:09:36
+```
+
+Do NOT hardcode the uploader to this file.
+
+It is only an example schedule that can be selected manually with the file picker.
+
+---
+
+# TESTS
+
+Add unit tests for the importer.
+
+At minimum test:
+
+### Successful sparse import
+
+Import the sample CSV against the Blue Line.
+
+Verify:
+
+```text
+15 template rows exist
+4 train columns exist
+A1 has all four departure times
+B10 has Train 1 and Train 3 times
+C15 has Train 2 and Train 4 times
+other block times remain blank
+```
+
+### Generated TrainIds
+
+Verify CSV headings such as:
+
+```text
+Train 1
+Train 2
+```
+
+do NOT become CTC TrainIds.
+
+The IDs should come from `ScheduleTemplateFactory` / `TrainIds`.
+
+Also verify behavior when earlier train IDs already exist.
+
+### Wrong line fails
+
+A Red schedule should fail when Blue is selected.
+
+### Unknown block fails
+
+Example:
+
+```text
+Blue,Z,999,...
+```
+
+### Duplicate block fails
+
+Two rows for `B10`.
+
+### Invalid block number fails
+
+### No train columns fails
+
+### Missing required header fails
+
+### Blank lines are tolerated
+
+### Imported schedule still converts correctly
+
+Take the successfully imported sample template and run:
+
+```csharp
+ScheduleTemplateConverter.Convert(...)
+```
+
+Verify all four trains convert successfully and the routes are:
+
+```text
+Train 1:
+A1 -> A2 -> A3 -> A4 -> A5 -> B6 -> B7 -> B8 -> B9 -> B10
+
+Train 2:
+A1 -> A2 -> A3 -> A4 -> A5 -> C11 -> C12 -> C13 -> C14 -> C15
+
+Train 3:
+A1 -> A2 -> A3 -> A4 -> A5 -> B6 -> B7 -> B8 -> B9 -> B10
+
+Train 4:
+A1 -> A2 -> A3 -> A4 -> A5 -> C11 -> C12 -> C13 -> C14 -> C15
+```
+
+Do not weaken or remove existing schedule tests.
+
+Run the full test suite after implementation.
+
+---
+
+# DO NOT
+
+Do not:
+
+- parse `.xlsx`
+- add an Excel library
+- immediately queue schedules on upload
+- immediately dispatch trains
+- create routes in the CSV importer
+- duplicate `ScheduleTemplateConverter`
+- duplicate the track layout inside the CSV
+- trust the Train headers as actual CTC TrainIds
+- hardcode the Blue Line topology into the importer
+- remove manual schedule entry
+- break Clear Schedule
+- break existing Queue Schedule behavior
+- break the TestUI sample Blue Line
+- make unrelated architectural changes
+
+---
+
+# EXPECTED FINAL WORKFLOW
+
+The exact manual test I should be able to perform is:
+
+1. Run CTC.
+2. Run CTC TestUI.
+3. Press **Send Sample Layout**.
+4. CTC displays Blue Line.
+5. Go to Schedule Builder.
+6. Press **Upload Schedule**.
+7. Select `BlueLineSampleSchedule.csv`.
+8. Schedule Builder automatically displays all 15 Blue Line rows.
+9. Four CTC train columns appear.
+10. A1 contains:
+   - 12:00:00
+   - 12:03:00
+   - 12:06:00
+   - 12:09:00
+11. B10 contains times for the first and third trains.
+12. C15 contains times for the second and fourth trains.
+13. All intermediate cells remain blank.
+14. I can manually edit any imported value.
+15. Press **Queue Schedule**.
+16. Existing validation succeeds.
+17. Four trains appear in the dispatch queue in departure-time order.
+18. Advancing system time causes them to dispatch using the existing dispatch logic.
+
+Please first inspect the existing CTC implementation and reuse its current patterns. Implement the smallest clean change that accomplishes this feature, add appropriate tests, run the tests, and summarize the files changed and any design decisions afterward.
