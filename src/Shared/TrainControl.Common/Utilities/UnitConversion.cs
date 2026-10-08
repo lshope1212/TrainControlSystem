@@ -35,19 +35,29 @@ public static class UnitConversion
     public static double MetersPerSecondToKilometersPerHour(double metersPerSecond) =>
         metersPerSecond / MetersPerKilometer * SecondsPerHour;
 
+    public static double KilometersPerHourToMilesPerHour(double kilometersPerHour) =>
+        MetersPerSecondToMilesPerHour(
+            KilometersPerHourToMetersPerSecond(kilometersPerHour));
+
     public static double MetersToFeet(double meters) => meters / MetersPerFoot;
 
     public static double FeetToMeters(double feet) => feet * MetersPerFoot;
 
-    public static double CelsiusToFahrenheit(double celsius) => celsius * 9.0 / 5.0 + 32.0;
+    public static double CelsiusToFahrenheit(double celsius) =>
+        celsius * 9.0 / 5.0 + 32.0;
 
-    public static double FahrenheitToCelsius(double fahrenheit) => (fahrenheit - 32.0) * 5.0 / 9.0;
+    public static double FahrenheitToCelsius(double fahrenheit) =>
+        (fahrenheit - 32.0) * 5.0 / 9.0;
 
-    public static double WattsToKilowatts(double watts) => watts / WattsPerKilowatt;
+    public static double WattsToKilowatts(double watts) =>
+        watts / WattsPerKilowatt;
 
-    public static double KilowattsToWatts(double kilowatts) => kilowatts * WattsPerKilowatt;
+    public static double KilowattsToWatts(double kilowatts) =>
+        kilowatts * WattsPerKilowatt;
 
-    public static double WattsToHorsepower(double watts) => watts / WattsPerHorsepower;
+    public static double WattsToHorsepower(double watts) =>
+        watts / WattsPerHorsepower;
 
-    public static double HorsepowerToWatts(double horsepower) => horsepower * WattsPerHorsepower;
+    public static double HorsepowerToWatts(double horsepower) =>
+        horsepower * WattsPerHorsepower;
 }

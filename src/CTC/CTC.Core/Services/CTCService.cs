@@ -1,3 +1,5 @@
+using CTC.Core.Dispatching;
+using CTC.Core.Exceptions;
 using CTC.Core.Interfaces;
 using CTC.Core.Models;
 using TrainControl.Common.Validation;
@@ -10,8 +12,14 @@ namespace CTC.Core.Services;
 /// CTC office service. Maps shared contract messages into <see cref="CtcSystemState"/>
 /// and builds outbound contract messages. Transmission is delegated to an injected
 /// <see cref="IMessageSender"/>; this class knows nothing about the transport.
-/// No dispatching, routing or authority algorithms yet (see RouteManager / AuthorityManager).
+/// Dispatching is time-triggered only (see <see cref="SetSystemTimeAsync"/>). Speed and
+/// authority rules live in <see cref="SpeedPlanner"/> and <see cref="AuthorityManager"/>;
+/// only the INITIAL suggestion at dispatch is calculated.
 /// </summary>
+/// <remarks>
+/// Async methods resume on the caller's synchronization context, so when called from the
+/// UI thread every state change also happens on the UI thread.
+/// </remarks>
 public class CTCService : ICTCService
 {
     private readonly IMessageSender _messageSender;
@@ -50,6 +58,7 @@ public class CTCService : ICTCService
                     BlockNumber = blockDefinition.BlockNumber,
                     Section = blockDefinition.Section,
                     LengthMeters = blockDefinition.LengthMeters,
+                    SpeedLimitKilometersPerHour = blockDefinition.SpeedLimitKilometersPerHour,
                     StationName = blockDefinition.StationName,
                     HasSwitch = blockDefinition.HasSwitch,
                     HasSignal = blockDefinition.HasSignal,
@@ -80,30 +89,11 @@ public class CTCService : ICTCService
         block.Switch = message.Switch;
         block.Crossing = message.Crossing;
 
+        // Only the confirmed state: RequestedMaintenanceState records what CTC asked for
+        // and is never overwritten by a wayside report.
+        block.ConfirmedMaintenanceState = message.Maintenance;
+
         OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
-    }
-
-    /// <summary>
-    /// Records the speed/authority the Track Controller has authorized for a train,
-    /// in SI units exactly as received. A train not yet known to CTC is added to the
-    /// dispatched trains, since the wayside is reporting an authorization for it.
-    /// </summary>
-    public void ApplyTrainAuthorization(TrainAuthorizationStatusMessage message)
-    {
-        ArgumentNullException.ThrowIfNull(message);
-        Guard.NotNullOrWhiteSpace(message.TrainId, nameof(message));
-
-        DispatchedTrainState train = State.FindDispatchedTrain(message.TrainId);
-        if (train is null)
-        {
-            train = new DispatchedTrainState { TrainId = message.TrainId };
-            State.DispatchedTrains.Add(train);
-        }
-
-        train.AuthorizedSpeedMetersPerSecond = message.AuthorizedSpeedMetersPerSecond;
-        train.AuthorizedAuthorityMeters = message.AuthorizedAuthorityMeters;
-
-        OnStateChanged(CtcStateChangeKind.TrainAuthorization);
     }
 
     public void ApplyTicketSales(TicketSalesMessage message)
@@ -120,20 +110,252 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
-    /// Sets CTC's notion of the current time. Intended to be driven by the shared
-    /// simulation clock; CTC deliberately has no timer of its own.
+    /// Sets CTC's notion of the current time and releases every train that is now due.
     /// </summary>
-    public void SetSystemTime(TimeSpan systemTime)
+    /// <remarks>
+    /// <para>
+    /// CTC deliberately has no clock of its own: every module must agree on one simulation
+    /// time, so the time is owned by the external system clock (the TestUI during isolated
+    /// development) and arrives here as SystemTimeMessages. CTC never interpolates between them.
+    /// </para>
+    /// <para>
+    /// A train is due when <c>DepartureTime &lt;= SystemTime</c>, not <c>==</c>: messages can
+    /// be delayed or skipped (e.g. 12:00:07 then 12:00:09), and a train due at 12:00:08 must
+    /// still leave. A jump forward therefore releases every train it passed, in departure order.
+    /// </para>
+    /// <para>
+    /// Each due train is attempted independently: if one send fails, that train stays queued
+    /// (and is retried on the next time update) while the remaining due trains are still attempted.
+    /// Moving the time backwards never un-dispatches a train; pending trains simply wait.
+    /// </para>
+    /// </remarks>
+    public async Task SetSystemTimeAsync(TimeSpan systemTime, CancellationToken cancellationToken = default)
     {
         State.SystemTime = systemTime;
-
         OnStateChanged(CtcStateChangeKind.SystemTime);
+
+        // Claim every due entry up front so a dispatch pass started while this one is
+        // awaiting a send (another time update, re-entrant on the UI thread) cannot send them again.
+        var dueEntries = State.DispatchQueue
+            .Where(entry => entry.QueueStatus == DispatchQueueStatus.Queued && entry.DepartureTime <= systemTime)
+            .OrderBy(entry => entry.DepartureTime)
+            .ToList();
+
+        foreach (var entry in dueEntries)
+        {
+            entry.QueueStatus = DispatchQueueStatus.Dispatching;
+        }
+
+        foreach (var entry in dueEntries)
+        {
+            try
+            {
+                string? warning = await DispatchTrainAsync(entry, cancellationToken);
+                OnStateChanged(CtcStateChangeKind.TrainDispatched, trainId: entry.TrainId, message: warning);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Not dispatched: put the train back so the next time update retries it.
+                entry.QueueStatus = DispatchQueueStatus.Queued;
+                OnStateChanged(CtcStateChangeKind.DispatchFailed, trainId: entry.TrainId, message: ex.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutting down: release every claim that has not completed, then stop.
+                foreach (var pending in dueEntries.Where(pending => pending.QueueStatus == DispatchQueueStatus.Dispatching))
+                {
+                    pending.QueueStatus = DispatchQueueStatus.Queued;
+                }
+
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Releases <paramref name="entry"/>'s train: calculates its initial suggested speed and
+    /// authority, sends the MovementSuggestion and then the MovementRequest to the Track
+    /// Controller, and only then moves the train from the dispatch queue to the dispatched trains.
+    /// </summary>
+    /// <returns>A dispatcher-readable warning (e.g. the train is late), or null.</returns>
+    /// <exception cref="DispatchException">The start block is unsafe; nothing was sent or changed.</exception>
+    /// <exception cref="MessageSendException">A message could not be delivered; nothing changed.</exception>
+    private async Task<string?> DispatchTrainAsync(DispatchQueueEntry entry, CancellationToken cancellationToken)
+    {
+        var scheduledTrain = State.ScheduledTrains.FirstOrDefault(train => train.TrainId == entry.TrainId && train.LineId == entry.LineId)
+            ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} is queued but no longer scheduled.");
+
+        var line = State.FindLine(scheduledTrain.LineId)
+            ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} is scheduled on unknown line '{scheduledTrain.LineId}'.");
+        var route = ResolveRoute(scheduledTrain, line)
+            ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} uses a block that is no longer in the track layout.");
+
+        // Releasing a train with zero authority would leave it stranded, because CTC cannot
+        // recalculate authority later. Hold it in the queue instead; it is retried next tick.
+        double authority = AuthorityManager.CalculateInitialAuthorityMeters(route);
+        if (authority <= 0)
+        {
+            throw new DispatchException($"its start block {route[0].BlockId} is occupied or closed for maintenance.");
+        }
+
+        var speed = SpeedPlanner.CalculateInitialSpeed(scheduledTrain, route, State.SystemTime);
+
+        var suggestion = new MovementSuggestionMessage
+        {
+            TrainId = scheduledTrain.TrainId,
+            SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond,
+            SuggestedAuthorityMeters = authority,
+        };
+        var request = CreateMovementRequest(scheduledTrain.TrainId);
+
+        // Suggestion first, so the Track Controller has movement data before the release.
+        // If the release then fails, the train stays queued and the retry sends both again.
+        await _messageSender.SendAsync(suggestion, cancellationToken);
+        await _messageSender.SendAsync(request, cancellationToken);
+
+        // Only now, after both sends succeeded, does the train leave the queue. Removing it first
+        // would make CTC believe a train was released when the request never reached the wayside.
+        State.DispatchQueue.Remove(entry);
+
+        var dispatched = State.FindDispatchedTrain(scheduledTrain.TrainId);
+        if (dispatched is null)
+        {
+            dispatched = new DispatchedTrainState { TrainId = scheduledTrain.TrainId };
+            State.DispatchedTrains.Add(dispatched);
+        }
+
+        dispatched.LineId = scheduledTrain.LineId;
+        dispatched.SuggestedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
+        dispatched.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
+
+        // Known authoritatively only at release time: the schedule says the train starts here.
+        // It stays the last known block until a train-position message exists (occupancy has no TrainId).
+        // StartBlockId was fixed when the schedule was built; it is not re-derived per tick.
+        // TODO: real route/yard logic will replace the temporary route-start rule.
+        dispatched.LastKnownBlockId =scheduledTrain.StartBlockId;
+
+        return speed.IsLate
+            ? $"{TrainIds.DisplayName(scheduledTrain.TrainId)} is behind schedule for {speed.TargetBlockId}; suggested the maximum permitted speed."
+            : null;
+    }
+
+    /// <summary>
+    /// The line's blocks for <paramref name="train"/>'s route, aligned with <see cref="ScheduledTrain.Route"/>;
+    /// null if any scheduled block is not on the line.
+    /// </summary>
+    private static List<CtcBlockState>? ResolveRoute(ScheduledTrain train, CtcLineState line)
+    {
+        var route = new List<CtcBlockState>();
+        foreach (var routeBlock in train.Route)
+        {
+            var block = line.Blocks.FirstOrDefault(block => block.BlockId == routeBlock.BlockId);
+            if (block is null)
+            {
+                return null;
+            }
+
+            route.Add(block);
+        }
+
+        return route;
+    }
+
+    /// <summary>
+    /// Stores a validated schedule and queues its trains for dispatch. Trains already
+    /// scheduled on the same line(s) are replaced; other lines' schedules are kept.
+    /// Everything is checked before any state changes, so a bad schedule is never partially queued.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// A train is blank, duplicated, on an unknown line, has fewer than two route blocks or a
+    /// block not on its line, or its schedule needs a speed above the permitted maximum
+    /// (see <see cref="SpeedPlanner.ValidateFeasibility"/>).
+    /// </exception>
+    public void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains)
+    {
+        ArgumentNullException.ThrowIfNull(scheduledTrains);
+
+        var trains = scheduledTrains.ToList();
+        var trainIds = new HashSet<string>();
+        foreach (var train in trains)
+        {
+            if (train is null || string.IsNullOrWhiteSpace(train.TrainId))
+            {
+                throw new ArgumentException("Every scheduled train needs a train ID.", nameof(scheduledTrains));
+            }
+
+            if (!trainIds.Add(train.TrainId))
+            {
+                throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} is scheduled more than once.", nameof(scheduledTrains));
+            }
+
+            var line = State.FindLine(train.LineId)
+                ?? throw new ArgumentException($"Unknown line '{train.LineId}'.", nameof(scheduledTrains));
+
+            if (train.Route.Count < 2 || !train.Route[0].IsTimed || !train.Route[^1].IsTimed)
+            {
+                throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} needs a timed route start block and at least one later timed block.", nameof(scheduledTrains));
+            }
+
+            var route = ResolveRoute(train, line)
+                ?? throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} uses a block that is not on {line.Name}.", nameof(scheduledTrains));
+
+            for (int i = 0; i + 1 < route.Count; i++)
+            {
+                if (!route[i].ConnectedBlockIds.Contains(route[i + 1].BlockId))
+                {
+                    throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)}'s route goes from {route[i].BlockId} to {route[i + 1].BlockId}, which are not connected.", nameof(scheduledTrains));
+                }
+            }
+
+            // An impossible schedule is rejected outright; it is never accepted with its speed clamped.
+            // No parameter name, so the message stays dispatcher-readable as it is.
+            string? infeasible = SpeedPlanner.ValidateFeasibility(train, route);
+            if (infeasible is not null)
+            {
+                throw new ArgumentException(infeasible);
+            }
+        }
+
+        var lineIds = trains.Select(train => train.LineId).ToHashSet();
+        foreach (var replaced in State.ScheduledTrains.Where(train => lineIds.Contains(train.LineId)).ToList())
+        {
+            State.ScheduledTrains.Remove(replaced);
+        }
+
+        foreach (var train in trains)
+        {
+            State.ScheduledTrains.Add(train);
+        }
+
+        // Rebuild only the pending part of the queue. Already-dispatched trains (recorded in
+        // DispatchedTrains) are never queued again, and entries whose MovementRequest is being
+        // sent right now are kept as they are so they cannot be sent twice.
+        var inFlight = State.DispatchQueue.Where(entry => entry.QueueStatus == DispatchQueueStatus.Dispatching).ToList();
+        var pending = State.ScheduledTrains
+            .Where(train => State.FindDispatchedTrain(train.TrainId) is null)
+            .Where(train => !inFlight.Any(entry => entry.TrainId == train.TrainId && entry.LineId == train.LineId))
+            .Select(train => new DispatchQueueEntry
+            {
+                TrainId = train.TrainId,
+                LineId = train.LineId,
+                DepartureTime = train.DepartureTime,
+            });
+
+        var rebuilt = inFlight.Concat(pending).OrderBy(entry => entry.DepartureTime).ToList();
+        State.DispatchQueue.Clear();
+        foreach (var entry in rebuilt)
+        {
+            State.DispatchQueue.Add(entry);
+        }
+
+        OnStateChanged(CtcStateChangeKind.Schedule);
+        OnStateChanged(CtcStateChangeKind.DispatchQueue);
     }
 
     /// <summary>
     /// Builds a maintenance request for a known block. Does not change CTC state; the
     /// requested state is recorded only once a request has actually been sent
-    /// (see <see cref="CloseBlockAsync"/>).
+    /// (see <see cref="CloseBlockAsync"/> and <see cref="ReopenBlockAsync"/>).
     /// </summary>
     public MaintenanceRequestMessage CreateMaintenanceRequest(string blockId, MaintenanceState requestedState)
     {
@@ -197,14 +419,49 @@ public class CTCService : ICTCService
 
         // RequestedMaintenanceState == Closed means "CTC successfully issued a Close
         // request". It does NOT mean the Track Controller confirmed the block is closed;
-        // that needs a future Track Controller -> CTC maintenance status message.
+        // ConfirmedMaintenanceState changes only when a BlockStatusMessage reports it.
         block.RequestedMaintenanceState = MaintenanceState.Closed;
 
         OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
     }
 
-    private void OnStateChanged(CtcStateChangeKind kind, string? blockId = null) =>
-        StateChanged?.Invoke(this, new CtcStateChangedEventArgs(kind, blockId));
+    /// <summary>
+    /// Sends a request to the Track Controller to reopen a block closed for maintenance.
+    /// </summary>
+    /// <exception cref="ArgumentException">The block ID is blank or unknown to CTC.</exception>
+    /// <exception cref="Exceptions.MessageSendException">The request could not be delivered.</exception>
+    public async Task ReopenBlockAsync(string blockId, CancellationToken cancellationToken = default)
+    {
+        var block = GetBlock(blockId);
+        var request = CreateMaintenanceRequest(blockId, MaintenanceState.Open);
+
+        // As with CloseBlockAsync, a failed send leaves the requested state untouched.
+        await _messageSender.SendAsync(request, cancellationToken);
+
+        // The block stays confirmed Closed (and unsafe for authority) until the Track
+        // Controller reports it Open via ApplyBlockStatus.
+        block.RequestedMaintenanceState = MaintenanceState.Open;
+
+        OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
+    }
+
+    /// <summary>
+    /// Sends a request to the Track Controller to move a block's switch.
+    /// </summary>
+    /// <exception cref="ArgumentException">The block is unknown, has no switch, or the position is Unknown.</exception>
+    /// <exception cref="Exceptions.MessageSendException">The request could not be delivered.</exception>
+    public async Task SetSwitchPositionAsync(string blockId, SwitchPosition requestedPosition, CancellationToken cancellationToken = default)
+    {
+        var request = CreateSwitchPositionRequest(blockId, requestedPosition);
+
+        // The block's Switch is deliberately left untouched, even on success: it is the
+        // wayside-reported position, which changes only through ApplyBlockStatus once the
+        // Track Controller has actually moved the switch.
+        await _messageSender.SendAsync(request, cancellationToken);
+    }
+
+    private void OnStateChanged(CtcStateChangeKind kind, string? blockId = null, string? trainId = null, string? message = null) =>
+        StateChanged?.Invoke(this, new CtcStateChangedEventArgs(kind, blockId, trainId, message));
 
     private CtcBlockState GetBlock(string blockId)
     {

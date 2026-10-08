@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:CTC.Wpf.Behaviors"
         mc:Ignorable="d"
         Title="CTC Office"
         Width="1600"
@@ -153,7 +154,8 @@
 
                     <ComboBox Width="165"
                               ItemsSource="{Binding AvailableLines}"
-                              SelectedItem="{Binding SelectedLine}"/>
+                              SelectedItem="{Binding SelectedLine}"
+                              DisplayMemberPath="Name"/>
 
                 </StackPanel>
 
@@ -440,6 +442,7 @@
                                         <RowDefinition Height="28"/>
                                         <RowDefinition Height="28"/>
                                         <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
                                     </Grid.RowDefinitions>
 
                                     <TextBlock Grid.Row="0"
@@ -502,6 +505,18 @@
                                                               TargetNullValue=N/A}"
                                                Style="{StaticResource ValueStyle}"/>
 
+                                    <!-- Track data from the layout; read-only. -->
+                                    <TextBlock Grid.Row="6"
+                                               Text="Speed Limit"
+                                               Style="{StaticResource FieldLabelStyle}"/>
+
+                                    <TextBlock Grid.Row="6"
+                                               Grid.Column="1"
+                                               Text="{Binding SelectedBlock.SpeedLimitMilesPerHour,
+                                                              StringFormat={}{0:F1} mph,
+                                                              FallbackValue=--}"
+                                               Style="{StaticResource ValueStyle}"/>
+
                                 </Grid>
 
                             </StackPanel>
@@ -524,51 +539,74 @@
                                            Style="{StaticResource SubHeaderStyle}"
                                            Margin="0,0,0,8"/>
 
-                                <Grid Margin="0,0,0,8">
+                                <!-- Always enabled so the operator can enter or leave Maintenance Mode. -->
+                                <Button Content="{Binding MaintenanceModeButtonText}"
+                                        Command="{Binding ToggleMaintenanceModeCommand}"
+                                        Margin="2,0,2,8">
+                                    <Button.Style>
+                                        <Style TargetType="Button"
+                                               BasedOn="{StaticResource {x:Type Button}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsMaintenanceMode}"
+                                                             Value="True">
+                                                    <Setter Property="Background" Value="#FEF3C7"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                                <!-- Block-modifying controls are usable only in Maintenance Mode. -->
+                                <StackPanel IsEnabled="{Binding IsMaintenanceMode}">
 
-                                    <Button Grid.Column="0"
-                                            Content="Close Block"
-                                            Command="{Binding CloseSelectedBlockCommand}"/>
+                                    <Grid Margin="0,0,0,8">
 
-                                    <Button Grid.Column="1"
-                                            Content="Reopen Block"
-                                            Command="{Binding ReopenSelectedBlockCommand}"/>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                </Grid>
+                                        <Button Grid.Column="0"
+                                                Content="Close Block"
+                                                Command="{Binding CloseSelectedBlockCommand}"/>
 
-                                <Separator Margin="0,4,0,8"/>
+                                        <Button Grid.Column="1"
+                                                Content="Reopen Block"
+                                                Command="{Binding ReopenSelectedBlockCommand}"/>
 
-                                <Grid>
+                                    </Grid>
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Separator Margin="0,4,0,8"/>
 
-                                    <StackPanel>
+                                    <Grid>
 
-                                        <TextBlock Text="Track Switch"
-                                                   FontWeight="SemiBold"/>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
 
-                                        <TextBlock Text="Available only when the selected block contains a switch."
-                                                   Foreground="#6B7280"
-                                                   FontSize="10"
-                                                   TextWrapping="Wrap"/>
+                                        <StackPanel>
 
-                                    </StackPanel>
+                                            <TextBlock Text="Track Switch"
+                                                       FontWeight="SemiBold"/>
 
-                                    <Button Grid.Column="1"
-                                            Content="Toggle Switch"
-                                            Width="110"
-                                            IsEnabled="{Binding SelectedBlock.HasSwitch}"
-                                            Command="{Binding ToggleSelectedBlockSwitchCommand}"/>
+                                            <TextBlock Text="Available only when the selected block contains a switch."
+                                                       Foreground="#6B7280"
+                                                       FontSize="10"
+                                                       TextWrapping="Wrap"/>
 
-                                </Grid>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="1"
+                                                Content="Toggle Switch"
+                                                Width="110"
+                                                IsEnabled="{Binding SelectedBlock.HasSwitch}"
+                                                Command="{Binding ToggleSelectedBlockSwitchCommand}"/>
+
+                                    </Grid>
+
+                                </StackPanel>
 
                             </StackPanel>
 
@@ -592,48 +630,16 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="28"/>
-                                        <RowDefinition Height="28"/>
-                                        <RowDefinition Height="28"/>
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Grid.Row="0"
-                                               Text="Queued Trains"
+                                    <TextBlock Text="Tickets Sold / Hour"
                                                Style="{StaticResource FieldLabelStyle}"/>
 
-                                    <TextBlock Grid.Row="0"
-                                               Grid.Column="1"
-                                               Text="{Binding QueuedTrainCount}"
-                                               Style="{StaticResource ValueStyle}"/>
-
-                                    <TextBlock Grid.Row="1"
-                                               Text="Dispatched Trains"
-                                               Style="{StaticResource FieldLabelStyle}"/>
-
-                                    <TextBlock Grid.Row="1"
-                                               Grid.Column="1"
-                                               Text="{Binding DispatchedTrainCount}"
-                                               Style="{StaticResource ValueStyle}"/>
-
-                                    <TextBlock Grid.Row="2"
-                                               Text="Tickets Sold / Hour"
-                                               Style="{StaticResource FieldLabelStyle}"/>
-
-                                    <TextBlock Grid.Row="2"
-                                               Grid.Column="1"
+                                    <TextBlock Grid.Column="1"
                                                Text="{Binding CurrentLineTicketSalesPerHour}"
                                                FontSize="18"
                                                FontWeight="Bold"
                                                Foreground="#111827"/>
 
                                 </Grid>
-
-                                <TextBlock Text="Ticket sales automatically change when the Current Line selection changes."
-                                           Foreground="#6B7280"
-                                           FontSize="10"
-                                           TextWrapping="Wrap"
-                                           Margin="0,8,0,0"/>
 
                             </StackPanel>
 
@@ -670,254 +676,146 @@
 
                 <!-- ==============================================
                      SCHEDULE BUILDER
+                     Spreadsheet-shaped template for the Current Line:
+                     one row per block, one time column per train.
+                     Train columns are added at run time by
+                     behaviors:DataGridTrainColumns.
                      ============================================== -->
                 <TabItem Header="Schedule Builder">
 
-                    <Grid Margin="10">
+                    <Grid Margin="10"
+                          DataContext="{Binding ScheduleBuilder}">
+
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+
+                        <!-- Template controls -->
+                        <Grid Margin="0,0,0,8">
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="24"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="24"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="Current Line:"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding LineName}"
+                                       Style="{StaticResource ValueStyle}"
+                                       Margin="6,0,0,0"/>
+
+                            <TextBlock Grid.Column="3"
+                                       Text="Number of Trains:"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+
+                            <TextBox Grid.Column="4"
+                                     Width="60"
+                                     Margin="6,0,0,0"
+                                     Text="{Binding NumberOfTrainsText,
+                                                    UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <Button Grid.Column="6"
+                                    Content="Generate Schedule Template"
+                                    Command="{Binding GenerateTemplateCommand}"/>
+
+                            <Button Grid.Column="8"
+                                    Content="Clear Template"
+                                    Command="{Binding ClearTemplateCommand}"/>
+
+                            <Button Grid.Column="10"
+                                    Content="Upload Schedule"
+                                    Command="{Binding UploadScheduleCommand}"/>
+
+                        </Grid>
+
+
+                        <!-- Schedule matrix. Every block cell accepts the time
+                             (HH:mm:ss) the train ENTERS that block. Only some
+                             blocks need a time: CTC routes the train between
+                             timed blocks through the blank ones. Length and
+                             speed limit are read-only track data. -->
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding Rows}"
+                                  behaviors:DataGridTrainColumns.Source="{Binding TrainColumns}"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  CanUserSortColumns="False"
+                                  CanUserReorderColumns="False"
+                                  SelectionUnit="Cell"
+                                  FrozenColumnCount="6">
+
+                            <DataGrid.Columns>
+
+                                <DataGridTextColumn Header="Line"
+                                                    Binding="{Binding LineId}"
+                                                    IsReadOnly="True"
+                                                    Width="60"/>
+
+                                <DataGridTextColumn Header="Section"
+                                                    Binding="{Binding Section}"
+                                                    IsReadOnly="True"
+                                                    Width="60"/>
+
+                                <DataGridTextColumn Header="Block"
+                                                    Binding="{Binding BlockNumber}"
+                                                    IsReadOnly="True"
+                                                    Width="55"/>
+
+                                <DataGridTextColumn Header="Infrastructure"
+                                                    Binding="{Binding Infrastructure}"
+                                                    IsReadOnly="True"
+                                                    Width="200"/>
+
+                                <DataGridTextColumn Header="Length (ft)"
+                                                    Binding="{Binding LengthFeet, StringFormat={}{0:F1}}"
+                                                    IsReadOnly="True"
+                                                    Width="75"/>
 
-                        <Grid.ColumnDefinitions>
-                            <!-- Train list -->
-                            <ColumnDefinition Width="360"/>
+                                <DataGridTextColumn Header="Speed Limit (mph)"
+                                                    Binding="{Binding SpeedLimitMilesPerHour, StringFormat={}{0:F1}}"
+                                                    IsReadOnly="True"
+                                                    Width="115"/>
 
-                            <!-- Stops for selected train -->
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                            </DataGrid.Columns>
 
+                        </DataGrid>
 
-                        <!-- ======================================
-                             LEFT: SCHEDULED TRAINS
-                             ====================================== -->
-                        <Border Grid.Column="0"
-                                Style="{StaticResource InsetPanelStyle}"
-                                Margin="0,0,10,0">
 
-                            <Grid>
+                        <!-- Status / queue -->
+                        <Grid Grid.Row="2"
+                              Margin="0,8,0,0">
 
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                                <Grid>
+                            <TextBlock Text="{Binding StatusMessage}"
+                                       Style="{StaticResource SubHeaderStyle}"
+                                       VerticalAlignment="Center"/>
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                            <Button Grid.Column="1"
+                                    Content="Queue Schedule"
+                                    FontWeight="SemiBold"
+                                    Command="{Binding QueueScheduleCommand}"/>
 
-                                    <StackPanel>
-
-                                        <TextBlock Text="Scheduled Trains"
-                                                   Style="{StaticResource SectionHeaderStyle}"/>
-
-                                        <TextBlock Text="Build a schedule manually or upload an existing schedule."
-                                                   Style="{StaticResource SubHeaderStyle}"/>
-
-                                    </StackPanel>
-
-                                    <Button Grid.Column="1"
-                                            Content="Upload Schedule"
-                                            VerticalAlignment="Top"
-                                            Command="{Binding UploadScheduleCommand}"/>
-
-                                </Grid>
-
-
-                                <!-- Add a train to the schedule -->
-                                <Grid Grid.Row="1"
-                                      Margin="0,8,0,8">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition Width="120"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0">
-
-                                        <TextBlock Text="Train"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <ComboBox ItemsSource="{Binding AvailableTrains}"
-                                                  SelectedItem="{Binding NewScheduleTrain}"/>
-
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="2">
-
-                                        <TextBlock Text="Departure Time"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <TextBox Text="{Binding NewScheduleDepartureTime,
-                                                                UpdateSourceTrigger=PropertyChanged}"/>
-
-                                    </StackPanel>
-
-                                </Grid>
-
-
-                                <DataGrid Grid.Row="2"
-                                          ItemsSource="{Binding ScheduledTrains}"
-                                          SelectedItem="{Binding SelectedScheduledTrain}"
-                                          AutoGenerateColumns="False"
-                                          CanUserAddRows="False">
-
-                                    <DataGrid.Columns>
-
-                                        <DataGridTextColumn Header="Train ID"
-                                                            Binding="{Binding TrainId}"
-                                                            Width="*"/>
-
-                                        <DataGridTextColumn Header="Departure"
-                                                            Binding="{Binding DepartureTime}"
-                                                            Width="120"/>
-
-                                    </DataGrid.Columns>
-
-                                </DataGrid>
-
-
-                                <Grid Grid.Row="3"
-                                      Margin="0,8,0,0">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0"
-                                            Content="Add Train"
-                                            Command="{Binding AddScheduledTrainCommand}"/>
-
-                                    <Button Grid.Column="1"
-                                            Content="Delete Selected"
-                                            Command="{Binding DeleteScheduledTrainCommand}"/>
-
-                                </Grid>
-
-                            </Grid>
-
-                        </Border>
-
-
-                        <!-- ======================================
-                             RIGHT: SELECTED TRAIN'S STOPS
-                             ====================================== -->
-                        <Border Grid.Column="1"
-                                Style="{StaticResource InsetPanelStyle}">
-
-                            <Grid>
-
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-
-                                <StackPanel>
-
-                                    <TextBlock Text="Selected Train Schedule"
-                                               Style="{StaticResource SectionHeaderStyle}"/>
-
-                                    <TextBlock Text="Add station stops and arrival times for the selected scheduled train."
-                                               Style="{StaticResource SubHeaderStyle}"/>
-
-                                </StackPanel>
-
-
-                                <!-- Manual stop entry -->
-                                <Grid Grid.Row="1"
-                                      Margin="0,8,0,8">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition Width="150"/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0">
-
-                                        <TextBlock Text="Station"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <ComboBox ItemsSource="{Binding AvailableStationsForSelectedLine}"
-                                                  SelectedItem="{Binding NewStopStation}"/>
-
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="2">
-
-                                        <TextBlock Text="Arrival Time"
-                                                   Style="{StaticResource FieldLabelStyle}"/>
-
-                                        <TextBox Text="{Binding NewStopArrivalTime,
-                                                                UpdateSourceTrigger=PropertyChanged}"/>
-
-                                    </StackPanel>
-
-                                    <Button Grid.Column="4"
-                                            Content="Add Stop"
-                                            Width="90"
-                                            VerticalAlignment="Bottom"
-                                            Command="{Binding AddStopCommand}"/>
-
-                                </Grid>
-
-
-                                <DataGrid Grid.Row="2"
-                                          ItemsSource="{Binding SelectedScheduledTrain.Stops}"
-                                          SelectedItem="{Binding SelectedScheduleStop}"
-                                          AutoGenerateColumns="False"
-                                          CanUserAddRows="False">
-
-                                    <DataGrid.Columns>
-
-                                        <DataGridTextColumn Header="Station"
-                                                            Binding="{Binding StationName}"
-                                                            Width="*"/>
-
-                                        <DataGridTextColumn Header="Arrival Time"
-                                                            Binding="{Binding ArrivalTime}"
-                                                            Width="160"/>
-
-                                    </DataGrid.Columns>
-
-                                </DataGrid>
-
-
-                                <Grid Grid.Row="3"
-                                      Margin="0,8,0,0">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0"
-                                            Content="Delete Selected Stop"
-                                            Command="{Binding DeleteStopCommand}"/>
-
-                                    <Button Grid.Column="1"
-                                            Content="Clear Stops"
-                                            Command="{Binding ClearStopsCommand}"/>
-
-                                    <Button Grid.Column="3"
-                                            Content="Queue Schedule"
-                                            FontWeight="SemiBold"
-                                            Command="{Binding QueueScheduleCommand}"/>
-
-                                </Grid>
-
-                            </Grid>
-
-                        </Border>
+                        </Grid>
 
                     </Grid>
 
@@ -926,9 +824,10 @@
 
                 <!-- ==============================================
                      DISPATCH QUEUE
-                     No manual dispatch button is provided.
-                     The backend/global clock dispatches trains when
-                     System Time reaches Departure Time.
+                     Read-only, ordered by departure time. No manual
+                     dispatch button is provided: CTC releases each
+                     train when the received System Time reaches its
+                     departure time.
                      ============================================== -->
                 <TabItem Header="Dispatch Queue">
 
@@ -946,7 +845,7 @@
                                 Padding="8"
                                 Margin="0,0,0,8">
 
-                            <TextBlock Text="Trains in this queue are automatically dispatched when System Time reaches their scheduled departure time."
+                            <TextBlock Text="Queued trains are dispatched automatically when System Time reaches their departure time. A train leaves this queue only after its movement request has been sent; if sending fails it stays queued and is retried."
                                        Foreground="#1E3A8A"
                                        TextWrapping="Wrap"/>
 
@@ -954,28 +853,20 @@
 
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding DispatchQueue}"
-                                  SelectedItem="{Binding SelectedQueuedTrain}"
                                   AutoGenerateColumns="False"
                                   CanUserAddRows="False"
+                                  CanUserSortColumns="False"
                                   IsReadOnly="True">
 
                             <DataGrid.Columns>
 
                                 <DataGridTextColumn Header="Train ID"
-                                                    Binding="{Binding TrainId}"
-                                                    Width="120"/>
+                                                    Binding="{Binding TrainDisplayName}"
+                                                    Width="160"/>
 
                                 <DataGridTextColumn Header="Departure Time"
                                                     Binding="{Binding DepartureTime}"
-                                                    Width="160"/>
-
-                                <DataGridTextColumn Header="First Station"
-                                                    Binding="{Binding FirstStation}"
                                                     Width="*"/>
-
-                                <DataGridTextColumn Header="Status"
-                                                    Binding="{Binding QueueStatus}"
-                                                    Width="160"/>
 
                             </DataGrid.Columns>
 
@@ -988,8 +879,8 @@
 
                 <!-- ==============================================
                      DISPATCHED TRAINS
-                     Speed/authority are displayed as read-only data.
-                     The CTC operator does not set them here.
+                     Speed/authority are CTC's initial suggestions,
+                     displayed read-only. The CTC operator does not set them here.
                      ============================================== -->
                 <TabItem Header="Dispatched Trains">
 
@@ -1000,14 +891,14 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Text="Trains already released from the queue. Speed and authority are monitoring values, not dispatcher inputs."
+                        <TextBlock Text="Trains already released from the queue. Suggested Speed and Suggested Authority are what CTC sent to the Track Controller when the train was released; they are not recalculated afterwards. Last Known Block is the last block CTC can authoritatively place the train in (its route start block at release); block occupancy does not identify trains, so it is not updated yet."
                                    Foreground="#6B7280"
                                    FontSize="11"
+                                   TextWrapping="Wrap"
                                    Margin="0,0,0,8"/>
 
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding DispatchedTrains}"
-                                  SelectedItem="{Binding SelectedDispatchedTrain}"
                                   AutoGenerateColumns="False"
                                   CanUserAddRows="False"
                                   IsReadOnly="True">
@@ -1015,25 +906,21 @@
                             <DataGrid.Columns>
 
                                 <DataGridTextColumn Header="Train ID"
-                                                    Binding="{Binding TrainId}"
+                                                    Binding="{Binding TrainDisplayName}"
                                                     Width="120"/>
 
-                                <DataGridTextColumn Header="Authorized Speed"
-                                                    Binding="{Binding AuthorizedSpeed,
+                                <DataGridTextColumn Header="Suggested Speed"
+                                                    Binding="{Binding SuggestedSpeed,
                                                                       StringFormat={}{0:F1} mph}"
                                                     Width="160"/>
 
-                                <DataGridTextColumn Header="Authority"
-                                                    Binding="{Binding Authority,
+                                <DataGridTextColumn Header="Suggested Authority"
+                                                    Binding="{Binding SuggestedAuthority,
                                                                       StringFormat={}{0:F0} ft}"
-                                                    Width="150"/>
+                                                    Width="160"/>
 
-                                <DataGridTextColumn Header="Current Block"
-                                                    Binding="{Binding CurrentBlock}"
-                                                    Width="150"/>
-
-                                <DataGridTextColumn Header="Next Station"
-                                                    Binding="{Binding NextStation}"
+                                <DataGridTextColumn Header="Last Known Block"
+                                                    Binding="{Binding LastKnownBlock}"
                                                     Width="*"/>
 
                             </DataGrid.Columns>
@@ -1076,7 +963,7 @@
             <Separator/>
 
             <StatusBarItem>
-                <TextBlock Text="Auto-dispatch follows the global system clock."/>
+                <TextBlock Text="Auto-dispatch follows the received system time."/>
             </StatusBarItem>
 
             <Separator/>

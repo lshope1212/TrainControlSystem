@@ -34,47 +34,69 @@ public sealed class CtcNamedPipeReceiver
 
     /// <summary>Receives until <paramref name="cancellationToken"/> is cancelled.</summary>
     public Task RunAsync(CancellationToken cancellationToken) =>
-        NamedPipeTransport.ListenAsync(NamedPipeNames.Ctc, HandleAsync, ReportError, cancellationToken);
+        NamedPipeTransport.ListenAsync(
+            NamedPipeNames.Ctc,
+            envelope => HandleAsync(envelope, cancellationToken),
+            ReportError,
+            cancellationToken);
 
-    private async Task HandleAsync(MessageEnvelope envelope)
+    private async Task HandleAsync(MessageEnvelope envelope, CancellationToken cancellationToken)
     {
         // Deserialize on the background thread; only the service call runs on the UI thread.
-        Action<ICTCService>? apply = envelope.MessageType switch
+        Func<ICTCService, Task>? apply = envelope.MessageType switch
         {
             nameof(BlockStatusMessage) => Route<BlockStatusMessage>(envelope, (ctc, m) => ctc.ApplyBlockStatus(m)),
             nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => ctc.ApplyTrackLayout(m)),
-            nameof(TrainAuthorizationStatusMessage) => Route<TrainAuthorizationStatusMessage>(envelope, (ctc, m) => ctc.ApplyTrainAuthorization(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
-            nameof(SystemTimeMessage) => Route<SystemTimeMessage>(envelope, (ctc, m) => ctc.SetSystemTime(m.SystemTime)),
+            nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ctc.SetSystemTimeAsync(m.SystemTime, cancellationToken)),
             _ => null,
         };
 
         if (apply is null)
         {
+            // The raw type name is kept here: it is what a developer needs to diagnose the sender.
             await ReportOnUiThreadAsync($"Ignored inbound message of unknown type '{envelope.MessageType}'.");
             return;
         }
 
-        // CTC state backs WPF bindings, so it is only ever mutated on the UI thread.
-        await _dispatcher.InvokeAsync(() =>
+        // CTC state backs WPF bindings, so it is only ever mutated on the UI thread. The
+        // service call is awaited to completion (including any dispatch sends it makes), so
+        // inbound messages are applied strictly one after another.
+        var displayName = MessageDisplayNameFormatter.ToDisplayName(envelope.MessageType);
+        await _dispatcher.InvokeAsync(async () =>
         {
             string status;
             try
             {
-                apply(_ctc);
-                status = $"Received {envelope.MessageType}.";
+                await apply(_ctc);
+                status = $"Received {displayName}.";
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
             }
             catch (Exception ex)
             {
                 // E.g. a BlockStatusMessage for a block that is not in the current layout.
-                status = $"Rejected {envelope.MessageType}: {ex.Message}";
+                status = $"Rejected {displayName}: {ex.Message}";
             }
 
             Report(status);
-        });
+        }).Task.Unwrap();
     }
 
-    private static Action<ICTCService> Route<TMessage>(MessageEnvelope envelope, Action<ICTCService, TMessage> apply)
+    private static Func<ICTCService, Task> Route<TMessage>(MessageEnvelope envelope, Action<ICTCService, TMessage> apply)
+        where TMessage : class
+    {
+        var message = MessageSerializer.DeserializePayload<TMessage>(envelope);
+        return ctc =>
+        {
+            apply(ctc, message);
+            return Task.CompletedTask;
+        };
+    }
+
+    private static Func<ICTCService, Task> RouteAsync<TMessage>(MessageEnvelope envelope, Func<ICTCService, TMessage, Task> apply)
         where TMessage : class
     {
         var message = MessageSerializer.DeserializePayload<TMessage>(envelope);

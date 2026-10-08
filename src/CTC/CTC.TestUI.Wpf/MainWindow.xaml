@@ -43,7 +43,7 @@
                                  BLOCK STATUS INPUT
                                  ============================ -->
 
-                            <TextBlock Text="Block Status (BlockStatusMessage)"
+                            <TextBlock Text="Block Status"
                                        FontWeight="SemiBold"
                                        Margin="0,0,0,8"/>
 
@@ -54,6 +54,7 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
@@ -127,12 +128,27 @@
                                            Grid.Column="0"
                                            Text="Crossing:"
                                            VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
+                                           Margin="0,0,8,6"/>
 
                                 <ComboBox Grid.Row="4"
                                           Grid.Column="1"
                                           ItemsSource="{Binding BlockStatusInput.CrossingOptions}"
-                                          SelectedItem="{Binding BlockStatusInput.SelectedCrossing}"/>
+                                          SelectedItem="{Binding BlockStatusInput.SelectedCrossing}"
+                                          Margin="0,0,0,6"/>
+
+
+                                <!-- Maintenance -->
+
+                                <TextBlock Grid.Row="5"
+                                           Grid.Column="0"
+                                           Text="Maintenance:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+
+                                <ComboBox Grid.Row="5"
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding BlockStatusInput.MaintenanceOptions}"
+                                          SelectedItem="{Binding BlockStatusInput.SelectedMaintenance}"/>
 
                             </Grid>
 
@@ -149,18 +165,12 @@
                                  FUTURE INPUT
                                  ============================ -->
 
-                            <Separator Margin="0,12,0,10"/>
-
-                            <TextBlock Text="Train Authorization Status (TrainAuthorizationStatusMessage): not implemented yet"
-                                       Style="{StaticResource PlaceholderTextStyle}"
-                                       TextWrapping="Wrap"/>
-
                         </StackPanel>
                     </GroupBox>
 
                     <GroupBox Header="Track Model -> CTC">
                         <StackPanel>
-                            <TextBlock Text="Track Layout (TrackLayoutMessage)" FontWeight="SemiBold"/>
+                            <TextBlock Text="Track Layout" FontWeight="SemiBold"/>
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                 <Button Content="Send Sample Layout"
                                         Command="{Binding TrackLayoutInput.SendSampleLayoutCommand}"/>
@@ -168,22 +178,99 @@
                             <TextBlock Text="{Binding TrackLayoutInput.Result}"
                                        Style="{StaticResource ResultTextStyle}"/>
 
-                            <TextBlock Text="Ticket Sales (TicketSalesMessage): not implemented yet"
-                                       Style="{StaticResource PlaceholderTextStyle}"
-                                       Margin="0,10,0,0"/>
+                            <!-- ============================
+                                 TICKET SALES INPUT
+                                 ============================ -->
+
+                            <TextBlock Text="Ticket Sales"
+                                       FontWeight="SemiBold"
+                                       Margin="0,10,0,8"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="160"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0"
+                                           Grid.Column="0"
+                                           Text="Line:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,6"/>
+
+                                <ComboBox Grid.Row="0"
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding TicketSalesInput.LineOptions}"
+                                          SelectedItem="{Binding TicketSalesInput.SelectedLine}"
+                                          DisplayMemberPath="DisplayName"
+                                          Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="1"
+                                           Grid.Column="0"
+                                           Text="Tickets Sold / Hour:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+
+                                <TextBox Grid.Row="1"
+                                         Grid.Column="1"
+                                         Text="{Binding TicketSalesInput.TicketsPerHourText,
+                                                        UpdateSourceTrigger=PropertyChanged}"
+                                         VerticalContentAlignment="Center"/>
+                            </Grid>
+
+                            <Button Content="Send Ticket Sales"
+                                    Command="{Binding TicketSalesInput.SendCommand}"
+                                    HorizontalAlignment="Left"
+                                    Margin="0,10,0,0"/>
+
+                            <TextBlock Text="{Binding TicketSalesInput.Result}"
+                                       Style="{StaticResource ResultTextStyle}"/>
                         </StackPanel>
                     </GroupBox>
 
                     <GroupBox Header="System -> CTC">
                         <StackPanel>
-                            <TextBlock Text="System Time (SystemTimeMessage, simulated shared clock)" FontWeight="SemiBold"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="System Time (simulated shared clock, 1x)" FontWeight="SemiBold"/>
+
+                            <!-- Current clock value and state -->
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="Current Time:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+                                <TextBlock Text="{Binding SystemTimeInput.CurrentTimeDisplay}"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,12,0"/>
+                                <TextBlock Text="{Binding SystemTimeInput.ClockState}"
+                                           Foreground="#4B5563"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Set the clock (only while paused) -->
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                 <TextBox Text="{Binding SystemTimeInput.TimeText, UpdateSourceTrigger=PropertyChanged}"
+                                         IsEnabled="{Binding SystemTimeInput.IsPaused}"
                                          Width="90"
                                          Margin="0,0,6,0"
                                          VerticalContentAlignment="Center"/>
-                                <Button Content="Send Time"
-                                        Command="{Binding SystemTimeInput.SendCommand}"/>
+                                <Button Content="Set Time"
+                                        Command="{Binding SystemTimeInput.SetTimeCommand}"/>
+                            </StackPanel>
+
+                            <!-- Run controls -->
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Start"
+                                        Command="{Binding SystemTimeInput.StartCommand}"/>
+                                <Button Content="Pause"
+                                        Command="{Binding SystemTimeInput.PauseCommand}"/>
+                                <Button Content="Reset"
+                                        Command="{Binding SystemTimeInput.ResetCommand}"/>
                             </StackPanel>
                             <TextBlock Text="{Binding SystemTimeInput.Result}"
                                        Style="{StaticResource ResultTextStyle}"/>

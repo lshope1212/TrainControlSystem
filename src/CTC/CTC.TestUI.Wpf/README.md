@@ -90,8 +90,14 @@ dotnet run --project src/CTC/CTC.TestUI.Wpf
 Quick check:
 
 1. TestUI: **Send Sample Layout**.
-2. CTC: pick `G4` in the *Selected Block* drop-down.
-3. TestUI: Block ID `G4`, Occupancy `Occupied`, Signal `Red` → **Send Block Status**.
+2. CTC: pick `A4` in the *Selected Block* drop-down.
+3. TestUI: Block ID `A4`, Occupancy `Occupied`, Signal `Red` → **Send Block Status**.
    The CTC *Selected Block* panel updates immediately.
 4. CTC: **Close Block**. TestUI *Captured CTC Outputs* shows
-   `MaintenanceRequestMessage` with `BlockId = G4, RequestedState = Closed`.
+   `MaintenanceRequestMessage` with `BlockId = A4, RequestedState = Closed`.
+
+Dispatch check: queue a schedule in the CTC Schedule Builder, then advance the TestUI
+system time past its departure. *Captured CTC Outputs* shows a
+`MovementSuggestionMessage` (CTC's suggested speed/authority) followed by a
+`MovementRequestMessage` for the train. Speed and authority are calculated by CTC;
+the TestUI no longer enters them.
