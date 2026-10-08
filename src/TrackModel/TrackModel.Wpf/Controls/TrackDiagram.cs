@@ -105,7 +105,6 @@ public sealed class TrackDiagram : FrameworkElement
             dc.DrawRoundedRectangle(Brushes.WhiteSmoke, new Pen(Brushes.SlateGray, 2), new Rect(25, 318, 75, 65), 12, 12);
             Label(dc, "Yard", new(40, 337), 20);
             dc.DrawLine(TrackPen, new(100, 350), new(109, 350));
-            Label(dc, "Blue Line · 15 blocks · Yard to Station B / Station C", new(35, 675), 20);
         }
     }
 

@@ -34,8 +34,6 @@ public sealed class MainWindowViewModel : ViewModelBase
     private string _status = "Disconnected";
     private string _speed = "25", _authority = "1200", _actualSpeed = "22", _boarding = "0", _disembarking = "0";
     private string _time = "09:42:18", _multiplier = "1";
-    private string _waitingPassengers = "24";
-    private TrackBlockDefinition? _selectedDemandBlock;
     private SwitchPosition _switch = SwitchPosition.Normal;
     private SignalState _signal = SignalState.Green;
     private CrossingState _crossing = CrossingState.Open;
@@ -49,24 +47,12 @@ public sealed class MainWindowViewModel : ViewModelBase
         _connection.ErrorReported += error => Status = "Capture error: " + error;
         SendCommandsCommand = new AsyncRelayCommand(SendCommandsAsync);
         SendTrainCommand = new AsyncRelayCommand(() => SendTrainAsync(exchange: true));
-        RemoveTrainCommand = new AsyncRelayCommand(async () =>
-        {
-            TrainOccupancy = OccupancyState.Clear;
-            await FlushInputsAsync();
-        });
         SendFailuresCommand = new AsyncRelayCommand(SendFailuresAsync);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         SendTimeCommand = new AsyncRelayCommand(SendTimeAsync);
         StepClockCommand = new AsyncRelayCommand(() => AdvanceClockAsync(10, scale: false));
         ToggleClockCommand = new RelayCommand(ToggleClock);
         ClearLogCommand = new RelayCommand(() => Messages.Clear());
-        SetDemandCommand = new AsyncRelayCommand(async () =>
-        {
-            await FlushInputsAsync();
-            await SendSafely(() => new TrackModelPassengerDemandMessage
-                { BlockId = Required(SelectedDemandBlock?.BlockId ?? "", "Station block"), WaitingPassengers = Count(WaitingPassengers, "Waiting passengers") });
-            SelectOutput(SelectedDemandBlock?.BlockId);
-        });
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _clock.Tick += async (_, _) =>
         {
@@ -85,28 +71,15 @@ public sealed class MainWindowViewModel : ViewModelBase
     public SwitchPosition[] SwitchOptions { get; } = [SwitchPosition.Normal, SwitchPosition.Reverse];
     public SignalState[] SignalOptions { get; } = [SignalState.Green, SignalState.Yellow, SignalState.Red];
     public CrossingState[] CrossingOptions { get; } = [CrossingState.Open, CrossingState.Closed];
-    public OccupancyState[] TrainOccupancyOptions { get; } = [OccupancyState.Occupied, OccupancyState.Clear];
-    public IEnumerable<TrackBlockDefinition> StationBlocks => Blocks.Where(b => !string.IsNullOrWhiteSpace(b.StationName));
-    public TrackBlockDefinition? SelectedDemandBlock
-    {
-        get => _selectedDemandBlock;
-        set
-        {
-            if (SetProperty(ref _selectedDemandBlock, value) && value is not null)
-                WaitingPassengers = (_captured.GetValueOrDefault(value.BlockId)?.Environment?.WaitingPassengers ?? 24).ToString(CultureInfo.CurrentCulture);
-        }
-    }
-    public string WaitingPassengers { get => _waitingPassengers; set => SetProperty(ref _waitingPassengers, value); }
+    public bool[] TrainPresenceOptions { get; } = [true, false];
     public ICommand SendCommandsCommand { get; }
     public ICommand SendTrainCommand { get; }
-    public ICommand RemoveTrainCommand { get; }
     public ICommand SendFailuresCommand { get; }
     public ICommand RefreshCommand { get; }
     public ICommand SendTimeCommand { get; }
     public ICommand StepClockCommand { get; }
     public ICommand ToggleClockCommand { get; }
     public ICommand ClearLogCommand { get; }
-    public ICommand SetDemandCommand { get; }
     public string Status { get => _status; set => SetProperty(ref _status, value); }
     public string BlockId
     {
@@ -143,8 +116,17 @@ public sealed class MainWindowViewModel : ViewModelBase
         set
         {
             if (value is not (OccupancyState.Occupied or OccupancyState.Clear)) return;
-            if (SetProperty(ref _trainOccupancy, value)) QueueInput(InputGroup.Train);
+            if (SetProperty(ref _trainOccupancy, value))
+            {
+                OnPropertyChanged(nameof(TrainPresent));
+                QueueInput(InputGroup.Train);
+            }
         }
+    }
+    public bool TrainPresent
+    {
+        get => TrainOccupancy == OccupancyState.Occupied;
+        set => TrainOccupancy = value ? OccupancyState.Occupied : OccupancyState.Clear;
     }
     public TrackBlockDefinition? SelectedCommandBlock
     {
@@ -255,7 +237,6 @@ public sealed class MainWindowViewModel : ViewModelBase
                     var selection = BlockId;
                     var current = CurrentBlock;
                     var outputSelection = SelectedOutput?.Id;
-                    var demandSelection = SelectedDemandBlock?.BlockId;
                     _layoutSnapshotId = layout.SnapshotId;
                     _layoutInputsPending = !_pendingInputs.Contains(InputGroup.Controller) && !_pendingInputs.Contains(InputGroup.Failures);
                     _trainInputsPending = !_pendingInputs.Contains(InputGroup.Train);
@@ -271,10 +252,6 @@ public sealed class MainWindowViewModel : ViewModelBase
                     { OutputBlocks.Remove(_captured[stale]); _captured.Remove(stale); }
                     BlockId = ids.Contains(selection) ? selection : Blocks.FirstOrDefault()?.BlockId ?? "";
                     CurrentBlock = ids.Contains(current) ? current : Blocks.FirstOrDefault()?.BlockId ?? "";
-                    OnPropertyChanged(nameof(StationBlocks));
-                    var demandBlock = StationBlocks.FirstOrDefault(b => b.BlockId == demandSelection) ?? StationBlocks.FirstOrDefault();
-                    if (demandBlock?.BlockId != demandSelection) SelectedDemandBlock = demandBlock;
-                    else { _selectedDemandBlock = demandBlock; OnPropertyChanged(nameof(SelectedDemandBlock)); }
                     // WPF finishes its collection-change selection work after this callback.
                     // Restore the source selections then, rather than during that update.
                     _dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>

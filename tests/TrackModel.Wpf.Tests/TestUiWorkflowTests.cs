@@ -1,3 +1,8 @@
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Threading;
 using TrackModel.Core.Services;
 using TrackModel.TestUI.Wpf.Services;
 using TrackModel.TestUI.Wpf.ViewModels;
@@ -21,6 +26,120 @@ public class TestUiWorkflowTests
     }
     [TestCleanup] public void Cleanup() => _vm.Stop();
     private CapturedBlockViewModel Output(string id) => _vm.OutputBlocks.Single(b => b.Id == id);
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject node)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+        {
+            var child = VisualTreeHelper.GetChild(node, i);
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
+    }
+
+    [TestMethod]
+    public async Task TrainPresenceSelector_RendersYesNoAndUpdatesPhysicalPresence()
+    {
+        var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("/TrackModel.TestUI.Wpf;component/Resources/Theme.xaml", UriKind.Relative)
+        });
+        var window = new TrackModel.TestUI.Wpf.MainWindow(_vm) { ShowActivated = false };
+        void Render()
+        {
+            window.UpdateLayout();
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        }
+        try
+        {
+            window.Show(); Render();
+            var selector = Descendants(window).OfType<ComboBox>()
+                .Single(control => AutomationProperties.GetName(control) == "Train present");
+            Assert.IsTrue(Descendants(selector).OfType<TextBlock>().Any(text => text.Text == "Yes"));
+
+            selector.SelectedItem = false;
+            await _vm.RefreshAsync(); Render();
+            Assert.IsFalse(_vm.TrainPresent);
+            Assert.AreEqual("No train", Output("104").Train);
+            Assert.IsTrue(Descendants(selector).OfType<TextBlock>().Any(text => text.Text == "No"));
+
+            // A captured model snapshot must also update the selector, not just user edits.
+            _connection.Model.ApplyTrainUpdate(new TrackModelTrainUpdateMessage
+                { TrainId = "01", CurrentBlockId = "104", ActualSpeedMetersPerSecond = 0 });
+            await _vm.RefreshAsync(); Render();
+            Assert.IsTrue(_vm.TrainPresent);
+            Assert.IsTrue(Descendants(selector).OfType<TextBlock>().Any(text => text.Text == "Yes"));
+        }
+        finally { window.Close(); }
+    }
+
+    [TestMethod]
+    public async Task DashboardTrainInformation_UpdatesForSelectedCommandBlock()
+    {
+        await UseBlueLineAsync();
+        var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("/TrackModel.Wpf;component/Resources/Theme.xaml", UriKind.Relative)
+        });
+        var dashboard = new TrackModel.Wpf.ViewModels.MainWindowViewModel(_connection.Model);
+        var window = new TrackModel.Wpf.MainWindow(dashboard) { ShowActivated = false };
+        void Render()
+        {
+            window.UpdateLayout();
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        }
+        string Display(string name) => Descendants(window).OfType<TextBlock>()
+            .Single(text => AutomationProperties.GetName(text) == name).Text;
+        try
+        {
+            window.Show(); Render();
+            _vm.BlockId = "9"; _vm.Speed = "30"; _vm.Authority = "600";
+            await _vm.RefreshAsync(); Render();
+
+            // Inspecting another block must not show commands sent to block 9.
+            Assert.AreEqual("Block 1", Display("Train information block"));
+            Assert.AreEqual("0 mph", Display("Train commanded speed"));
+            Assert.AreEqual("0 ft", Display("Train authority"));
+
+            dashboard.SelectedBlock = dashboard.Blocks.Single(block => block.Id == "9");
+            Render();
+            Assert.AreEqual("Block 9", Display("Train information block"));
+            Assert.AreEqual("30 mph", Display("Train commanded speed"));
+            Assert.AreEqual("600 ft", Display("Train authority"));
+
+            // Later edits must update rendered dashboard bindings automatically,
+            // through the input debounce, without clicking Refresh outputs.
+            _vm.Speed = "15"; _vm.Authority = "300";
+            var frame = new DispatcherFrame();
+            var deadline = DateTime.UtcNow.AddSeconds(3);
+            var poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(25) };
+            poll.Tick += (_, _) =>
+            {
+                if (Display("Train commanded speed") == "15 mph" && Display("Train authority") == "300 ft"
+                    || DateTime.UtcNow >= deadline) frame.Continue = false;
+            };
+            try { poll.Start(); Dispatcher.PushFrame(frame); }
+            finally { poll.Stop(); }
+            Render();
+            Assert.AreEqual("15 mph", Display("Train commanded speed"));
+            Assert.AreEqual("300 ft", Display("Train authority"));
+            Assert.AreEqual("0 mph", dashboard.SelectedBlock.ActualSpeed);
+
+            // Environmental state updates the read-only display and heater automatically.
+            Assert.AreEqual("68 °F", Display("Environment temperature"));
+            Assert.AreEqual("Off", Display("Track heater status"));
+            _connection.Model.ApplyTemperature(new TrackModelTemperatureCommandMessage
+                { BlockId = "9", TemperatureCelsius = 0 });
+            Render();
+            Assert.AreEqual("32 °F", Display("Environment temperature"));
+            Assert.AreEqual("On", Display("Track heater status"));
+            _connection.Model.ApplyFailures(new TrackModelFailureCommandMessage { BlockId = "9", PowerFailure = true });
+            Render();
+            Assert.AreEqual("Off", Display("Track heater status"));
+        }
+        finally { window.Close(); }
+    }
 
     [TestMethod]
     public void StableStartingState_IsCapturedFromModel()
@@ -31,6 +150,7 @@ public class TestUiWorkflowTests
         Assert.AreEqual("NORMAL", _vm.SelectedOutput.BrokenRail);
         Assert.AreEqual("NORMAL", _vm.SelectedOutput.TrackCircuit);
         Assert.AreEqual("NORMAL", _vm.SelectedOutput.Power);
+        Assert.IsTrue(_vm.TrainPresent);
     }
 
     [TestMethod]
@@ -93,10 +213,11 @@ public class TestUiWorkflowTests
         Assert.AreEqual("01", Output("105").Train);
         Assert.AreEqual("22 mph", Output("105").ActualSpeed);
         Assert.AreEqual("CLEAR", Output("104").Occupancy);
-        _vm.RemoveTrainCommand.Execute(null); await _vm.RefreshAsync();
+        _vm.TrainPresent = false; await _vm.RefreshAsync();
         Assert.AreEqual("CLEAR", Output("105").Occupancy);
         Assert.AreEqual("No train", Output("105").Train);
-        _vm.CurrentBlock = "104"; _vm.ActualSpeed = "22"; _vm.TrainOccupancy = OccupancyState.Occupied;
+        Assert.IsFalse(_vm.TrainPresent);
+        _vm.CurrentBlock = "104"; _vm.ActualSpeed = "22"; _vm.TrainPresent = true;
         await _vm.RefreshAsync();
         Assert.AreEqual("01", Output("104").Train);
     }
@@ -138,6 +259,7 @@ public class TestUiWorkflowTests
             Assert.AreEqual(power ? "FAILURE" : "NORMAL",o.Power);
             Assert.AreEqual(circuit || power ? "UNKNOWN" : "OCCUPIED",o.Occupancy);
             Assert.AreEqual("01",o.Train); Assert.AreEqual("22 mph",o.ActualSpeed);
+            Assert.IsTrue(_vm.TrainPresent);
             Assert.AreEqual("30 mph",o.Speed); Assert.AreEqual("600 ft",o.Authority);
         }
     }
@@ -285,22 +407,23 @@ public class TestUiWorkflowTests
     }
 
     [TestMethod]
-    public async Task BlueLine_StationDemandAndSingleExchangeAreIndependentInputs()
+    public async Task BlueLine_PassengerExchangeUsesLayoutPopulationWithoutDemandInput()
     {
         await UseBlueLineAsync();
-        _vm.WaitingPassengers="7"; _vm.SetDemandCommand.Execute(null); await _vm.RefreshAsync();
-        Assert.AreEqual("7 waiting",Output("10").Demand); Assert.AreEqual("0",Output("10").Tickets);
+        _connection.Sent.Clear();
+        Assert.AreEqual("24 waiting",Output("10").Demand); Assert.AreEqual("0",Output("10").Tickets);
         _vm.CurrentBlock="10"; _vm.Boarding="3"; _vm.Disembarking="2";
         _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
-        Assert.AreEqual("4 waiting",Output("10").Demand); Assert.AreEqual("3 / 2",Output("10").PassengerTotals);
+        Assert.AreEqual("21 waiting",Output("10").Demand); Assert.AreEqual("3 / 2",Output("10").PassengerTotals);
         Assert.AreEqual("3",Output("10").Tickets); StringAssert.Contains(_vm.TicketSales,"3 tickets/hour");
         await _vm.RefreshAsync(); Assert.AreEqual("3",Output("10").Tickets);
-        _vm.WaitingPassengers="-1"; _vm.SetDemandCommand.Execute(null); await _vm.RefreshAsync();
-        StringAssert.Contains(_vm.Status,"nonnegative whole number"); Assert.AreEqual("4 waiting",Output("10").Demand);
+        Assert.AreEqual("21 waiting",Output("10").Demand);
+        Assert.AreEqual("24 waiting",Output("15").Demand);
+        Assert.IsFalse(_connection.Sent.Any(m => m is TrackModelPassengerDemandMessage));
     }
 
     [TestMethod]
-    public async Task BlueLine_OrdinaryTestInputsDoNotSendTemperatureOrMaintenance()
+    public async Task BlueLine_OrdinaryTestInputsDoNotSendSimulationSetupOrMaintenance()
     {
         await UseBlueLineAsync();
         _connection.Sent.Clear();
