@@ -27,15 +27,15 @@
 
    <Grid Grid.Column="2" Grid.ColumnSpan="3" Margin="0,0,0,8">
     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="140"/><ColumnDefinition Width="95"/></Grid.ColumnDefinitions>
-    <TextBlock Text="{Binding SelectedOutput.LastReceived, StringFormat=Last received: {0}}" Foreground="{StaticResource Muted}" FontSize="18"/>
+    <TextBlock Text="{Binding SelectedOutput.LastReceived, StringFormat=Output last updated: {0}}" ToolTip="Local computer time when block-state or train-environment output was last received for the selected output block. Separate from simulation time." Foreground="{StaticResource Muted}" FontSize="18"/>
     <TextBlock Grid.Column="1" Text="Output block" HorizontalAlignment="Right" Margin="0,0,8,0"/>
     <ComboBox Grid.Column="2" ItemsSource="{Binding OutputBlocks}" SelectedItem="{Binding SelectedOutput}" DisplayMemberPath="Id" AutomationProperties.Name="Output block"/>
    </Grid>
    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,8"><StackPanel>
     <TextBlock Text="From Track Controller" Style="{StaticResource Heading}"/>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/></Grid.RowDefinitions>
-<TextBlock Grid.Row="0" Text="Block" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding Blocks}" DisplayMemberPath="BlockId" SelectedItem="{Binding SelectedCommandBlock}" AutomationProperties.Name="Command block" />
-<TextBlock Grid.Row="1" Text="Speed (mph)" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" Text="{Binding Speed, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Commanded speed mph" />
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="42"/><RowDefinition Height="Auto" MinHeight="56"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/></Grid.RowDefinitions>
+<TextBlock Grid.Row="0" Text="Command block" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding Blocks}" DisplayMemberPath="BlockId" SelectedItem="{Binding SelectedCommandBlock}" AutomationProperties.Name="Command block" ToolTip="Commands apply to this block. Choose the same Block number under Block Information in the dashboard to inspect Train Information." />
+<TextBlock Grid.Row="1" Text="Commanded speed (mph)" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" Text="{Binding Speed, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Commanded speed mph" />
 <TextBlock Grid.Row="2" Text="Authority (ft)" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,2" Text="{Binding Authority, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Authority feet" />
 <TextBlock Grid.Row="3" Text="Switch" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding SwitchOptions}" SelectedItem="{Binding Switch}" IsEnabled="{Binding HasSwitch}" AutomationProperties.Name="Switch command" />
 <TextBlock Grid.Row="4" Text="Signal" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/>
@@ -56,7 +56,12 @@
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/></Grid.RowDefinitions>
 <TextBlock Grid.Row="0" Text="Train ID" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="0" Grid.Column="1" Margin="0,2,0,2" Text="{Binding TrainId, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="Train ID" />
 <TextBlock Grid.Row="1" Text="Current block" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding Blocks}" DisplayMemberPath="BlockId" SelectedItem="{Binding SelectedTrainBlock}" AutomationProperties.Name="Train current block" />
-<TextBlock Grid.Row="2" Text="Occupancy" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><ComboBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding TrainOccupancyOptions}" SelectedItem="{Binding TrainOccupancy}" AutomationProperties.Name="Train occupancy" />
+<TextBlock Grid.Row="2" Text="Train present" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/>
+<ComboBox Grid.Row="2" Grid.Column="1" Margin="0,2,0,2" ItemsSource="{Binding TrainPresenceOptions}" SelectedItem="{Binding TrainPresent}" AutomationProperties.Name="Train present" ToolTip="Yes places this train on the current block. No removes this train and clears its previous block.">
+ <ComboBox.ItemTemplate><DataTemplate><TextBlock>
+  <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Text" Value="No"/><Style.Triggers><DataTrigger Binding="{Binding}" Value="True"><Setter Property="Text" Value="Yes"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+ </TextBlock></DataTemplate></ComboBox.ItemTemplate>
+</ComboBox>
 <TextBlock Grid.Row="3" Text="Actual speed (mph)" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/><TextBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,2" Text="{Binding ActualSpeed, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Actual speed mph" />
 <Grid Grid.Row="4" Grid.ColumnSpan="2"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
  <TextBlock Text="Boarding" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/><TextBox Grid.Column="1" Margin="0,2,8,2" Text="{Binding Boarding, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Boarding passengers" />
@@ -64,17 +69,8 @@
 </Grid>
 </Grid>
     <WrapPanel Margin="0,5,0,0">
-     <Button Content="Apply passenger exchange once" Command="{Binding SendTrainCommand}" AutomationProperties.Name="Apply passenger exchange once" Margin="0,0,6,4"/>
-     <Button Content="Remove train" Command="{Binding RemoveTrainCommand}" AutomationProperties.Name="Remove train" Margin="0,0,0,4"/>
+     <Button Content="Simulate boarding / disembarking" Command="{Binding SendTrainCommand}" AutomationProperties.Name="Simulate boarding / disembarking" ToolTip="Each click records one boarding/disembarking event using the counts above. Requires a stopped train at a station; refreshing outputs does not repeat it." Margin="0,0,0,4"/>
     </WrapPanel>
-    <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,6,0,0"><StackPanel>
-     <TextBlock Text="Simulation station demand" FontWeight="SemiBold" Margin="0,0,0,4"/>
-     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="70"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      <ComboBox ItemsSource="{Binding StationBlocks}" SelectedItem="{Binding SelectedDemandBlock}" DisplayMemberPath="StationName" AutomationProperties.Name="Passenger demand station" Margin="0,0,6,0"/>
-      <TextBox Grid.Column="1" Text="{Binding WaitingPassengers, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Set waiting passengers" ToolTip="Waiting population; tickets are counted when passengers board"/>
-      <Button Grid.Column="2" Content="Set waiting" Command="{Binding SetDemandCommand}" AutomationProperties.Name="Apply station demand" Margin="6,0,0,0"/>
-     </Grid>
-    </StackPanel></Border>
 
    </StackPanel></Border>
    <Border Grid.Row="1" Grid.Column="4" Style="{StaticResource Card}" Margin="0,0,0,8"><StackPanel>
@@ -108,21 +104,14 @@
    </StackPanel></Border>
    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource Card}"><StackPanel>
     <TextBlock Text="To Train Model" Style="{StaticResource Heading}"/>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/></Grid.RowDefinitions>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/></Grid.RowDefinitions>
 <TextBlock Grid.Row="0" Text="Train" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedOutput.Train}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
 <TextBlock Grid.Row="1" Text="Commanded speed" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedOutput.Speed}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="2" Text="Actual speed" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedOutput.ActualSpeed}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="3" Text="Authority" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedOutput.Authority}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="4" Text="Track signal" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedOutput.TrackSignal}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="5" Text="Beacon" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedOutput.Beacon}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="6" Text="Elevation / grade" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedOutput.ElevationGrade}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="7" Text="Passenger demand" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedOutput.Demand}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
-<TextBlock Grid.Row="8" Text="Next block" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedOutput.NextBlock}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
+<TextBlock Grid.Row="2" Text="Authority" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedOutput.Authority}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
+<TextBlock Grid.Row="3" Text="Track signal" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedOutput.TrackSignal}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
+<TextBlock Grid.Row="4" Text="Beacon" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedOutput.Beacon}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
+<TextBlock Grid.Row="5" Text="Elevation / grade" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedOutput.ElevationGrade}" Style="{StaticResource OutputValue}" Margin="8,0,0,0"/>
 </Grid>
-    <Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="32"/></Grid.RowDefinitions>
-     <TextBlock Text="Boarded / disembarked"/><TextBlock Grid.Column="1" Text="{Binding SelectedOutput.PassengerTotals}" Style="{StaticResource OutputValue}"/>
-     <TextBlock Grid.Row="1" Text="Cumulative station tickets"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedOutput.Tickets}" Style="{StaticResource OutputValue}"/>
-    </Grid>
    </StackPanel></Border>
    <Border Grid.Row="2" Grid.Column="4" Style="{StaticResource Card}"><StackPanel>
     <TextBlock Text="To CTC" Style="{StaticResource Heading}"/>

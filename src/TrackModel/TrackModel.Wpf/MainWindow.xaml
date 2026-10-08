@@ -21,7 +21,7 @@
    <StackPanel><TextBlock Text="{Binding Status}" TextWrapping="Wrap"/><TextBlock Text="{Binding Delivery}" FontSize="14" Foreground="{StaticResource Muted}" Margin="0,4,0,0" TextWrapping="Wrap"/></StackPanel>
   </Border>
   <Grid Margin="12">
-   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="460"/></Grid.ColumnDefinitions>
+   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="560"/></Grid.ColumnDefinitions>
    <Border Style="{StaticResource Card}" Padding="0" Margin="0,0,12,0">
     <DockPanel>
      <Border DockPanel.Dock="Top" Background="#F7FAFD" Padding="16,12" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
@@ -55,36 +55,84 @@
      </TabControl>
     </DockPanel>
    </Border>
-   <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+   <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" TextElement.FontSize="20">
     <StackPanel>
-     <TextBlock Text="Line Status" FontSize="23" FontWeight="Bold" Margin="8,4,0,12"/>
-     <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-      <Border Style="{StaticResource Card}" Margin="0,0,5,0"><StackPanel><TextBlock Text="Selected Block" Style="{StaticResource Heading}"/><ComboBox ItemsSource="{Binding Blocks}" SelectedItem="{Binding SelectedBlock}" DisplayMemberPath="Id" Margin="0,0,0,12" AutomationProperties.Name="Selected block"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/></Grid.RowDefinitions><TextBlock Grid.Row="0" Text="Occupancy" Style="{StaticResource Label}"/><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedBlock.Occupancy}" Style="{StaticResource Value}"/><TextBlock Grid.Row="1" Text="Reported" Style="{StaticResource Label}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.ReportedOccupancy}" Style="{StaticResource Value}"/><TextBlock Grid.Row="2" Text="Length" Style="{StaticResource Label}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.Length}" Style="{StaticResource Value}"/><TextBlock Grid.Row="3" Text="Elevation" Style="{StaticResource Label}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.Elevation}" Style="{StaticResource Value}"/><TextBlock Grid.Row="4" Text="Grade" Style="{StaticResource Label}"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedBlock.Grade}" Style="{StaticResource Value}"/><TextBlock Grid.Row="5" Text="Temperature" Style="{StaticResource Label}"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedBlock.Temperature}" Style="{StaticResource Value}"/><TextBlock Grid.Row="6" Text="Maintenance" Style="{StaticResource Label}"/><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedBlock.Maintenance}" Style="{StaticResource Value}"/></Grid></StackPanel></Border>
-      <StackPanel Grid.Column="1" Margin="5,0,0,0">
-       <Border Style="{StaticResource Card}" Margin="0,0,0,10"><StackPanel><TextBlock Text="Equipment" Style="{StaticResource Heading}"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/></Grid.RowDefinitions><TextBlock Grid.Row="0" Text="Signal" Style="{StaticResource Label}"/><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedBlock.Signal}" Style="{StaticResource Value}"/><TextBlock Grid.Row="1" Text="Switch" Style="{StaticResource Label}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.Switch}" Style="{StaticResource Value}"/><TextBlock Grid.Row="2" Text="Crossing" Style="{StaticResource Label}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.Crossing}" Style="{StaticResource Value}"/><TextBlock Grid.Row="3" Text="Next block" Style="{StaticResource Label}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.NextBlock}" Style="{StaticResource Value}"/></Grid></StackPanel></Border>
-       <Border Style="{StaticResource Card}" ><StackPanel><TextBlock Text="Movement" Style="{StaticResource Heading}"/><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/></Grid.RowDefinitions><TextBlock Grid.Row="0" Text="Train" Style="{StaticResource Label}"/><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedBlock.Train}" Style="{StaticResource Value}"/><TextBlock Grid.Row="1" Text="Actual speed" Style="{StaticResource Label}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.ActualSpeed}" Style="{StaticResource Value}"/><TextBlock Grid.Row="2" Text="Commanded speed" Style="{StaticResource Label}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.CommandedSpeed}" Style="{StaticResource Value}"/><TextBlock Grid.Row="3" Text="Authority" Style="{StaticResource Label}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.Authority}" Style="{StaticResource Value}"/></Grid></StackPanel></Border>
-      </StackPanel>
-     </Grid>
      <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
-      <TextBlock Text="Track properties &amp; environment" Style="{StaticResource Heading}"/>
-      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/></Grid.RowDefinitions>
-       <TextBlock Text="Speed limit"/><TextBlock Grid.Column="1" Text="{Binding SelectedBlock.SpeedLimit}" Style="{StaticResource Value}"/>
-       <TextBlock Grid.Row="1" Text="Travel direction"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.TravelDirection}" Style="{StaticResource Value}"/>
-       <TextBlock Grid.Row="2" Text="Beacon"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.Beacon}" Style="{StaticResource Value}"/>
-       <TextBlock Grid.Row="3" Text="Track heater"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.Heater}" Style="{StaticResource Value}"/>
+      <TextBlock Text="Block Information" Style="{StaticResource Heading}"/>
+      <Grid Margin="0,0,0,12">
+       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="150"/></Grid.ColumnDefinitions>
+       <TextBlock Text="Block number" Style="{StaticResource Label}"/>
+       <ComboBox Grid.Column="1" ItemsSource="{Binding Blocks}" SelectedItem="{Binding SelectedBlock}" DisplayMemberPath="Id" AutomationProperties.Name="Selected block" FontSize="20" MinHeight="42"/>
       </Grid>
-      <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="90"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-       <TextBlock Text="Temperature (°F)"/>
-       <TextBox Grid.Column="1" Text="{Binding TemperatureInput, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Set ambient temperature Fahrenheit"/>
-       <Button Grid.Column="2" Content="Apply" Command="{Binding SetTemperatureCommand}" Margin="8,0,0,0" AutomationProperties.Name="Apply ambient temperature"/>
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+       </Grid.RowDefinitions>
+       <TextBlock Grid.Row="0" Text="Environment temperature" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedBlock.Temperature}" Style="{StaticResource Value}" AutomationProperties.Name="Environment temperature"/>
+       <TextBlock Grid.Row="1" Text="Occupancy" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.Occupancy}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="2" Text="Block length" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.Length}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="3" Text="Elevation" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.Elevation}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="4" Text="Grade" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedBlock.Grade}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="5" Text="Speed limit" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedBlock.SpeedLimit}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="6" Text="Track availability" Style="{StaticResource Label}" Margin="0,0,12,3" ToolTip="Open for traffic, or closed for maintenance. Independent of occupancy."/>
+       <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedBlock.Maintenance}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="7" Text="Track signal" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedBlock.Signal}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="8" Text="Switch direction" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedBlock.Switch}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="9" Text="Crossing status" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SelectedBlock.Crossing}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="10" Text="Beacon" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding SelectedBlock.Beacon}" Style="{StaticResource Value}" MaxWidth="240" TextWrapping="Wrap" TextAlignment="Right"/>
+       <TextBlock Grid.Row="11" Text="Track heater" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="11" Grid.Column="1" Text="{Binding SelectedBlock.Heater}" Style="{StaticResource Value}" AutomationProperties.Name="Track heater status"/>
+      </Grid>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+      <TextBlock Text="Train Information" Style="{StaticResource Heading}"/>
+      <TextBlock Text="{Binding SelectedBlock.Id, StringFormat=Block {0}}" AutomationProperties.Name="Train information block" FontSize="18" Margin="0,0,0,8" ToolTip="Train values belong to the selected block. Choose the same Command block in TestUI to compare inputs."/>
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+        <RowDefinition Height="Auto" MinHeight="36"/>
+       </Grid.RowDefinitions>
+       <TextBlock Grid.Row="0" Text="Train ID" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedBlock.Train}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="1" Text="Actual speed" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedBlock.ActualSpeed}" Style="{StaticResource Value}"/>
+       <TextBlock Grid.Row="2" Text="Commanded speed" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedBlock.CommandedSpeed}" Style="{StaticResource Value}" AutomationProperties.Name="Train commanded speed"/>
+       <TextBlock Grid.Row="3" Text="Authority" Style="{StaticResource Label}" Margin="0,0,12,3"/>
+       <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedBlock.Authority}" Style="{StaticResource Value}" AutomationProperties.Name="Train authority"/>
       </Grid>
      </StackPanel></Border>
      <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
       <Border Style="{StaticResource Card}" Margin="0,0,5,0"><StackPanel><TextBlock Text="Failures" Style="{StaticResource Heading}"/><CheckBox Content="Broken rail" IsChecked="{Binding SelectedBlock.BrokenRail}" AutomationProperties.Name="Broken rail failure"/><CheckBox Content="Track circuit" IsChecked="{Binding SelectedBlock.TrackCircuitFailure}" AutomationProperties.Name="Track circuit failure"/><CheckBox Content="Power" IsChecked="{Binding SelectedBlock.PowerFailure}" AutomationProperties.Name="Power failure"/></StackPanel></Border>
       <Border Style="{StaticResource Card}" Grid.Column="1" Margin="5,0,0,0"><StackPanel><TextBlock Text="Active Failures" Style="{StaticResource Heading}"/><ItemsControl ItemsSource="{Binding Failures}"><ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding Id}" FontWeight="Bold" Foreground="DarkOrange"/><TextBlock Text="{Binding FailureSummary}" TextWrapping="Wrap" Foreground="DarkOrange"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
      </Grid>
-     <Border Style="{StaticResource Card}" ><StackPanel><TextBlock Text="Stations" Style="{StaticResource Heading}"/><DataGrid ItemsSource="{Binding Stations}" MaxHeight="235"><DataGrid.Columns>
-      <DataGridTextColumn Header="Station" Binding="{Binding Station}" Width="*"/><DataGridTextColumn Header="Board" Binding="{Binding Boarding}" Width="70"/><DataGridTextColumn Header="Exit" Binding="{Binding Disembarking}" Width="55"/><DataGridTextColumn Header="Waiting" Binding="{Binding Waiting}" Width="80"/><DataGridTextColumn Header="Tickets" Binding="{Binding TicketsSold}" Width="75"/>
+     <Border Style="{StaticResource Card}" ><StackPanel><TextBlock Text="Station Information" Style="{StaticResource Heading}"/><DataGrid ItemsSource="{Binding Stations}" MaxHeight="235" FontSize="20" RowHeight="44" ColumnHeaderHeight="48"><DataGrid.Columns>
+      <DataGridTextColumn Header="Station" Binding="{Binding Station}" Width="*" MinWidth="90"/><DataGridTextColumn Header="Boarding" Binding="{Binding Boarding}" Width="SizeToHeader"/><DataGridTextColumn Header="Disembarking" Binding="{Binding Disembarking}" Width="SizeToHeader"/><DataGridTextColumn Header="Waiting" Binding="{Binding Waiting}" Width="SizeToHeader"/><DataGridTextColumn Header="Tickets" Binding="{Binding TicketsSold}" Width="SizeToHeader"/>
      </DataGrid.Columns></DataGrid></StackPanel></Border>
     </StackPanel>
    </ScrollViewer>
