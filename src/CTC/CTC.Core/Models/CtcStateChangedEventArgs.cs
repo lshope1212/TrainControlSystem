@@ -42,6 +42,21 @@ public enum CtcStateChangeKind
     /// (e.g. the arrival time cannot be met) or is null.
     /// </summary>
     TrainMovementPlanUpdated,
+
+    /// <summary>
+    /// A block became occupied that is the next active-route block of exactly one dispatched
+    /// train, so CTC moved that train's current block forward. Raised after the block's own
+    /// <see cref="BlockStatus"/> change. <see cref="CtcStateChangedEventArgs.TrainId"/> names the
+    /// train and <see cref="CtcStateChangedEventArgs.BlockId"/> its new current block.
+    /// </summary>
+    TrainLocationUpdated,
+
+    /// <summary>
+    /// A block became occupied that could be the next block of more than one dispatched train.
+    /// CTC does not guess: no train was moved. <see cref="CtcStateChangedEventArgs.BlockId"/> is
+    /// the block; <see cref="CtcStateChangedEventArgs.Message"/> names the candidate trains.
+    /// </summary>
+    TrainLocationAmbiguous,
 }
 
 /// <summary>

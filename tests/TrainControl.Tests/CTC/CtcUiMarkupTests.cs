@@ -40,12 +40,27 @@ public class CtcUiMarkupTests
     }
 
     [TestMethod]
-    public void DispatchedTrainsGrid_ShowsLastKnownNotCurrentBlock()
+    public void DispatchedTrainsGrid_ShowsInferredCurrentBlock()
     {
         string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
 
-        Assert.Contains("Header=\"Last Known Block\"", xaml);
-        Assert.DoesNotContain("Current Block", xaml);
+        Assert.Contains("Header=\"Current Block\"", xaml);
+        Assert.Contains("{Binding CurrentBlock}", xaml);
+        Assert.Contains("inferred from sequential track occupancy", xaml);
+        Assert.DoesNotContain("Last Known Block", xaml);
+        Assert.DoesNotContain("not updated yet", xaml);
+    }
+
+    [TestMethod]
+    public void TestUi_OccupancySimulator_SendsNoTrainIdentity()
+    {
+        string testUi = RepoPath("src", "CTC", "CTC.TestUI.Wpf");
+        string simulator = File.ReadAllText(Path.Combine(testUi, "ViewModels", "OccupancySequenceSimulatorViewModel.cs"));
+
+        // It must imitate anonymous track circuits only, so CTC's inference is what is exercised.
+        Assert.Contains("new BlockStatusMessage", simulator);
+        Assert.DoesNotContain("TrainId", simulator);
+        Assert.Contains("OccupancySequenceSimulator.NextStepCommand", File.ReadAllText(Path.Combine(testUi, "MainWindow.xaml")));
     }
 
     [TestMethod]

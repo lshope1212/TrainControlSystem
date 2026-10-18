@@ -68,7 +68,7 @@ public class CtcTrainPlanUpdateTests
         var train = service.State.DispatchedTrains.Single();
         Assert.AreEqual("A3", train.TargetBlockId);
         Assert.AreEqual(At(12, 10, 0), train.TargetArrivalTime);
-        Assert.AreEqual("A1", train.LastKnownBlockId);
+        Assert.AreEqual("A1", train.CurrentBlockId);
     }
 
     [TestMethod]
@@ -111,7 +111,7 @@ public class CtcTrainPlanUpdateTests
         Assert.AreEqual(At(12, 15, 0), train.TargetArrivalTime);
         Assert.AreEqual(suggestion.SuggestedSpeedMetersPerSecond, train.SuggestedSpeedMetersPerSecond);
         Assert.AreEqual(suggestion.SuggestedAuthorityMeters, train.SuggestedAuthorityMeters);
-        Assert.AreEqual("A1", train.LastKnownBlockId);
+        Assert.AreEqual("A1", train.CurrentBlockId);
     }
 
     [TestMethod]
@@ -197,7 +197,7 @@ public class CtcTrainPlanUpdateTests
     // ---- Destination change ----
 
     [TestMethod]
-    public async Task NewDestination_RoutesFromLastKnownBlockAndRecalculates()
+    public async Task NewDestination_RoutesFromCurrentBlockAndRecalculates()
     {
         var (service, sender) = await DispatchTrainAsync();
 
@@ -303,7 +303,7 @@ public class CtcTrainPlanUpdateTests
         Assert.AreEqual(At(12, 10, 0), train.TargetArrivalTime);
         Assert.AreEqual(100.0 / 600.0, train.SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(500.0, train.SuggestedAuthorityMeters);
-        Assert.AreEqual("A1", train.LastKnownBlockId);
+        Assert.AreEqual("A1", train.CurrentBlockId);
     }
 
     [TestMethod]
@@ -319,7 +319,7 @@ public class CtcTrainPlanUpdateTests
         var ex = await Assert.ThrowsExactlyAsync<DispatchException>(
             () => service.UpdateDispatchedTrainPlanAsync("000", "D16", At(12, 10, 0)));
 
-        Assert.AreEqual("No route on Blue Line connects Train 000's last known block A1 to D16.", ex.Message);
+        Assert.AreEqual("No route on Blue Line connects Train 000's current block A1 to D16.", ex.Message);
         Assert.HasCount(2, sender.SentMessages);
         Assert.IsEmpty(events);
         AssertPlanUnchanged(service.State.DispatchedTrains.Single());
@@ -380,7 +380,7 @@ public class CtcTrainPlanUpdateTests
     }
 
     [TestMethod]
-    public async Task DestinationIsLastKnownBlock_FailsCleanly()
+    public async Task DestinationIsCurrentBlock_FailsCleanly()
     {
         var (service, sender) = await DispatchTrainAsync();
 

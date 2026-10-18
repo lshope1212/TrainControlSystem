@@ -901,7 +901,7 @@
                         </Grid.ColumnDefinitions>
 
                         <TextBlock Grid.ColumnSpan="3"
-                                   Text="Trains already released from the queue. Suggested Speed and Suggested Authority are the latest values CTC sent to the Track Controller, toward the Destination at the Arrival Time. Select a train to change its destination or arrival time; CTC then routes it from its Last Known Block and sends a new movement suggestion. Last Known Block is the last block CTC can authoritatively place the train in (its route start block at release); block occupancy does not identify trains, so it is not updated yet."
+                                   Text="Trains already released from the queue. Current Block is inferred from sequential track occupancy along the train's active route. Suggested Speed and Suggested Authority are the latest values CTC sent to the Track Controller, toward the Destination at the Arrival Time. Select a train to change its destination or arrival time; CTC then routes it from its Current Block and sends a new movement suggestion."
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    TextWrapping="Wrap"
@@ -921,8 +921,8 @@
                                                     Binding="{Binding TrainDisplayName}"
                                                     Width="90"/>
 
-                                <DataGridTextColumn Header="Last Known Block"
-                                                    Binding="{Binding LastKnownBlock}"
+                                <DataGridTextColumn Header="Current Block"
+                                                    Binding="{Binding CurrentBlock}"
                                                     Width="115"/>
 
                                 <DataGridTextColumn Header="Destination"
@@ -989,12 +989,12 @@
                                            Margin="8,4,0,4"/>
 
                                 <TextBlock Grid.Row="2"
-                                           Text="Last Known Block:"
+                                           Text="Current Block:"
                                            Style="{StaticResource FieldLabelStyle}"/>
 
                                 <TextBlock Grid.Row="2"
                                            Grid.Column="1"
-                                           Text="{Binding SelectedDispatchedTrain.LastKnownBlock,
+                                           Text="{Binding SelectedDispatchedTrain.CurrentBlock,
                                                           FallbackValue=--}"
                                            Style="{StaticResource ValueStyle}"
                                            Margin="8,4,0,4"/>

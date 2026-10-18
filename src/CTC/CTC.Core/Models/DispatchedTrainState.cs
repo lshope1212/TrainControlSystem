@@ -31,17 +31,35 @@ public class DispatchedTrainState
     public double SuggestedAuthorityMeters { get; set; }
 
     /// <summary>
-    /// Last block CTC can authoritatively associate with the train; empty when unknown.
-    /// Set to the schedule's route start block when CTC releases the train, because that is
-    /// where the schedule says it begins. It is NOT necessarily where the train is now: Track
-    /// Controller occupancy alone cannot update it, because <c>BlockStatusMessage</c> carries no
-    /// TrainId, so CTC cannot tell which train moved into a block and must not guess.
-    /// Re-planning (route, speed and authority) always starts from this block, so once it is
-    /// kept up to date the re-planning logic needs no change.
-    /// TODO: update it from a train-position message (train identity + location) once the
-    /// modules are integrated.
+    /// Block CTC currently places the train in: the foremost block it has logically advanced
+    /// the train into; empty when unknown. Set to the schedule's route start block at release,
+    /// then inferred from sequential track occupancy by <see cref="Tracking.TrainLocationTracker"/>:
+    /// when the next block of <see cref="ActiveRouteBlockIds"/> becomes occupied and no other
+    /// train could explain it, the train moves into that block. <c>BlockStatusMessage</c> never
+    /// names the train; the identity comes only from CTC's own dispatch and route knowledge.
+    /// A trailing block clearing never moves it. Re-planning (route, speed and authority)
+    /// starts from this block.
     /// </summary>
-    public string LastKnownBlockId { get; set; } = string.Empty;
+    public string CurrentBlockId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The blocks CTC currently expects this train to follow, in travel order. At release, the
+    /// scheduled route; after the dispatcher changes the plan, the newly calculated route
+    /// (starting at <see cref="CurrentBlockId"/>). Runtime state only: the train's
+    /// <see cref="ScheduledTrain.Route"/> is never changed.
+    /// </summary>
+    public IList<string> ActiveRouteBlockIds { get; } = new List<string>();
+
+    /// <summary>Position of <see cref="CurrentBlockId"/> in <see cref="ActiveRouteBlockIds"/>.</summary>
+    public int ActiveRouteIndex { get; set; }
+
+    /// <summary>
+    /// True once the Track Controller has reported <see cref="CurrentBlockId"/> occupied. The
+    /// train is advanced to its next route block only after that, so CTC never carries a train
+    /// identity forward from a block it has not seen the train in. The block clearing later does
+    /// not reset it, so the old block may clear before the next one is reported occupied.
+    /// </summary>
+    public bool CurrentBlockOccupancyObserved { get; set; }
 
     /// <summary>
     /// Block the latest suggested speed is planned to reach: at release, the next timed block

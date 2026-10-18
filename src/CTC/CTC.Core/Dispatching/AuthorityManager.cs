@@ -11,9 +11,8 @@ namespace CTC.Core.Dispatching;
 /// <para>
 /// Calculated when a train is released (<see cref="CalculateInitialAuthorityMeters"/>) and
 /// when the dispatcher re-plans a released train (<see cref="CalculateUpdatedAuthorityMeters"/>).
-/// It is not recalculated automatically as the train moves, because BlockStatusMessage
-/// occupancy does not say which train occupies a block, so CTC cannot tell its own train
-/// from another one.
+/// It is not recalculated automatically as the train moves: CTC issues a new suggestion only
+/// at release and when the dispatcher changes the plan.
 /// </para>
 /// <para>
 /// Deliberately out of scope: braking curves, moving-block/MBO logic, switch-conflict and
@@ -52,7 +51,7 @@ public static class AuthorityManager
 
     /// <summary>
     /// Authority for a train that is already on the line, along <paramref name="route"/>
-    /// starting with the block the train is in (its last known block). Same rules as
+    /// starting with the block the train is in (its current block). Same rules as
     /// <see cref="CalculateInitialAuthorityMeters"/>, except that the start block being
     /// reported occupied does not stop the authority: CTC assumes the occupant is this train.
     /// </summary>

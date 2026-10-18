@@ -164,8 +164,52 @@
 
 
                             <!-- ============================
-                                 FUTURE INPUT
+                                 OCCUPANCY SEQUENCE SIMULATOR (TEST-ONLY)
+                                 Sends only anonymous BlockStatusMessages;
+                                 CTC must infer which train moved.
                                  ============================ -->
+
+                            <TextBlock Text="Occupancy Sequence Simulator (TEST-ONLY)"
+                                       FontWeight="SemiBold"
+                                       Margin="0,14,0,4"/>
+
+                            <TextBlock Text="Imitates track circuits along a list of blocks. Each step reports the next block Occupied, then the previous block Clear. No train ID is sent; CTC infers the train from sequential occupancy. Other status fields are sent as Unknown / maintenance Open."
+                                       Foreground="#6B7280"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,6"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="Route blocks:"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding OccupancySequenceSimulator.RouteText,
+                                                        UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Content="Start (Occupy First Block)"
+                                        Command="{Binding OccupancySequenceSimulator.StartCommand}"
+                                        Margin="0,0,6,0"/>
+                                <Button Content="Next Occupancy Step"
+                                        Command="{Binding OccupancySequenceSimulator.NextStepCommand}"
+                                        Margin="0,0,6,0"/>
+                                <Button Content="Reset (Clear All)"
+                                        Command="{Binding OccupancySequenceSimulator.ResetCommand}"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding OccupancySequenceSimulator.Progress}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,6,0,0"/>
+
+                            <TextBlock Text="{Binding OccupancySequenceSimulator.Result}"
+                                       Style="{StaticResource ResultTextStyle}"/>
 
                         </StackPanel>
                     </GroupBox>

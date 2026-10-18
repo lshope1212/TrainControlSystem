@@ -22,6 +22,12 @@ public interface ICTCService
 
     void ApplyTrackLayout(TrackLayoutMessage message);
 
+    /// <summary>
+    /// Records an anonymous block status report. When a block becomes occupied that is the next
+    /// active-route block of exactly one dispatched train, that train's current block moves
+    /// forward (raising <see cref="CtcStateChangeKind.TrainLocationUpdated"/>); the report itself
+    /// never identifies a train.
+    /// </summary>
     void ApplyBlockStatus(BlockStatusMessage message);
 
     void ApplyTicketSales(TicketSalesMessage message);
@@ -75,7 +81,7 @@ public interface ICTCService
 
     /// <summary>
     /// Changes an already-dispatched train's destination and/or arrival time: CTC routes it
-    /// from its last known block to <paramref name="destinationBlockId"/>, recalculates its
+    /// from its current (occupancy-inferred) block to <paramref name="destinationBlockId"/>, recalculates its
     /// suggested speed and authority, and sends only a new MovementSuggestion (never another
     /// MovementRequest). The train's state changes only if the send succeeded.
     /// </summary>

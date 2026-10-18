@@ -434,6 +434,15 @@ public class MainWindowViewModel : ViewModelBase
                     + " (movement suggestion sent)."
                     + (e.Message is null ? string.Empty : $" Warning: {e.Message}");
                 break;
+
+            case CtcStateChangeKind.TrainLocationUpdated:
+                // Only the current block of one train changed; its plan and the edit fields did not.
+                DispatchedTrains.FirstOrDefault(train => train.TrainId == e.TrainId)?.Refresh();
+                break;
+
+            case CtcStateChangeKind.TrainLocationAmbiguous:
+                CommunicationStatus = $"Warning: {e.Message}";
+                break;
         }
 
         CommandManager.InvalidateRequerySuggested();

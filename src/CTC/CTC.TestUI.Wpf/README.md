@@ -106,3 +106,16 @@ Re-plan check: in the CTC *Dispatched Trains* tab, select the train, change its
 Destination and/or Arrival Time and click **Apply Changes**. *Captured CTC Outputs*
 shows one more `MovementSuggestionMessage` for the same TrainId with the recalculated
 speed/authority, and no second `MovementRequestMessage`.
+
+Train-tracking check (*Occupancy Sequence Simulator*, TEST-ONLY): it sends only anonymous
+`BlockStatusMessage`s through the same pipe, never a train ID, so CTC must infer which
+train moved.
+
+1. Dispatch a train that starts at `A1` (as above). CTC *Dispatched Trains* shows
+   `Current Block A1`.
+2. TestUI: Route blocks `A1,A2,A3,A4,A5` → **Start (Occupy First Block)** (sends `A1 Occupied`).
+3. **Next Occupancy Step** sends `A2 Occupied` then `A1 Clear`; CTC shows `Current Block A2`.
+4. **Next Occupancy Step** again: `A3 Occupied`, `A2 Clear`; CTC shows `A3`.
+5. **Reset (Clear All)** reports every block the simulator left occupied as Clear.
+
+The simulation time of these messages does not matter for the inference.

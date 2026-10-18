@@ -2,6 +2,7 @@ using CTC.Core.Dispatching;
 using CTC.Core.Exceptions;
 using CTC.Core.Interfaces;
 using CTC.Core.Models;
+using CTC.Core.Tracking;
 using TrainControl.Common.Validation;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
@@ -14,7 +15,8 @@ namespace CTC.Core.Services;
 /// <see cref="IMessageSender"/>; this class knows nothing about the transport.
 /// Dispatching is time-triggered only (see <see cref="SetSystemTimeAsync"/>). Speed and
 /// authority rules live in <see cref="SpeedPlanner"/> and <see cref="AuthorityManager"/>,
-/// routing in <see cref="RouteManager"/>. Suggestions are calculated at dispatch and when
+/// routing in <see cref="RouteManager"/>, train location inference in
+/// <see cref="TrainLocationTracker"/>. Suggestions are calculated at dispatch and when
 /// the dispatcher re-plans a released train (see <see cref="UpdateDispatchedTrainPlanAsync"/>);
 /// never automatically as trains move.
 /// </summary>
@@ -81,11 +83,19 @@ public class CTCService : ICTCService
         OnStateChanged(CtcStateChangeKind.TrackLayout);
     }
 
+    /// <summary>
+    /// Records the Track Controller's latest report for a block, then lets
+    /// <see cref="TrainLocationTracker"/> infer whether a dispatched train moved into it.
+    /// The report never identifies a train; occupancy that no single train explains stays anonymous.
+    /// </summary>
     public void ApplyBlockStatus(BlockStatusMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
 
         CtcBlockState block = GetBlock(message.BlockId);
+
+        // Captured first: only a change INTO Occupied can move a train, never a repeated snapshot.
+        OccupancyState previousOccupancy = block.Occupancy;
         block.Occupancy = message.Occupancy;
         block.Signal = message.Signal;
         block.Switch = message.Switch;
@@ -96,6 +106,20 @@ public class CTCService : ICTCService
         block.ConfirmedMaintenanceState = message.Maintenance;
 
         OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
+
+        var location = TrainLocationTracker.ApplyOccupancy(State, block, previousOccupancy);
+        if (location.AdvancedTrain is { } advanced)
+        {
+            OnStateChanged(CtcStateChangeKind.TrainLocationUpdated, block.BlockId, advanced.TrainId);
+        }
+        else if (location.IsAmbiguous)
+        {
+            string trainNames = string.Join(" or ", location.AmbiguousTrains.Select(train => TrainIds.DisplayName(train.TrainId)));
+            OnStateChanged(
+                CtcStateChangeKind.TrainLocationAmbiguous,
+                block.BlockId,
+                message: $"Block {block.BlockId} became occupied, but it could be {trainNames}; no train location was changed.");
+        }
     }
 
     public void ApplyTicketSales(TicketSalesMessage message)
@@ -230,11 +254,13 @@ public class CTCService : ICTCService
         dispatched.SuggestedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
         dispatched.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
 
-        // Known authoritatively only at release time: the schedule says the train starts here.
-        // It stays the last known block until a train-position message exists (occupancy has no TrainId).
-        // StartBlockId was fixed when the schedule was built; it is not re-derived per tick.
+        // CTC knows where the train enters because it released it there. From now on the
+        // location follows sequential occupancy along the active route (TrainLocationTracker).
         // TODO: real route/yard logic will replace the temporary route-start rule.
-        dispatched.LastKnownBlockId =scheduledTrain.StartBlockId;
+        dispatched.CurrentBlockId = scheduledTrain.StartBlockId;
+        dispatched.ActiveRouteIndex = 0;
+        dispatched.CurrentBlockOccupancyObserved = false;
+        ReplaceActiveRoute(dispatched, scheduledTrain.Route.Select(routeBlock => routeBlock.BlockId));
 
         // The active movement target starts as the schedule's next timed block; the
         // dispatcher can change it later (UpdateDispatchedTrainPlanAsync).
@@ -268,28 +294,28 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
-    /// Re-plans a train that has already been released: routes it from its last known block to
+    /// Re-plans a train that has already been released: routes it from its current block to
     /// <paramref name="destinationBlockId"/>, recalculates the suggested speed (to arrive at
     /// <paramref name="targetArrivalTime"/>) and authority along that route, and sends ONLY a new
     /// MovementSuggestion. No MovementRequest is sent: the train was already released.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The route always starts at <see cref="DispatchedTrainState.LastKnownBlockId"/>. That is
-    /// currently the train's route start block (CTC cannot yet track trains; see that property),
-    /// so the plan is only as accurate as that block; once it is kept up to date this method
-    /// needs no change.
+    /// The route always starts at <see cref="DispatchedTrainState.CurrentBlockId"/>, the block CTC
+    /// has inferred from sequential track occupancy (see <see cref="TrainLocationTracker"/>).
     /// </para>
     /// <para>
     /// The train's state is updated only after the suggestion was sent, so if sending fails CTC
-    /// keeps showing the plan it last actually issued. The original schedule is not changed.
+    /// keeps showing the plan it last actually issued. On success the new route also becomes the
+    /// train's active route, so later occupancy is interpreted along it. The original schedule is
+    /// not changed.
     /// </para>
     /// </remarks>
     /// <returns>A dispatcher-readable warning (e.g. the arrival time cannot be met), or null.</returns>
     /// <exception cref="ArgumentException">The train or block ID is blank.</exception>
     /// <exception cref="DispatchException">
-    /// The train is not dispatched, its last known block is unknown, the destination is not on
-    /// its line or is its last known block, no route reaches it, or a block on the route has no
+    /// The train is not dispatched, its current block is unknown, the destination is not on
+    /// its line or is its current block, no route reaches it, or a block on the route has no
     /// speed limit. Nothing was sent or changed.
     /// </exception>
     /// <exception cref="Exceptions.MessageSendException">The suggestion could not be delivered; nothing changed.</exception>
@@ -305,9 +331,9 @@ public class CTCService : ICTCService
         var line = State.FindLine(train.LineId)
             ?? throw new DispatchException($"{trainName} is on unknown line '{train.LineId}'.");
 
-        if (string.IsNullOrEmpty(train.LastKnownBlockId) || !line.Blocks.Any(block => block.BlockId == train.LastKnownBlockId))
+        if (string.IsNullOrEmpty(train.CurrentBlockId) || !line.Blocks.Any(block => block.BlockId == train.CurrentBlockId))
         {
-            throw new DispatchException($"{trainName}'s last known block is unknown, so no route can be planned from it.");
+            throw new DispatchException($"{trainName}'s current block is unknown, so no route can be planned from it.");
         }
 
         if (!line.Blocks.Any(block => block.BlockId == destinationBlockId))
@@ -315,17 +341,17 @@ public class CTCService : ICTCService
             throw new DispatchException($"Block {destinationBlockId} is not on {line.Name}.");
         }
 
-        if (destinationBlockId == train.LastKnownBlockId)
+        if (destinationBlockId == train.CurrentBlockId)
         {
-            throw new DispatchException($"{trainName}'s last known block is already {destinationBlockId}; choose a destination beyond it.");
+            throw new DispatchException($"{trainName}'s current block is already {destinationBlockId}; choose a destination beyond it.");
         }
 
-        var route = RouteManager.FindRoute(line, train.LastKnownBlockId, destinationBlockId)
-            ?? throw new DispatchException($"No route on {line.Name} connects {trainName}'s last known block {train.LastKnownBlockId} to {destinationBlockId}.");
+        var route = RouteManager.FindRoute(line, train.CurrentBlockId, destinationBlockId)
+            ?? throw new DispatchException($"No route on {line.Name} connects {trainName}'s current block {train.CurrentBlockId} to {destinationBlockId}.");
 
         var speed = SpeedPlanner.CalculateSpeedToTarget(route, targetArrivalTime, State.SystemTime);
 
-        // The train is assumed to be the occupant of its own last known block.
+        // The train is assumed to be the occupant of its own current block.
         double authority = AuthorityManager.CalculateUpdatedAuthorityMeters(route);
 
         var suggestion = new MovementSuggestionMessage
@@ -344,6 +370,12 @@ public class CTCService : ICTCService
         train.SuggestedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
         train.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
 
+        // From now on occupancy is interpreted along the route CTC just issued. The route starts
+        // at the current block, so the train stays where it is; whether that block has been seen
+        // occupied is unchanged.
+        ReplaceActiveRoute(train, route.Select(block => block.BlockId));
+        train.ActiveRouteIndex = 0;
+
         var warnings = new List<string>();
         if (speed.ArrivalWarning is { } arrivalWarning)
         {
@@ -352,7 +384,7 @@ public class CTCService : ICTCService
 
         if (authority <= 0)
         {
-            warnings.Add($"{trainName}'s last known block {train.LastKnownBlockId} is closed for maintenance, so its suggested authority is 0.");
+            warnings.Add($"{trainName}'s current block {train.CurrentBlockId} is closed for maintenance, so its suggested authority is 0.");
         }
 
         string? warning = warnings.Count == 0 ? null : string.Join(" ", warnings);
@@ -558,6 +590,16 @@ public class CTCService : ICTCService
         // wayside-reported position, which changes only through ApplyBlockStatus once the
         // Track Controller has actually moved the switch.
         await _messageSender.SendAsync(request, cancellationToken);
+    }
+
+    private static void ReplaceActiveRoute(DispatchedTrainState train, IEnumerable<string> blockIds)
+    {
+        var route = blockIds.ToList();
+        train.ActiveRouteBlockIds.Clear();
+        foreach (var blockId in route)
+        {
+            train.ActiveRouteBlockIds.Add(blockId);
+        }
     }
 
     private void OnStateChanged(CtcStateChangeKind kind, string? blockId = null, string? trainId = null, string? message = null) =>
