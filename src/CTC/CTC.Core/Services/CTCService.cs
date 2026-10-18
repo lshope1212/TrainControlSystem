@@ -13,8 +13,10 @@ namespace CTC.Core.Services;
 /// and builds outbound contract messages. Transmission is delegated to an injected
 /// <see cref="IMessageSender"/>; this class knows nothing about the transport.
 /// Dispatching is time-triggered only (see <see cref="SetSystemTimeAsync"/>). Speed and
-/// authority rules live in <see cref="SpeedPlanner"/> and <see cref="AuthorityManager"/>;
-/// only the INITIAL suggestion at dispatch is calculated.
+/// authority rules live in <see cref="SpeedPlanner"/> and <see cref="AuthorityManager"/>,
+/// routing in <see cref="RouteManager"/>. Suggestions are calculated at dispatch and when
+/// the dispatcher re-plans a released train (see <see cref="UpdateDispatchedTrainPlanAsync"/>);
+/// never automatically as trains move.
 /// </summary>
 /// <remarks>
 /// Async methods resume on the caller's synchronization context, so when called from the
@@ -190,8 +192,8 @@ public class CTCService : ICTCService
         var route = ResolveRoute(scheduledTrain, line)
             ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} uses a block that is no longer in the track layout.");
 
-        // Releasing a train with zero authority would leave it stranded, because CTC cannot
-        // recalculate authority later. Hold it in the queue instead; it is retried next tick.
+        // Releasing a train with zero authority would leave it stranded, because CTC does not
+        // recalculate authority automatically. Hold it in the queue instead; it is retried next tick.
         double authority = AuthorityManager.CalculateInitialAuthorityMeters(route);
         if (authority <= 0)
         {
@@ -234,6 +236,11 @@ public class CTCService : ICTCService
         // TODO: real route/yard logic will replace the temporary route-start rule.
         dispatched.LastKnownBlockId =scheduledTrain.StartBlockId;
 
+        // The active movement target starts as the schedule's next timed block; the
+        // dispatcher can change it later (UpdateDispatchedTrainPlanAsync).
+        dispatched.TargetBlockId = speed.TargetBlockId;
+        dispatched.TargetArrivalTime = speed.TargetArrivalTime;
+
         return speed.IsLate
             ? $"{TrainIds.DisplayName(scheduledTrain.TrainId)} is behind schedule for {speed.TargetBlockId}; suggested the maximum permitted speed."
             : null;
@@ -258,6 +265,99 @@ public class CTCService : ICTCService
         }
 
         return route;
+    }
+
+    /// <summary>
+    /// Re-plans a train that has already been released: routes it from its last known block to
+    /// <paramref name="destinationBlockId"/>, recalculates the suggested speed (to arrive at
+    /// <paramref name="targetArrivalTime"/>) and authority along that route, and sends ONLY a new
+    /// MovementSuggestion. No MovementRequest is sent: the train was already released.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The route always starts at <see cref="DispatchedTrainState.LastKnownBlockId"/>. That is
+    /// currently the train's route start block (CTC cannot yet track trains; see that property),
+    /// so the plan is only as accurate as that block; once it is kept up to date this method
+    /// needs no change.
+    /// </para>
+    /// <para>
+    /// The train's state is updated only after the suggestion was sent, so if sending fails CTC
+    /// keeps showing the plan it last actually issued. The original schedule is not changed.
+    /// </para>
+    /// </remarks>
+    /// <returns>A dispatcher-readable warning (e.g. the arrival time cannot be met), or null.</returns>
+    /// <exception cref="ArgumentException">The train or block ID is blank.</exception>
+    /// <exception cref="DispatchException">
+    /// The train is not dispatched, its last known block is unknown, the destination is not on
+    /// its line or is its last known block, no route reaches it, or a block on the route has no
+    /// speed limit. Nothing was sent or changed.
+    /// </exception>
+    /// <exception cref="Exceptions.MessageSendException">The suggestion could not be delivered; nothing changed.</exception>
+    public async Task<string?> UpdateDispatchedTrainPlanAsync(string trainId, string destinationBlockId, TimeSpan targetArrivalTime, CancellationToken cancellationToken = default)
+    {
+        Guard.NotNullOrWhiteSpace(trainId, nameof(trainId));
+        Guard.NotNullOrWhiteSpace(destinationBlockId, nameof(destinationBlockId));
+
+        string trainName = TrainIds.DisplayName(trainId);
+        var train = State.FindDispatchedTrain(trainId)
+            ?? throw new DispatchException($"{trainName} has not been dispatched.");
+
+        var line = State.FindLine(train.LineId)
+            ?? throw new DispatchException($"{trainName} is on unknown line '{train.LineId}'.");
+
+        if (string.IsNullOrEmpty(train.LastKnownBlockId) || !line.Blocks.Any(block => block.BlockId == train.LastKnownBlockId))
+        {
+            throw new DispatchException($"{trainName}'s last known block is unknown, so no route can be planned from it.");
+        }
+
+        if (!line.Blocks.Any(block => block.BlockId == destinationBlockId))
+        {
+            throw new DispatchException($"Block {destinationBlockId} is not on {line.Name}.");
+        }
+
+        if (destinationBlockId == train.LastKnownBlockId)
+        {
+            throw new DispatchException($"{trainName}'s last known block is already {destinationBlockId}; choose a destination beyond it.");
+        }
+
+        var route = RouteManager.FindRoute(line, train.LastKnownBlockId, destinationBlockId)
+            ?? throw new DispatchException($"No route on {line.Name} connects {trainName}'s last known block {train.LastKnownBlockId} to {destinationBlockId}.");
+
+        var speed = SpeedPlanner.CalculateSpeedToTarget(route, targetArrivalTime, State.SystemTime);
+
+        // The train is assumed to be the occupant of its own last known block.
+        double authority = AuthorityManager.CalculateUpdatedAuthorityMeters(route);
+
+        var suggestion = new MovementSuggestionMessage
+        {
+            TrainId = train.TrainId,
+            SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond,
+            SuggestedAuthorityMeters = authority,
+        };
+
+        // If sending throws, the exception propagates and the train's plan is deliberately
+        // left untouched: CTC must not claim a suggestion it never issued.
+        await _messageSender.SendAsync(suggestion, cancellationToken);
+
+        train.TargetBlockId = destinationBlockId;
+        train.TargetArrivalTime = targetArrivalTime;
+        train.SuggestedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
+        train.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
+
+        var warnings = new List<string>();
+        if (speed.ArrivalWarning is { } arrivalWarning)
+        {
+            warnings.Add($"For {trainName}, {arrivalWarning}");
+        }
+
+        if (authority <= 0)
+        {
+            warnings.Add($"{trainName}'s last known block {train.LastKnownBlockId} is closed for maintenance, so its suggested authority is 0.");
+        }
+
+        string? warning = warnings.Count == 0 ? null : string.Join(" ", warnings);
+        OnStateChanged(CtcStateChangeKind.TrainMovementPlanUpdated, trainId: train.TrainId, message: warning);
+        return warning;
     }
 
     /// <summary>

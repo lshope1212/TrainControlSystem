@@ -1,56 +1,610 @@
-Make one small change to the CTC portion of the TrainControlSystem project.
+We need to add an important new feature to the CTC module of the TrainControlSystem repository.
 
-Currently, signal states only support three options:
+Repository:
+https://github.com/lshope1212/TrainControlSystem
 
-- Red
-- Yellow
-- Green
+Work against the current `Luke_CTC` branch and inspect the existing implementation carefully before making changes.
 
-Update the system so that there are four valid signal states:
+The CTC already supports:
+- building schedules
+- queueing trains
+- dispatching trains automatically based on system time
+- calculating an initial suggested speed
+- calculating an initial suggested authority
+- sending a `MovementSuggestionMessage`
+- sending a `MovementRequestMessage`
+- displaying dispatched trains
+- storing `LastKnownBlockId`
 
-- Red
-- Yellow
-- Green
-- Super Green
+We now need to support **manual modification/rerouting of a train AFTER it has already been dispatched**.
 
-Please inspect the existing implementation first and make the smallest clean change necessary.
+# Required behavior
+
+Once a train is in the "Dispatched Trains" area, the dispatcher must be able to select it and modify its current movement plan.
+
+There are two main cases:
+
+1. Change the arrival time while keeping the same destination block.
+   - Example: Train 000 was supposed to reach Block D12 at 12:15:00.
+   - Dispatcher changes this to 12:18:00.
+   - CTC must recalculate the suggested speed required to reach D12 at the new time.
+   - Suggested authority must also be recalculated from the train's current/last-known location along the active route.
+   - Send the new suggestion to the Track Controller.
+
+2. Change the destination block.
+   - Example: Train 000 was heading to D12 but the dispatcher changes its destination to F6.
+   - CTC must determine a route from the train's current/last-known block to F6.
+   - Recalculate suggested speed based on the destination and target arrival time.
+   - Recalculate authority based on the newly selected route and current block conditions.
+   - Send the new suggestion to the Track Controller.
+
+The dispatcher should be able to change BOTH destination and arrival time at once as well.
+
+Do NOT make suggested speed or suggested authority directly editable. The dispatcher edits the movement objective (destination/time), and CTC calculates speed and authority.
+
+# Important current limitation
+
+Currently `DispatchedTrainState.LastKnownBlockId` is initialized to the train's starting block when it is dispatched.
+
+The comments correctly explain that CTC cannot yet update this position accurately because ordinary block occupancy messages do not contain a TrainId.
+
+Do NOT try to solve or guess train position as part of this task.
+
+For now:
+- use `LastKnownBlockId` as the starting block for post-dispatch calculations
+- clearly preserve/document this limitation
+- design the code so that when `LastKnownBlockId` begins receiving real live train-position updates later, no rerouting logic needs to be rewritten
+
+In other words:
+
+    route calculation:
+    LastKnownBlockId -> selected destination
+
+Eventually LastKnownBlockId will represent the actual train position.
+
+# 1. Update DispatchedTrainState
+
+Inspect:
+
+`src/CTC/CTC.Core/Models/DispatchedTrainState.cs`
+
+It currently stores:
+- TrainId
+- LineId
+- SuggestedSpeedMetersPerSecond
+- SuggestedAuthorityMeters
+- LastKnownBlockId
+
+Extend it so that a dispatched train also knows its currently active movement target.
+
+Add appropriate properties such as:
+
+- TargetBlockId
+- TargetArrivalTime
+
+Use naming that best fits the existing codebase.
+
+These represent the CURRENT active target, not necessarily the train's original scheduled destination.
+
+Update comments that currently describe suggested speed/authority as "initial only." These values should now represent the **latest suggestion issued by CTC**.
+
+At initial dispatch, populate TargetBlockId and TargetArrivalTime from the next timed block that SpeedPlanner is targeting.
+
+Do not remove the original ScheduledTrain from CTC state or otherwise destroy the original schedule.
+
+# 2. Generalize SpeedPlanner
+
+Inspect:
+
+`CTC.Core/Dispatching/SpeedPlanner.cs`
+
+Currently `CalculateInitialSpeed()` calculates:
+
+route start -> next timed scheduled block
+
+using:
+
+distance / (targetArrivalTime - currentSystemTime)
+
+We now need equivalent functionality for an already-dispatched train.
+
+Add a reusable method that can calculate a speed suggestion given:
+
+- a route/path beginning at the train's current/last-known block
+- a target arrival time
+- current CTC system time
+
+Conceptually:
+
+    remainingSeconds = targetArrivalTime - currentSystemTime
+    requiredSpeed = routeDistance / remainingSeconds
+    permittedSpeed = minimum applicable block speed limit and train maximum
+    suggestedSpeed = min(requiredSpeed, permittedSpeed)
+
+Reuse existing helpers where appropriate. Do not duplicate the unit-conversion and speed-limit logic.
+
+The initial-dispatch code should ideally continue to reuse the same underlying calculation logic.
+
+Handle these cases cleanly:
+
+- arrival time is in the future and achievable
+- arrival time is in the future but would require exceeding the permitted maximum
+- arrival time has already passed
+- destination cannot be reached
+- route contains a block with an invalid/no speed limit
+
+For a requested arrival time that cannot be achieved without exceeding the permitted maximum:
+- do NOT issue an unsafe speed
+- clamp the suggestion to the maximum permitted speed
+- return/provide a dispatcher-readable warning stating that the requested arrival time cannot be met
+
+Likewise, if the requested arrival time has already passed, suggest the maximum legal speed and provide a warning.
+
+Do not ever exceed track/train speed limits.
+
+# 3. Implement routing in RouteManager
+
+Inspect:
+
+`CTC.Core/Dispatching/RouteManager.cs`
+
+It is currently mostly a placeholder and is the correct architectural place for this functionality.
+
+Implement a simple graph route calculation using the line's blocks and their `ConnectedBlockIds`.
+
+For this iteration, a BFS shortest-path-by-block-count solution is sufficient.
+
+Create a method conceptually similar to:
+
+    FindRoute(
+        CtcLineState line,
+        string startBlockId,
+        string destinationBlockId)
+
+Return the ordered list of `CtcBlockState` objects:
+
+    start -> ... -> destination
 
 Requirements:
+- both blocks must exist on the specified line
+- route must follow ConnectedBlockIds
+- no infinite loops
+- handle cycles
+- return a clear failure if no route exists
+- do not cross into another line
 
-1. **Update the underlying signal-state representation**
-   - Find the enum, model, constant collection, or other type currently representing signal states.
-   - Add `SuperGreen` as the fourth supported state.
-   - Follow the existing naming/style conventions in the codebase.
+Do not introduce MBO logic.
 
-2. **Update the CTC UI**
-   - Anywhere the user can select or display a signal state must support all four states.
-   - The user-facing text should display:
-     - `Red`
-     - `Yellow`
-     - `Green`
-     - `Super Green`
-   - Do not display `SuperGreen` without the space in the UI.
+Keep this simple fixed-block routing consistent with the existing system.
 
-3. **Update the CTC TestUI**
-   - If the TestUI contains a signal-state input used to simulate incoming Track Model/Track Controller data, update it to provide all four options as well.
-   - Preserve the current TestUI architecture and behavior.
+# 4. Generalize AuthorityManager
 
-4. **Update mappings/conversions**
-   - Search the CTC solution for any `switch`, `if`, converter, parser, serialization, or display logic that assumes there are exactly three signal states.
-   - Update those areas to correctly support `SuperGreen`.
-   - Do not change unrelated signaling behavior.
+Inspect:
 
-5. **Compatibility**
-   - Existing Red, Yellow, and Green functionality must continue working exactly as it does now.
-   - Do not restructure the architecture for this change.
-   - Do not add unnecessary abstractions or dependencies.
+`CTC.Core/Dispatching/AuthorityManager.cs`
 
-6. **Tests**
-   - Update or add any appropriate unit tests so `SuperGreen` is recognized as a valid signal state.
-   - Make sure existing tests still pass.
+Currently authority is described and implemented as "initial authority."
 
-After making the changes, build the relevant CTC projects and report:
-- Which files were changed
-- Where `SuperGreen` was added
-- Whether the build succeeds
-- Any areas you found that previously assumed there were only three signal states
+Generalize it so that the same fixed-block authority calculation can also be used after dispatch.
+
+For a rerouted train, authority should be calculated along:
+
+    LastKnownBlockId -> selected destination
+
+using the new route.
+
+It must continue to stop authority before:
+- occupied blocks
+- blocks confirmed closed for maintenance
+- blocks CTC has requested closed
+
+IMPORTANT:
+
+When performing a post-dispatch calculation, the train's current block may itself be reported as occupied because THAT TRAIN is occupying it.
+
+Do not cause the train to receive zero authority simply because its starting/current block is occupied by itself.
+
+For reroute calculations, treat the starting/current block as the train's own block and evaluate unsafe occupancy beginning with blocks AHEAD of it.
+
+Keep the logic conservative and document this assumption.
+
+We do not know the train's exact position within the block yet, so continuing to use block-level distance is acceptable for this iteration.
+
+# 5. Add a CTCService operation for updating a dispatched train
+
+Inspect:
+
+`CTC.Core/Interfaces/ICTCService.cs`
+
+and
+
+`CTC.Core/Services/CTCService.cs`
+
+Add an async service operation conceptually similar to:
+
+    UpdateDispatchedTrainPlanAsync(
+        string trainId,
+        string destinationBlockId,
+        TimeSpan targetArrivalTime,
+        CancellationToken cancellationToken = default)
+
+Use naming consistent with the rest of the project.
+
+The service should:
+
+1. Find the dispatched train.
+2. Verify it exists.
+3. Find its line.
+4. Verify `LastKnownBlockId` is known and exists.
+5. Verify the destination exists on the same line.
+6. Use RouteManager to calculate:
+       LastKnownBlockId -> destination
+7. Use SpeedPlanner to calculate the new suggested speed.
+8. Use AuthorityManager to calculate new suggested authority.
+9. Create a new `MovementSuggestionMessage` containing:
+       TrainId
+       SuggestedSpeedMetersPerSecond
+       SuggestedAuthorityMeters
+10. Send it using the existing IMessageSender.
+11. ONLY AFTER the send succeeds, update:
+       TargetBlockId
+       TargetArrivalTime
+       SuggestedSpeedMetersPerSecond
+       SuggestedAuthorityMeters
+12. Raise an appropriate CTC state-changed event.
+
+IMPORTANT:
+
+DO NOT send another `MovementRequestMessage`.
+
+The train has already been released.
+
+A post-dispatch modification should send only a new:
+
+    MovementSuggestionMessage
+
+The Track Controller should interpret this as an updated movement suggestion for the same TrainId.
+
+Preserve the project's existing failure semantics:
+- if sending fails, local CTC state must continue showing the old movement plan
+- do not make CTC claim it issued a suggestion that was never delivered
+
+Return or otherwise propagate dispatcher-readable warning information when the requested arrival time cannot actually be met.
+
+# 6. Add a new state change kind
+
+Inspect:
+
+`CtcStateChangedEventArgs.cs`
+
+Add an appropriate state change enum value, for example:
+
+    TrainMovementPlanUpdated
+
+or a similar name consistent with the existing enum.
+
+When a post-dispatch update succeeds, raise this event with:
+- TrainId
+- optional warning message
+
+MainWindowViewModel should use this event to refresh the dispatched train display and communication/status text.
+
+# 7. Update DispatchedTrainViewModel
+
+Inspect:
+
+`CTC.Wpf/ViewModels/DispatchedTrainViewModel.cs`
+
+It currently presents the train as read-only and specifically describes speed/authority as the initial suggestion.
+
+Change the semantics so the displayed values represent the **latest CTC suggestion**.
+
+Expose display properties for:
+
+- Train
+- Last Known Block
+- Target/Destination Block
+- Target Arrival Time
+- Suggested Speed
+- Suggested Authority
+
+Continue displaying speed/authority in the current UI units.
+
+`Refresh()` should refresh all of these values.
+
+# 8. Add selection/editing functionality to MainWindowViewModel
+
+Inspect:
+
+`CTC.Wpf/ViewModels/MainWindowViewModel.cs`
+
+Add support for selecting one dispatched train.
+
+Add something conceptually like:
+
+    SelectedDispatchedTrain
+
+When a train is selected, populate editable fields such as:
+
+    EditedDestinationBlockId
+    EditedArrivalTime
+
+The initial values should come from:
+
+    SelectedDispatchedTrain.TargetBlockId
+    SelectedDispatchedTrain.TargetArrivalTime
+
+Expose valid destination blocks from the currently selected line.
+
+Add:
+
+    ApplyTrainPlanCommand
+
+The command should:
+- require a selected dispatched train
+- require a valid destination
+- validate the arrival-time input
+- call the new CTC service method
+- show a useful success or warning message in CommunicationStatus
+- catch errors and display a dispatcher-readable failure without crashing the UI
+
+Use an HH:mm:ss input/display format consistent with the existing simulation clock.
+
+Do not put business logic in MainWindowViewModel. Route, speed, and authority calculations belong in Core.
+
+# 9. Update the Dispatched Trains UI
+
+Inspect the existing "Dispatched Trains" tab in:
+
+`CTC.Wpf/MainWindow.xaml`
+
+Currently it is described as a read-only display of initial speed/authority.
+
+Update the layout.
+
+The dispatched-train DataGrid should support selecting a train:
+
+    SelectedItem="{Binding SelectedDispatchedTrain}"
+
+The table should show approximately:
+
+- Train
+- Last Known Block
+- Destination
+- Arrival Time
+- Suggested Speed
+- Suggested Authority
+
+Add a compact panel associated with the selected train titled something like:
+
+    Update Train Route
+
+or:
+
+    Active Movement Plan
+
+It should contain:
+
+Selected Train:
+    Train 000
+
+Last Known Block:
+    A1
+    (read only)
+
+Destination:
+    [ ComboBox containing blocks on current line ]
+
+Arrival Time:
+    [ HH:mm:ss TextBox ]
+
+[ Apply Changes ]
+
+Suggested speed and authority remain read-only.
+
+Do not redesign the entire CTC UI. Integrate this into the existing visual language.
+
+The desired workflow is:
+
+    click dispatched train
+        ↓
+    edit destination and/or arrival time
+        ↓
+    Apply Changes
+        ↓
+    CTC recalculates route
+        ↓
+    recalculates suggested speed
+        ↓
+    recalculates suggested authority
+        ↓
+    sends MovementSuggestionMessage
+        ↓
+    table updates with new values
+
+# 10. Preserve original behavior
+
+Do not break:
+
+- schedule creation
+- CSV schedule upload
+- schedule clearing
+- dispatch queue
+- time-triggered dispatch
+- initial suggested speed calculation
+- initial authority calculation
+- start-block occupancy protection
+- maintenance behavior
+- switch controls
+- ticket sales
+- TestUI communication
+- existing named-pipe architecture
+
+Initial dispatch should behave exactly as it currently does, except that the newly created `DispatchedTrainState` should also store its initial active target block/time.
+
+# 11. TestUI / output verification
+
+Inspect `CTC.TestUI.Wpf`.
+
+The TestUI already captures CTC outputs.
+
+Make sure that if CTC sends multiple `MovementSuggestionMessage`s for the SAME TrainId, they are all captured/displayed correctly.
+
+A reroute must therefore be observable in the TestUI as another outgoing movement suggestion, for example:
+
+Initial dispatch:
+
+    MovementSuggestion
+    TrainId: 000
+    Speed: X
+    Authority: Y
+
+Later dispatcher adjustment:
+
+    MovementSuggestion
+    TrainId: 000
+    Speed: X2
+    Authority: Y2
+
+Do not send a second MovementRequest during the second operation.
+
+If the TestUI already supports displaying repeated MovementSuggestion messages correctly, do not unnecessarily modify it.
+
+# 12. Tests
+
+Add/update tests covering at least:
+
+### Arrival-time change
+
+Dispatch train:
+
+    A -> B -> C
+
+Current target:
+    C at 12:10
+
+Change target time:
+    C at 12:15
+
+Verify:
+- route remains toward C
+- lower/recalculated speed is generated
+- authority is recalculated
+- exactly one new MovementSuggestion is sent
+- NO new MovementRequest is sent
+- DispatchedTrainState reflects the new values
+
+### Earlier arrival time
+
+Change:
+
+    C at 12:15
+
+to:
+
+    C at 12:08
+
+Verify suggested speed increases but never exceeds the permitted maximum.
+
+### Impossible arrival time
+
+Set an arrival time that requires exceeding the speed limit.
+
+Verify:
+- suggested speed is capped at legal maximum
+- dispatcher gets a warning
+- unsafe speed is never sent
+
+### Destination change
+
+Original:
+
+    Current/LastKnown = A
+    destination = C
+
+Change destination to D.
+
+Verify:
+- RouteManager creates A -> ... -> D
+- speed is calculated using the new distance
+- authority follows the new route
+- state shows D as the destination
+
+### Block obstruction on new route
+
+Have:
+
+    A -> B -> C -> D
+
+with C occupied.
+
+Reroute toward D.
+
+Authority should stop before C.
+
+### Current block occupied
+
+Current/LastKnown = A
+A is reported occupied because the train itself is there.
+
+The reroute calculation must NOT return zero authority solely because A is occupied.
+
+### Unreachable destination
+
+If no path exists:
+- send nothing
+- leave existing movement plan unchanged
+- display a useful error
+
+### Send failure
+
+If IMessageSender throws:
+- old destination remains
+- old arrival time remains
+- old suggested speed remains
+- old suggested authority remains
+
+### Unknown train
+
+Trying to update a train that is not dispatched should fail cleanly.
+
+# 13. Code quality requirements
+
+Follow the existing architecture:
+
+CTC.Wpf
+    user interaction / MVVM
+
+CTC.Core.Services
+    workflow / state management
+
+CTC.Core.Dispatching
+    route, speed, authority calculations
+
+TrainControl.Contracts
+    subsystem message DTOs
+
+Do not put routing or speed calculations in the ViewModel.
+
+Do not use code-behind for this feature unless absolutely required by existing architecture.
+
+Do not duplicate unit conversion logic.
+
+Reuse the existing MovementSuggestionMessage unless inspection of the architecture proves that a contract change is absolutely necessary. Destination does not need to be sent to the Track Controller if the Track Controller only requires the resulting suggested speed/authority.
+
+Keep this fixed-block CTC logic. Do not add MBO.
+
+Before editing:
+1. inspect all relevant existing classes
+2. understand their current behavior
+3. preserve naming/style conventions
+
+After implementation:
+1. build the entire solution
+2. run relevant tests
+3. fix compilation/test failures caused by this work
+4. summarize every file changed
+5. explain the final post-dispatch update flow
+6. specifically state whether the TestUI required any changes
+
+Do not stop after creating skeleton methods or TODOs. Implement the feature end-to-end.

@@ -101,3 +101,8 @@ system time past its departure. *Captured CTC Outputs* shows a
 `MovementSuggestionMessage` (CTC's suggested speed/authority) followed by a
 `MovementRequestMessage` for the train. Speed and authority are calculated by CTC;
 the TestUI no longer enters them.
+
+Re-plan check: in the CTC *Dispatched Trains* tab, select the train, change its
+Destination and/or Arrival Time and click **Apply Changes**. *Captured CTC Outputs*
+shows one more `MovementSuggestionMessage` for the same TrainId with the recalculated
+speed/authority, and no second `MovementRequestMessage`.

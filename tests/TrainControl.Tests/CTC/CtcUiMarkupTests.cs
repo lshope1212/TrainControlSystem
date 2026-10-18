@@ -49,6 +49,23 @@ public class CtcUiMarkupTests
     }
 
     [TestMethod]
+    public void DispatchedTrains_EditOnlyDestinationAndArrivalTime()
+    {
+        string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
+
+        Assert.Contains("SelectedItem=\"{Binding SelectedDispatchedTrain}\"", xaml);
+        Assert.Contains("SelectedItem=\"{Binding EditedDestinationBlockId}\"", xaml);
+        Assert.Contains("{Binding EditedArrivalTime", xaml);
+        Assert.Contains("Command=\"{Binding ApplyTrainPlanCommand}\"", xaml);
+        Assert.Contains("Header=\"Destination\"", xaml);
+        Assert.Contains("Header=\"Arrival Time\"", xaml);
+
+        // Speed and authority are calculated by CTC, never typed in.
+        Assert.DoesNotContain("EditedSuggestedSpeed", xaml);
+        Assert.DoesNotContain("EditedSuggestedAuthority", xaml);
+    }
+
+    [TestMethod]
     public void TrainGrids_ShowTrainDisplayName()
     {
         string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));

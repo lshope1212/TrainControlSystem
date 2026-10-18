@@ -879,8 +879,11 @@
 
                 <!-- ==============================================
                      DISPATCHED TRAINS
-                     Speed/authority are CTC's initial suggestions,
-                     displayed read-only. The CTC operator does not set them here.
+                     Each train's active movement plan and the latest
+                     speed/authority CTC suggested. The dispatcher edits
+                     only the destination and arrival time (Active
+                     Movement Plan); CTC recalculates speed and authority,
+                     which stay read-only.
                      ============================================== -->
                 <TabItem Header="Dispatched Trains">
 
@@ -891,7 +894,14 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Text="Trains already released from the queue. Suggested Speed and Suggested Authority are what CTC sent to the Track Controller when the train was released; they are not recalculated afterwards. Last Known Block is the last block CTC can authoritatively place the train in (its route start block at release); block occupancy does not identify trains, so it is not updated yet."
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="260"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.ColumnSpan="3"
+                                   Text="Trains already released from the queue. Suggested Speed and Suggested Authority are the latest values CTC sent to the Track Controller, toward the Destination at the Arrival Time. Select a train to change its destination or arrival time; CTC then routes it from its Last Known Block and sends a new movement suggestion. Last Known Block is the last block CTC can authoritatively place the train in (its route start block at release); block occupancy does not identify trains, so it is not updated yet."
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    TextWrapping="Wrap"
@@ -899,6 +909,8 @@
 
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding DispatchedTrains}"
+                                  SelectedItem="{Binding SelectedDispatchedTrain}"
+                                  SelectionMode="Single"
                                   AutoGenerateColumns="False"
                                   CanUserAddRows="False"
                                   IsReadOnly="True">
@@ -907,25 +919,120 @@
 
                                 <DataGridTextColumn Header="Train ID"
                                                     Binding="{Binding TrainDisplayName}"
-                                                    Width="120"/>
+                                                    Width="90"/>
+
+                                <DataGridTextColumn Header="Last Known Block"
+                                                    Binding="{Binding LastKnownBlock}"
+                                                    Width="115"/>
+
+                                <DataGridTextColumn Header="Destination"
+                                                    Binding="{Binding TargetBlockId}"
+                                                    Width="90"/>
+
+                                <DataGridTextColumn Header="Arrival Time"
+                                                    Binding="{Binding TargetArrivalTimeDisplay}"
+                                                    Width="90"/>
 
                                 <DataGridTextColumn Header="Suggested Speed"
                                                     Binding="{Binding SuggestedSpeed,
                                                                       StringFormat={}{0:F1} mph}"
-                                                    Width="160"/>
+                                                    Width="120"/>
 
                                 <DataGridTextColumn Header="Suggested Authority"
                                                     Binding="{Binding SuggestedAuthority,
                                                                       StringFormat={}{0:F0} ft}"
-                                                    Width="160"/>
-
-                                <DataGridTextColumn Header="Last Known Block"
-                                                    Binding="{Binding LastKnownBlock}"
                                                     Width="*"/>
 
                             </DataGrid.Columns>
 
                         </DataGrid>
+
+
+                        <!-- Active movement plan of the selected train.
+                             Only the objective (destination/arrival time)
+                             is editable; nothing is sent until Apply Changes. -->
+                        <Border Grid.Row="1"
+                                Grid.Column="2"
+                                Style="{StaticResource InsetPanelStyle}"
+                                IsEnabled="{Binding HasSelectedDispatchedTrain}">
+
+                            <Grid>
+
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.ColumnSpan="2"
+                                           Text="Active Movement Plan"
+                                           Style="{StaticResource SectionHeaderStyle}"/>
+
+                                <TextBlock Grid.Row="1"
+                                           Text="Selected Train:"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+
+                                <TextBlock Grid.Row="1"
+                                           Grid.Column="1"
+                                           Text="{Binding SelectedDispatchedTrain.TrainDisplayName,
+                                                          TargetNullValue=None,
+                                                          FallbackValue=None}"
+                                           Style="{StaticResource ValueStyle}"
+                                           Margin="8,4,0,4"/>
+
+                                <TextBlock Grid.Row="2"
+                                           Text="Last Known Block:"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+
+                                <TextBlock Grid.Row="2"
+                                           Grid.Column="1"
+                                           Text="{Binding SelectedDispatchedTrain.LastKnownBlock,
+                                                          FallbackValue=--}"
+                                           Style="{StaticResource ValueStyle}"
+                                           Margin="8,4,0,4"/>
+
+                                <TextBlock Grid.Row="3"
+                                           Text="Destination:"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+
+                                <ComboBox Grid.Row="3"
+                                          Grid.Column="1"
+                                          ItemsSource="{Binding DestinationBlockIds}"
+                                          SelectedItem="{Binding EditedDestinationBlockId}"
+                                          Margin="8,4,0,4"/>
+
+                                <TextBlock Grid.Row="4"
+                                           Text="Arrival Time:"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+
+                                <TextBox Grid.Row="4"
+                                         Grid.Column="1"
+                                         Text="{Binding EditedArrivalTime,
+                                                        UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="HH:mm:ss"
+                                         VerticalContentAlignment="Center"
+                                         Margin="8,4,0,4"/>
+
+                                <Button Grid.Row="5"
+                                        Grid.ColumnSpan="2"
+                                        Content="Apply Changes"
+                                        FontWeight="SemiBold"
+                                        Command="{Binding ApplyTrainPlanCommand}"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom"
+                                        Margin="2,8,0,0"/>
+
+                            </Grid>
+
+                        </Border>
 
                     </Grid>
 

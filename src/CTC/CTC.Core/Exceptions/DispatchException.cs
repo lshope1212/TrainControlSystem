@@ -1,8 +1,10 @@
 namespace CTC.Core.Exceptions;
 
 /// <summary>
-/// Raised when a queued train cannot be released yet (e.g. its start block is occupied or
-/// closed). The message is dispatcher-readable; the train stays queued for retry.
+/// Raised when CTC cannot release a queued train yet (e.g. its start block is occupied or
+/// closed; the train stays queued for retry), or cannot apply a dispatcher's change to a
+/// released train's movement plan (e.g. no route to the destination; the old plan is kept).
+/// The message is dispatcher-readable.
 /// </summary>
 public class DispatchException : Exception
 {

@@ -72,4 +72,15 @@ public interface ICTCService
     /// changes only when the Track Controller reports it via <see cref="ApplyBlockStatus"/>.
     /// </summary>
     Task SetSwitchPositionAsync(string blockId, SwitchPosition requestedPosition, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Changes an already-dispatched train's destination and/or arrival time: CTC routes it
+    /// from its last known block to <paramref name="destinationBlockId"/>, recalculates its
+    /// suggested speed and authority, and sends only a new MovementSuggestion (never another
+    /// MovementRequest). The train's state changes only if the send succeeded.
+    /// </summary>
+    /// <returns>A dispatcher-readable warning (e.g. the arrival time cannot be met), or null.</returns>
+    /// <exception cref="Exceptions.DispatchException">The plan cannot be applied (dispatcher-readable reason); nothing was sent.</exception>
+    /// <exception cref="Exceptions.MessageSendException">The suggestion could not be delivered; nothing changed.</exception>
+    Task<string?> UpdateDispatchedTrainPlanAsync(string trainId, string destinationBlockId, TimeSpan targetArrivalTime, CancellationToken cancellationToken = default);
 }

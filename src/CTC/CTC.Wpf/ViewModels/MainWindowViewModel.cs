@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using CTC.Core.Interfaces;
 using CTC.Core.Models;
+using CTC.Core.Scheduling;
 using CTC.Wpf.Commands;
 using TrainControl.Contracts.Enums;
 
@@ -25,6 +26,10 @@ public class MainWindowViewModel : ViewModelBase
     private string _inboundStatus = "No messages received.";
     private string _lastTerritoryUpdate = "--";
     private bool _isMaintenanceMode;
+    private DispatchedTrainViewModel? _selectedDispatchedTrain;
+    private string? _editedDestinationBlockId;
+    private string _editedArrivalTime = string.Empty;
+    private bool _isRebuildingDispatchedTrains;
 
     public MainWindowViewModel(ICTCService ctc)
     {
@@ -34,6 +39,7 @@ public class MainWindowViewModel : ViewModelBase
         CloseSelectedBlockCommand = new AsyncRelayCommand(_ => CloseSelectedBlockAsync(), _ => CanCloseSelectedBlock());
         ReopenSelectedBlockCommand = new AsyncRelayCommand(_ => ReopenSelectedBlockAsync(), _ => CanReopenSelectedBlock());
         ToggleSelectedBlockSwitchCommand = new AsyncRelayCommand(_ => ToggleSelectedBlockSwitchAsync(), _ => CanToggleSelectedBlockSwitch());
+        ApplyTrainPlanCommand = new AsyncRelayCommand(_ => ApplyTrainPlanAsync(), _ => CanApplyTrainPlan());
 
         //TODO other command implementations
 
@@ -55,12 +61,70 @@ public class MainWindowViewModel : ViewModelBase
     public int QueuedTrainCount => DispatchQueue.Count;
 
     /// <summary>
-    /// Trains CTC has released on the selected line, with the speed/authority CTC suggested.
-    /// Backed by CTC's DispatchedTrains state.
+    /// Trains CTC has released on the selected line, with their active movement plan and the
+    /// latest speed/authority CTC suggested. Backed by CTC's DispatchedTrains state.
     /// </summary>
     public ObservableCollection<DispatchedTrainViewModel> DispatchedTrains { get; } = new ObservableCollection<DispatchedTrainViewModel>();
 
     public int DispatchedTrainCount => DispatchedTrains.Count;
+
+    /// <summary>
+    /// Dispatched train whose movement plan the dispatcher is editing. Choosing a different
+    /// train loads its current destination and arrival time into the edit fields.
+    /// </summary>
+    public DispatchedTrainViewModel? SelectedDispatchedTrain
+    {
+        get => _selectedDispatchedTrain;
+        set
+        {
+            string? previousTrainId = _selectedDispatchedTrain?.TrainId;
+            if (SetProperty(ref _selectedDispatchedTrain, value))
+            {
+                // A grid rebuild re-selects the same train; keep the dispatcher's unsaved edits then.
+                if (!_isRebuildingDispatchedTrains && value?.TrainId != previousTrainId)
+                {
+                    LoadEditedPlan();
+                }
+
+                OnPropertyChanged(nameof(HasSelectedDispatchedTrain));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
+    public bool HasSelectedDispatchedTrain => SelectedDispatchedTrain is not null;
+
+    /// <summary>Blocks on the selected line the dispatcher can send a dispatched train to.</summary>
+    public ObservableCollection<string> DestinationBlockIds { get; } = new ObservableCollection<string>();
+
+    /// <summary>Destination chosen for <see cref="SelectedDispatchedTrain"/>; applied only by <see cref="ApplyTrainPlanCommand"/>.</summary>
+    public string? EditedDestinationBlockId
+    {
+        get => _editedDestinationBlockId;
+        set
+        {
+            if (SetProperty(ref _editedDestinationBlockId, value))
+            {
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Arrival time typed for <see cref="SelectedDispatchedTrain"/>, as HH:mm:ss; validated
+    /// only by <see cref="ApplyTrainPlanCommand"/>.
+    /// </summary>
+    public string EditedArrivalTime
+    {
+        get => _editedArrivalTime;
+        set => SetProperty(ref _editedArrivalTime, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Sends <see cref="SelectedDispatchedTrain"/>'s edited destination and arrival time to CTC,
+    /// which recalculates the route, speed and authority and sends a new movement suggestion.
+    /// </summary>
+    public ICommand ApplyTrainPlanCommand { get; }
 
     /// <summary>Tickets sold per hour on the selected line, as last reported by the Track Model.</summary>
     public int CurrentLineTicketSalesPerHour => SelectedLine?.TicketSalesPerHour ?? 0;
@@ -123,6 +187,7 @@ public class MainWindowViewModel : ViewModelBase
             {
                 // Later this can rebuild/filter the territory display for only the selected line. TODO
                 ScheduleBuilder.Line = value;
+                RebuildDestinationBlocks();
                 RebuildDispatchQueue();
                 RebuildDispatchedTrains();
                 OnPropertyChanged(nameof(CurrentLineTicketSalesPerHour));
@@ -262,6 +327,50 @@ public class MainWindowViewModel : ViewModelBase
         }
     }
 
+    // The arrival time is checked when applying, so a bad entry gets an explanation rather
+    // than a silently disabled button.
+    private bool CanApplyTrainPlan() =>
+        SelectedDispatchedTrain is not null
+        && !string.IsNullOrWhiteSpace(EditedDestinationBlockId);
+
+    private async Task ApplyTrainPlanAsync()
+    {
+        var train = SelectedDispatchedTrain;
+        string? destinationBlockId = EditedDestinationBlockId;
+        if (train is null || string.IsNullOrWhiteSpace(destinationBlockId))
+        {
+            return;
+        }
+
+        if (!ScheduleTemplateConverter.TryParseTime(EditedArrivalTime, out var arrivalTime))
+        {
+            CommunicationStatus = $"Unable to update {train.TrainDisplayName}: enter the arrival time as {ScheduleTemplateConverter.TimeFormat}.";
+            return;
+        }
+
+        CommunicationStatus = $"Sending updated movement suggestion for {train.TrainDisplayName}...";
+
+        try
+        {
+            // Route, speed and authority are all calculated by CTC. On success the status is
+            // set from the TrainMovementPlanUpdated state change.
+            await _ctc.UpdateDispatchedTrainPlanAsync(train.TrainId, destinationBlockId, arrivalTime);
+        }
+        catch (Exception ex)
+        {
+            // CTC kept the train's previous plan. Everything is caught because this runs from
+            // an async void command and must never crash the UI.
+            CommunicationStatus = $"Unable to update {train.TrainDisplayName}'s movement plan: {ex.Message}";
+        }
+    }
+
+    /// <summary>Loads <see cref="SelectedDispatchedTrain"/>'s active plan into the edit fields.</summary>
+    private void LoadEditedPlan()
+    {
+        EditedDestinationBlockId = SelectedDispatchedTrain?.TargetBlockId;
+        EditedArrivalTime = SelectedDispatchedTrain?.TargetArrivalTimeDisplay ?? string.Empty;
+    }
+
     private void OnCtcStateChanged(object? sender, CtcStateChangedEventArgs e)
     {
         switch (e.Kind)
@@ -310,6 +419,21 @@ public class MainWindowViewModel : ViewModelBase
                 // The train is still queued; CTC retries on the next system time update.
                 CommunicationStatus = $"Unable to dispatch {TrainIds.DisplayName(e.TrainId ?? string.Empty)}: {e.Message} Will retry on the next time update.";
                 break;
+
+            case CtcStateChangeKind.TrainMovementPlanUpdated:
+                // The DispatchedTrainState was updated in place; just re-read it.
+                var updated = DispatchedTrains.FirstOrDefault(train => train.TrainId == e.TrainId);
+                updated?.Refresh();
+                if (updated is not null && updated == SelectedDispatchedTrain)
+                {
+                    LoadEditedPlan();
+                }
+
+                CommunicationStatus = $"{TrainIds.DisplayName(e.TrainId ?? string.Empty)} movement plan updated"
+                    + (updated is null ? string.Empty : $": {updated.TargetBlockId} at {updated.TargetArrivalTimeDisplay}")
+                    + " (movement suggestion sent)."
+                    + (e.Message is null ? string.Empty : $" Warning: {e.Message}");
+                break;
         }
 
         CommandManager.InvalidateRequerySuggested();
@@ -349,15 +473,44 @@ public class MainWindowViewModel : ViewModelBase
 
     private void RebuildDispatchedTrains()
     {
-        DispatchedTrains.Clear();
+        var selectedTrainId = SelectedDispatchedTrain?.TrainId;
 
-        var lineId = SelectedLine?.LineId;
-        foreach (var train in _ctc.State.DispatchedTrains.Where(train => train.LineId == lineId))
+        // Clearing the grid briefly deselects the train; that must not discard the edits.
+        _isRebuildingDispatchedTrains = true;
+        try
         {
-            DispatchedTrains.Add(new DispatchedTrainViewModel(train));
+            DispatchedTrains.Clear();
+
+            var lineId = SelectedLine?.LineId;
+            foreach (var train in _ctc.State.DispatchedTrains.Where(train => train.LineId == lineId))
+            {
+                DispatchedTrains.Add(new DispatchedTrainViewModel(train));
+            }
+
+            // Keep the dispatcher's selection (and unsaved edits) when the train is still listed.
+            SelectedDispatchedTrain = DispatchedTrains.FirstOrDefault(train => train.TrainId == selectedTrainId);
+        }
+        finally
+        {
+            _isRebuildingDispatchedTrains = false;
+        }
+
+        if (SelectedDispatchedTrain is null)
+        {
+            LoadEditedPlan();
         }
 
         OnPropertyChanged(nameof(DispatchedTrainCount));
+    }
+
+    private void RebuildDestinationBlocks()
+    {
+        DestinationBlockIds.Clear();
+
+        foreach (var block in SelectedLine?.Blocks ?? Enumerable.Empty<CtcBlockState>())
+        {
+            DestinationBlockIds.Add(block.BlockId);
+        }
     }
 
     private void RebuildLines()

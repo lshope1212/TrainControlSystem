@@ -28,10 +28,10 @@ WPF types) so the UI can refresh when messages arrive from other modules.
   `ScheduledTrain`, `ScheduledRouteBlock`, `DispatchQueueEntry`, `DispatchedTrainState`).
   Contract messages are never stored as domain state.
 - `Services/CTCService` is the boundary between contracts and the domain model.
-- `Dispatching/` holds the speed and authority rules used at dispatch:
+- `Dispatching/` holds the routing, speed and authority rules:
   `TrainPerformance` (vehicle max speed), `SpeedPlanner` (schedule feasibility and
-  initial suggested speed) and `AuthorityManager` (initial fixed-block authority).
-  `RouteManager` is still a placeholder.
+  suggested speed), `AuthorityManager` (fixed-block authority) and `RouteManager`
+  (shortest path by block count over connected blocks, used when re-planning).
 
 A scheduled train is an ordered list of route blocks. The dispatcher times only some of
 them (the time the train ENTERS the block); CTC routes the train between timed blocks
@@ -39,6 +39,14 @@ through the connected untimed ones, and checks each timed span is reachable with
 speed limits. When its departure time is reached CTC sends a `MovementSuggestionMessage`
 (initial suggested speed/authority) and then a `MovementRequestMessage` to the Track
 Controller; the train leaves the queue only after both sends succeed.
+
+After release the dispatcher can change a train's destination and/or arrival time
+(`UpdateDispatchedTrainPlanAsync`). CTC routes it from `LastKnownBlockId` to the new
+destination, recalculates speed and authority (the train's own block being occupied
+does not stop its authority), and sends only a new `MovementSuggestionMessage`, never
+another `MovementRequestMessage`. The train's state changes only after that send
+succeeds. An arrival time that cannot be met gives the maximum permitted speed and a
+warning; a limit is never exceeded.
 
 All quantities are SI (meters, meters/second); the WPF layer converts to mph/feet.
 UI-only state such as the selected line or block belongs in the view model.
@@ -50,8 +58,10 @@ UI-only state such as the selected line or block belongs in the view model.
    `DispatchedTrainState.LastKnownBlockId` therefore stays at the route start block
    set at release; it waits for a train-position message after integration rather
    than being guessed from occupancy.
-   For the same reason suggested speed and authority are calculated only once, at
-   dispatch, and are not recalculated as the train moves.
+   For the same reason suggested speed and authority are calculated only at dispatch
+   and when the dispatcher changes the plan, not automatically as the train moves,
+   and a re-plan starts from that (possibly stale) block. Once `LastKnownBlockId` is
+   kept up to date, re-planning needs no change.
 2. **No maintenance acknowledgement.** There is no Track Controller -> CTC
    maintenance status. `CtcBlockState.RequestedMaintenanceState == Closed` means
    "CTC successfully issued a Close request", not "Track Controller closed the block".
