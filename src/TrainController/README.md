@@ -111,8 +111,8 @@ green/red/orange/blue status colors).
 
 | Window | Contains | Never contains |
 | ------ | -------- | -------------- |
-| **Main UI** (`MainWindow`) | Train dropdown (TRAIN-001…010 with fixed SW/HW label), controller source badge, Pi link status, input-source badge, station & authority guidance bar (train · station brake point · authority brake point · authority end · station, all vertical lines), speed readouts incl. effective target and what limits it, Driver controls (mode; requested speed as a numeric **mph** entry — Manual only, applied with Enter/Set, validated; service / emergency brake; E-brake reset; doors; lights; one-shot announcement; cabin °F), Engineer Kp/Ki per train (with untuned-placeholder warning), status cards, fleet table, alerts, event log | Train Model inputs, simulation controls |
-| **Test UI** (`TestWindow`) | Own train dropdown (independent of the Main UI), GLOBAL input source (Train Model / Test UI), Run / Stop / Step / Reset / speed, Train Model → Train Controller inputs of the selected train (incl. "active / dispatched" = Train Model state, and "Transmit beacon"), Train Controller → Train Model outputs, fleet table limited to Train Model boundary I/O, edge-value warnings | Driver or Engineer controls, controller type, any non-boundary data (enforced by tests) |
+| **Main UI** (`MainWindow`) | Header: train dropdown (TRAIN-001…010 with fixed SW/HW label), controller source badge, input-source badge, simulation time. Guidance panel: traffic-light signal head (red / yellow / green lamp lit, all dark = unknown; display only) with a SIGNAL lamp below it (green = track signal valid, red = invalid), and the distance bar (station brake point, authority brake point, authority end, station — labelled vertical lines, no separate legend). Alert banner below it: the single most important ongoing condition (fail-safe > emergency brake > failure > signal lost > authority protection > overspeed > doors open) with what to do; hidden when none. Speed panel: actual / setpoint (and what limits it) / commanded / driver request / power, then FAILURES: SIGNAL PICKUP, BRAKE, ENGINE (+ PI LINK on Hardware trains) red lamps (dark = OK), reset availability, a full-width RESET FAILURES button and, for ~4 s, why a reset was rejected. Driver Controls: mode (default Automatic); requested speed (Manual only, empty = follow the commanded speed, Set / Clear); service brake / EMERGENCY BRAKE / E-brake reset, each brake with a lamp showing the brake actually commanded; doors and exterior lights as toggles whose lamp shows the real state reported by the Train Model (pressed = driver request, lamp = actual); announcement with the last one sent; cabin °F setpoint with the actual temperature. Right column: Status (Pi link, fault, emergency causes, E-brake reset guidance) and Engineer Kp/Ki with the untuned-gains warning. Bottom: fleet table and event log. Layout sizes are proportional (bottom area and right column scale with the window) so it fits different screen sizes / Windows scaling | Train Model inputs, simulation controls |
+| **Test UI** (`TestWindow`) | Own train dropdown (independent of the Main UI), GLOBAL input source (Train Model / Test UI), Run / Stop / Step / Reset / speed, "Simple physics" (test tool: speed, doors and lights follow the commands; off = hold the speed by hand to reproduce failures), Train Model → Train Controller inputs (incl. commanded speed and traffic light) of the selected train (incl. "active / dispatched" = Train Model state, and "Transmit beacon"), Train Controller → Train Model outputs, fleet table limited to Train Model boundary I/O, edge-value warnings | Driver or Engineer controls, controller type, any non-boundary data (enforced by tests) |
 
 **UI units are imperial everywhere: mph, ft, °F, hp** (480 000 W ≈ 644 hp). Internal,
 integration and Pi values stay SI (m/s, m, °C, W, s). Conversion happens only in
@@ -159,23 +159,75 @@ Layering and restyling:
      authority braking curve and the display all use this estimate. In the Test UI, changing
      Remaining authority (or "Send authority") is an authority update.
 
-### Signal pickup
+### Terminology
 
-Signal pickup (receiving the track-provided authorized speed and authority) is represented by
-`TrackSignalValid`, supplied by the Train Model in `TrainModelStatusMessage` and simulated by the
-Test UI "Track signal valid" checkbox. There is deliberately no separate `SignalPickupFailure`
-input and no timeout / freshness inference: the interface provides signal validity explicitly.
-While invalid: target speed 0 (service-brake stop by default, configurable emergency brake via
-`TrackSignalLossResponse`) and authority updates are not trusted (see above).
-3. Effective target = MINIMUM of: authorized speed, vehicle maximum, the remaining-authority
-   braking curve √(2·1.2·(authority − margin)), the driver request (Manual only), and in
-   Automatic the station braking curve √(2·1.2·(station distance − margin)) / station stop.
-   0 when the track signal is lost (plus a latched emergency brake only if
-   `TrackSignalLossResponse.EmergencyBrake` is configured), while the emergency brake is
-   applied, or while the driver holds the service brake (`DriverServiceBrake`; the requested
-   speed setting is kept and becomes the target again on release). The binding constraint is reported as the strongly typed `TargetLimitedBy`
+- **Actual speed** — measured speed reported by the Train Model.
+- **Commanded speed** — wayside speed received through the track (formerly "authorized speed").
+  Trusted only while the track signal is valid.
+- **Setpoint speed** — the controller's final speed target after all limits (formerly
+  "effective target").
+- **Authority** — remaining permitted travel DISTANCE (not a speed).
+
+### Signal pickup (`TrackSignalValid`) and traffic light
+
+Signal pickup is the existing `TrackSignalValid` input (Train Model → controller; Test UI
+"Track signal valid"). There is no `SignalPickupFailure` input. As soon as the signal is
+invalid: setpoint 0, power 0, service brake, and newly received commanded speed / authority
+are not trusted. Invalid for `SignalPickupFailureLatchSeconds` (0.5 s = 5 ticks) in a row →
+**Signal Pickup Failure** latched (see Failure detection).
+
+The **traffic light** (`TrainModelInput.TrafficLight`, shared `SignalState`: Unknown / Red /
+Yellow / Green — the enum the Track Model already uses) is DISPLAY-ONLY: no control logic uses
+it yet, and it is a separate concept from `TrackSignalValid`. Its field in
+`TrainModelStatusMessage` is provisional until the final Track Model contract is agreed.
+
+### Failure detection (inferred, latched)
+
+`TrainController.Core/Safety/FailureMonitor.cs` (Pi: `HardwareTrainController.FailureWatch`)
+infers failures from normal observable data only — no Train Model failure flags. The speed
+measured on a tick is judged against the commands of the PREVIOUS tick. All thresholds are in
+`ControllerPolicy`.
+
+| Failure | Detected when | Response | "Reset failures" accepted when |
+| ------- | ------------- | -------- | ------------------------------ |
+| Signal pickup | `TrackSignalValid == false` for 0.5 s in a row | setpoint 0, power 0, service brake (from the first invalid tick) | track signal valid |
+| Brake (service brake only; the emergency brake is assumed to work) | service brake commanded, no emergency brake, speed > 1.0 m/s, for 1.0 s, average deceleration < 0.3 m/s² | power 0, **emergency brake** | train stopped |
+| Engine | no brake, setpoint − speed > 0.5 m/s, power ≥ 10 % of 480 kW, for 1.0 s, average acceleration ≤ 0 | power 0, **service brake** (a failing service brake then triggers Brake Failure → emergency brake) | train stopped |
+| Hardware link (Hardware trains, integration layer) | any Pi communication fault | fail-safe (power 0, emergency brake) | Pi link healthy again; the Pi state of that train is re-synchronized |
+
+All failures are latched; a rejected reset leaves that failure latched and is shown and
+logged with the reason. When a Brake Failure is detected while the driver is holding the
+service brake (Manual testing), the integration layer releases that now-ineffective request
+(logged), so after "Reset failures" the train is not left braked by a forgotten toggle — the
+same outcome as in Automatic. Failure detected / cleared / reset rejected are written to the event
+log (category `Safety`). Brake and engine failures are not judged at low Kp: with the untuned
+placeholder gains the power never reaches 48 kW.
+
+Testing failures in the Test UI: turn **Simple physics** off only while provoking a failure
+(hold the actual speed by hand). Turn it back on before "Reset failures": with physics off the
+speed cannot rise, so a train that is powered after the reset is — correctly — detected as an
+Engine Failure again.
+
+### Emergency brake — how each cause is released
+
+| Cause | Released by |
+| ----- | ----------- |
+| Driver press, passenger request | **E-brake reset** — only when stopped and no passenger request is active |
+| Brake failure, Hardware link failure | **Reset failures** |
+| Authority (cannot stop within authority, incl. no trusted authority while the signal is invalid) | automatically on the first tick the train is stopped (authority limit / holding brake keep it there) |
+
+The E-brake reset, "Reset failures" and the Test UI Reset are three separate actions.
+
+3. Setpoint speed = MINIMUM of: commanded speed, vehicle maximum, the remaining-authority
+   braking curve √(2·1.2·(authority − margin)), the driver request (Manual, only when set —
+   no request = follow the commanded speed), and in BOTH modes the station braking curve
+   √(2·1.2·(station distance − margin)) / station stop. 0 while the track signal is invalid
+   or a signal-pickup failure is latched, while a brake / engine failure is latched, while the
+   emergency brake is applied, or while the driver holds the service brake
+   (`DriverServiceBrake`; the requested speed setting is kept and applies again on release). The binding constraint is reported as the strongly typed `TargetLimitedBy`
    (`TargetSpeedConstraint`); presentation converts it to text. The driver request can only
-   LOWER the target; Automatic mode never uses it. The station braking curve applies only
+   LOWER the target; Automatic mode never uses it. Manual differs from Automatic ONLY by this
+   optional request. The station braking curve applies only
    when a valid next-station distance exists (`StationTracker.HasValidDistance`); missing or
    invalid station information never implies a zero target. The authority braking curve is
    a PREVENTIVE target limit; `AuthorityProtection` (step 4) remains the INDEPENDENT safety
@@ -183,18 +235,18 @@ While invalid: target speed 0 (service-brake stop by default, configurable emerg
 4. Authority protection: service brake when authority ≤ service stopping distance + authority
    margin + v·dt; emergency brake when authority < emergency stopping distance while moving;
    service-brake hold when stopped with exhausted authority.
-5. Emergency latch (driver, passenger, authority). Reset accepted only when no emergency
-   condition remains; one source clearing never releases the brake.
+5. Emergency brake: see "Emergency brake — how each cause is released" above.
 6. Station guidance: latest brake point = distance − v·dt − (v²/2·1.2 + station margin).
    Authority brake point (display only, same thresholds as authority protection) = remaining authority − v·dt − (v²/2·1.2 + authority margin); stopped: remaining authority − margin. ≤ 0 ⇔ authority protection applies the service brake.
-   Manual: advisory only. Automatic: controller applies the service brake.
-7. Arrival = distance ≤ station threshold AND speed ≤ stopped threshold. Automatic: dwell
+   Both modes: the controller applies the service brake itself (no driver action needed).
+7. Arrival = distance ≤ station threshold AND speed ≤ stopped threshold. Both modes: dwell
    with platform-side doors open, then close and depart.
-8. Doors: closed and requests refused while moving; traction inhibited while any door is
-   open or commanded open.
+8. Doors: the dwell opens the platform side; the driver may also open either side while
+   stopped, in either mode (e.g. emergencies). Closed and requests refused while moving;
+   traction inhibited while any door is open or commanded open.
 9. Overspeed (> limit): service brake.
 10. PI power (Kp·e + Ki·∫e dt, SI, clamped to 0 … 480 kW, anti-windup, integral cleared while
-    traction is inhibited) only when no brake is applied and doors are closed.
+    traction is inhibited) only when no brake is applied, doors are closed and no failure is latched.
 
 ### Station announcements
 
@@ -251,7 +303,8 @@ Pi:  HardwareControllerServer -> HardwareRequestHandler
   the connection is closed, the train gets a fail-safe output (power 0, emergency brake), the
   Main UI shows Faulted. No Software fallback, ever.
 - **Link-fault latch** (integration safety policy, provisional): after a fault the train stays
-  in fail-safe until the link works AND the driver presses E-brake reset; the Pi state of that
+  in fail-safe (Hardware link failure) until the link works AND the driver presses
+  "Reset failures"; the Pi state of that
   train is then reset (its estimates did not advance during the outage, so station distance is
   re-learned from the next beacon). Other Hardware trains are unaffected.
 - **Test Simulation Reset** also resets all Pi train states (queued until reconnect if the Pi is
@@ -274,7 +327,11 @@ requirements. (Source-backed vehicle data lives separately in `VehicleSpecificat
 | Station braking margin | `ControllerPolicy.StationBrakingMarginMeters` | 0 m (none invented) |
 | Authority braking margin | `ControllerPolicy.AuthorityBrakingMarginMeters` | 0 m (none invented) |
 | Station dwell time | `ControllerPolicy.StationDwellTimeSeconds` | 30 s |
-| Initial Manual/Automatic mode | `ControllerStartupDefaults.InitialOperatingMode` | Manual |
+| Initial Manual/Automatic mode | `ControllerStartupDefaults.InitialOperatingMode` | Automatic (team decision) |
+| Signal pickup failure latch | `ControllerPolicy.SignalPickupFailureLatchSeconds` | 0.5 s |
+| Brake failure: minimum speed / window / minimum deceleration | `ControllerPolicy.BrakeFailure*` | 1.0 m/s / 1.0 s / 0.3 m/s² |
+| Engine failure: minimum speed error / minimum power / window / maximum acceleration | `ControllerPolicy.EngineFailure*` | 0.5 m/s / 10 % of rated power / 1.0 s / 0 m/s² |
+| Test UI simple physics | `TestModeController.SetSimplePhysics` (WPF turns it on) | on in the app, off in code |
 | Initial driver cabin setpoint | `ControllerStartupDefaults.InitialCabinTemperatureSetpointCelsius` | 21 °C (≈ 70 °F) |
 | Initial Test Model cabin temperature | `ControllerStartupDefaults.InitialTestCabinTemperatureCelsius` | 21 °C (≈ 70 °F) |
 | Initial Test Model `IsActive` | `TestModelState` | false (initial state only) |
@@ -292,12 +349,12 @@ current provisional behavior; all remain changeable in one place.
 
 | Behavior | Status | Where |
 | -------- | ------ | ----- |
-| Track signal lost → service-brake stop (target 0, held once stopped). Configurable to a latched emergency brake. The requirement only mandates braking. | accepted | `ControllerPolicy.TrackSignalLossResponse` (default `ServiceBrakeStop`) |
+| Track signal lost → immediate service-brake stop (setpoint 0, held once stopped); latched Signal Pickup Failure after 0.5 s. (Replaces the earlier configurable `TrackSignalLossResponse` and the earlier "no timeout inference" decision.) | accepted | `SoftwareTrainController`, `FailureMonitor` |
 | Stopped and not ready to depart (target ≈ 0, or doors open / commanded open) → service brake held, preventing unintended motion | accepted | `SoftwareTrainController` step 8 |
-| Automatic mode: driver door requests do not control the doors; station logic opens the platform side when stopped at the station. Manual mode: driver door commands, subject to the interlock. | accepted | `DoorController` |
-| Driver E-brake reset is allowed only when the passenger request is no longer active and no other emergency condition remains; no stopped-train requirement | accepted | `BrakeController` |
-| Track signal invalid before any trusted authority → remaining authority 0 (held if stopped; authority emergency brake if moving) | provisional | `AuthorityTracker`, Pi `HardwareTrainController` |
-| Manual mode: arrival ends station braking guidance; doors are the driver's | provisional | `SoftwareTrainController` step 7 |
+| Doors: station logic opens the platform side in both modes; the driver may open either side while stopped in either mode, subject to the interlock. | accepted | `DoorController` |
+| Driver E-brake reset (driver / passenger causes only) is allowed only when stopped and the passenger request is no longer active | accepted | `BrakeController` |
+| Track signal invalid before any trusted authority → remaining authority 0 (held if stopped; authority emergency brake if moving) | accepted | `AuthorityTracker`, Pi `HardwareTrainController` |
+| Switching into Manual clears the driver request (the train first follows the commanded speed); "Clear" returns to following it | accepted | `DriverInputState` |
 | The train is a point; all distances (station, authority, brake points) are measured from the train's front. Train length is expected to be reflected in the beacon / authority distances supplied by Track Model | provisional — confirm with Track Model / Train Model | `GuidanceBar`, `SoftwareTrainController`, `HardwareTrainController` |
 | Look-ahead of one control period (v·dt) in station/authority braking | provisional | discretization compensation, not a safety margin |
 | Overspeed has no tolerance band (none defined) | provisional | `OverspeedProtection` |

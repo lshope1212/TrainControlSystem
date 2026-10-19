@@ -83,7 +83,7 @@ public sealed class HardwareProtocolException : Exception
 public static class HardwareProtocol
 {
     /// <summary>Bump whenever the message shape or meaning changes; both ends must agree exactly.</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>
     /// camelCase JSON, enums as strings (readable while debugging). Default number handling is
@@ -138,7 +138,7 @@ public static class HardwareProtocol
                 IsActive = true,
                 TrackSignalValid = true,
                 ActualSpeedMetersPerSecond = 1.0,
-                AuthorizedSpeedMetersPerSecond = 5.0,
+                CommandedSpeedMetersPerSecond = 5.0,
                 RemainingAuthorityMeters = 100.0,
                 Beacon = new BeaconData { IsValid = true, IsNewlyReceived = true, NextStationName = "WARMUP", DistanceToStationMeters = 50.0 },
             },

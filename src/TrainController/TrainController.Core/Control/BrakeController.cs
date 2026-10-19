@@ -3,7 +3,7 @@ using TrainController.Abstractions.Outputs;
 namespace TrainController.Core.Control;
 
 /// <summary>Result of one emergency-brake evaluation.</summary>
-/// <param name="ResetBlockedReason">Empty if no reset is needed or one would be accepted now; otherwise why not.</param>
+/// <param name="ResetBlockedReason">Empty if no E-brake reset is needed or one would be accepted now; otherwise why not.</param>
 public readonly record struct EmergencyBrakeEvaluation(
     EmergencyBrakeCause LatchedCauses,
     bool ResetAccepted,
@@ -15,31 +15,34 @@ public readonly record struct EmergencyBrakeEvaluation(
 }
 
 /// <summary>
-/// Emergency-brake latch for ONE train.
+/// Emergency-brake latch for ONE train (driver, passenger and authority causes; brake-failure and
+/// Hardware-link emergency brakes are owned by the failure handling, not by this latch).
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every emergency source (driver press, passenger request, authority violation and — only
-/// when configured — track signal loss) sets a
-/// latched cause. The emergency brake stays applied while ANY cause is latched; a source
-/// clearing on its own never releases the brake.
+/// <see cref="EmergencyBrakeCause.Driver"/> / <see cref="EmergencyBrakeCause.Passenger"/>: latched;
+/// released only by the driver's E-brake reset, and only when the train is stopped and no passenger
+/// request is still active. Otherwise the reset is rejected. A new press on the same tick as a
+/// reset wins.
 /// </para>
 /// <para>
-/// A driver reset clears the latch only when no emergency condition is still active this
-/// tick (passenger request no longer present, no authority violation, no configured
-/// track-signal-loss emergency). Otherwise the reset
-/// is rejected and the latch stays. A new press on the same tick as a reset wins.
+/// <see cref="EmergencyBrakeCause.AuthorityViolation"/>: a protection action, not a failure. It stays
+/// applied while the train cannot stop within its authority and is released automatically on the
+/// first tick the train is stopped (the authority limit and holding brake then keep it stopped).
+/// The E-brake reset does not affect it.
 /// </para>
 /// </remarks>
 public sealed class BrakeController
 {
+    private const EmergencyBrakeCause ManualCauses = EmergencyBrakeCause.Driver | EmergencyBrakeCause.Passenger;
+
     public EmergencyBrakeCause LatchedCauses { get; private set; }
 
     public EmergencyBrakeEvaluation Evaluate(
         bool driverEmergencyBrakePressed,
         bool passengerEmergencyBrakeRequested,
         bool authorityViolation,
-        bool trackSignalLossEmergency,
+        bool stopped,
         bool driverResetRequested)
     {
         var resetAccepted = false;
@@ -48,13 +51,11 @@ public sealed class BrakeController
 
         var blocker = passengerEmergencyBrakeRequested
             ? "passenger emergency brake request is still active"
-            : authorityViolation
-                ? "train still cannot stop within its remaining authority"
-                : trackSignalLossEmergency
-                    ? "track signal is still lost"
-                    : string.Empty;
+            : !stopped
+                ? "train is still moving"
+                : string.Empty;
 
-        if (driverResetRequested && LatchedCauses != EmergencyBrakeCause.None)
+        if (driverResetRequested && (LatchedCauses & ManualCauses) != 0)
         {
             if (blocker.Length > 0)
             {
@@ -63,7 +64,7 @@ public sealed class BrakeController
             }
             else
             {
-                LatchedCauses = EmergencyBrakeCause.None;
+                LatchedCauses &= ~ManualCauses;
                 resetAccepted = true;
             }
         }
@@ -82,13 +83,12 @@ public sealed class BrakeController
         {
             LatchedCauses |= EmergencyBrakeCause.AuthorityViolation;
         }
-
-        if (trackSignalLossEmergency)
+        else if (stopped)
         {
-            LatchedCauses |= EmergencyBrakeCause.TrackSignalLoss;
+            LatchedCauses &= ~EmergencyBrakeCause.AuthorityViolation;
         }
 
-        var blockedNow = LatchedCauses != EmergencyBrakeCause.None ? blocker : string.Empty;
+        var blockedNow = (LatchedCauses & ManualCauses) != 0 ? blocker : string.Empty;
         return new EmergencyBrakeEvaluation(LatchedCauses, resetAccepted, resetRejected, rejectedReason, blockedNow);
     }
 

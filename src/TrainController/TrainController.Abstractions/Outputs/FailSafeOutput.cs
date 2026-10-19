@@ -67,11 +67,15 @@ public static class FailSafeOutput
             },
             Display = previousDisplay with
             {
-                EffectiveTargetSpeedMetersPerSecond = 0.0,
+                SetpointSpeedMetersPerSecond = 0.0,
                 StationBrakingActive = false,
-                StationBrakingAdvised = false,
                 DoorInterlockActive = !stopped,
                 EmergencyBrakeResetRejected = false,
+                FailureResetRejected = false,
+                FailureResetRejectedReason = string.Empty,
+                Failures = (cause & EmergencyBrakeCause.HardwareCommunication) != 0
+                    ? previousDisplay.Failures | ControllerFailure.HardwareLink
+                    : previousDisplay.Failures,
                 BeaconRecalibrated = false,
                 AuthorityRecalibrated = false,
                 StationEvent = StationEvent.None,

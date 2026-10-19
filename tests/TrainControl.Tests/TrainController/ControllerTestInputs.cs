@@ -20,7 +20,7 @@ internal static class ControllerTestInputs
 
     public static TrainModelInput Model(
         double speed = 0.0,
-        double authorized = 10.0,
+        double commanded = 10.0,
         double authority = 10_000.0,
         bool passengerEmergency = false,
         bool leftOpen = false,
@@ -31,7 +31,7 @@ internal static class ControllerTestInputs
             IsActive = true,
             TrackSignalValid = signalValid,
             ActualSpeedMetersPerSecond = speed,
-            AuthorizedSpeedMetersPerSecond = authorized,
+            CommandedSpeedMetersPerSecond = commanded,
             RemainingAuthorityMeters = authority,
             PassengerEmergencyBrakeRequested = passengerEmergency,
             LeftDoorsOpen = leftOpen,
@@ -50,7 +50,7 @@ internal static class ControllerTestInputs
             PlatformSide = side,
         };
 
-    public static DriverInput Manual(double requested = 0.0) =>
+    public static DriverInput Manual(double? requested = 0.0) =>
         new DriverInput { Mode = OperatingMode.Manual, RequestedSpeedMetersPerSecond = requested };
 
     public static DriverInput Automatic() => new DriverInput { Mode = OperatingMode.Automatic };

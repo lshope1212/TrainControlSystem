@@ -58,21 +58,21 @@
     </Style>
     <Style x:Key="HeaderTitle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="FontSize" Value="22"/>
+        <Setter Property="FontSize" Value="30"/>
         <Setter Property="FontWeight" Value="Bold"/>
     </Style>
     <Style x:Key="HeaderSubtitle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource HeaderMutedTextBrush}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="16"/>
     </Style>
     <Style x:Key="HeaderLabel" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource HeaderMutedTextBrush}"/>
-        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontSize" Value="15"/>
         <Setter Property="Margin" Value="0,0,0,2"/>
     </Style>
     <Style x:Key="HeaderClock" TargetType="TextBlock">
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="FontSize" Value="18"/>
+        <Setter Property="FontSize" Value="26"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
     <Style x:Key="HeaderBadge" TargetType="Border">
@@ -84,7 +84,7 @@
     </Style>
     <Style x:Key="HeaderBadgeText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
 
@@ -102,7 +102,7 @@
     </Style>
     <Style x:Key="PanelTitle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="18"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
@@ -115,55 +115,55 @@
     </Style>
     <Style x:Key="CardTitle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="18"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Margin" Value="0,0,0,4"/>
     </Style>
     <Style x:Key="KeyLabelText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="ValueText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="BigValueText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="FontSize" Value="24"/>
+        <Setter Property="FontSize" Value="32"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
     <Style x:Key="MutedText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
     <Style x:Key="SectionLabel" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Margin" Value="0,10,0,4"/>
     </Style>
     <Style x:Key="WarningText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
     <Style x:Key="StatusBarText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Margin" Value="8,0"/>
     </Style>
     <Style x:Key="LegendDot" TargetType="Ellipse">
-        <Setter Property="Width" Value="8"/>
-        <Setter Property="Height" Value="8"/>
+        <Setter Property="Width" Value="10"/>
+        <Setter Property="Height" Value="10"/>
         <Setter Property="Margin" Value="10,0,4,0"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="LegendText" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
@@ -197,7 +197,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="Padding" Value="12,5"/>
         <Setter Property="Margin" Value="0,0,6,0"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -233,6 +233,54 @@
             </Trigger>
         </Style.Triggers>
     </Style>
+    <!-- Indicator lamps: dark when off; Tag="True" lights them (with a soft glow). -->
+    <Style x:Key="Lamp" TargetType="Ellipse">
+        <Setter Property="Width" Value="14"/>
+        <Setter Property="Height" Value="14"/>
+        <Setter Property="Fill" Value="#4B5563"/>
+        <Setter Property="Stroke" Value="#1F2937"/>
+        <Setter Property="StrokeThickness" Value="1"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="LampGreen" TargetType="Ellipse" BasedOn="{StaticResource Lamp}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="Fill" Value="#22C55E"/>
+                <Setter Property="Effect"><Setter.Value><DropShadowEffect Color="#22C55E" BlurRadius="14" ShadowDepth="0" Opacity="0.9"/></Setter.Value></Setter>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="LampYellow" TargetType="Ellipse" BasedOn="{StaticResource Lamp}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="Fill" Value="#FACC15"/>
+                <Setter Property="Effect"><Setter.Value><DropShadowEffect Color="#FACC15" BlurRadius="14" ShadowDepth="0" Opacity="0.9"/></Setter.Value></Setter>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="LampAmber" TargetType="Ellipse" BasedOn="{StaticResource Lamp}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="Fill" Value="#F59E0B"/>
+                <Setter Property="Effect"><Setter.Value><DropShadowEffect Color="#F59E0B" BlurRadius="14" ShadowDepth="0" Opacity="0.9"/></Setter.Value></Setter>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="LampRed" TargetType="Ellipse" BasedOn="{StaticResource Lamp}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="Fill" Value="#EF4444"/>
+                <Setter Property="Effect"><Setter.Value><DropShadowEffect Color="#EF4444" BlurRadius="16" ShadowDepth="0" Opacity="0.95"/></Setter.Value></Setter>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="LampLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource HeaderMutedTextBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </Style>
+
     <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource FlatButton}">
         <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
         <Setter Property="BorderBrush" Value="#B32F25"/>
@@ -245,16 +293,16 @@
     <Style TargetType="TextBox">
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="Padding" Value="4,2"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="MinHeight" Value="32"/>
     </Style>
     <Style TargetType="ComboBox">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="FontSize" Value="17"/>
+        <Setter Property="MinHeight" Value="32"/>
     </Style>
     <Style TargetType="CheckBox">
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Margin" Value="0,3"/>
@@ -267,8 +315,8 @@
         <Setter Property="GridLinesVisibility" Value="Horizontal"/>
         <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource DividerBrush}"/>
         <Setter Property="HeadersVisibility" Value="Column"/>
-        <Setter Property="RowHeight" Value="26"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="RowHeight" Value="34"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="IsReadOnly" Value="True"/>
         <Setter Property="AutoGenerateColumns" Value="False"/>
         <Setter Property="CanUserAddRows" Value="False"/>
@@ -280,7 +328,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}"/>
         <Setter Property="BorderThickness" Value="0,0,1,1"/>
         <Setter Property="Padding" Value="8,5"/>
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
     </Style>
     <Style TargetType="DataGridCell">
         <Setter Property="BorderThickness" Value="0"/>
@@ -298,7 +346,7 @@
 
     <!-- Tabs (like Schedule Builder / Dispatch Queue / Dispatched Trains) -->
     <Style TargetType="TabItem">
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="17"/>
         <Setter Property="Padding" Value="10,4"/>
     </Style>
 </ResourceDictionary>

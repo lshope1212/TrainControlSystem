@@ -18,7 +18,7 @@ public class SoftwareTrainControllerTests
     public void PassengerEmergencyBrake_AppliesEmergencyBrakeAndZeroPower_WithoutDriverAction()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 10.0, authorized: 15.0, passengerEmergency: true), Manual(requested: 15.0)));
+        var output = Step(c, Input(Model(speed: 10.0, commanded: 15.0, passengerEmergency: true), Manual(requested: 15.0)));
 
         Assert.IsTrue(output.Commands.EmergencyBrakeCommand);
         Assert.AreEqual(0.0, output.Commands.PowerCommandWatts);
@@ -78,18 +78,35 @@ public class SoftwareTrainControllerTests
     }
 
     [TestMethod]
-    public void EmergencyBrakeReset_RejectedWhileAuthorityViolationRemains()
+    public void AuthorityEmergencyBrake_IsNotReleasedByEbReset_ReleasesAutomaticallyOnceStopped()
     {
         var c = NewController();
         // 15 m/s needs ~41 m even with the emergency brake; only 10 m of authority remain.
-        var first = Step(c, Input(Model(speed: 15.0, authorized: 20.0, authority: 10.0), tick: 1));
+        var first = Step(c, Input(Model(speed: 15.0, commanded: 20.0, authority: 10.0), tick: 1));
         Assert.IsTrue(first.Commands.EmergencyBrakeCommand);
         Assert.IsTrue(first.Display.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.AuthorityViolation));
 
-        var reset = Step(c, Input(Model(speed: 12.0, authorized: 20.0, authority: 5.0),
+        var reset = Step(c, Input(Model(speed: 12.0, commanded: 20.0, authority: 5.0),
             new DriverInput { EmergencyBrakeResetRequested = true }, tick: 2));
-        Assert.IsTrue(reset.Display.EmergencyBrakeResetRejected);
-        Assert.IsTrue(reset.Commands.EmergencyBrakeCommand);
+        Assert.IsFalse(reset.Display.EmergencyBrakeResetRejected, "The E-brake reset only concerns driver / passenger emergency brakes.");
+        Assert.IsTrue(reset.Commands.EmergencyBrakeCommand, "Still cannot stop in time: stays applied.");
+
+        var stopped = Step(c, Input(Model(speed: 0.0, commanded: 20.0, authority: 5.0), tick: 3));
+        Assert.IsFalse(stopped.Commands.EmergencyBrakeCommand, "Protection action: released once the train has stopped.");
+        Assert.IsTrue(stopped.Commands.ServiceBrakeCommand, "Held with the service brake (authority / holding brake).");
+        Assert.AreEqual(EmergencyBrakeCause.None, c.LatchedEmergencyCauses);
+    }
+
+    [TestMethod]
+    public void DriverEmergencyBrake_ResetRejectedWhileMoving()
+    {
+        var c = NewController();
+        Step(c, Input(Model(speed: 5.0), new DriverInput { EmergencyBrakeRequested = true }, tick: 1));
+
+        var moving = Step(c, Input(Model(speed: 3.0), new DriverInput { EmergencyBrakeResetRequested = true }, tick: 2));
+        Assert.IsTrue(moving.Display.EmergencyBrakeResetRejected);
+        StringAssert.Contains(moving.Display.EmergencyBrakeResetBlockedReason, "moving");
+        Assert.IsTrue(moving.Commands.EmergencyBrakeCommand);
     }
 
     // ---------------------------------------------------------------- beacon / station distance
@@ -169,18 +186,20 @@ public class SoftwareTrainControllerTests
     }
 
     [TestMethod]
-    public void ManualMode_DepartingAfterStop_ClearsStation()
+    public void ManualMode_DwellsLikeAutomatic_ThenDepartureClearsStation()
     {
         var c = NewController();
+        var policy = ControllerPolicy.Default with { StationDwellTimeSeconds = 0.2 };
 
-        var arrived = Step(c, Input(Model(speed: 0.0, beacon: Beacon(1.0, "EDGEBROOK")), tick: 1));
+        var arrived = Step(c, Input(Model(speed: 0.0, beacon: Beacon(1.0, "EDGEBROOK")), tick: 1, policy: policy));
         Assert.IsTrue(arrived.Display.AtStation);
         Assert.AreEqual(StationEvent.Arrived, arrived.Display.StationEvent);
+        Assert.IsTrue(arrived.Commands.LeftDoorsOpenCommand, "Manual mode: doors open automatically at the station too.");
 
-        var waiting = Step(c, Input(Model(speed: 0.0), tick: 2));
+        var waiting = Step(c, Input(Model(speed: 0.0), tick: 2, policy: policy));
         Assert.IsTrue(waiting.Display.AtStation, "Still at the station while stopped.");
 
-        var departed = Step(c, Input(Model(speed: 1.0), Manual(requested: 5.0), tick: 3));
+        var departed = Step(c, Input(Model(speed: 1.0), Manual(requested: 5.0), tick: 3, policy: policy));
         Assert.AreEqual(StationEvent.Departed, departed.Display.StationEvent);
         Assert.IsNull(departed.Display.DistanceToNextStationMeters);
         Assert.IsFalse(departed.Display.AtStation);
@@ -200,7 +219,7 @@ public class SoftwareTrainControllerTests
         var departed = Step(c, Input(Model(speed: 0.5), Automatic(), tick: 4, policy: policy));
         Assert.AreEqual(StationEvent.Departed, departed.Display.StationEvent);
         Assert.IsNull(departed.Display.DistanceToNextStationMeters);
-        Assert.AreEqual(TargetSpeedConstraint.AuthorizedSpeed, departed.Display.TargetLimitedBy, "No stale station limits the target.");
+        Assert.AreEqual(TargetSpeedConstraint.CommandedSpeed, departed.Display.TargetLimitedBy, "No stale station limits the target.");
     }
 
     [TestMethod]
@@ -284,18 +303,18 @@ public class SoftwareTrainControllerTests
     {
         var c = NewController();
 
-        var t1 = Step(c, Input(Model(speed: 10.0, authorized: 15.0, authority: 1000.0), tick: 1));
+        var t1 = Step(c, Input(Model(speed: 10.0, commanded: 15.0, authority: 1000.0), tick: 1));
         Assert.AreEqual(1000.0, t1.Display.RemainingAuthorityMeters, 1e-9);
         Assert.IsTrue(t1.Display.AuthorityRecalibrated, "First value received initializes the estimate.");
 
-        var t2 = Step(c, Input(Model(speed: 10.0, authorized: 15.0, authority: 1000.0), tick: 2));
+        var t2 = Step(c, Input(Model(speed: 10.0, commanded: 15.0, authority: 1000.0), tick: 2));
         Assert.AreEqual(999.0, t2.Display.RemainingAuthorityMeters, 1e-9, "Same value without an update: counted down.");
         Assert.IsFalse(t2.Display.AuthorityRecalibrated);
 
-        var t3 = Step(c, Input(Model(speed: 8.0, authorized: 15.0, authority: 1000.0), tick: 3));
+        var t3 = Step(c, Input(Model(speed: 8.0, commanded: 15.0, authority: 1000.0), tick: 3));
         Assert.AreEqual(998.2, t3.Display.RemainingAuthorityMeters, 1e-9);
 
-        var update = Model(speed: 8.0, authorized: 15.0, authority: 500.0) with { AuthorityUpdateReceived = true };
+        var update = Model(speed: 8.0, commanded: 15.0, authority: 500.0) with { AuthorityUpdateReceived = true };
         var t4 = Step(c, Input(update, tick: 4));
         Assert.AreEqual(500.0, t4.Display.RemainingAuthorityMeters, 1e-9, "New authority replaces the estimate.");
         Assert.IsTrue(t4.Display.AuthorityRecalibrated);
@@ -306,7 +325,7 @@ public class SoftwareTrainControllerTests
     {
         var c = NewController();
         TrainModelInput Tick(double authority, bool update, bool signal) =>
-            Model(speed: 10.0, authorized: 15.0, authority: authority, signalValid: signal) with { AuthorityUpdateReceived = update };
+            Model(speed: 10.0, commanded: 15.0, authority: authority, signalValid: signal) with { AuthorityUpdateReceived = update };
 
         var t1 = Step(c, Input(Tick(1000.0, update: true, signal: true), tick: 1));
         Assert.AreEqual(1000.0, t1.Display.RemainingAuthorityMeters, 1e-9);
@@ -353,7 +372,7 @@ public class SoftwareTrainControllerTests
         var firstBrakeTick = 0;
         for (var tick = 1; tick <= 20 && firstBrakeTick == 0; tick++)
         {
-            var output = Step(c, Input(Model(speed: 10.0, authorized: 15.0, authority: 50.0), Manual(requested: 10.0), tick: tick, engineer: gains));
+            var output = Step(c, Input(Model(speed: 10.0, commanded: 15.0, authority: 50.0), Manual(requested: 10.0), tick: tick, engineer: gains));
             if (output.Display.AuthorityProtectionActive)
             {
                 firstBrakeTick = tick;
@@ -375,15 +394,15 @@ public class SoftwareTrainControllerTests
     public void TractionState_ExplainsZeroPower()
     {
         Assert.AreEqual(TractionState.Powering,
-            Step(NewController(), Input(Model(speed: 5.0, authorized: 10.0), Automatic())).Display.TractionState);
+            Step(NewController(), Input(Model(speed: 5.0, commanded: 10.0), Automatic())).Display.TractionState);
         Assert.AreEqual(TractionState.AtOrAboveTarget,
-            Step(NewController(), Input(Model(speed: 8.0, authorized: 10.0), Manual(requested: 5.0))).Display.TractionState);
+            Step(NewController(), Input(Model(speed: 8.0, commanded: 10.0), Manual(requested: 5.0))).Display.TractionState);
         Assert.AreEqual(TractionState.HoldingStopped,
-            Step(NewController(), Input(Model(speed: 0.0, authorized: 10.0), Manual(requested: 0.0))).Display.TractionState);
+            Step(NewController(), Input(Model(speed: 0.0, commanded: 10.0), Manual(requested: 0.0))).Display.TractionState);
         Assert.AreEqual(TractionState.ServiceBrake,
-            Step(NewController(), Input(Model(speed: 12.0, authorized: 10.0), Automatic())).Display.TractionState);
+            Step(NewController(), Input(Model(speed: 12.0, commanded: 10.0), Automatic())).Display.TractionState);
         Assert.AreEqual(TractionState.DoorInterlock,
-            Step(NewController(), Input(Model(speed: 0.0, authorized: 10.0, leftOpen: true), Automatic())).Display.TractionState);
+            Step(NewController(), Input(Model(speed: 0.0, commanded: 10.0, leftOpen: true), Automatic())).Display.TractionState);
         Assert.AreEqual(TractionState.EmergencyBrake,
             Step(NewController(), Input(Model(speed: 5.0, passengerEmergency: true), Automatic())).Display.TractionState);
     }
@@ -407,26 +426,27 @@ public class SoftwareTrainControllerTests
     // ---------------------------------------------------------------- station braking / arrival
 
     [TestMethod]
-    public void ManualMode_StationBrakingIsAdvisoryOnly()
+    public void ManualMode_AppliesStationBrakingAutomatically()
     {
         var c = NewController();
         // 10 m/s needs 41.7 m with the service brake; station is 40 m away -> braking due.
-        var output = Step(c, Input(Model(speed: 10.0, authorized: 15.0, beacon: Beacon(40.0)), Manual(requested: 12.0)));
+        var output = Step(c, Input(Model(speed: 10.0, commanded: 15.0, beacon: Beacon(40.0)), Manual(requested: 12.0)));
 
-        Assert.IsTrue(output.Display.StationBrakingAdvised);
-        Assert.IsFalse(output.Display.StationBrakingActive);
-        Assert.IsFalse(output.Commands.ServiceBrakeCommand, "Manual mode: the driver brakes.");
-        NumericAssert.Positive(output.Commands.PowerCommandWatts);
+        Assert.IsTrue(output.Display.StationBrakingActive, "Station braking is automatic in Manual mode too.");
+        Assert.IsTrue(output.Commands.ServiceBrakeCommand);
+        Assert.AreEqual(0.0, output.Commands.PowerCommandWatts);
+        Assert.AreEqual(0.0, output.Display.SetpointSpeedMetersPerSecond);
+        Assert.AreEqual(TargetSpeedConstraint.StationStop, output.Display.TargetLimitedBy);
         NumericAssert.AtMost(output.Display.DistanceToStationBrakePointMeters, 0.0);
     }
 
     [TestMethod]
-    public void ManualMode_NoAdvisoryBeforeTheBrakePoint()
+    public void ManualMode_NoStationBrakingBeforeTheBrakePoint()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 10.0, authorized: 15.0, beacon: Beacon(200.0)), Manual(requested: 12.0)));
+        var output = Step(c, Input(Model(speed: 10.0, commanded: 15.0, beacon: Beacon(200.0)), Manual(requested: 12.0)));
 
-        Assert.IsFalse(output.Display.StationBrakingAdvised);
+        Assert.IsFalse(output.Display.StationBrakingActive);
         NumericAssert.GreaterThan(output.Display.DistanceToStationBrakePointMeters, 0.0);
     }
 
@@ -434,12 +454,12 @@ public class SoftwareTrainControllerTests
     public void AutomaticMode_AppliesStationBrakingItself()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 10.0, authorized: 15.0, beacon: Beacon(40.0, "WHITED")), Automatic()));
+        var output = Step(c, Input(Model(speed: 10.0, commanded: 15.0, beacon: Beacon(40.0, "WHITED")), Automatic()));
 
         Assert.IsTrue(output.Display.StationBrakingActive);
         Assert.IsTrue(output.Commands.ServiceBrakeCommand);
         Assert.AreEqual(0.0, output.Commands.PowerCommandWatts);
-        Assert.AreEqual(0.0, output.Display.EffectiveTargetSpeedMetersPerSecond);
+        Assert.AreEqual(0.0, output.Display.SetpointSpeedMetersPerSecond);
         Assert.AreEqual("Next station: WHITED. Doors will open on the left.", output.Commands.StationAnnouncement, "Beacon tick announcement.");
     }
 
@@ -508,7 +528,7 @@ public class SoftwareTrainControllerTests
     {
         var c = NewController();
         // service stop 41.7 m + v·dt 1 m >= 30 m; emergency stop 18.3 m < 30 m.
-        var output = Step(c, Input(Model(speed: 10.0, authorized: 15.0, authority: 30.0), Manual(requested: 15.0)));
+        var output = Step(c, Input(Model(speed: 10.0, commanded: 15.0, authority: 30.0), Manual(requested: 15.0)));
 
         Assert.IsTrue(output.Commands.ServiceBrakeCommand);
         Assert.IsFalse(output.Commands.EmergencyBrakeCommand);
@@ -520,15 +540,15 @@ public class SoftwareTrainControllerTests
     public void AuthorityBrakePoint_IsWhereAuthorityProtectionStartsBraking()
     {
         // v = 10 m/s: service stop 10²/(2·1.2) = 41.667 m, v·dt = 1 m, margin 0 → brake point at 42.667 m.
-        var far = Step(NewController(), Input(Model(speed: 10.0, authorized: 15.0, authority: 500.0), Manual(requested: 15.0)));
+        var far = Step(NewController(), Input(Model(speed: 10.0, commanded: 15.0, authority: 500.0), Manual(requested: 15.0)));
         Assert.AreEqual(500.0 - 42.0 - 2.0 / 3.0, far.Display.DistanceToAuthorityBrakePointMeters!.Value, 1e-9);
         Assert.IsFalse(far.Display.AuthorityProtectionActive);
 
-        var due = Step(NewController(), Input(Model(speed: 10.0, authorized: 15.0, authority: 42.0), Manual(requested: 15.0)));
+        var due = Step(NewController(), Input(Model(speed: 10.0, commanded: 15.0, authority: 42.0), Manual(requested: 15.0)));
         NumericAssert.AtMost(due.Display.DistanceToAuthorityBrakePointMeters!.Value, 0.0);
         Assert.IsTrue(due.Display.AuthorityProtectionActive, "Brake point reached ⇔ authority protection active.");
 
-        var stopped = Step(NewController(), Input(Model(speed: 0.0, authorized: 15.0, authority: 120.0), Manual(requested: 15.0)));
+        var stopped = Step(NewController(), Input(Model(speed: 0.0, commanded: 15.0, authority: 120.0), Manual(requested: 15.0)));
         Assert.AreEqual(120.0, stopped.Display.DistanceToAuthorityBrakePointMeters!.Value, 1e-9);
     }
 
@@ -536,7 +556,7 @@ public class SoftwareTrainControllerTests
     public void AuthorityProtection_ObeysAuthorityEvenWhenStationIsFarther()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 10.0, authorized: 15.0, authority: 30.0, beacon: Beacon(2000.0)), Automatic()));
+        var output = Step(c, Input(Model(speed: 10.0, commanded: 15.0, authority: 30.0, beacon: Beacon(2000.0)), Automatic()));
 
         Assert.IsFalse(output.Display.StationBrakingActive);
         Assert.IsTrue(output.Commands.ServiceBrakeCommand);
@@ -548,7 +568,7 @@ public class SoftwareTrainControllerTests
     public void AuthorityProtection_HoldsStoppedTrainWithExhaustedAuthority()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 0.0, authorized: 15.0, authority: 0.0), Automatic()));
+        var output = Step(c, Input(Model(speed: 0.0, commanded: 15.0, authority: 0.0), Automatic()));
 
         Assert.IsTrue(output.Commands.ServiceBrakeCommand);
         Assert.IsFalse(output.Commands.EmergencyBrakeCommand);
@@ -559,7 +579,7 @@ public class SoftwareTrainControllerTests
     public void Overspeed_AppliesServiceBrake()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 12.0, authorized: 10.0), Automatic()));
+        var output = Step(c, Input(Model(speed: 12.0, commanded: 10.0), Automatic()));
 
         Assert.IsTrue(output.Display.OverspeedProtectionActive);
         Assert.IsTrue(output.Commands.ServiceBrakeCommand);
@@ -570,9 +590,9 @@ public class SoftwareTrainControllerTests
     public void TargetSpeed_IsCappedByVehicleMaximum()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 0.0, authorized: 30.0), Automatic()));
+        var output = Step(c, Input(Model(speed: 0.0, commanded: 30.0), Automatic()));
 
-        Assert.AreEqual(VehicleSpecification.Flexity2Blackpool.MaxSpeedMetersPerSecond, output.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9);
+        Assert.AreEqual(VehicleSpecification.Flexity2Blackpool.MaxSpeedMetersPerSecond, output.Display.SetpointSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(TargetSpeedConstraint.VehicleMaximum, output.Display.TargetLimitedBy);
     }
 
@@ -584,10 +604,10 @@ public class SoftwareTrainControllerTests
         var authorized = 8.9408; // 20 mph
         var c = NewController();
 
-        var output = Step(c, Input(Model(speed: 8.9408, authorized: authorized), Manual(requested: requested)));
+        var output = Step(c, Input(Model(speed: 8.9408, commanded: authorized), Manual(requested: requested)));
 
-        Assert.AreEqual(authorized, output.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9);
-        Assert.AreEqual(TargetSpeedConstraint.AuthorizedSpeed, output.Display.TargetLimitedBy);
+        Assert.AreEqual(authorized, output.Display.SetpointSpeedMetersPerSecond, 1e-9);
+        Assert.AreEqual(TargetSpeedConstraint.CommandedSpeed, output.Display.TargetLimitedBy);
         Assert.AreEqual(0.0, output.Commands.PowerCommandWatts, "Already at the authorized limit: no power toward 30 mph.");
     }
 
@@ -595,7 +615,7 @@ public class SoftwareTrainControllerTests
     public void ManualMode_DriverRequestBelowLimits_IsTheBindingConstraint()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(authorized: 10.0), Manual(requested: 6.0)));
+        var output = Step(c, Input(Model(commanded: 10.0), Manual(requested: 6.0)));
 
         Assert.AreEqual(TargetSpeedConstraint.DriverRequest, output.Display.TargetLimitedBy);
     }
@@ -609,9 +629,9 @@ public class SoftwareTrainControllerTests
         foreach (var driver in new[] { Manual(requested: 15.0), Automatic() })
         {
             var c = NewController();
-            var output = Step(c, Input(Model(speed: 0.0, authorized: 15.0, authority: 50.0), driver));
+            var output = Step(c, Input(Model(speed: 0.0, commanded: 15.0, authority: 50.0), driver));
 
-            Assert.AreEqual(expected, output.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9, driver.Mode.ToString());
+            Assert.AreEqual(expected, output.Display.SetpointSpeedMetersPerSecond, 1e-9, driver.Mode.ToString());
             Assert.AreEqual(TargetSpeedConstraint.RemainingAuthority, output.Display.TargetLimitedBy);
         }
     }
@@ -622,37 +642,37 @@ public class SoftwareTrainControllerTests
         var c = NewController();
         var driver = new DriverInput { Mode = OperatingMode.Automatic, RequestedSpeedMetersPerSecond = 3.0 };
 
-        var output = Step(c, Input(Model(speed: 0.0, authorized: 10.0), driver));
+        var output = Step(c, Input(Model(speed: 0.0, commanded: 10.0), driver));
 
-        Assert.AreEqual(10.0, output.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9);
-        Assert.AreEqual(TargetSpeedConstraint.AuthorizedSpeed, output.Display.TargetLimitedBy);
+        Assert.AreEqual(10.0, output.Display.SetpointSpeedMetersPerSecond, 1e-9);
+        Assert.AreEqual(TargetSpeedConstraint.CommandedSpeed, output.Display.TargetLimitedBy);
     }
 
     [TestMethod]
-    public void AutomaticMode_TargetFollowsStationBrakingCurve_ManualDoesNot()
+    public void BothModes_TargetFollowsStationBrakingCurve()
     {
         var expected = Math.Sqrt(2.0 * 1.2 * 50.0); // stop within 50 m
 
-        var automatic = Step(NewController(), Input(Model(speed: 0.0, authorized: 15.0, beacon: Beacon(50.0)), Automatic()));
-        Assert.AreEqual(expected, automatic.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9);
+        var automatic = Step(NewController(), Input(Model(speed: 0.0, commanded: 15.0, beacon: Beacon(50.0)), Automatic()));
+        Assert.AreEqual(expected, automatic.Display.SetpointSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(TargetSpeedConstraint.StationStop, automatic.Display.TargetLimitedBy);
 
-        var manual = Step(NewController(), Input(Model(speed: 0.0, authorized: 15.0, beacon: Beacon(50.0)), Manual(requested: 14.0)));
-        Assert.AreEqual(14.0, manual.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9, "Manual: station guidance is advisory only.");
-        Assert.AreEqual(TargetSpeedConstraint.DriverRequest, manual.Display.TargetLimitedBy);
+        var manual = Step(NewController(), Input(Model(speed: 0.0, commanded: 15.0, beacon: Beacon(50.0)), Manual(requested: 14.0)));
+        Assert.AreEqual(expected, manual.Display.SetpointSpeedMetersPerSecond, 1e-9, "Manual: the station approach limits the setpoint too.");
+        Assert.AreEqual(TargetSpeedConstraint.StationStop, manual.Display.TargetLimitedBy);
     }
 
     [TestMethod]
     public void AutomaticMode_WithoutValidStationDistance_StationCurveDoesNotApply()
     {
         // No beacon at all, and an invalid beacon reception: neither may imply a zero target.
-        var noBeacon = Step(NewController(), Input(Model(speed: 5.0, authorized: 10.0), Automatic()));
-        var invalidBeacon = Step(NewController(), Input(Model(speed: 5.0, authorized: 10.0, beacon: Beacon(0.0, valid: false)), Automatic()));
+        var noBeacon = Step(NewController(), Input(Model(speed: 5.0, commanded: 10.0), Automatic()));
+        var invalidBeacon = Step(NewController(), Input(Model(speed: 5.0, commanded: 10.0, beacon: Beacon(0.0, valid: false)), Automatic()));
 
         foreach (var output in new[] { noBeacon, invalidBeacon })
         {
-            Assert.AreEqual(10.0, output.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9);
-            Assert.AreEqual(TargetSpeedConstraint.AuthorizedSpeed, output.Display.TargetLimitedBy);
+            Assert.AreEqual(10.0, output.Display.SetpointSpeedMetersPerSecond, 1e-9);
+            Assert.AreEqual(TargetSpeedConstraint.CommandedSpeed, output.Display.TargetLimitedBy);
             Assert.IsNull(output.Display.DistanceToNextStationMeters);
             Assert.IsFalse(output.Display.StationBrakingActive);
             Assert.IsFalse(output.Display.AtStation);
@@ -664,20 +684,20 @@ public class SoftwareTrainControllerTests
     public void AuthorityBrakingCurve_AndAuthorityProtection_AreIndependent()
     {
         // 1. Preventive only: curve limits the target while protection is NOT braking.
-        var preventive = Step(NewController(), Input(Model(speed: 0.0, authorized: 15.0, authority: 50.0), Automatic()));
+        var preventive = Step(NewController(), Input(Model(speed: 0.0, commanded: 15.0, authority: 50.0), Automatic()));
         Assert.AreEqual(TargetSpeedConstraint.RemainingAuthority, preventive.Display.TargetLimitedBy);
         Assert.IsFalse(preventive.Display.AuthorityProtectionActive);
         Assert.IsFalse(preventive.Commands.ServiceBrakeCommand);
 
         // 2. Both: train already faster than the curve allows -> target limited AND backstop brakes.
-        var both = Step(NewController(), Input(Model(speed: 10.0, authorized: 15.0, authority: 30.0), Automatic()));
-        Assert.AreEqual(Math.Sqrt(2.0 * 1.2 * 30.0), both.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9);
+        var both = Step(NewController(), Input(Model(speed: 10.0, commanded: 15.0, authority: 30.0), Automatic()));
+        Assert.AreEqual(Math.Sqrt(2.0 * 1.2 * 30.0), both.Display.SetpointSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(TargetSpeedConstraint.RemainingAuthority, both.Display.TargetLimitedBy);
         Assert.IsTrue(both.Display.AuthorityProtectionActive);
         Assert.IsTrue(both.Commands.ServiceBrakeCommand);
 
         // 3. Backstop beyond the curve: authority shorter than even the emergency stopping distance.
-        var backstop = Step(NewController(), Input(Model(speed: 15.0, authorized: 20.0, authority: 10.0), Automatic()));
+        var backstop = Step(NewController(), Input(Model(speed: 15.0, commanded: 20.0, authority: 10.0), Automatic()));
         Assert.IsTrue(backstop.Commands.EmergencyBrakeCommand);
         Assert.IsTrue(backstop.Display.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.AuthorityViolation));
     }
@@ -689,17 +709,17 @@ public class SoftwareTrainControllerTests
         {
             var c = NewController();
 
-            var braking = Step(c, Input(Model(speed: 8.0, authorized: 15.0),
+            var braking = Step(c, Input(Model(speed: 8.0, commanded: 15.0),
                 new DriverInput { Mode = mode, RequestedSpeedMetersPerSecond = 10.0, ServiceBrakeRequested = true }, tick: 1));
-            Assert.AreEqual(0.0, braking.Display.EffectiveTargetSpeedMetersPerSecond, mode.ToString());
+            Assert.AreEqual(0.0, braking.Display.SetpointSpeedMetersPerSecond, mode.ToString());
             Assert.AreEqual(TargetSpeedConstraint.DriverServiceBrake, braking.Display.TargetLimitedBy);
             Assert.IsTrue(braking.Commands.ServiceBrakeCommand);
             Assert.AreEqual(0.0, braking.Commands.PowerCommandWatts);
 
-            var released = Step(c, Input(Model(speed: 6.0, authorized: 15.0),
+            var released = Step(c, Input(Model(speed: 6.0, commanded: 15.0),
                 new DriverInput { Mode = mode, RequestedSpeedMetersPerSecond = 10.0 }, tick: 2));
             var expected = mode == OperatingMode.Manual ? 10.0 : 15.0;
-            Assert.AreEqual(expected, released.Display.EffectiveTargetSpeedMetersPerSecond, 1e-9, "Target returns on release.");
+            Assert.AreEqual(expected, released.Display.SetpointSpeedMetersPerSecond, 1e-9, "Target returns on release.");
             Assert.IsFalse(released.Commands.ServiceBrakeCommand);
         }
     }
@@ -716,9 +736,9 @@ public class SoftwareTrainControllerTests
     [TestMethod]
     public void EmergencyBrake_SetsTargetToZero()
     {
-        var output = Step(NewController(), Input(Model(speed: 5.0, authorized: 10.0, passengerEmergency: true), Automatic()));
+        var output = Step(NewController(), Input(Model(speed: 5.0, commanded: 10.0, passengerEmergency: true), Automatic()));
 
-        Assert.AreEqual(0.0, output.Display.EffectiveTargetSpeedMetersPerSecond);
+        Assert.AreEqual(0.0, output.Display.SetpointSpeedMetersPerSecond);
         Assert.AreEqual(TargetSpeedConstraint.EmergencyBrake, output.Display.TargetLimitedBy);
     }
 
@@ -727,66 +747,38 @@ public class SoftwareTrainControllerTests
     {
         var c = NewController();
 
-        Assert.AreEqual(6.0, Step(c, Input(Model(authorized: 10.0), Manual(requested: 6.0))).Display.EffectiveTargetSpeedMetersPerSecond);
-        Assert.AreEqual(10.0, Step(c, Input(Model(authorized: 10.0), Manual(requested: 14.0), tick: 2)).Display.EffectiveTargetSpeedMetersPerSecond);
+        Assert.AreEqual(6.0, Step(c, Input(Model(commanded: 10.0), Manual(requested: 6.0))).Display.SetpointSpeedMetersPerSecond);
+        Assert.AreEqual(10.0, Step(c, Input(Model(commanded: 10.0), Manual(requested: 14.0), tick: 2)).Display.SetpointSpeedMetersPerSecond);
     }
 
     [TestMethod]
-    public void TrackSignalLost_Default_StopsWithServiceBrake_NotEmergency()
+    public void TrackSignalLost_StopsWithServiceBrake_NotEmergency()
     {
-        Assert.AreEqual(TrackSignalLossResponse.ServiceBrakeStop, ControllerPolicy.Default.TrackSignalLossResponse);
-
         var c = NewController();
-        Step(c, Input(Model(speed: 5.0, authorized: 15.0), Automatic(), tick: 0)); // trusted authority first
-        var output = Step(c, Input(Model(speed: 5.0, authorized: 15.0, signalValid: false), Automatic()));
+        Step(c, Input(Model(speed: 5.0, commanded: 15.0), Automatic(), tick: 0)); // trusted authority first
+        var output = Step(c, Input(Model(speed: 5.0, commanded: 15.0, signalValid: false), Automatic()));
 
         Assert.IsTrue(output.Display.TrackSignalLost);
-        Assert.AreEqual(0.0, output.Display.EffectiveTargetSpeedMetersPerSecond);
+        Assert.AreEqual(0.0, output.Display.SetpointSpeedMetersPerSecond);
         Assert.AreEqual(TargetSpeedConstraint.TrackSignalLoss, output.Display.TargetLimitedBy);
         Assert.IsTrue(output.Commands.ServiceBrakeCommand);
         Assert.IsFalse(output.Commands.EmergencyBrakeCommand);
         Assert.AreEqual(0.0, output.Commands.PowerCommandWatts);
 
-        var stopped = Step(c, Input(Model(speed: 0.0, authorized: 15.0, signalValid: false), Automatic(), tick: 2));
+        var stopped = Step(c, Input(Model(speed: 0.0, commanded: 15.0, signalValid: false), Automatic(), tick: 2));
         Assert.IsTrue(stopped.Commands.ServiceBrakeCommand, "Held once stopped.");
 
-        var restored = Step(c, Input(Model(speed: 0.0, authorized: 15.0), Automatic(), tick: 3));
+        var restored = Step(c, Input(Model(speed: 0.0, commanded: 15.0), Automatic(), tick: 3));
         Assert.IsFalse(restored.Commands.ServiceBrakeCommand, "Service-brake response clears when the signal returns.");
         NumericAssert.Positive(restored.Commands.PowerCommandWatts);
     }
 
     [TestMethod]
-    public void TrackSignalLost_ConfiguredEmergency_LatchesAndRefusesResetWhileLost()
+    public void UndefinedEnum_IsRejectedAsInvalidInput()
     {
         var c = NewController();
-        var policy = ControllerPolicy.Default with { TrackSignalLossResponse = TrackSignalLossResponse.EmergencyBrake };
-        Step(c, Input(Model(speed: 5.0, authorized: 15.0), Automatic(), tick: 0, policy: policy)); // trusted authority first
 
-        var lost = Step(c, Input(Model(speed: 5.0, authorized: 15.0, signalValid: false), Automatic(), tick: 1, policy: policy));
-        Assert.IsTrue(lost.Commands.EmergencyBrakeCommand);
-        Assert.IsTrue(lost.Display.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.TrackSignalLoss));
-        Assert.AreEqual(0.0, lost.Commands.PowerCommandWatts);
-
-        var refused = Step(c, Input(Model(speed: 0.0, authorized: 15.0, signalValid: false),
-            new DriverInput { Mode = OperatingMode.Automatic, EmergencyBrakeResetRequested = true }, tick: 2, policy: policy));
-        Assert.IsTrue(refused.Display.EmergencyBrakeResetRejected);
-        Assert.IsTrue(refused.Commands.EmergencyBrakeCommand);
-
-        var stillLatched = Step(c, Input(Model(speed: 0.0, authorized: 15.0), Automatic(), tick: 3, policy: policy));
-        Assert.IsTrue(stillLatched.Commands.EmergencyBrakeCommand, "Signal returning alone does not release a latched emergency brake.");
-
-        var reset = Step(c, Input(Model(speed: 0.0, authorized: 15.0),
-            new DriverInput { Mode = OperatingMode.Automatic, EmergencyBrakeResetRequested = true }, tick: 4, policy: policy));
-        Assert.IsFalse(reset.Commands.EmergencyBrakeCommand);
-    }
-
-    [TestMethod]
-    public void UndefinedPolicyEnum_IsRejectedAsInvalidInput()
-    {
-        var c = NewController();
-        var policy = ControllerPolicy.Default with { TrackSignalLossResponse = (TrackSignalLossResponse)99 };
-
-        var output = c.Step(Input(Model(), policy: policy));
+        var output = c.Step(Input(Model() with { TrafficLight = (SignalState)99 }));
 
         Assert.IsTrue(output.IsFailSafe);
         Assert.IsTrue(output.Display.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.InvalidInput));
@@ -798,7 +790,7 @@ public class SoftwareTrainControllerTests
     public void PI_ProportionalTerm_UsesSiSpeedError()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 5.0, authorized: 10.0), Automatic(), engineer: EngineerSettings.Create(1000.0, 0.0)));
+        var output = Step(c, Input(Model(speed: 5.0, commanded: 10.0), Automatic(), engineer: EngineerSettings.Create(1000.0, 0.0)));
 
         Assert.AreEqual(5000.0, output.Commands.PowerCommandWatts, 1e-9);
     }
@@ -809,14 +801,14 @@ public class SoftwareTrainControllerTests
         var c = NewController();
         var gains = EngineerSettings.Create(1000.0, 100.0);
 
-        var t1 = Step(c, Input(Model(speed: 5.0, authorized: 10.0), Automatic(), tick: 1, engineer: gains));
+        var t1 = Step(c, Input(Model(speed: 5.0, commanded: 10.0), Automatic(), tick: 1, engineer: gains));
         Assert.AreEqual(5000.0 + 100.0 * 0.5, t1.Commands.PowerCommandWatts, 1e-9);
 
-        var t2 = Step(c, Input(Model(speed: 5.0, authorized: 10.0), Automatic(), tick: 2, engineer: gains));
+        var t2 = Step(c, Input(Model(speed: 5.0, commanded: 10.0), Automatic(), tick: 2, engineer: gains));
         Assert.AreEqual(5000.0 + 100.0 * 1.0, t2.Commands.PowerCommandWatts, 1e-9);
 
         var other = NewController();
-        Step(other, Input(Model(speed: 5.0, authorized: 10.0), Automatic(), engineer: gains, dt: 0.5));
+        Step(other, Input(Model(speed: 5.0, commanded: 10.0), Automatic(), engineer: gains, dt: 0.5));
         Assert.AreEqual(2.5, other.IntegralMeters, 1e-9, "Integral uses the input's dt, not wall-clock time.");
     }
 
@@ -824,7 +816,7 @@ public class SoftwareTrainControllerTests
     public void PI_OutputIsClampedToRatedPower_WithoutIntegralWindup()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 0.0, authorized: 15.0), Automatic(), engineer: EngineerSettings.Create(1e6, 1e5)));
+        var output = Step(c, Input(Model(speed: 0.0, commanded: 15.0), Automatic(), engineer: EngineerSettings.Create(1e6, 1e5)));
 
         Assert.AreEqual(480_000.0, output.Commands.PowerCommandWatts, 1e-6);
         Assert.AreEqual(0.0, c.IntegralMeters);
@@ -834,7 +826,7 @@ public class SoftwareTrainControllerTests
     public void PI_NeverCommandsNegativePower()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 8.0, authorized: 10.0), Manual(requested: 5.0), engineer: EngineerSettings.Create(1000.0, 0.0)));
+        var output = Step(c, Input(Model(speed: 8.0, commanded: 10.0), Manual(requested: 5.0), engineer: EngineerSettings.Create(1000.0, 0.0)));
 
         Assert.AreEqual(0.0, output.Commands.PowerCommandWatts);
         Assert.IsFalse(output.Commands.ServiceBrakeCommand, "Below the authorized limit the controller coasts; the driver may brake.");
@@ -845,10 +837,10 @@ public class SoftwareTrainControllerTests
     {
         var c = NewController();
         var gains = EngineerSettings.Create(10.0, 10.0);
-        Step(c, Input(Model(speed: 5.0, authorized: 10.0), Automatic(), tick: 1, engineer: gains));
+        Step(c, Input(Model(speed: 5.0, commanded: 10.0), Automatic(), tick: 1, engineer: gains));
         NumericAssert.Positive(c.IntegralMeters);
 
-        Step(c, Input(Model(speed: 5.0, authorized: 10.0), new DriverInput { Mode = OperatingMode.Automatic, ServiceBrakeRequested = true }, tick: 2, engineer: gains));
+        Step(c, Input(Model(speed: 5.0, commanded: 10.0), new DriverInput { Mode = OperatingMode.Automatic, ServiceBrakeRequested = true }, tick: 2, engineer: gains));
         Assert.AreEqual(0.0, c.IntegralMeters);
     }
 
@@ -858,7 +850,7 @@ public class SoftwareTrainControllerTests
     public void Doors_OpenRequestWhileMoving_IsRefused()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 5.0, authorized: 10.0), new DriverInput { RequestedSpeedMetersPerSecond = 8.0, LeftDoorsOpenRequested = true }));
+        var output = Step(c, Input(Model(speed: 5.0, commanded: 10.0), new DriverInput { RequestedSpeedMetersPerSecond = 8.0, LeftDoorsOpenRequested = true }));
 
         Assert.IsFalse(output.Commands.LeftDoorsOpenCommand);
         Assert.IsTrue(output.Display.DoorInterlockActive);
@@ -868,7 +860,7 @@ public class SoftwareTrainControllerTests
     public void Doors_ManualStopped_FollowDriver_AndInhibitTraction()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 0.0, authorized: 10.0), new DriverInput { RequestedSpeedMetersPerSecond = 8.0, RightDoorsOpenRequested = true }));
+        var output = Step(c, Input(Model(speed: 0.0, commanded: 10.0), new DriverInput { RequestedSpeedMetersPerSecond = 8.0, RightDoorsOpenRequested = true }));
 
         Assert.IsTrue(output.Commands.RightDoorsOpenCommand);
         Assert.IsFalse(output.Commands.LeftDoorsOpenCommand);
@@ -879,7 +871,7 @@ public class SoftwareTrainControllerTests
     public void Doors_ReportedOpen_InhibitTraction()
     {
         var c = NewController();
-        var output = Step(c, Input(Model(speed: 0.0, authorized: 10.0, leftOpen: true), Automatic()));
+        var output = Step(c, Input(Model(speed: 0.0, commanded: 10.0, leftOpen: true), Automatic()));
 
         Assert.IsTrue(output.Display.DoorInterlockActive);
         Assert.AreEqual(0.0, output.Commands.PowerCommandWatts);
@@ -925,15 +917,15 @@ public class SoftwareTrainControllerTests
     {
         var c = NewController();
         var gains = EngineerSettings.Create(10.0, 10.0);
-        Step(c, Input(Model(speed: 5.0, authorized: 10.0, beacon: Beacon(300.0)), Automatic(), tick: 1, engineer: gains));
-        Step(c, Input(Model(speed: 5.0, authorized: 10.0, passengerEmergency: true), Automatic(), tick: 2, engineer: gains));
+        Step(c, Input(Model(speed: 5.0, commanded: 10.0, beacon: Beacon(300.0)), Automatic(), tick: 1, engineer: gains));
+        Step(c, Input(Model(speed: 5.0, commanded: 10.0, passengerEmergency: true), Automatic(), tick: 2, engineer: gains));
 
         c.Reset();
 
         Assert.AreEqual(0.0, c.IntegralMeters);
         Assert.AreEqual(EmergencyBrakeCause.None, c.LatchedEmergencyCauses);
         Assert.IsNull(c.LastOutput);
-        var after = Step(c, Input(Model(speed: 0.0, authorized: 10.0), Automatic(), tick: 1, engineer: gains));
+        var after = Step(c, Input(Model(speed: 0.0, commanded: 10.0), Automatic(), tick: 1, engineer: gains));
         Assert.IsNull(after.Display.DistanceToNextStationMeters);
         Assert.IsFalse(after.Commands.EmergencyBrakeCommand);
     }
@@ -945,8 +937,8 @@ public class SoftwareTrainControllerTests
         var b = NewController("TRAIN-003");
         var gains = EngineerSettings.Create(10.0, 10.0);
 
-        Step(a, Input(Model(speed: 5.0, authorized: 10.0, passengerEmergency: true, beacon: Beacon(300.0)), Automatic(), trainId: "TRAIN-001", engineer: gains));
-        var bOut = Step(b, Input(Model(speed: 5.0, authorized: 10.0), Automatic(), trainId: "TRAIN-003", engineer: gains));
+        Step(a, Input(Model(speed: 5.0, commanded: 10.0, passengerEmergency: true, beacon: Beacon(300.0)), Automatic(), trainId: "TRAIN-001", engineer: gains));
+        var bOut = Step(b, Input(Model(speed: 5.0, commanded: 10.0), Automatic(), trainId: "TRAIN-003", engineer: gains));
 
         Assert.AreEqual(EmergencyBrakeCause.Passenger, a.LatchedEmergencyCauses);
         Assert.AreEqual(EmergencyBrakeCause.None, b.LatchedEmergencyCauses);

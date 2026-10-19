@@ -10,8 +10,9 @@ namespace TrainController.Core.Services;
 
 /// <summary>
 /// Software Train Controller for ONE train. Each call to <see cref="Step"/> executes exactly
-/// one control step for one tick. All runtime state (PI integral, emergency latch, station
-/// tracking, dwell, previous output) lives in this instance and is never shared.
+/// one control step for one tick. All runtime state (PI integral, emergency latch, failure
+/// latches and detection windows, station tracking, dwell, previous output) lives in this
+/// instance and is never shared.
 /// </summary>
 /// <remarks>
 /// <para>Per tick, in order:</para>
@@ -21,21 +22,26 @@ namespace TrainController.Core.Services;
 ///       (signed). The target is cleared after departing a served station or passing it.
 ///       Remaining authority: recalibrated only from authority updates received while the track
 ///       signal is valid; otherwise dead-reckoned v·dt from the last trusted value.</item>
-/// <item>Effective target = minimum of: authorized speed, vehicle maximum, driver request
-///       (Manual only), the remaining-authority braking curve √(2·a·(authority − margin)),
-///       and in Automatic the station braking curve / station stop. 0 if the track signal is
-///       lost (plus an emergency brake if <see cref="ControllerPolicy.TrackSignalLossResponse"/>
-///       says so), while the emergency brake is applied, or while the driver holds the
-///       service brake.</item>
+/// <item>Failure detection (<see cref="FailureMonitor"/>): Signal Pickup, Brake, Engine — inferred,
+///       latched, cleared only by "Reset failures" when each reset condition holds.</item>
+/// <item>Setpoint speed = minimum of: commanded speed, vehicle maximum, driver request (Manual,
+///       only when set), the remaining-authority braking curve √(2·a·(authority − margin)), and
+///       the station braking curve / station stop (BOTH modes). 0 while the track signal is
+///       invalid or a signal-pickup failure is latched, while a brake or engine failure is
+///       latched, while the emergency brake is applied, or while the driver holds the service brake.</item>
 /// <item>Authority protection (service brake / emergency brake), always automatic.</item>
-/// <item>Emergency-brake latch: driver press, passenger request, authority violation; driver reset.</item>
-/// <item>Station guidance: service-brake stopping distance vs distance to station.
-///       Manual → advisory only; Automatic → controller applies the service brake.</item>
-/// <item>Arrival by thresholds (never exact zero); Automatic dwell opens the platform side.</item>
-/// <item>Door/motion interlock; overspeed protection; holding brake when stopped and not moving off.</item>
-/// <item>PI traction power only when no brake is applied and doors are closed.</item>
+/// <item>Emergency brake: driver press / passenger request (E-brake reset), authority violation
+///       (released once stopped), brake failure (Reset failures).</item>
+/// <item>Station braking: automatic in both modes once the service-brake stopping distance
+///       reaches the distance to the station.</item>
+/// <item>Arrival by thresholds (never exact zero); dwell opens the platform side (both modes).</item>
+/// <item>Doors: dwell side or driver request while stopped; door/motion interlock; overspeed
+///       protection; holding brake when stopped and not moving off.</item>
+/// <item>PI traction power only when no brake is applied, doors are closed and no failure is latched.</item>
 /// </list>
 /// <para>
+/// Manual mode differs from Automatic ONLY in that the driver may lower the speed with a requested
+/// speed. The traffic light is passed through for display only (no control logic yet).
 /// All units SI. This class must stay free of UI, transport and Hardware-controller code.
 /// The Hardware controller on the Raspberry Pi implements the same requirements independently.
 /// </para>
@@ -46,6 +52,7 @@ public sealed class SoftwareTrainController
     private readonly BrakeController _brakes = new BrakeController();
     private readonly StationTracker _station = new StationTracker();
     private readonly AuthorityTracker _authority = new AuthorityTracker();
+    private readonly FailureMonitor _failures = new FailureMonitor();
     private TrainControllerOutput? _lastOutput;
 
     public SoftwareTrainController(string trainId)
@@ -65,6 +72,8 @@ public sealed class SoftwareTrainController
 
     public EmergencyBrakeCause LatchedEmergencyCauses => _brakes.LatchedCauses;
 
+    public ControllerFailure LatchedFailures => _failures.Latched;
+
     public TrainControllerOutput? LastOutput => _lastOutput;
 
     /// <exception cref="ArgumentException">The input is for a different train.</exception>
@@ -81,6 +90,7 @@ public sealed class SoftwareTrainController
         if (!validation.IsValid)
         {
             _speed.ResetIntegral();
+            _failures.ForgetCommands();
             _lastOutput = FailSafeOutput.Create(
                 TrainId,
                 input.TickId,
@@ -103,6 +113,7 @@ public sealed class SoftwareTrainController
         _brakes.Reset();
         _station.Reset();
         _authority.Reset();
+        _failures.Reset();
         _lastOutput = null;
     }
 
@@ -114,7 +125,7 @@ public sealed class SoftwareTrainController
         var policy = input.Policy;
         var dt = input.DeltaTimeSeconds;
         var v = model.ActualSpeedMetersPerSecond;
-        var automatic = driver.Mode == OperatingMode.Automatic;
+        var manual = driver.Mode == OperatingMode.Manual;
         var stopped = v <= policy.StoppedSpeedThresholdMetersPerSecond;
         var alerts = new List<string>();
 
@@ -145,28 +156,58 @@ public sealed class SoftwareTrainController
             }
         }
 
-        // 2. Speed limit and target.
-        var signalLost = !model.TrackSignalValid;
-        var authorized = signalLost ? 0.0 : model.AuthorizedSpeedMetersPerSecond;
-        var limit = Math.Min(authorized, vehicle.MaxSpeedMetersPerSecond);
-        var signalLossEmergency = signalLost && policy.TrackSignalLossResponse == TrackSignalLossResponse.EmergencyBrake;
-        if (signalLost)
+        // 2. Failure detection (judges the PREVIOUS tick's commands against this tick's speed).
+        var failureCheck = _failures.Evaluate(
+            v, model.TrackSignalValid, stopped, dt, driver.ResetFailuresRequested, vehicle.TotalRatedPowerWatts, policy);
+        var failures = failureCheck.Latched;
+        var signalPickupFailure = failures.HasFlag(ControllerFailure.SignalPickup);
+        var brakeFailure = failures.HasFlag(ControllerFailure.Brake);
+        var engineFailure = failures.HasFlag(ControllerFailure.Engine);
+        if (failureCheck.ResetRejected)
         {
-            alerts.Add(signalLossEmergency
-                ? "Track signal lost: emergency brake applied."
-                : "Track signal lost: stopping the train with the service brake.");
+            alerts.Add($"Failure reset rejected: {failureCheck.ResetRejectedReason}.");
         }
 
-        // 3. Authority protection (always automatic).
+        // 3. Track signal. An invalid signal stops the train with the service brake IMMEDIATELY;
+        //    the latched Signal Pickup Failure keeps it stopped until reset. Commanded speed is
+        //    not trusted while the signal is invalid.
+        var signalLost = !model.TrackSignalValid;
+        var signalRestricted = signalLost || signalPickupFailure;
+        var commanded = signalRestricted ? 0.0 : model.CommandedSpeedMetersPerSecond;
+        var limit = Math.Min(commanded, vehicle.MaxSpeedMetersPerSecond);
+        if (signalLost)
+        {
+            alerts.Add("Track signal lost: stopping the train with the service brake.");
+        }
+
+        if (signalPickupFailure)
+        {
+            alerts.Add(model.TrackSignalValid
+                ? "SIGNAL PICKUP FAILURE: signal valid again; press Reset failures to resume."
+                : "SIGNAL PICKUP FAILURE: train held with the service brake.");
+        }
+
+        if (brakeFailure)
+        {
+            alerts.Add("BRAKE FAILURE: emergency brake applied. Reset failures once stopped.");
+        }
+
+        if (engineFailure)
+        {
+            alerts.Add("ENGINE FAILURE: power 0, service brake applied. Reset failures once stopped.");
+        }
+
+        // 4. Authority protection (always automatic).
         var authority = AuthorityProtection.Evaluate(v, remainingAuthority, dt, vehicle, policy);
         var distanceToAuthorityBrakePoint = AuthorityProtection.DistanceToBrakePoint(v, remainingAuthority, dt, vehicle, policy);
 
-        // 4. Emergency-brake latch.
+        // 5. Emergency brake: driver / passenger latch (E-brake reset), authority (released when
+        //    stopped), brake failure (Reset failures).
         var emergency = _brakes.Evaluate(
             driver.EmergencyBrakeRequested,
             model.PassengerEmergencyBrakeRequested,
             authority.EmergencyBrake,
-            signalLossEmergency,
+            stopped,
             driver.EmergencyBrakeResetRequested);
 
         if (emergency.ResetRejected)
@@ -174,7 +215,10 @@ public sealed class SoftwareTrainController
             alerts.Add($"Emergency brake reset rejected: {emergency.ResetRejectedReason}.");
         }
 
-        // 5. Station guidance.
+        var emergencyCauses = emergency.LatchedCauses | (brakeFailure ? EmergencyBrakeCause.BrakeFailure : EmergencyBrakeCause.None);
+        var emergencyBrake = emergencyCauses != EmergencyBrakeCause.None;
+
+        // 6. Station braking — automatic in BOTH modes.
         var stationStoppingDistance =
             StoppingDistance.Compute(v, vehicle.ServiceBrakeDecelerationMetersPerSecondSquared)
             + policy.StationBrakingMarginMeters;
@@ -184,22 +228,15 @@ public sealed class SoftwareTrainController
             && stopped;
 
         double? distanceToBrakePoint = null;
-        var stationBrakingDue = false;
+        var stationBrakingActive = false;
         if (_station.HasValidDistance && !_station.StationServiced)
         {
             // Latest braking point, looking one control period ahead (discretization, not a margin).
             distanceToBrakePoint = _station.DistanceToNextStationMeters - v * dt - stationStoppingDistance;
-            stationBrakingDue = !atStation && distanceToBrakePoint <= 0.0;
+            stationBrakingActive = !atStation && distanceToBrakePoint <= 0.0;
         }
 
-        var stationBrakingAdvised = !automatic && stationBrakingDue;
-        var stationBrakingActive = automatic && stationBrakingDue;
-        if (stationBrakingAdvised)
-        {
-            alerts.Add($"Brake now for {StationLabel()}.");
-        }
-
-        // 6. Arrival and dwell.
+        // 7. Arrival and dwell (both modes).
         var dwellOpenLeft = false;
         var dwellOpenRight = false;
         var dwelling = false;
@@ -210,28 +247,20 @@ public sealed class SoftwareTrainController
                 stationEvent = StationEvent.Arrived;
             }
 
-            if (automatic)
+            _station.AdvanceDwell(dt);
+            if (_station.DwellElapsedSeconds >= policy.StationDwellTimeSeconds)
             {
-                _station.AdvanceDwell(dt);
-                if (_station.DwellElapsedSeconds >= policy.StationDwellTimeSeconds)
-                {
-                    _station.CompleteService();
-                }
-                else
-                {
-                    dwelling = true;
-                    dwellOpenLeft = _station.PlatformSide is PlatformSide.Left or PlatformSide.Both;
-                    dwellOpenRight = _station.PlatformSide is PlatformSide.Right or PlatformSide.Both;
-                    if (_station.PlatformSide == PlatformSide.None)
-                    {
-                        alerts.Add($"No platform side known for {StationLabel()}: doors stay closed.");
-                    }
-                }
+                _station.CompleteService();
             }
             else
             {
-                // Manual: arrival ends the braking guidance; doors are the driver's.
-                _station.CompleteService();
+                dwelling = true;
+                dwellOpenLeft = _station.PlatformSide is PlatformSide.Left or PlatformSide.Both;
+                dwellOpenRight = _station.PlatformSide is PlatformSide.Right or PlatformSide.Both;
+                if (_station.PlatformSide == PlatformSide.None)
+                {
+                    alerts.Add($"No platform side known for {StationLabel()}: doors stay closed.");
+                }
             }
         }
 
@@ -255,8 +284,8 @@ public sealed class SoftwareTrainController
             announcement = driverAnnouncement;
         }
 
-        // 7. Doors.
-        var doors = DoorController.Decide(driver.Mode, stopped, dwellOpenLeft, dwellOpenRight, driver);
+        // 8. Doors.
+        var doors = DoorController.Decide(stopped, dwellOpenLeft, dwellOpenRight, driver);
         var doorsPhysicallyOpen = model.LeftDoorsOpen || model.RightDoorsOpen;
         var doorsCommandedOpen = doors.LeftOpen || doors.RightOpen;
         var doorInterlock = doorsPhysicallyOpen || doorsCommandedOpen || doors.RequestRefused;
@@ -269,32 +298,34 @@ public sealed class SoftwareTrainController
             alerts.Add("Doors open: traction inhibited.");
         }
 
-        // 8. Overspeed and holding brake.
+        // 9. Overspeed.
         var overspeed = OverspeedProtection.IsOverspeed(v, limit);
-        if (overspeed)
+        if (overspeed && !signalRestricted)
         {
             alerts.Add("Overspeed: service brake applied.");
         }
 
-        // Effective target. The remaining-authority braking curve is a PREVENTIVE target limit
-        // (the PI never aims faster than the train can stop within its authority);
-        // AuthorityProtection (step 3) is the INDEPENDENT safety backstop that brakes regardless
-        // of the target. Neither replaces the other.
+        // Setpoint speed. The remaining-authority braking curve is a PREVENTIVE limit (the PI never
+        // aims faster than the train can stop within its authority); AuthorityProtection (step 4)
+        // is the INDEPENDENT safety backstop that brakes regardless of the setpoint.
         var serviceDecel = vehicle.ServiceBrakeDecelerationMetersPerSecondSquared;
         var selector = new TargetSpeedSelector()
-            .Limit(signalLost ? 0.0 : model.AuthorizedSpeedMetersPerSecond,
-                signalLost ? TargetSpeedConstraint.TrackSignalLoss : TargetSpeedConstraint.AuthorizedSpeed)
+            .Limit(commanded,
+                signalLost ? TargetSpeedConstraint.TrackSignalLoss
+                : signalPickupFailure ? TargetSpeedConstraint.Failure
+                : TargetSpeedConstraint.CommandedSpeed)
             .Limit(vehicle.MaxSpeedMetersPerSecond, TargetSpeedConstraint.VehicleMaximum)
             .Limit(
                 TargetSpeedSelector.BrakingCurveSpeed(remainingAuthority - policy.AuthorityBrakingMarginMeters, serviceDecel),
                 TargetSpeedConstraint.RemainingAuthority);
 
-        if (!automatic)
+        if (manual && driver.RequestedSpeedMetersPerSecond is double requested)
         {
-            // Manual: the request is only ONE constraint; it can never raise the target.
-            selector.Limit(driver.RequestedSpeedMetersPerSecond, TargetSpeedConstraint.DriverRequest);
+            // Manual: the request is only ONE constraint; it can never raise the setpoint.
+            selector.Limit(requested, TargetSpeedConstraint.DriverRequest);
         }
-        else if (stationBrakingActive || dwelling)
+
+        if (stationBrakingActive || dwelling)
         {
             selector.Limit(0.0, TargetSpeedConstraint.StationStop);
         }
@@ -306,7 +337,12 @@ public sealed class SoftwareTrainController
                 TargetSpeedConstraint.StationStop);
         }
 
-        if (emergency.EmergencyBrakeApplied)
+        if (brakeFailure || engineFailure)
+        {
+            selector.Limit(0.0, TargetSpeedConstraint.Failure);
+        }
+
+        if (emergencyBrake)
         {
             selector.Limit(0.0, TargetSpeedConstraint.EmergencyBrake);
         }
@@ -314,14 +350,14 @@ public sealed class SoftwareTrainController
         if (driver.ServiceBrakeRequested)
         {
             // The driver is braking: the controller must not aim for any speed while the brake is
-            // held. The request setting itself is untouched and returns as the target on release.
+            // held. The request setting itself is untouched and applies again on release.
             selector.Limit(0.0, TargetSpeedConstraint.DriverServiceBrake);
         }
 
         var target = selector.Result;
-        var effectiveTarget = target.MetersPerSecond;
+        var setpoint = target.MetersPerSecond;
         var holdingBrake = stopped
-            && (effectiveTarget <= policy.StoppedSpeedThresholdMetersPerSecond || doorsPhysicallyOpen || doorsCommandedOpen);
+            && (setpoint <= policy.StoppedSpeedThresholdMetersPerSecond || doorsPhysicallyOpen || doorsCommandedOpen);
 
         if (authority.Active)
         {
@@ -330,29 +366,32 @@ public sealed class SoftwareTrainController
                 : "Authority protection: service brake applied.");
         }
 
-        if (emergency.EmergencyBrakeApplied)
+        if (emergencyBrake)
         {
-            alerts.Add(DescribeEmergency(emergency.LatchedCauses, model.PassengerEmergencyBrakeRequested));
+            alerts.Add(DescribeEmergency(emergencyCauses, model.PassengerEmergencyBrakeRequested));
         }
 
-        // 9. Brakes and traction.
+        // 10. Brakes and traction.
         var serviceBrake = driver.ServiceBrakeRequested
             || authority.ServiceBrake
             || overspeed
             || stationBrakingActive
-            || holdingBrake;
-        var emergencyBrake = emergency.EmergencyBrakeApplied;
+            || holdingBrake
+            || signalRestricted
+            || engineFailure;
 
         double power;
-        if (!serviceBrake && !emergencyBrake && !doorInterlock)
+        if (!serviceBrake && !emergencyBrake && !doorInterlock && failures == ControllerFailure.None)
         {
-            power = _speed.ComputePower(effectiveTarget, v, input.Engineer, dt, vehicle.TotalRatedPowerWatts);
+            power = _speed.ComputePower(setpoint, v, input.Engineer, dt, vehicle.TotalRatedPowerWatts);
         }
         else
         {
             power = 0.0;
             _speed.ResetIntegral();
         }
+
+        _failures.RecordCommands(v, serviceBrake, emergencyBrake, power, setpoint);
 
         var traction = emergencyBrake ? TractionState.EmergencyBrake
             : doorInterlock ? TractionState.DoorInterlock
@@ -378,8 +417,10 @@ public sealed class SoftwareTrainController
             },
             Display = new DriverDisplayState
             {
-                EffectiveTargetSpeedMetersPerSecond = effectiveTarget,
+                SetpointSpeedMetersPerSecond = setpoint,
                 TargetLimitedBy = target.LimitedBy,
+                CommandedSpeedMetersPerSecond = model.CommandedSpeedMetersPerSecond,
+                TrafficLight = model.TrafficLight,
                 NextStationName = _station.NextStationName,
                 DistanceToNextStationMeters = _station.HasValidDistance ? _station.DistanceToNextStationMeters : null,
                 PlatformSide = _station.PlatformSide,
@@ -388,7 +429,6 @@ public sealed class SoftwareTrainController
                 ServiceBrakeStoppingDistanceMeters = stationStoppingDistance,
                 DistanceToStationBrakePointMeters = distanceToBrakePoint,
                 DistanceToAuthorityBrakePointMeters = distanceToAuthorityBrakePoint,
-                StationBrakingAdvised = stationBrakingAdvised,
                 StationBrakingActive = stationBrakingActive,
                 AtStation = atStation,
                 StationEvent = stationEvent,
@@ -396,10 +436,14 @@ public sealed class SoftwareTrainController
                 AuthorityProtectionActive = authority.Active,
                 OverspeedProtectionActive = overspeed,
                 DoorInterlockActive = doorInterlock,
-                EmergencyBrakeCauses = emergency.LatchedCauses,
-                EmergencyBrakeLatched = emergency.EmergencyBrakeApplied,
+                EmergencyBrakeCauses = emergencyCauses,
+                EmergencyBrakeLatched = emergencyBrake,
                 EmergencyBrakeResetRejected = emergency.ResetRejected,
                 EmergencyBrakeResetBlockedReason = emergency.ResetBlockedReason,
+                Failures = failures,
+                FailureResetRejected = failureCheck.ResetRejected,
+                FailureResetRejectedReason = failureCheck.ResetRejectedReason,
+                FailureResetBlockedReason = failureCheck.ResetBlockedReason,
                 BeaconRecalibrated = recalibrated,
                 TrackSignalLost = signalLost,
                 ControllerFaulted = false,
@@ -438,11 +482,11 @@ public sealed class SoftwareTrainController
             parts.Add("authority");
         }
 
-        if (causes.HasFlag(EmergencyBrakeCause.TrackSignalLoss))
+        if (causes.HasFlag(EmergencyBrakeCause.BrakeFailure))
         {
-            parts.Add("track signal loss");
+            parts.Add("brake failure");
         }
 
-        return $"Emergency brake applied ({string.Join(", ", parts)}). Driver reset required.";
+        return $"Emergency brake applied ({string.Join(", ", parts)}).";
     }
 }

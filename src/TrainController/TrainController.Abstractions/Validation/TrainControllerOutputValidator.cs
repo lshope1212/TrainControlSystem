@@ -84,7 +84,8 @@ public static class TrainControllerOutputValidator
         }
 
         var display = output.Display;
-        CheckFinite(errors, display.EffectiveTargetSpeedMetersPerSecond, "Display.EffectiveTargetSpeedMetersPerSecond");
+        CheckFinite(errors, display.SetpointSpeedMetersPerSecond, "Display.SetpointSpeedMetersPerSecond");
+        CheckFinite(errors, display.CommandedSpeedMetersPerSecond, "Display.CommandedSpeedMetersPerSecond");
         CheckFinite(errors, display.RemainingAuthorityMeters, "Display.RemainingAuthorityMeters");
         CheckFinite(errors, display.ServiceBrakeStoppingDistanceMeters, "Display.ServiceBrakeStoppingDistanceMeters");
 

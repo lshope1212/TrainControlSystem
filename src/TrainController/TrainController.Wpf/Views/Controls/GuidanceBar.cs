@@ -27,7 +27,7 @@ public sealed class GuidanceBar : FrameworkElement
     private const double SideMargin = 36.0;
 
     /// <summary>Width of the TRAIN icon (symbol, not to scale).</summary>
-    private const double TrainIconWidth = 44.0;
+    private const double TrainIconWidth = 56.0;
 
     public GuidanceBar()
     {
@@ -66,7 +66,7 @@ public sealed class GuidanceBar : FrameworkElement
 
         if (!model.HasData)
         {
-            DrawText(dc, "No controller output for this train yet.", width / 2, trackY - 26, ThemeBrush("MutedTextBrush", Brushes.Gray), 12, center: true);
+            DrawText(dc, "No controller output for this train yet.", width / 2, trackY - 32, ThemeBrush("MutedTextBrush", Brushes.Gray), 15, center: true);
             DrawTrain(dc, left, trackY);
             return;
         }
@@ -86,9 +86,9 @@ public sealed class GuidanceBar : FrameworkElement
         {
             var x = Snap(X(stationFeet));
             var platform = ThemeBrush("PlatformBrush", Brushes.DimGray);
-            dc.DrawLine(new Pen(platform, 3), new Point(x, trackY - 14), new Point(x, trackY + 14));
+            dc.DrawLine(new Pen(platform, 3), new Point(x, trackY - 16), new Point(x, trackY + 16));
             var name = string.IsNullOrEmpty(model.StationName) ? "Station" : model.StationName;
-            DrawText(dc, $"{name}  {Feet(stationFeet)}", x, trackY + 16, ThemeBrush("TextBrush", Brushes.Black), 11, center: true);
+            DrawText(dc, $"{name}  {Feet(stationFeet)}", x, trackY + 18, ThemeBrush("TextBrush", Brushes.Black), 16, center: true);
         }
 
         // Authority end: solid red stop line.
@@ -96,8 +96,8 @@ public sealed class GuidanceBar : FrameworkElement
         {
             var x = Snap(X(authorityFeet));
             var danger = ThemeBrush("DangerBrush", Brushes.Red);
-            dc.DrawLine(new Pen(danger, 3), new Point(x, trackY - 14), new Point(x, trackY + 14));
-            DrawText(dc, $"Authority end  {Feet(authorityFeet)}", x, trackY - 44, danger, 11, center: true);
+            dc.DrawLine(new Pen(danger, 3), new Point(x, trackY - 16), new Point(x, trackY + 16));
+            DrawText(dc, $"Authority end  {Feet(authorityFeet)}", x, trackY - 62, danger, 16, center: true);
         }
 
         // Authority brake point: dashed red line (where authority protection applies the service brake).
@@ -106,8 +106,8 @@ public sealed class GuidanceBar : FrameworkElement
             var x = Snap(X(authorityBrakeFeet));
             var danger = ThemeBrush("DangerBrush", Brushes.Red);
             var dashed = new Pen(danger, 2) { DashStyle = DashStyles.Dash };
-            dc.DrawLine(dashed, new Point(x, trackY - 12), new Point(x, trackY + 12));
-            DrawText(dc, model.AuthorityBrakingDue ? "AUTHORITY BRAKE" : "Authority brake point", x, trackY + 32, danger, 11,
+            dc.DrawLine(dashed, new Point(x, trackY - 14), new Point(x, trackY + 14));
+            DrawText(dc, model.AuthorityBrakingDue ? "AUTHORITY BRAKE" : "Authority brake point", x, trackY + 40, danger, 16,
                 center: true, bold: model.AuthorityBrakingDue);
         }
 
@@ -116,8 +116,8 @@ public sealed class GuidanceBar : FrameworkElement
         {
             var x = Snap(X(brakeFeet));
             var warning = ThemeBrush("WarningBrush", Brushes.Orange);
-            dc.DrawLine(new Pen(warning, 3), new Point(x, trackY - 12), new Point(x, trackY + 12));
-            DrawText(dc, model.BrakingDue ? "BRAKE NOW" : "Station brake point", x, trackY - 28, warning, 11,
+            dc.DrawLine(new Pen(warning, 3), new Point(x, trackY - 14), new Point(x, trackY + 14));
+            DrawText(dc, model.BrakingDue ? "BRAKE NOW" : "Station brake point", x, trackY - 38, warning, 16,
                 center: true, bold: model.BrakingDue);
         }
 
@@ -128,8 +128,8 @@ public sealed class GuidanceBar : FrameworkElement
     private void DrawTrain(DrawingContext dc, double front, double trackY)
     {
         var info = ThemeBrush("InfoBrush", Brushes.SteelBlue);
-        dc.DrawRoundedRectangle(info, null, new Rect(front - TrainIconWidth, trackY - 8, TrainIconWidth, 16), 3, 3);
-        DrawText(dc, "TRAIN", front - TrainIconWidth / 2, trackY - 7, Brushes.White, 10, center: true, bold: true);
+        dc.DrawRoundedRectangle(info, null, new Rect(front - TrainIconWidth, trackY - 11, TrainIconWidth, 22), 3, 3);
+        DrawText(dc, "TRAIN", front - TrainIconWidth / 2, trackY - 9, Brushes.White, 13, center: true, bold: true);
     }
 
     private static double Snap(double x) => Math.Round(x) + 0.5;

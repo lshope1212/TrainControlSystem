@@ -1,7 +1,7 @@
 namespace TrainController.Abstractions.Outputs;
 
 /// <summary>
-/// Which constraint produced the effective target speed this tick (the binding minimum).
+/// Which constraint produced the setpoint speed this tick (the binding minimum).
 /// Display-only: lets the driver see WHY the target is what it is.
 /// </summary>
 public enum TargetSpeedConstraint
@@ -11,8 +11,8 @@ public enum TargetSpeedConstraint
     /// <summary>Manual mode: the driver's requested speed is the lowest limit.</summary>
     DriverRequest,
 
-    /// <summary>The authorized (wayside) speed is the lowest limit.</summary>
-    AuthorizedSpeed,
+    /// <summary>The commanded (wayside) speed is the lowest limit.</summary>
+    CommandedSpeed,
 
     /// <summary>The vehicle's nominal maximum speed is the lowest limit.</summary>
     VehicleMaximum,
@@ -20,7 +20,7 @@ public enum TargetSpeedConstraint
     /// <summary>The speed from which the train can still stop within the remaining authority.</summary>
     RemainingAuthority,
 
-    /// <summary>Automatic mode: the speed from which the train can still stop at the station / station braking / dwell.</summary>
+    /// <summary>Both modes: the speed from which the train can still stop at the station / station braking / dwell.</summary>
     StationStop,
 
     /// <summary>Track signal lost: target 0.</summary>
@@ -33,5 +33,8 @@ public enum TargetSpeedConstraint
     /// Driver is holding the service brake: target 0 while held. The driver's requested speed
     /// setting is unchanged and becomes the target again when the brake is released.
     /// </summary>
-    DriverServiceBrake
+    DriverServiceBrake,
+
+    /// <summary>A latched failure (signal pickup with a valid signal again, brake or engine) holds the setpoint at 0.</summary>
+    Failure,
 }

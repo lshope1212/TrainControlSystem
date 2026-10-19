@@ -34,14 +34,36 @@ public sealed record ControllerPolicy
     /// </summary>
     public double AuthorityBrakingMarginMeters { get; init; }
 
-    /// <summary>
-    /// PROVISIONAL default (<see cref="TrackSignalLossResponse.ServiceBrakeStop"/>). Brake used when
-    /// the track signal is lost. The requirement only mandates braking, not a specific brake.
-    /// </summary>
-    public TrackSignalLossResponse TrackSignalLossResponse { get; init; } = TrackSignalLossResponse.ServiceBrakeStop;
-
-    /// <summary>PROVISIONAL default (30 s). How long doors stay open at a station in Automatic mode.</summary>
+    /// <summary>PROVISIONAL default (30 s). How long doors stay open at a station (both modes).</summary>
     public double StationDwellTimeSeconds { get; init; } = 30.0;
+
+    // ---------------------------------------------------------------- failure detection
+    // A track signal loss ALWAYS stops the train with the service brake immediately; these
+    // values only control when a condition becomes a LATCHED failure.
+
+    /// <summary>Track signal invalid continuously this long → Signal Pickup Failure latched (0.5 s = 5 ticks at 0.1 s).</summary>
+    public double SignalPickupFailureLatchSeconds { get; init; } = 0.5;
+
+    /// <summary>Brake failure is only judged while the speed is above this value (m/s).</summary>
+    public double BrakeFailureMinimumSpeedMetersPerSecond { get; init; } = 1.0;
+
+    /// <summary>Service brake must be commanded continuously this long before brake failure is judged (s).</summary>
+    public double BrakeFailureDetectionSeconds { get; init; } = 1.0;
+
+    /// <summary>Average deceleration below this over the detection window → Brake Failure (nominal service brake 1.2 m/s²).</summary>
+    public double BrakeFailureMinimumDecelerationMetersPerSecondSquared { get; init; } = 0.3;
+
+    /// <summary>Engine failure is only judged while setpoint − actual speed exceeds this value (m/s).</summary>
+    public double EngineFailureMinimumSpeedErrorMetersPerSecond { get; init; } = 0.5;
+
+    /// <summary>Engine failure is only judged while commanded power ≥ this fraction of the rated power (10 % of 480 kW = 48 kW).</summary>
+    public double EngineFailureMinimumPowerFraction { get; init; } = 0.10;
+
+    /// <summary>Traction conditions must hold continuously this long before engine failure is judged (s).</summary>
+    public double EngineFailureDetectionSeconds { get; init; } = 1.0;
+
+    /// <summary>Average acceleration at or below this over the detection window → Engine Failure (m/s²).</summary>
+    public double EngineFailureMaximumAccelerationMetersPerSecondSquared { get; init; }
 
     public static ControllerPolicy Default { get; } = new ControllerPolicy();
 }

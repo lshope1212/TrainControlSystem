@@ -16,10 +16,11 @@ public sealed class DriverInputState
     private readonly object _gate = new object();
 
     private OperatingMode _mode;
-    private double _requestedSpeedMetersPerSecond;
+    private double? _requestedSpeedMetersPerSecond;
     private bool _serviceBrakeRequested;
     private bool _emergencyBrakePressPending;
     private bool _emergencyBrakeResetPending;
+    private bool _resetFailuresPending;
     private string _announcementPending = string.Empty;
     private bool _leftDoorsOpenRequested;
     private bool _rightDoorsOpenRequested;
@@ -36,19 +37,39 @@ public sealed class DriverInputState
 
     public event EventHandler? Changed;
 
+    /// <summary>Switching INTO Manual clears the driver request: the train first follows the commanded speed.</summary>
     public OperatingMode Mode
     {
         get { lock (_gate) { return _mode; } }
-        set => Set(ref _mode, value);
+        set
+        {
+            bool changed;
+            lock (_gate)
+            {
+                changed = _mode != value;
+                if (changed && value == OperatingMode.Manual)
+                {
+                    _requestedSpeedMetersPerSecond = null;
+                }
+
+                _mode = value;
+            }
+
+            if (changed)
+            {
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
     }
 
+    /// <summary>Null = no request (follow the commanded speed). Only used in Manual mode.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Negative, NaN or infinite.</exception>
-    public double RequestedSpeedMetersPerSecond
+    public double? RequestedSpeedMetersPerSecond
     {
         get { lock (_gate) { return _requestedSpeedMetersPerSecond; } }
         set
         {
-            if (!double.IsFinite(value) || value < 0.0)
+            if (value is double v && (!double.IsFinite(v) || v < 0.0))
             {
                 throw new ArgumentOutOfRangeException(nameof(value), value, "Requested speed must be finite and >= 0.");
             }
@@ -56,6 +77,9 @@ public sealed class DriverInputState
             Set(ref _requestedSpeedMetersPerSecond, value);
         }
     }
+
+    /// <summary>Removes the driver request: the train follows the commanded speed again.</summary>
+    public void ClearRequestedSpeed() => RequestedSpeedMetersPerSecond = null;
 
     public bool ServiceBrakeRequested
     {
@@ -107,6 +131,11 @@ public sealed class DriverInputState
     }
 
     /// <summary>Announcement queued for this train's next tick (empty = none).</summary>
+    public bool ResetFailuresPending
+    {
+        get { lock (_gate) { return _resetFailuresPending; } }
+    }
+
     public string AnnouncementPending
     {
         get { lock (_gate) { return _announcementPending; } }
@@ -131,6 +160,9 @@ public sealed class DriverInputState
     /// <summary>Driver presses emergency-brake reset (honored by the controller only if no emergency remains).</summary>
     public void PressEmergencyBrakeReset() => Set(ref _emergencyBrakeResetPending, true);
 
+    /// <summary>One-shot "Reset failures" (separate from the E-brake reset and the Test UI Reset).</summary>
+    public void PressResetFailures() => Set(ref _resetFailuresPending, true);
+
     /// <summary>Current driver input WITHOUT consuming pending presses (for display).</summary>
     public DriverInput Peek()
     {
@@ -149,9 +181,10 @@ public sealed class DriverInputState
         lock (_gate)
         {
             snapshot = Build();
-            consumed = _emergencyBrakePressPending || _emergencyBrakeResetPending || _announcementPending.Length > 0;
+            consumed = _emergencyBrakePressPending || _emergencyBrakeResetPending || _resetFailuresPending || _announcementPending.Length > 0;
             _emergencyBrakePressPending = false;
             _emergencyBrakeResetPending = false;
+            _resetFailuresPending = false;
             _announcementPending = string.Empty;
         }
 
@@ -170,9 +203,10 @@ public sealed class DriverInputState
 
         lock (_gate)
         {
-            cleared = _emergencyBrakePressPending || _emergencyBrakeResetPending || _announcementPending.Length > 0;
+            cleared = _emergencyBrakePressPending || _emergencyBrakeResetPending || _resetFailuresPending || _announcementPending.Length > 0;
             _emergencyBrakePressPending = false;
             _emergencyBrakeResetPending = false;
+            _resetFailuresPending = false;
             _announcementPending = string.Empty;
         }
 
@@ -189,6 +223,7 @@ public sealed class DriverInputState
         ServiceBrakeRequested = _serviceBrakeRequested,
         EmergencyBrakeRequested = _emergencyBrakePressPending,
         EmergencyBrakeResetRequested = _emergencyBrakeResetPending,
+        ResetFailuresRequested = _resetFailuresPending,
         LeftDoorsOpenRequested = _leftDoorsOpenRequested,
         RightDoorsOpenRequested = _rightDoorsOpenRequested,
         ExteriorLightsRequested = _exteriorLightsRequested,

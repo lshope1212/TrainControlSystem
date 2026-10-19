@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:TrainController.Wpf.Views.Controls"
         Title="Train Controller — Test UI (Train Model stand-in)"
-        Width="1200" Height="860" MinWidth="1000" MinHeight="700"
+        Width="1450" Height="960" MinWidth="1150" MinHeight="760"
         WindowStartupLocation="Manual" Left="60" Top="40"
         Background="{StaticResource PageBrush}"
         FontFamily="{StaticResource UiFont}">
@@ -37,7 +37,7 @@
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
                     <TextBlock Text="Selected train (Test UI)" Style="{StaticResource HeaderLabel}"/>
-                    <ComboBox Width="160" ItemsSource="{Binding Trains}" SelectedItem="{Binding SelectedTrain}" DisplayMemberPath="TrainId"/>
+                    <ComboBox Width="200" ItemsSource="{Binding Trains}" SelectedItem="{Binding SelectedTrain}" DisplayMemberPath="TrainId"/>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center">
                     <TextBlock Text="Simulation time" Style="{StaticResource HeaderLabel}" HorizontalAlignment="Right"/>
@@ -51,21 +51,23 @@
             <StackPanel Margin="10,8">
                 <DockPanel>
                     <TextBlock Text="Test Simulation" Style="{StaticResource PanelTitle}" Margin="0,0,16,0"/>
-                    <TextBlock Text="Global: applies to ALL trains. Driver / Engineer inputs stay in the Main UI." Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
                 </DockPanel>
                 <WrapPanel Margin="0,8,0,0">
                     <TextBlock Text="Input source" Style="{StaticResource KeyLabelText}" Margin="0,0,8,0"/>
                     <RadioButton Content="Train Model (Normal)" GroupName="Source" IsChecked="{Binding IsNormalMode}" Style="{StaticResource FlatToggleButton}"/>
                     <RadioButton Content="Test UI (Test Mode)" GroupName="Source" IsChecked="{Binding IsTestMode}" Style="{StaticResource FlatToggleButton}" Margin="0,0,24,0"/>
 
-                    <Button Content="Run" Command="{Binding RunCommand}" Style="{StaticResource FlatButton}" MinWidth="60"/>
-                    <Button Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource FlatButton}" MinWidth="60"/>
-                    <Button Content="Step" Command="{Binding StepCommand}" Style="{StaticResource FlatButton}" MinWidth="60"/>
-                    <Button Content="Reset" Command="{Binding ResetCommand}" Style="{StaticResource FlatButton}" MinWidth="60" Margin="0,0,24,0"
+                    <Button Content="Run" Command="{Binding RunCommand}" Style="{StaticResource FlatButton}" MinWidth="75"/>
+                    <Button Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource FlatButton}" MinWidth="75"/>
+                    <Button Content="Step" Command="{Binding StepCommand}" Style="{StaticResource FlatButton}" MinWidth="75"/>
+                    <Button Content="Reset" Command="{Binding ResetCommand}" Style="{StaticResource FlatButton}" MinWidth="75" Margin="0,0,24,0"
                             ToolTip="Test simulation reset for all trains (not the driver's E-brake reset)."/>
 
                     <TextBlock Text="Speed" Style="{StaticResource KeyLabelText}" Margin="0,0,6,0"/>
-                    <ComboBox Width="70" ItemsSource="{Binding SpeedMultipliers}" SelectedItem="{Binding SelectedSpeedMultiplier}" ItemStringFormat="{}{0}x" Margin="0,0,24,0"/>
+                    <ComboBox Width="90" ItemsSource="{Binding SpeedMultipliers}" SelectedItem="{Binding SelectedSpeedMultiplier}" ItemStringFormat="{}{0}x" Margin="0,0,24,0"/>
+
+                    <CheckBox IsChecked="{Binding SimplePhysicsEnabled}" Content="Simple physics" VerticalAlignment="Center" Margin="0,0,24,0"
+                              ToolTip="On: actual speed, doors and lights follow the controller's commands (test tool, not the Train Model). Off: set the actual speed by hand, e.g. to reproduce a brake or engine failure."/>
 
                     <TextBlock Text="{Binding SimulationText}" Style="{StaticResource ValueText}"/>
                 </WrapPanel>
@@ -78,7 +80,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="380"/>
+                <ColumnDefinition Width="490"/>
             </Grid.ColumnDefinitions>
 
             <!-- Inputs: values that normally come FROM the Train Model -->
@@ -101,29 +103,31 @@
                             <ContentControl Grid.Column="0" Focusable="False">
                                 <Grid VerticalAlignment="Top">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                     <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="SERVICE (TRAIN MODEL STATE)" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
                                     <TextBlock Grid.Row="1" Text="Train active / dispatched" Style="{StaticResource FormLabel}"/>
                                     <ContentControl Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding IsActive}" Content="Active"/></ContentControl>
                                     <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="MOVEMENT / AUTHORITY" Style="{StaticResource SectionLabel}" Margin="0,10,0,4"/>
                                     <TextBlock Grid.Row="3" Text="Actual speed (mph)" Style="{StaticResource FormLabel}"/>
                                     <ContentControl Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding ActualSpeedMphText}" Style="{StaticResource FormBox}"/></ContentControl>
-                                    <TextBlock Grid.Row="4" Text="Authorized speed (mph)" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="4" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding AuthorizedSpeedMphText}" Style="{StaticResource FormBox}"/></ContentControl>
+                                    <TextBlock Grid.Row="4" Text="Commanded speed (mph)" Style="{StaticResource FormLabel}"/>
+                                    <ContentControl Grid.Row="4" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding CommandedSpeedMphText}" Style="{StaticResource FormBox}"/></ContentControl>
                                     <TextBlock Grid.Row="5" Text="Remaining authority (ft)" Style="{StaticResource FormLabel}"/>
                                     <ContentControl Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><StackPanel Orientation="Horizontal"><TextBox Text="{Binding RemainingAuthorityFeetText}" Style="{StaticResource FormBox}"/><Button Content="Send authority" Command="{Binding SendAuthorityCommand}" Style="{StaticResource FlatButton}" Margin="6,0,0,0" ToolTip="Sends the authority value as a NEW update (changing the value also sends it). Between updates the controller counts it down with speed × dt."/><TextBlock Text="{Binding AuthorityPendingText}" Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="6,0,0,0"/></StackPanel></ContentControl>
                                     <TextBlock Grid.Row="6" Text="Track signal valid" Style="{StaticResource FormLabel}"/>
                                     <ContentControl Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding TrackSignalValid}" Content="Valid"/></ContentControl>
-                                    <TextBlock Grid.Row="7" Grid.ColumnSpan="2" Text="BEACON" Style="{StaticResource SectionLabel}" Margin="0,10,0,4"/>
-                                    <TextBlock Grid.Row="8" Text="Beacon valid" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="8" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding BeaconValid}" Content="Valid"/></ContentControl>
-                                    <TextBlock Grid.Row="9" Text="Next station name" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="9" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding NextStationName}" Style="{StaticResource FormBox}" Width="160"/></ContentControl>
-                                    <TextBlock Grid.Row="10" Text="Distance to next station (ft)" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="10" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding DistanceToStationFeetText}" Style="{StaticResource FormBox}"/></ContentControl>
-                                    <TextBlock Grid.Row="11" Text="Platform side" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="11" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><ComboBox ItemsSource="{Binding PlatformSides}" SelectedItem="{Binding PlatformSide}" Width="110" HorizontalAlignment="Left" Margin="0,2"/></ContentControl>
-                                    <ContentControl Grid.Row="12" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><StackPanel><Button Content="Transmit beacon" Command="{Binding TransmitBeaconCommand}" Style="{StaticResource FlatButton}" HorizontalAlignment="Left" Margin="0,6,0,0" ToolTip="Simulates passing a NEW beacon with the values above; the controller recalibrates on this train&apos;s next tick."/><TextBlock Text="{Binding BeaconPendingText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/></StackPanel></ContentControl>
+                                    <TextBlock Grid.Row="7" Text="Traffic light" Style="{StaticResource FormLabel}"/>
+                                    <ContentControl Grid.Row="7" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><ComboBox ItemsSource="{Binding TrafficLights}" SelectedItem="{Binding TrafficLight}" Width="140" HorizontalAlignment="Left" Margin="0,2" ToolTip="From the Track Model. Display-only in the controller; separate from track signal validity."/></ContentControl>
+                                    <TextBlock Grid.Row="8" Grid.ColumnSpan="2" Text="BEACON" Style="{StaticResource SectionLabel}" Margin="0,10,0,4"/>
+                                    <TextBlock Grid.Row="9" Text="Beacon valid" Style="{StaticResource FormLabel}"/>
+                                    <ContentControl Grid.Row="9" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding BeaconValid}" Content="Valid"/></ContentControl>
+                                    <TextBlock Grid.Row="10" Text="Next station name" Style="{StaticResource FormLabel}"/>
+                                    <ContentControl Grid.Row="10" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding NextStationName}" Style="{StaticResource FormBox}" Width="200"/></ContentControl>
+                                    <TextBlock Grid.Row="11" Text="Distance to next station (ft)" Style="{StaticResource FormLabel}"/>
+                                    <ContentControl Grid.Row="11" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding DistanceToStationFeetText}" Style="{StaticResource FormBox}"/></ContentControl>
+                                    <TextBlock Grid.Row="12" Text="Platform side" Style="{StaticResource FormLabel}"/>
+                                    <ContentControl Grid.Row="12" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><ComboBox ItemsSource="{Binding PlatformSides}" SelectedItem="{Binding PlatformSide}" Width="140" HorizontalAlignment="Left" Margin="0,2"/></ContentControl>
+                                    <ContentControl Grid.Row="13" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><StackPanel><Button Content="Transmit beacon" Command="{Binding TransmitBeaconCommand}" Style="{StaticResource FlatButton}" HorizontalAlignment="Left" Margin="0,6,0,0" ToolTip="Simulates passing a NEW beacon with the values above; the controller recalibrates on this train&apos;s next tick."/><TextBlock Text="{Binding BeaconPendingText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/></StackPanel></ContentControl>
                                 </Grid>
                             </ContentControl>
                             <!-- Column 2: passenger, equipment status, validation -->
@@ -144,7 +148,7 @@
                                     <TextBlock Grid.Row="6" Text="Cabin temperature (°F)" Style="{StaticResource FormLabel}"/>
                                     <ContentControl Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding CabinTemperatureFahrenheitText}" Style="{StaticResource FormBox}"/></ContentControl>
                                     <TextBlock Grid.Row="7" Grid.ColumnSpan="2" Text="VALIDATION" Style="{StaticResource SectionLabel}" Margin="0,10,0,4"/>
-                                    <ContentControl Grid.Row="8" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><StackPanel><TextBlock Text="{Binding InputError}" Style="{StaticResource WarningText}"/><ItemsControl ItemsSource="{Binding InputWarnings}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource WarningText}" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock Text="Edge and fault values are allowed on purpose; they are flagged here." Style="{StaticResource MutedText}" Margin="0,4,0,0"/></StackPanel></ContentControl>
+                                    <ContentControl Grid.Row="8" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><StackPanel><TextBlock Text="{Binding InputError}" Style="{StaticResource WarningText}"/><ItemsControl ItemsSource="{Binding InputWarnings}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource WarningText}" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></ContentControl>
                                 </Grid>
                             </ContentControl>
                         </Grid>
@@ -186,7 +190,6 @@
                                 <controls:KeyValueRow Label="Last announcement sent" Display="{Binding Outputs.LastAnnouncementSent}"/>
                             </StackPanel>
                         </Border>
-                        <TextBlock Style="{StaticResource MutedText}" Text="In Test Mode these outputs are shown here only; they are not sent to the real Train Model."/>
                     </StackPanel>
                 </DockPanel>
             </Border>
@@ -200,15 +203,15 @@
                 </Border>
                 <DataGrid ItemsSource="{Binding Fleet}">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Train" Binding="{Binding TrainId}" Width="110"/>
-                        <DataGridTemplateColumn Header="Test Model state" Width="130">
+                        <DataGridTextColumn Header="Train" Binding="{Binding TrainId}" Width="138"/>
+                        <DataGridTemplateColumn Header="Test Model state" Width="162">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate><TextBlock DataContext="{Binding Active}" Style="{StaticResource ToneText}"/></DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Actual speed (input)" Binding="{Binding ActualSpeedInput}" Width="150"/>
-                        <DataGridTextColumn Header="Power command" Binding="{Binding PowerCommand}" Width="130"/>
-                        <DataGridTemplateColumn Header="Service brake" Width="110">
+                        <DataGridTextColumn Header="Actual speed (input)" Binding="{Binding ActualSpeedInput}" Width="188"/>
+                        <DataGridTextColumn Header="Power command" Binding="{Binding PowerCommand}" Width="162"/>
+                        <DataGridTemplateColumn Header="Service brake" Width="138">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate><TextBlock DataContext="{Binding ServiceBrakeCommand}" Style="{StaticResource ToneText}"/></DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -223,7 +226,5 @@
             </DockPanel>
         </Border>
 
-        <TextBlock Grid.Row="4" Style="{StaticResource StatusBarText}"
-                   Text="Test UI replaces the Train Model only. Selecting a train here does not affect the Main UI selection or which trains run."/>
     </Grid>
 </Window>

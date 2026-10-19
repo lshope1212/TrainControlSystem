@@ -57,6 +57,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         ApplyGainsCommand = new RelayCommand(_ => ApplyGains());
         ApplyCabinSetpointCommand = new RelayCommand(_ => ApplyCabinSetpoint());
         ApplyRequestedSpeedCommand = new RelayCommand(_ => ApplyRequestedSpeed(), _ => IsManual);
+        ClearRequestedSpeedCommand = new RelayCommand(_ => ClearRequestedSpeed(), _ => IsManual);
+        ResetFailuresCommand = new RelayCommand(_ => Slot.Driver.PressResetFailures());
         AnnounceCommand = new RelayCommand(_ => Announce(), _ => !string.IsNullOrWhiteSpace(AnnouncementText));
 
         LoadEditableState();
@@ -177,6 +179,12 @@ public sealed class MainWindowViewModel : ViewModelBase
     /// <summary>Validates the entry (mph) and stores it in the selected train's Driver state (m/s).</summary>
     public ICommand ApplyRequestedSpeedCommand { get; }
 
+    /// <summary>Manual: removes the driver request so the train follows the commanded speed.</summary>
+    public ICommand ClearRequestedSpeedCommand { get; }
+
+    /// <summary>"Reset failures" (signal pickup / brake / engine / Hardware link). Not the E-brake reset.</summary>
+    public ICommand ResetFailuresCommand { get; }
+
     public bool ServiceBrakeRequested
     {
         get => Slot.Driver.ServiceBrakeRequested;
@@ -296,6 +304,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public void Refresh()
     {
         Status = TrainControllerPresenter.BuildMain(Slot, HardwareState);
+        OnPropertyChanged(nameof(ServiceBrakeRequested)); // may be released by the system (brake failure)
 
         for (var i = 0; i < _subsystem.Registry.Trains.Count; i++)
         {
@@ -326,13 +335,14 @@ public sealed class MainWindowViewModel : ViewModelBase
             ? "E-brake press pending (applied on this train's next tick)"
             : driver.EmergencyBrakeResetPending
                 ? "E-brake reset pending (applied on this train's next tick)"
-                : string.Empty;
+                : driver.ResetFailuresPending
+                    ? "Reset failures pending (applied on this train's next tick)"
+                    : string.Empty;
 
         var running = _subsystem.Registry.Trains.Count(s => s.LastModelInput?.IsActive == true);
         StatusBarText =
             $"{TrainFleet.TrainCount} trains  ·  {TrainFleet.SoftwareTrainIds.Count} Software  ·  {TrainFleet.HardwareTrainIds.Count} Hardware" +
-            $"  ·  {running} running  ·  Tick {_subsystem.Engine.TickCount}" +
-            $"  ·  Pi link: {TrainControllerPresenter.HardwareLinkText(HardwareState).Text}";
+            $"  ·  {running} running  ·  Tick {_subsystem.Engine.TickCount}";
     }
 
     // ------------------------------------------------------------------ helpers
@@ -344,6 +354,12 @@ public sealed class MainWindowViewModel : ViewModelBase
     private void SetMode(OperatingMode mode)
     {
         Slot.Driver.Mode = mode;
+        if (mode == OperatingMode.Manual)
+        {
+            RequestedSpeedText = RequestedSpeedTextFor(Slot.Driver.RequestedSpeedMetersPerSecond);
+            RequestedSpeedMessage = new DisplayValue("Following the commanded speed until you set a speed.", DisplayTone.Muted);
+        }
+
         OnPropertyChanged(nameof(IsManual));
         OnPropertyChanged(nameof(IsAutomatic));
         CommandManager.InvalidateRequerySuggested();
@@ -355,7 +371,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         KpText = DisplayUnits.Number(slot.Engineer.Kp, 3);
         KiText = DisplayUnits.Number(slot.Engineer.Ki, 3);
         CabinSetpointText = DisplayUnits.Number(DisplayUnits.ToFahrenheit(slot.Driver.CabinTemperatureSetpointCelsius));
-        RequestedSpeedText = DisplayUnits.Number(DisplayUnits.ToMph(slot.Driver.RequestedSpeedMetersPerSecond));
+        RequestedSpeedText = RequestedSpeedTextFor(slot.Driver.RequestedSpeedMetersPerSecond);
         RequestedSpeedMessage = new DisplayValue(string.Empty);
         AnnouncementText = string.Empty;
         GainsMessage = string.Empty;
@@ -415,6 +431,18 @@ public sealed class MainWindowViewModel : ViewModelBase
             Refresh();
         }
     }
+
+    /// <summary>Manual: back to following the commanded speed (no driver request).</summary>
+    public void ClearRequestedSpeed()
+    {
+        Slot.Driver.ClearRequestedSpeed();
+        RequestedSpeedText = string.Empty;
+        RequestedSpeedMessage = new DisplayValue("Cleared: following the commanded speed.", DisplayTone.Muted);
+        Refresh();
+    }
+
+    private static string RequestedSpeedTextFor(double? metersPerSecond) =>
+        metersPerSecond is double value ? DisplayUnits.Number(DisplayUnits.ToMph(value)) : string.Empty;
 
     public void Announce()
     {

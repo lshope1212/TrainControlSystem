@@ -9,13 +9,14 @@ namespace TrainController.Abstractions.Outputs;
 public sealed record DriverDisplayState
 {
     /// <summary>
-    /// Final internal speed target after applying ALL constraints (driver request in Manual,
-    /// authorized speed, vehicle maximum, remaining authority, station stop in Automatic,
-    /// signal loss, emergency brake). Never simply the driver's request.
+    /// Setpoint speed: final internal speed target after applying ALL constraints (driver
+    /// request in Manual, commanded speed, vehicle maximum, remaining authority, station stop,
+    /// signal loss, failures, emergency brake). Never simply the driver's request.
+    /// (Formerly "effective target".)
     /// </summary>
-    public double EffectiveTargetSpeedMetersPerSecond { get; init; }
+    public double SetpointSpeedMetersPerSecond { get; init; }
 
-    /// <summary>The constraint that determined <see cref="EffectiveTargetSpeedMetersPerSecond"/>.</summary>
+    /// <summary>The constraint that determined <see cref="SetpointSpeedMetersPerSecond"/>.</summary>
     public TargetSpeedConstraint TargetLimitedBy { get; init; }
 
     public string NextStationName { get; init; } = string.Empty;
@@ -55,10 +56,7 @@ public sealed record DriverDisplayState
     /// </summary>
     public double? DistanceToAuthorityBrakePointMeters { get; init; }
 
-    /// <summary>Manual mode: station braking is due (advisory to the driver).</summary>
-    public bool StationBrakingAdvised { get; init; }
-
-    /// <summary>Automatic mode: controller is applying station braking itself.</summary>
+    /// <summary>Both modes: the controller is applying station braking itself (no driver action needed).</summary>
     public bool StationBrakingActive { get; init; }
 
     public bool AtStation { get; init; }
@@ -94,6 +92,27 @@ public sealed record DriverDisplayState
 
     /// <summary>Track-circuit speed/authority signal is lost or invalid; the controller is stopping the train.</summary>
     public bool TrackSignalLost { get; init; }
+
+    /// <summary>Commanded speed as received this tick (only trusted while the track signal is valid).</summary>
+    public double CommandedSpeedMetersPerSecond { get; init; }
+
+    /// <summary>Traffic light from the Track Model, passed through for display only.</summary>
+    public SignalState TrafficLight { get; init; } = SignalState.Unknown;
+
+    /// <summary>Latched failures (see <see cref="ControllerFailure"/>).</summary>
+    public ControllerFailure Failures { get; init; }
+
+    /// <summary>True on the tick a "Reset failures" press left at least one failure latched.</summary>
+    public bool FailureResetRejected { get; init; }
+
+    /// <summary>Why the last "Reset failures" press was (partly) rejected; empty otherwise.</summary>
+    public string FailureResetRejectedReason { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Current reason a "Reset failures" press would be rejected for at least one latched
+    /// failure; empty when every latched failure could be reset now (or none is latched).
+    /// </summary>
+    public string FailureResetBlockedReason { get; init; } = string.Empty;
 
     public bool ControllerFaulted { get; init; }
 

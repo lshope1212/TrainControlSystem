@@ -73,18 +73,17 @@ public class MainAndTestViewModelTests
         main.EmergencyBrakeCommand.Execute(null);
 
         var t3 = subsystem.Registry.Get("TRAIN-003").Driver;
-        Assert.AreEqual(8.9408, t3.RequestedSpeedMetersPerSecond, 1e-4, "20 mph stored as m/s.");
+        Assert.AreEqual(8.9408, t3.RequestedSpeedMetersPerSecond!.Value, 1e-4, "20 mph stored as m/s.");
         Assert.IsTrue(t3.ServiceBrakeRequested);
         Assert.IsTrue(t3.EmergencyBrakePressPending);
 
         var t1 = subsystem.Registry.Get("TRAIN-001").Driver;
-        Assert.AreEqual(0.0, t1.RequestedSpeedMetersPerSecond);
+        Assert.IsNull(t1.RequestedSpeedMetersPerSecond, "Other trains keep no request.");
         Assert.IsFalse(t1.ServiceBrakeRequested);
         Assert.IsFalse(t1.EmergencyBrakePressPending);
 
-        main.IsAutomatic = true;
-        Assert.AreEqual(OperatingMode.Automatic, t3.Mode);
-        Assert.AreEqual(OperatingMode.Manual, t1.Mode);
+        Assert.AreEqual(OperatingMode.Manual, t3.Mode);
+        Assert.AreEqual(OperatingMode.Automatic, t1.Mode, "Other trains keep the default (Automatic).");
     }
 
     [TestMethod]
@@ -120,7 +119,7 @@ public class MainAndTestViewModelTests
         {
             test.SelectedTrain = Choice(test.Trains, id);
             test.IsActive = true;
-            test.AuthorizedSpeedMphText = "20";
+            test.CommandedSpeedMphText = "20";
             test.RemainingAuthorityFeetText = "5000";
         }
 
@@ -142,7 +141,7 @@ public class MainAndTestViewModelTests
             "KpText", "KiText", "ApplyGainsCommand", "RequestedSpeedText", "ApplyRequestedSpeedCommand", "IsManual", "IsAutomatic",
             "ServiceBrakeRequested", "EmergencyBrakeCommand", "EmergencyBrakeResetCommand",
             "LeftDoorsOpenRequested", "RightDoorsOpenRequested", "ExteriorLightsRequested", "CabinSetpointText",
-            "AnnouncementText", "AnnounceCommand",
+            "AnnouncementText", "AnnounceCommand", "ResetFailuresCommand", "ClearRequestedSpeedCommand",
         };
 
         var properties = typeof(TestWindowViewModel).GetProperties().Select(p => p.Name).ToHashSet();
@@ -153,7 +152,7 @@ public class MainAndTestViewModelTests
 
         // Main UI owns those controls.
         var mainProperties = typeof(MainWindowViewModel).GetProperties().Select(p => p.Name).ToHashSet();
-        foreach (var name in new[] { "KpText", "KiText", "RequestedSpeedText", "ApplyRequestedSpeedCommand", "EmergencyBrakeCommand", "EmergencyBrakeResetCommand", "AnnouncementText", "AnnounceCommand" })
+        foreach (var name in new[] { "KpText", "KiText", "RequestedSpeedText", "ApplyRequestedSpeedCommand", "EmergencyBrakeCommand", "EmergencyBrakeResetCommand", "AnnouncementText", "AnnounceCommand", "ResetFailuresCommand", "ClearRequestedSpeedCommand" })
         {
             Assert.Contains(name, mainProperties, $"Main UI must expose '{name}'.");
         }
@@ -230,13 +229,13 @@ public class MainAndTestViewModelTests
 
         main.RequestedSpeedText = "30.0";
         main.ApplyRequestedSpeed();
-        Assert.AreEqual(13.4112, driver.RequestedSpeedMetersPerSecond, 1e-9);
+        Assert.AreEqual(13.4112, driver.RequestedSpeedMetersPerSecond!.Value, 1e-9);
 
         foreach (var bad in new[] { "abc", "-5", "" })
         {
             main.RequestedSpeedText = bad;
             main.ApplyRequestedSpeed();
-            Assert.AreEqual(13.4112, driver.RequestedSpeedMetersPerSecond, 1e-9, $"'{bad}' must not change the stored value.");
+            Assert.AreEqual(13.4112, driver.RequestedSpeedMetersPerSecond!.Value, 1e-9, $"'{bad}' must not change the stored value.");
             Assert.AreEqual(DisplayTone.Danger, main.RequestedSpeedMessage.Tone);
         }
 
@@ -256,7 +255,7 @@ public class MainAndTestViewModelTests
 
         main.RequestedSpeedText = "25";
         main.ApplyRequestedSpeed();
-        Assert.AreEqual(0.0, subsystem.Registry.Get("TRAIN-001").Driver.RequestedSpeedMetersPerSecond);
+        Assert.IsNull(subsystem.Registry.Get("TRAIN-001").Driver.RequestedSpeedMetersPerSecond);
 
         main.IsManual = true;
         Assert.IsTrue(main.ApplyRequestedSpeedCommand.CanExecute(null));
@@ -273,7 +272,7 @@ public class MainAndTestViewModelTests
         main.ApplyRequestedSpeed();
 
         main.SelectedTrain = Choice(main.Trains, "TRAIN-005");
-        Assert.AreEqual("0.0", main.RequestedSpeedText);
+        Assert.AreEqual(string.Empty, main.RequestedSpeedText, "No request on TRAIN-005: follows the commanded speed.");
 
         main.SelectedTrain = Choice(main.Trains, "TRAIN-003");
         Assert.AreEqual("25.0", main.RequestedSpeedText);

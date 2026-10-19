@@ -28,10 +28,11 @@ public static class TrainModelContractMapper
         {
             IsActive = message.IsActive,
             ActualSpeedMetersPerSecond = message.ActualSpeedMetersPerSecond,
-            AuthorizedSpeedMetersPerSecond = message.AuthorizedSpeedMetersPerSecond,
+            CommandedSpeedMetersPerSecond = message.CommandedSpeedMetersPerSecond,
             RemainingAuthorityMeters = message.RemainingAuthorityMeters,
             AuthorityUpdateReceived = authorityUpdated,
             TrackSignalValid = message.TrackSignalValid,
+            TrafficLight = message.TrafficLight,
             Beacon = new BeaconData
             {
                 IsValid = message.BeaconValid,

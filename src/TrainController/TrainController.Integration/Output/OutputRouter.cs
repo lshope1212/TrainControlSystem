@@ -31,7 +31,20 @@ public sealed class OutputRouter
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(output);
 
-        _registry.Get(output.TrainId).RecordTickResult(input.Model, output);
+        var slot = _registry.Get(output.TrainId);
+        var previousFailures = slot.LastOutput?.Display.Failures ?? ControllerFailure.None;
+        LogSafetyEvents(output.TrainId, slot.LastOutput, output);
+        if (!previousFailures.HasFlag(ControllerFailure.Brake) && output.Display.Failures.HasFlag(ControllerFailure.Brake)
+            && slot.Driver.ServiceBrakeRequested)
+        {
+            // The service brake has failed and the emergency brake has taken over: release the
+            // driver's (now ineffective) service-brake request, so after "Reset failures" the
+            // train does not stay braked by a forgotten toggle — same result as in Automatic.
+            slot.Driver.ServiceBrakeRequested = false;
+            _log.Log(TrainControllerLogLevel.Info, "Safety", output.TrainId, "Driver service brake released automatically (service brake failed; emergency brake applied).");
+        }
+
+        slot.RecordTickResult(input.Model, output);
 
         if (testMode)
         {
@@ -51,4 +64,39 @@ public sealed class OutputRouter
             _log.Log(TrainControllerLogLevel.Error, "Output", output.TrainId, $"Failed to deliver commands to the Train Model: {ex.Message}");
         }
     }
+
+    /// <summary>Safety log: failure detected / cleared, rejected failure reset.</summary>
+    private void LogSafetyEvents(string trainId, TrainControllerOutput? previous, TrainControllerOutput current)
+    {
+        var before = previous?.Display.Failures ?? ControllerFailure.None;
+        var now = current.Display.Failures;
+
+        foreach (var failure in new[] { ControllerFailure.SignalPickup, ControllerFailure.Brake, ControllerFailure.Engine, ControllerFailure.HardwareLink })
+        {
+            var was = (before & failure) != 0;
+            var isNow = (now & failure) != 0;
+            if (!was && isNow)
+            {
+                _log.Log(TrainControllerLogLevel.Error, "Safety", trainId, $"{FailureName(failure)} detected (latched; Reset failures required).");
+            }
+            else if (was && !isNow)
+            {
+                _log.Log(TrainControllerLogLevel.Info, "Safety", trainId, $"{FailureName(failure)} cleared by Reset failures.");
+            }
+        }
+
+        if (current.Display.FailureResetRejected)
+        {
+            _log.Log(TrainControllerLogLevel.Warning, "Safety", trainId, $"Reset failures rejected: {current.Display.FailureResetRejectedReason}.");
+        }
+    }
+
+    private static string FailureName(ControllerFailure failure) => failure switch
+    {
+        ControllerFailure.SignalPickup => "Signal pickup failure",
+        ControllerFailure.Brake => "Brake failure",
+        ControllerFailure.Engine => "Engine failure",
+        ControllerFailure.HardwareLink => "Hardware link failure",
+        _ => failure.ToString(),
+    };
 }

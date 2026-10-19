@@ -31,7 +31,8 @@ namespace TrainController.Integration.Hardware;
 /// </para>
 /// <para>
 /// Safety policy (integration, not control law): a train that suffered a communication fault
-/// stays in fail-safe until the link works AND the driver presses E-brake reset. The Pi state
+/// stays in fail-safe (Hardware link failure) until the link works AND the driver presses
+/// "Reset failures". The Pi state
 /// of that train is then reset before control resumes, because its authority / station
 /// estimates did not advance while the link was down.
 /// </para>
@@ -72,7 +73,7 @@ public sealed class TcpHardwareTrainControllerBackend : ITrainControllerBackend,
 
     public string ConnectionDetail => Volatile.Read(ref _detail);
 
-    /// <summary>True while the train is held in fail-safe after a communication fault (driver reset required).</summary>
+    /// <summary>True while the train is held in fail-safe after a communication fault ("Reset failures" required).</summary>
     public bool IsFaultLatched(string trainId)
     {
         lock (_faultLatched)
@@ -97,15 +98,15 @@ public sealed class TcpHardwareTrainControllerBackend : ITrainControllerBackend,
 
                 if (IsFaultLatched(input.TrainId))
                 {
-                    if (!input.Driver.EmergencyBrakeResetRequested)
+                    if (!input.Driver.ResetFailuresRequested)
                     {
                         throw new ControllerCommunicationException(
-                            $"Hardware link fault latched for {input.TrainId}: link is up again — press E-brake reset to resume Hardware control.");
+                            $"Hardware link failure latched for {input.TrainId}: link is up again — press Reset failures to resume Hardware control.");
                     }
 
                     await SendResetAsync(input.TrainId, cancellationToken).ConfigureAwait(false);
                     SetLatched(input.TrainId, false);
-                    _log.Log(TrainControllerLogLevel.Info, Category, input.TrainId, "Driver reset after link fault: Pi state for this train re-synchronized; Hardware control resumed.");
+                    _log.Log(TrainControllerLogLevel.Info, Category, input.TrainId, "Reset failures after link fault: Pi state for this train re-synchronized; Hardware control resumed.");
                 }
 
                 // The first controller exchange on a fresh connection may still include one-time

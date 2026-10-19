@@ -55,7 +55,7 @@ internal sealed class SimulationRig
         var model = Registry.Get(trainId).TestModel;
         model.IsActive = true;
         model.ActualSpeedMetersPerSecond = speed;
-        model.AuthorizedSpeedMetersPerSecond = 10.0;
+        model.CommandedSpeedMetersPerSecond = 10.0;
         model.RemainingAuthorityMeters = 10_000.0;
     }
 

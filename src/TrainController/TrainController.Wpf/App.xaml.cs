@@ -44,6 +44,10 @@ public partial class App : Application
         _hardware = new TcpHardwareTrainControllerBackend(linkOptions, log);
         _subsystem = TrainControllerSubsystem.Create(hardwareBackend: _hardware, log: log);
 
+        // Test UI default: simple physics on, so normal scenarios behave without a Train Model
+        // (turn it off in the Test UI to hold the speed by hand, e.g. to reproduce failures).
+        _subsystem.TestMode.SetSimplePhysics(true);
+
         var mainWindow = new MainWindow(new MainWindowViewModel(_subsystem));
         var testWindow = new TestWindow(new TestWindowViewModel(_subsystem));
 

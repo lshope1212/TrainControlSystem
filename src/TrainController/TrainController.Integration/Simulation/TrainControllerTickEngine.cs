@@ -112,6 +112,11 @@ public sealed class TrainControllerTickEngine
 
                 var output = await _execution.ExecuteAsync(input, slot.LastOutput, cancellationToken);
                 await _output.RouteAsync(input, output, testMode, cancellationToken);
+                if (testMode && _testMode.SimplePhysicsEnabled)
+                {
+                    slot.TestModel.ApplySimplePhysics(output.Commands, _options.Vehicle, _options.SimulationTimeStepSeconds);
+                }
+
                 executed.Add(slot.TrainId);
             }
 

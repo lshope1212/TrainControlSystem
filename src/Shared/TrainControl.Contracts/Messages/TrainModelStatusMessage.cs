@@ -13,7 +13,7 @@ namespace TrainControl.Contracts.Messages;
 /// the Software or the Hardware Train Controller.
 /// </para>
 /// <para>
-/// <see cref="AuthorizedSpeedMetersPerSecond"/> and <see cref="RemainingAuthorityMeters"/>
+/// <see cref="CommandedSpeedMetersPerSecond"/> and <see cref="RemainingAuthorityMeters"/>
 /// are the values the wayside has authorized, relayed to the train through the track.
 /// The Train Controller never reads the track-layout workbook itself.
 /// </para>
@@ -38,12 +38,19 @@ public class TrainModelStatusMessage
 
     public double ActualSpeedMetersPerSecond { get; set; }
 
-    public double AuthorizedSpeedMetersPerSecond { get; set; }
+    public double CommandedSpeedMetersPerSecond { get; set; }
 
     public double RemainingAuthorityMeters { get; set; }
 
     /// <summary>False when the track-circuit speed/authority signal is lost or invalid.</summary>
     public bool TrackSignalValid { get; set; }
+
+    /// <summary>
+    /// Traffic light (wayside signal aspect) ahead of the train, as provided by the Track Model.
+    /// PROVISIONAL field until the final Track Model contract is agreed. Display-only in the
+    /// Train Controller; independent of <see cref="TrackSignalValid"/>.
+    /// </summary>
+    public SignalState TrafficLight { get; set; } = SignalState.Unknown;
 
     /// <summary>True when the beacon fields below carry valid data.</summary>
     public bool BeaconValid { get; set; }
