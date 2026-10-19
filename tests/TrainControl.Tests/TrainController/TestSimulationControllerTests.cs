@@ -176,7 +176,7 @@ public class TestSimulationControllerTests
         {
             slot.TestModel.IsActive = true;
             slot.TestModel.ActualSpeedMetersPerSecond = 5.0;
-            slot.TestModel.AuthorizedSpeedMetersPerSecond = 10.0;
+            slot.TestModel.CommandedSpeedMetersPerSecond = 10.0;
             slot.TestModel.RemainingAuthorityMeters = 10_000.0;
             slot.Driver.RequestedSpeedMetersPerSecond = 8.0;
         }

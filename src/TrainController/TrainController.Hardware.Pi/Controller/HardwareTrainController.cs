@@ -28,6 +28,7 @@ public sealed class HardwareTrainController
     private bool _authorityKnown;
     private double _authorityLeft;            // remaining-authority estimate (m)
     private StationTarget? _station;          // current next-station target, null = none
+    private readonly FailureWatch _watch = new FailureWatch(); // failure latches + detection windows
     private TrainControllerOutput? _previous;
 
     public HardwareTrainController(string trainId)
@@ -46,6 +47,8 @@ public sealed class HardwareTrainController
 
     public EmergencyBrakeCause LatchedEmergencyCauses => _latched;
 
+    public ControllerFailure LatchedFailures => _watch.Latched;
+
     public void Reset()
     {
         _integral = 0.0;
@@ -53,6 +56,7 @@ public sealed class HardwareTrainController
         _authorityKnown = false;
         _authorityLeft = 0.0;
         _station = null;
+        _watch.Clear();
         _previous = null;
     }
 
@@ -69,6 +73,7 @@ public sealed class HardwareTrainController
         if (!check.IsValid)
         {
             _integral = 0.0;
+            _watch.NoCommand();
             _previous = FailSafeOutput.Create(TrainId, input.TickId, EmergencyBrakeCause.InvalidInput,
                 $"Invalid controller input: {check}", input.Model, input.Policy ?? ControllerPolicy.Default, _previous);
             return _previous;
@@ -86,7 +91,7 @@ public sealed class HardwareTrainController
         var cfg = input.Policy;
         var dt = input.DeltaTimeSeconds;
         var speed = m.ActualSpeedMetersPerSecond;
-        var auto = d.Mode == OperatingMode.Automatic;
+        var manualMode = d.Mode == OperatingMode.Manual;
         var isStopped = speed <= cfg.StoppedSpeedThresholdMetersPerSecond;
         var sb = car.ServiceBrakeDecelerationMetersPerSecondSquared;
         var notes = new List<string>();
@@ -138,15 +143,42 @@ public sealed class HardwareTrainController
             }
         }
 
-        // ---- limits ----
+        // ---- failures (previous tick's commands judged against this tick's speed) ----
+        var watch = _watch.Update(speed, m.TrackSignalValid, isStopped, dt, d.ResetFailuresRequested, car.TotalRatedPowerWatts, cfg);
+        var failed = _watch.Latched;
+        var pickupFailed = (failed & ControllerFailure.SignalPickup) != 0;
+        var brakesFailed = (failed & ControllerFailure.Brake) != 0;
+        var engineFailed = (failed & ControllerFailure.Engine) != 0;
+        if (watch.Rejected.Length > 0)
+        {
+            notes.Add($"Failure reset rejected: {watch.Rejected}.");
+        }
+
+        // ---- track signal / commanded speed ----
         var signalLost = !m.TrackSignalValid;
-        var signalEmergency = signalLost && cfg.TrackSignalLossResponse == TrackSignalLossResponse.EmergencyBrake;
-        var speedLimit = Math.Min(signalLost ? 0.0 : m.AuthorizedSpeedMetersPerSecond, car.MaxSpeedMetersPerSecond);
+        var holdForSignal = signalLost || pickupFailed;
+        var trustedCommand = holdForSignal ? 0.0 : m.CommandedSpeedMetersPerSecond;
+        var speedLimit = Math.Min(trustedCommand, car.MaxSpeedMetersPerSecond);
         if (signalLost)
         {
-            notes.Add(signalEmergency
-                ? "Track signal lost: emergency brake applied."
-                : "Track signal lost: stopping the train with the service brake.");
+            notes.Add("Track signal lost: stopping the train with the service brake.");
+        }
+
+        if (pickupFailed)
+        {
+            notes.Add(m.TrackSignalValid
+                ? "SIGNAL PICKUP FAILURE: signal valid again; press Reset failures to resume."
+                : "SIGNAL PICKUP FAILURE: train held with the service brake.");
+        }
+
+        if (brakesFailed)
+        {
+            notes.Add("BRAKE FAILURE: emergency brake applied. Reset failures once stopped.");
+        }
+
+        if (engineFailed)
+        {
+            notes.Add("ENGINE FAILURE: power 0, service brake applied. Reset failures once stopped.");
         }
 
         // ---- authority protection (independent safety backstop) ----
@@ -167,14 +199,16 @@ public sealed class HardwareTrainController
             toAuthorityBrakePoint = _authorityLeft - needService;
         }
 
-        // ---- emergency latch ----
+        // ---- emergency brake ----
+        // Driver / passenger: latched, E-brake reset only when stopped and no passenger request.
+        // Authority: applied while it cannot stop in time, released once stopped.
+        const EmergencyBrakeCause pressCauses = EmergencyBrakeCause.Driver | EmergencyBrakeCause.Passenger;
         var blockedBecause = m.PassengerEmergencyBrakeRequested ? "passenger emergency brake request is still active"
-            : authorityEmergency ? "train still cannot stop within its remaining authority"
-            : signalEmergency ? "track signal is still lost"
+            : !isStopped ? "train is still moving"
             : string.Empty;
 
         var resetRefused = false;
-        if (d.EmergencyBrakeResetRequested && _latched != EmergencyBrakeCause.None)
+        if (d.EmergencyBrakeResetRequested && (_latched & pressCauses) != 0)
         {
             if (blockedBecause.Length > 0)
             {
@@ -183,37 +217,32 @@ public sealed class HardwareTrainController
             }
             else
             {
-                _latched = EmergencyBrakeCause.None;
+                _latched &= ~pressCauses;
             }
         }
 
         if (d.EmergencyBrakeRequested) _latched |= EmergencyBrakeCause.Driver;
         if (m.PassengerEmergencyBrakeRequested) _latched |= EmergencyBrakeCause.Passenger;
         if (authorityEmergency) _latched |= EmergencyBrakeCause.AuthorityViolation;
-        if (signalEmergency) _latched |= EmergencyBrakeCause.TrackSignalLoss;
-        var emergencyOn = _latched != EmergencyBrakeCause.None;
+        else if (isStopped) _latched &= ~EmergencyBrakeCause.AuthorityViolation;
 
-        // ---- station guidance ----
+        var ebCauses = _latched | (brakesFailed ? EmergencyBrakeCause.BrakeFailure : EmergencyBrakeCause.None);
+        var emergencyOn = ebCauses != EmergencyBrakeCause.None;
+
+        // ---- station braking: automatic in both modes ----
         var stationStop = Square(Math.Max(0.0, speed)) / (2.0 * sb) + cfg.StationBrakingMarginMeters;
         var hasStation = _station is not null && double.IsFinite(_station.Distance);
         var atStation = hasStation && Math.Abs(_station!.Distance) <= cfg.StationDistanceThresholdMeters && isStopped;
 
         double? toBrakePoint = null;
-        var brakingDue = false;
+        var stationBrake = false;
         if (hasStation && !_station!.Served)
         {
             toBrakePoint = _station.Distance - speed * dt - stationStop;
-            brakingDue = !atStation && toBrakePoint.Value <= 0.0;
+            stationBrake = !atStation && toBrakePoint.Value <= 0.0;
         }
 
-        var advise = !auto && brakingDue;
-        var autoBrake = auto && brakingDue;
-        if (advise)
-        {
-            notes.Add($"Brake now for {_station!.Label}.");
-        }
-
-        // ---- arrival / dwell ----
+        // ---- arrival / dwell (both modes) ----
         var dwellNow = false;
         var openLeftForDwell = false;
         var openRightForDwell = false;
@@ -224,28 +253,21 @@ public sealed class HardwareTrainController
                 stationEvent = StationEvent.Arrived;
             }
 
-            if (auto)
+            _station.Dwelling = true;
+            _station.DwellSeconds += dt;
+            if (_station.DwellSeconds >= cfg.StationDwellTimeSeconds)
             {
-                _station.Dwelling = true;
-                _station.DwellSeconds += dt;
-                if (_station.DwellSeconds >= cfg.StationDwellTimeSeconds)
-                {
-                    _station.MarkServed();
-                }
-                else
-                {
-                    dwellNow = true;
-                    openLeftForDwell = _station.Side is PlatformSide.Left or PlatformSide.Both;
-                    openRightForDwell = _station.Side is PlatformSide.Right or PlatformSide.Both;
-                    if (_station.Side == PlatformSide.None)
-                    {
-                        notes.Add($"No platform side known for {_station.Label}: doors stay closed.");
-                    }
-                }
+                _station.MarkServed();
             }
             else
             {
-                _station.MarkServed();
+                dwellNow = true;
+                openLeftForDwell = _station.Side is PlatformSide.Left or PlatformSide.Both;
+                openRightForDwell = _station.Side is PlatformSide.Right or PlatformSide.Both;
+                if (_station.Side == PlatformSide.None)
+                {
+                    notes.Add($"No platform side known for {_station.Label}: doors stay closed.");
+                }
             }
         }
 
@@ -273,7 +295,7 @@ public sealed class HardwareTrainController
             announce = driverText;
         }
 
-        // ---- doors ----
+        // ---- doors: dwell side or driver request while stopped (both modes) ----
         var wantsOpen = d.LeftDoorsOpenRequested || d.RightDoorsOpenRequested;
         bool leftCmd, rightCmd, refused;
         if (!isStopped)
@@ -281,13 +303,11 @@ public sealed class HardwareTrainController
             leftCmd = rightCmd = false;
             refused = wantsOpen;
         }
-        else if (auto)
-        {
-            (leftCmd, rightCmd, refused) = (openLeftForDwell, openRightForDwell, false);
-        }
         else
         {
-            (leftCmd, rightCmd, refused) = (d.LeftDoorsOpenRequested, d.RightDoorsOpenRequested, false);
+            leftCmd = openLeftForDwell || d.LeftDoorsOpenRequested;
+            rightCmd = openRightForDwell || d.RightDoorsOpenRequested;
+            refused = false;
         }
 
         var doorsAreOpen = m.LeftDoorsOpen || m.RightDoorsOpen;
@@ -304,12 +324,12 @@ public sealed class HardwareTrainController
 
         // ---- overspeed ----
         var tooFast = speed > speedLimit;
-        if (tooFast)
+        if (tooFast && !holdForSignal)
         {
             notes.Add("Overspeed: service brake applied.");
         }
 
-        // ---- effective target: minimum of all constraints, earliest wins ties ----
+        // ---- setpoint: minimum of all constraints, earliest wins ties ----
         var target = double.PositiveInfinity;
         var limitedBy = TargetSpeedConstraint.None;
         void Cap(double value, TargetSpeedConstraint why)
@@ -322,14 +342,17 @@ public sealed class HardwareTrainController
             }
         }
 
-        Cap(signalLost ? 0.0 : m.AuthorizedSpeedMetersPerSecond, signalLost ? TargetSpeedConstraint.TrackSignalLoss : TargetSpeedConstraint.AuthorizedSpeed);
+        Cap(trustedCommand, signalLost ? TargetSpeedConstraint.TrackSignalLoss
+            : pickupFailed ? TargetSpeedConstraint.Failure
+            : TargetSpeedConstraint.CommandedSpeed);
         Cap(car.MaxSpeedMetersPerSecond, TargetSpeedConstraint.VehicleMaximum);
         Cap(StopFrom(_authorityLeft - cfg.AuthorityBrakingMarginMeters, sb), TargetSpeedConstraint.RemainingAuthority);
-        if (!auto)
+        if (manualMode && d.RequestedSpeedMetersPerSecond.HasValue)
         {
-            Cap(d.RequestedSpeedMetersPerSecond, TargetSpeedConstraint.DriverRequest);
+            Cap(d.RequestedSpeedMetersPerSecond.Value, TargetSpeedConstraint.DriverRequest);
         }
-        else if (autoBrake || dwellNow)
+
+        if (stationBrake || dwellNow)
         {
             Cap(0.0, TargetSpeedConstraint.StationStop);
         }
@@ -338,6 +361,7 @@ public sealed class HardwareTrainController
             Cap(StopFrom(_station.Distance - cfg.StationBrakingMarginMeters, sb), TargetSpeedConstraint.StationStop);
         }
 
+        if (brakesFailed || engineFailed) Cap(0.0, TargetSpeedConstraint.Failure);
         if (emergencyOn) Cap(0.0, TargetSpeedConstraint.EmergencyBrake);
         if (d.ServiceBrakeRequested) Cap(0.0, TargetSpeedConstraint.DriverServiceBrake);
 
@@ -358,14 +382,15 @@ public sealed class HardwareTrainController
 
         if (emergencyOn)
         {
-            notes.Add("Emergency brake applied. Driver reset required.");
+            notes.Add(EmergencyNote(ebCauses, m.PassengerEmergencyBrakeRequested));
         }
 
         // ---- brakes, then traction ----
-        var serviceOn = d.ServiceBrakeRequested || authorityService || tooFast || autoBrake || hold;
+        var serviceOn = d.ServiceBrakeRequested || authorityService || tooFast || stationBrake || hold
+            || holdForSignal || engineFailed;
 
         double watts = 0.0;
-        if (!serviceOn && !emergencyOn && !interlock)
+        if (!serviceOn && !emergencyOn && !interlock && failed == ControllerFailure.None)
         {
             watts = PiPower(target - speed, input.Engineer, dt, car.TotalRatedPowerWatts);
         }
@@ -373,6 +398,8 @@ public sealed class HardwareTrainController
         {
             _integral = 0.0;
         }
+
+        _watch.Remember(speed, serviceOn, emergencyOn, watts, target);
 
         var powerState = emergencyOn ? TractionState.EmergencyBrake
             : interlock ? TractionState.DoorInterlock
@@ -398,8 +425,10 @@ public sealed class HardwareTrainController
             },
             Display = new DriverDisplayState
             {
-                EffectiveTargetSpeedMetersPerSecond = target,
+                SetpointSpeedMetersPerSecond = target,
                 TargetLimitedBy = limitedBy,
+                CommandedSpeedMetersPerSecond = m.CommandedSpeedMetersPerSecond,
+                TrafficLight = m.TrafficLight,
                 NextStationName = _station?.Name ?? string.Empty,
                 DistanceToNextStationMeters = hasStation && _station is not null ? _station.Distance : null,
                 PlatformSide = _station?.Side ?? PlatformSide.None,
@@ -408,18 +437,21 @@ public sealed class HardwareTrainController
                 ServiceBrakeStoppingDistanceMeters = stationStop,
                 DistanceToStationBrakePointMeters = toBrakePoint,
                 DistanceToAuthorityBrakePointMeters = toAuthorityBrakePoint,
-                StationBrakingAdvised = advise,
-                StationBrakingActive = autoBrake,
+                StationBrakingActive = stationBrake,
                 AtStation = atStation,
                 StationEvent = stationEvent,
                 TractionState = powerState,
                 AuthorityProtectionActive = authorityService || authorityEmergency,
                 OverspeedProtectionActive = tooFast,
                 DoorInterlockActive = interlock,
-                EmergencyBrakeCauses = _latched,
+                EmergencyBrakeCauses = ebCauses,
                 EmergencyBrakeLatched = emergencyOn,
-                EmergencyBrakeResetBlockedReason = emergencyOn ? blockedBecause : string.Empty,
+                EmergencyBrakeResetBlockedReason = (_latched & pressCauses) != 0 ? blockedBecause : string.Empty,
                 EmergencyBrakeResetRejected = resetRefused,
+                Failures = failed,
+                FailureResetRejected = watch.Rejected.Length > 0,
+                FailureResetRejectedReason = watch.Rejected,
+                FailureResetBlockedReason = watch.Blocked,
                 BeaconRecalibrated = beaconUsed,
                 TrackSignalLost = signalLost,
                 Alerts = notes,
@@ -427,7 +459,16 @@ public sealed class HardwareTrainController
         };
     }
 
-    /// <summary>PI law with conditional-integration anti-windup; output clamped to [0, rated power].</summary>
+    private static string EmergencyNote(EmergencyBrakeCause causes, bool passengerActive)
+    {
+        var why = new List<string>();
+        if ((causes & EmergencyBrakeCause.Passenger) != 0) why.Add(passengerActive ? "passenger request (active)" : "passenger request (cleared)");
+        if ((causes & EmergencyBrakeCause.Driver) != 0) why.Add("driver");
+        if ((causes & EmergencyBrakeCause.AuthorityViolation) != 0) why.Add("authority");
+        if ((causes & EmergencyBrakeCause.BrakeFailure) != 0) why.Add("brake failure");
+        return $"Emergency brake applied ({string.Join(", ", why)}).";
+    }
+
     private double PiPower(double error, EngineerSettings gains, double dt, double ratedWatts)
     {
         var nextIntegral = _integral + error * dt;
@@ -476,6 +517,157 @@ public sealed class HardwareTrainController
             Served = true;
             Dwelling = false;
             DwellSeconds = 0.0;
+        }
+    }
+
+    /// <summary>
+    /// Failure latches and detection windows for this train (independent of TrainController.Core).
+    /// Signal pickup: signal invalid for SignalPickupFailureLatchSeconds. Brake: service brake (no
+    /// emergency brake) above the minimum speed for BrakeFailureDetectionSeconds with average
+    /// deceleration below the minimum. Engine: no brake, speed error and power above their
+    /// minimums for EngineFailureDetectionSeconds with average acceleration at or below the maximum.
+    /// Speed changes are judged against the commands remembered from the previous tick.
+    /// </summary>
+    private sealed class FailureWatch
+    {
+        private const double Eps = 1e-9;
+
+        private double _invalidFor;
+        private bool _brakeTiming;
+        private double _brakeFrom;
+        private double _brakeFor;
+        private bool _engineTiming;
+        private double _engineFrom;
+        private double _engineFor;
+
+        private bool _known;
+        private double _lastSpeed;
+        private bool _lastService;
+        private bool _lastEmergency;
+        private double _lastWatts;
+        private double _lastTarget;
+
+        public ControllerFailure Latched { get; private set; }
+
+        public (string Rejected, string Blocked) Update(
+            double speed, bool signalValid, bool stopped, double dt, bool resetPressed, double ratedWatts, ControllerPolicy cfg)
+        {
+            var refusals = new List<string>();
+            if (resetPressed && Latched != ControllerFailure.None)
+            {
+                var keep = Latched;
+                if ((Latched & ControllerFailure.SignalPickup) != 0)
+                {
+                    if (signalValid) keep &= ~ControllerFailure.SignalPickup;
+                    else refusals.Add("signal pickup failure: track signal still invalid");
+                }
+
+                if ((Latched & ControllerFailure.Brake) != 0)
+                {
+                    if (stopped) { keep &= ~ControllerFailure.Brake; _brakeTiming = false; }
+                    else refusals.Add("brake failure: train still moving");
+                }
+
+                if ((Latched & ControllerFailure.Engine) != 0)
+                {
+                    if (stopped) { keep &= ~ControllerFailure.Engine; _engineTiming = false; }
+                    else refusals.Add("engine failure: train still moving");
+                }
+
+                Latched = keep;
+            }
+
+            // signal pickup
+            _invalidFor = signalValid ? 0.0 : _invalidFor + dt;
+            if (!signalValid && _invalidFor + Eps >= cfg.SignalPickupFailureLatchSeconds)
+            {
+                Latched |= ControllerFailure.SignalPickup;
+            }
+
+            // brake
+            if ((Latched & ControllerFailure.Brake) == 0
+                && _known && _lastService && !_lastEmergency && _lastSpeed > cfg.BrakeFailureMinimumSpeedMetersPerSecond)
+            {
+                if (!_brakeTiming)
+                {
+                    _brakeTiming = true;
+                    _brakeFrom = _lastSpeed;
+                    _brakeFor = 0.0;
+                }
+
+                _brakeFor += dt;
+                if (_brakeFor + Eps >= cfg.BrakeFailureDetectionSeconds)
+                {
+                    if ((_brakeFrom - speed) / _brakeFor < cfg.BrakeFailureMinimumDecelerationMetersPerSecondSquared)
+                    {
+                        Latched |= ControllerFailure.Brake;
+                    }
+
+                    _brakeTiming = false;
+                }
+            }
+            else
+            {
+                _brakeTiming = false;
+            }
+
+            // engine
+            if ((Latched & ControllerFailure.Engine) == 0
+                && _known && !_lastService && !_lastEmergency
+                && _lastTarget - _lastSpeed > cfg.EngineFailureMinimumSpeedErrorMetersPerSecond
+                && _lastWatts >= cfg.EngineFailureMinimumPowerFraction * ratedWatts)
+            {
+                if (!_engineTiming)
+                {
+                    _engineTiming = true;
+                    _engineFrom = _lastSpeed;
+                    _engineFor = 0.0;
+                }
+
+                _engineFor += dt;
+                if (_engineFor + Eps >= cfg.EngineFailureDetectionSeconds)
+                {
+                    if ((speed - _engineFrom) / _engineFor <= cfg.EngineFailureMaximumAccelerationMetersPerSecondSquared)
+                    {
+                        Latched |= ControllerFailure.Engine;
+                    }
+
+                    _engineTiming = false;
+                }
+            }
+            else
+            {
+                _engineTiming = false;
+            }
+
+            var blockers = new List<string>();
+            if ((Latched & ControllerFailure.SignalPickup) != 0 && !signalValid) blockers.Add("track signal still invalid");
+            if ((Latched & (ControllerFailure.Brake | ControllerFailure.Engine)) != 0 && !stopped) blockers.Add("train still moving");
+            return (string.Join("; ", refusals), string.Join("; ", blockers));
+        }
+
+        public void Remember(double speed, bool service, bool emergency, double watts, double target)
+        {
+            _known = true;
+            _lastSpeed = speed;
+            _lastService = service;
+            _lastEmergency = emergency;
+            _lastWatts = watts;
+            _lastTarget = target;
+        }
+
+        public void NoCommand()
+        {
+            _known = false;
+            _brakeTiming = false;
+            _engineTiming = false;
+        }
+
+        public void Clear()
+        {
+            Latched = ControllerFailure.None;
+            _invalidFor = 0.0;
+            NoCommand();
         }
     }
 }

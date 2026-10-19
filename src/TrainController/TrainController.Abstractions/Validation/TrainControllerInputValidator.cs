@@ -50,7 +50,7 @@ public static class TrainControllerInputValidator
 
         var model = input.Model;
         NonNegative(errors, model.ActualSpeedMetersPerSecond, "Model.ActualSpeedMetersPerSecond");
-        NonNegative(errors, model.AuthorizedSpeedMetersPerSecond, "Model.AuthorizedSpeedMetersPerSecond");
+        NonNegative(errors, model.CommandedSpeedMetersPerSecond, "Model.CommandedSpeedMetersPerSecond");
         NonNegative(errors, model.RemainingAuthorityMeters, "Model.RemainingAuthorityMeters");
         Finite(errors, model.CabinTemperatureCelsius, "Model.CabinTemperatureCelsius");
 
@@ -64,7 +64,11 @@ public static class TrainControllerInputValidator
         }
 
         var driver = input.Driver;
-        NonNegative(errors, driver.RequestedSpeedMetersPerSecond, "Driver.RequestedSpeedMetersPerSecond");
+        if (driver.RequestedSpeedMetersPerSecond is double requested)
+        {
+            NonNegative(errors, requested, "Driver.RequestedSpeedMetersPerSecond");
+        }
+
         Finite(errors, driver.CabinTemperatureSetpointCelsius, "Driver.CabinTemperatureSetpointCelsius");
         if (driver.AnnouncementRequest is null)
         {
@@ -94,9 +98,18 @@ public static class TrainControllerInputValidator
         NonNegative(errors, policy.AuthorityBrakingMarginMeters, "Policy.AuthorityBrakingMarginMeters");
         NonNegative(errors, policy.StationDwellTimeSeconds, "Policy.StationDwellTimeSeconds");
 
-        if (!Enum.IsDefined(policy.TrackSignalLossResponse))
+        Positive(errors, policy.SignalPickupFailureLatchSeconds, "Policy.SignalPickupFailureLatchSeconds");
+        NonNegative(errors, policy.BrakeFailureMinimumSpeedMetersPerSecond, "Policy.BrakeFailureMinimumSpeedMetersPerSecond");
+        Positive(errors, policy.BrakeFailureDetectionSeconds, "Policy.BrakeFailureDetectionSeconds");
+        NonNegative(errors, policy.BrakeFailureMinimumDecelerationMetersPerSecondSquared, "Policy.BrakeFailureMinimumDecelerationMetersPerSecondSquared");
+        NonNegative(errors, policy.EngineFailureMinimumSpeedErrorMetersPerSecond, "Policy.EngineFailureMinimumSpeedErrorMetersPerSecond");
+        NonNegative(errors, policy.EngineFailureMinimumPowerFraction, "Policy.EngineFailureMinimumPowerFraction");
+        Positive(errors, policy.EngineFailureDetectionSeconds, "Policy.EngineFailureDetectionSeconds");
+        Finite(errors, policy.EngineFailureMaximumAccelerationMetersPerSecondSquared, "Policy.EngineFailureMaximumAccelerationMetersPerSecondSquared");
+
+        if (!Enum.IsDefined(model.TrafficLight))
         {
-            errors.Add("Policy.TrackSignalLossResponse is not a defined value.");
+            errors.Add("Model.TrafficLight is not a defined value.");
         }
 
         if (!Enum.IsDefined(driver.Mode))

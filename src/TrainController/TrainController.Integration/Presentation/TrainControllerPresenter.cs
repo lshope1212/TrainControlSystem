@@ -52,9 +52,74 @@ public sealed record MainUiTrainStatus
 
     public DisplayValue DriverRequestedSpeed { get; init; } = DisplayValue.Missing;
 
-    public DisplayValue AuthorizedSpeed { get; init; } = DisplayValue.Missing;
+    public DisplayValue CommandedSpeed { get; init; } = DisplayValue.Missing;
 
-    public DisplayValue EffectiveTargetSpeed { get; init; } = DisplayValue.Missing;
+    /// <summary>Shown under the commanded speed while it is not trusted (track signal invalid); empty otherwise.</summary>
+    public string CommandedSpeedNote { get; init; } = string.Empty;
+
+    public DisplayValue SetpointSpeed { get; init; } = DisplayValue.Missing;
+
+    public DisplayValue TrafficLight { get; init; } = DisplayValue.Missing;
+
+    public DisplayValue TrackSignal { get; init; } = DisplayValue.Missing;
+
+    public DisplayValue SignalPickupFailure { get; init; } = DisplayValue.Missing;
+
+    public DisplayValue BrakeFailure { get; init; } = DisplayValue.Missing;
+
+    public DisplayValue EngineFailure { get; init; } = DisplayValue.Missing;
+
+    public DisplayValue HardwareLinkFailure { get; init; } = DisplayValue.Missing;
+
+    public DisplayValue FailureReset { get; init; } = DisplayValue.Missing;
+
+    public bool AnyFailure { get; init; }
+
+    // ---- lamp states for the graphical indicators (true = lit) ----
+
+    /// <summary>Traffic light aspect for the signal-head graphic (Unknown = all lamps dark).</summary>
+    public SignalState TrafficLightState { get; init; } = SignalState.Unknown;
+
+    public bool TrafficRed => TrafficLightState == SignalState.Red;
+
+    public bool TrafficYellow => TrafficLightState == SignalState.Yellow;
+
+    public bool TrafficGreen => TrafficLightState == SignalState.Green;
+
+    /// <summary>Null before the first output; otherwise whether the track signal is valid.</summary>
+    public bool? TrackSignalValid { get; init; }
+
+    public bool SignalPickupFailed { get; init; }
+
+    public bool BrakeFailed { get; init; }
+
+    public bool EngineFailed { get; init; }
+
+    public bool HardwareLinkFailed { get; init; }
+
+    public bool ServiceBrakeOn { get; init; }
+
+    public bool EmergencyBrakeOn { get; init; }
+
+    /// <summary>Door / light state reported by the Train Model (what is really happening).</summary>
+    public bool LeftDoorsOpenActual { get; init; }
+
+    public bool RightDoorsOpenActual { get; init; }
+
+    public bool ExteriorLightsOnActual { get; init; }
+
+    public string CabinActualText { get; init; } = string.Empty;
+
+    /// <summary>The single most important ongoing condition (empty = none): why the train brakes and what to do.</summary>
+    public DisplayValue Banner { get; init; } = new DisplayValue(string.Empty, DisplayTone.Muted);
+
+    public bool HasBanner => Banner.Text.Length > 0;
+
+    /// <summary>Recently rejected E-brake reset (shown for a few seconds next to the button); empty otherwise.</summary>
+    public string EmergencyResetRejection { get; init; } = string.Empty;
+
+    /// <summary>Recently rejected "Reset failures" (shown for a few seconds next to the button); empty otherwise.</summary>
+    public string FailureResetRejection { get; init; } = string.Empty;
 
     /// <summary>Which constraint set the effective target (computed by the controller).</summary>
     public DisplayValue TargetLimitedBy { get; init; } = DisplayValue.Missing;
@@ -199,9 +264,11 @@ public static class TrainControllerPresenter
             ControllerSource = ControllerSourceText(slot.ControllerType),
             IsHardware = isHardware,
             HardwareLink = isHardware ? HardwareLinkText(hardwareState) : new DisplayValue("Not applicable", DisplayTone.Muted),
-            DriverRequestedSpeed = driver.Mode == OperatingMode.Manual
-                ? new DisplayValue(DisplayUnits.Speed(driver.RequestedSpeedMetersPerSecond))
-                : new DisplayValue("Automatic", DisplayTone.Muted),
+            DriverRequestedSpeed = driver.Mode != OperatingMode.Manual
+                ? new DisplayValue("Automatic", DisplayTone.Muted)
+                : driver.RequestedSpeedMetersPerSecond is double requested
+                    ? new DisplayValue(DisplayUnits.Speed(requested))
+                    : new DisplayValue("Following commanded speed", DisplayTone.Muted),
             PendingAnnouncement = slot.Driver.AnnouncementPending.Length > 0
                 ? $"Queued for next tick: \"{slot.Driver.AnnouncementPending}\""
                 : string.Empty,
@@ -232,10 +299,37 @@ public static class TrainControllerPresenter
         {
             TrainState = trainState,
             ActualSpeed = new DisplayValue(DisplayUnits.Speed(model.ActualSpeedMetersPerSecond)),
-            AuthorizedSpeed = model.TrackSignalValid
-                ? new DisplayValue(DisplayUnits.Speed(model.AuthorizedSpeedMetersPerSecond))
-                : new DisplayValue("Signal lost", DisplayTone.Danger),
-            EffectiveTargetSpeed = new DisplayValue(DisplayUnits.Speed(display.EffectiveTargetSpeedMetersPerSecond)),
+            CommandedSpeed = new DisplayValue(DisplayUnits.Speed(model.CommandedSpeedMetersPerSecond),
+                model.TrackSignalValid ? DisplayTone.Neutral : DisplayTone.Danger),
+            CommandedSpeedNote = model.TrackSignalValid ? string.Empty : "Not trusted: track signal invalid",
+            SetpointSpeed = new DisplayValue(DisplayUnits.Speed(display.SetpointSpeedMetersPerSecond)),
+            TrafficLight = TrafficLightText(display.TrafficLight),
+            TrackSignal = model.TrackSignalValid
+                ? new DisplayValue("Valid", DisplayTone.Good)
+                : new DisplayValue("INVALID", DisplayTone.Danger),
+            SignalPickupFailure = FailureFlag(display.Failures, ControllerFailure.SignalPickup),
+            BrakeFailure = FailureFlag(display.Failures, ControllerFailure.Brake),
+            EngineFailure = FailureFlag(display.Failures, ControllerFailure.Engine),
+            HardwareLinkFailure = isHardware
+                ? FailureFlag(display.Failures, ControllerFailure.HardwareLink)
+                : new DisplayValue("Not applicable", DisplayTone.Muted),
+            FailureReset = FailureResetText(display),
+            AnyFailure = display.Failures != ControllerFailure.None,
+            TrafficLightState = display.TrafficLight,
+            TrackSignalValid = model.TrackSignalValid,
+            SignalPickupFailed = display.Failures.HasFlag(ControllerFailure.SignalPickup),
+            BrakeFailed = display.Failures.HasFlag(ControllerFailure.Brake),
+            EngineFailed = display.Failures.HasFlag(ControllerFailure.Engine),
+            HardwareLinkFailed = display.Failures.HasFlag(ControllerFailure.HardwareLink),
+            ServiceBrakeOn = commands.ServiceBrakeCommand,
+            EmergencyBrakeOn = commands.EmergencyBrakeCommand,
+            LeftDoorsOpenActual = model.LeftDoorsOpen,
+            RightDoorsOpenActual = model.RightDoorsOpen,
+            ExteriorLightsOnActual = model.ExteriorLightsOn,
+            CabinActualText = $"Actual {DisplayUnits.Temperature(model.CabinTemperatureCelsius)}",
+            Banner = BannerText(output, model),
+            EmergencyResetRejection = RecentRejection(slot.LastEmergencyResetRejection, output.TickId, "E-brake reset rejected"),
+            FailureResetRejection = RecentRejection(slot.LastFailureResetRejection, output.TickId, "Reset failures rejected"),
             TargetLimitedBy = TargetConstraintText(display.TargetLimitedBy),
             RemainingAuthority = new DisplayValue(DisplayUnits.Distance(display.RemainingAuthorityMeters),
                 display.AuthorityProtectionActive ? DisplayTone.Warning : DisplayTone.Neutral),
@@ -245,11 +339,7 @@ public static class TrainControllerPresenter
             EmergencyCauses = display.EmergencyBrakeCauses == EmergencyBrakeCause.None
                 ? new DisplayValue("None", DisplayTone.Muted)
                 : new DisplayValue(EmergencyCausesText(display.EmergencyBrakeCauses), DisplayTone.Danger),
-            EmergencyReset = !display.EmergencyBrakeLatched
-                ? new DisplayValue("Not needed", DisplayTone.Muted)
-                : display.EmergencyBrakeResetBlockedReason.Length > 0
-                    ? new DisplayValue($"Blocked: {display.EmergencyBrakeResetBlockedReason}", DisplayTone.Danger)
-                    : new DisplayValue("Available (press E-brake reset)", DisplayTone.Warning),
+            EmergencyReset = EmergencyResetText(display),
             PowerStatus = PowerStatusText(display.TractionState),
             NextStation = string.IsNullOrEmpty(display.NextStationName)
                 ? DisplayValue.Missing
@@ -282,7 +372,7 @@ public static class TrainControllerPresenter
                 StationName: display.NextStationName,
                 AuthorityEndFeet: DisplayUnits.ToFeet(display.RemainingAuthorityMeters),
                 BrakePointFeet: display.DistanceToStationBrakePointMeters is double b ? DisplayUnits.ToFeet(Math.Max(0.0, b)) : null,
-                BrakingDue: display.StationBrakingAdvised || display.StationBrakingActive,
+                BrakingDue: display.StationBrakingActive,
                 AuthorityBrakePointFeet: display.DistanceToAuthorityBrakePointMeters is double ab ? DisplayUnits.ToFeet(Math.Max(0.0, ab)) : null,
                 AuthorityBrakingDue: display.AuthorityProtectionActive),
         };
@@ -308,7 +398,9 @@ public static class TrainControllerPresenter
                 ? new DisplayValue("Service", DisplayTone.Warning)
                 : new DisplayValue("Released", DisplayTone.Muted);
 
-        var statusText = output.IsFailSafe
+        var statusText = output.Display.Failures != ControllerFailure.None
+            ? new DisplayValue(FailuresText(output.Display.Failures), DisplayTone.Danger)
+            : output.IsFailSafe
             ? new DisplayValue("Fail-safe", DisplayTone.Danger)
             : output.Display.Alerts.Count > 0
                 ? new DisplayValue(output.Display.Alerts[0], DisplayTone.Warning)
@@ -386,12 +478,12 @@ public static class TrainControllerPresenter
             warnings.Add($"Actual speed is above the nominal vehicle maximum ({maxMph}).");
         }
 
-        if (input.AuthorizedSpeedMetersPerSecond > vehicle.MaxSpeedMetersPerSecond)
+        if (input.CommandedSpeedMetersPerSecond > vehicle.MaxSpeedMetersPerSecond)
         {
-            warnings.Add($"Authorized speed is above the nominal vehicle maximum ({maxMph}).");
+            warnings.Add($"Commanded speed is above the nominal vehicle maximum ({maxMph}).");
         }
 
-        if (input.ActualSpeedMetersPerSecond < 0.0 || input.AuthorizedSpeedMetersPerSecond < 0.0
+        if (input.ActualSpeedMetersPerSecond < 0.0 || input.CommandedSpeedMetersPerSecond < 0.0
             || input.RemainingAuthorityMeters < 0.0
             || (input.Beacon.IsValid && input.Beacon.DistanceToStationMeters < 0.0))
         {
@@ -400,7 +492,7 @@ public static class TrainControllerPresenter
 
         if (!input.TrackSignalValid)
         {
-            warnings.Add("Track signal invalid: the controller will brake.");
+            warnings.Add("Track signal invalid: the controller brakes now; after 0.5 s a Signal Pickup Failure latches.");
         }
 
         if (input.PassengerEmergencyBrakeRequested)
@@ -414,13 +506,14 @@ public static class TrainControllerPresenter
     public static DisplayValue TargetConstraintText(TargetSpeedConstraint constraint) => constraint switch
     {
         TargetSpeedConstraint.DriverRequest => new DisplayValue("Driver request"),
-        TargetSpeedConstraint.AuthorizedSpeed => new DisplayValue("Authorized speed"),
+        TargetSpeedConstraint.CommandedSpeed => new DisplayValue("Commanded speed"),
         TargetSpeedConstraint.VehicleMaximum => new DisplayValue("Vehicle maximum"),
         TargetSpeedConstraint.RemainingAuthority => new DisplayValue("Remaining authority", DisplayTone.Warning),
         TargetSpeedConstraint.StationStop => new DisplayValue("Station stop", DisplayTone.Info),
         TargetSpeedConstraint.TrackSignalLoss => new DisplayValue("Track signal lost", DisplayTone.Danger),
         TargetSpeedConstraint.EmergencyBrake => new DisplayValue("Emergency brake", DisplayTone.Danger),
         TargetSpeedConstraint.DriverServiceBrake => new DisplayValue("Driver service brake", DisplayTone.Warning),
+        TargetSpeedConstraint.Failure => new DisplayValue("Failure", DisplayTone.Danger),
         _ => DisplayValue.Missing,
     };
 
@@ -447,7 +540,7 @@ public static class TrainControllerPresenter
         if (causes.HasFlag(EmergencyBrakeCause.Driver)) parts.Add("Driver");
         if (causes.HasFlag(EmergencyBrakeCause.Passenger)) parts.Add("Passenger request");
         if (causes.HasFlag(EmergencyBrakeCause.AuthorityViolation)) parts.Add("Cannot stop within authority");
-        if (causes.HasFlag(EmergencyBrakeCause.TrackSignalLoss)) parts.Add("Track signal lost");
+        if (causes.HasFlag(EmergencyBrakeCause.BrakeFailure)) parts.Add("Brake failure");
         if (causes.HasFlag(EmergencyBrakeCause.HardwareCommunication)) parts.Add("Hardware link failure");
         if (causes.HasFlag(EmergencyBrakeCause.InvalidInput)) parts.Add("Invalid input");
         if (causes.HasFlag(EmergencyBrakeCause.ControllerFault)) parts.Add("Controller fault");
@@ -474,11 +567,6 @@ public static class TrainControllerPresenter
             return new DisplayValue("Automatic station braking", DisplayTone.Info);
         }
 
-        if (display.StationBrakingAdvised)
-        {
-            return new DisplayValue("BRAKE NOW for station", DisplayTone.Warning);
-        }
-
         if (display.DistanceToNextStationMeters is null)
         {
             return display.StationEvent switch
@@ -490,6 +578,132 @@ public static class TrainControllerPresenter
         }
 
         return new DisplayValue("Approaching", DisplayTone.Neutral);
+    }
+
+    /// <summary>How long a rejected reset stays visible: 40 ticks (4 s of simulation time at dt = 0.1 s).</summary>
+    public const long RejectionDisplayTicks = 40;
+
+    private static string RecentRejection((string Text, long Tick) rejection, long currentTick, string prefix) =>
+        rejection.Tick > 0 && currentTick - rejection.Tick <= RejectionDisplayTicks
+            ? (rejection.Text.Length > 0 ? $"{prefix}: {rejection.Text}." : $"{prefix}.")
+            : string.Empty;
+
+    /// <summary>
+    /// Priority: fail-safe &gt; emergency brake &gt; latched failure &gt; track signal lost &gt; authority
+    /// protection &gt; overspeed &gt; doors open. One-tick events are not shown here.
+    /// </summary>
+    public static DisplayValue BannerText(TrainControllerOutput output, TrainModelInput model)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(model);
+        var d = output.Display;
+
+        if (output.IsFailSafe)
+        {
+            return new DisplayValue($"FAIL-SAFE: {d.FaultReason}", DisplayTone.Danger);
+        }
+
+        if (d.EmergencyBrakeLatched)
+        {
+            var next = (d.EmergencyBrakeCauses & (EmergencyBrakeCause.Driver | EmergencyBrakeCause.Passenger)) != 0
+                ? "Press E-brake reset when stopped."
+                : d.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.BrakeFailure)
+                    ? "Press Reset failures once stopped."
+                    : "Releases automatically once stopped.";
+            return new DisplayValue($"EMERGENCY BRAKE ({EmergencyCausesText(d.EmergencyBrakeCauses)}). {next}", DisplayTone.Danger);
+        }
+
+        if (d.Failures != ControllerFailure.None)
+        {
+            return new DisplayValue($"{FailuresText(d.Failures)}: train held. Press Reset failures when the condition is cleared.", DisplayTone.Danger);
+        }
+
+        if (d.TrackSignalLost)
+        {
+            return new DisplayValue("Track signal lost: stopping with the service brake.", DisplayTone.Danger);
+        }
+
+        if (d.AuthorityProtectionActive)
+        {
+            return new DisplayValue("Authority protection: braking to stay within the authority.", DisplayTone.Warning);
+        }
+
+        if (d.OverspeedProtectionActive)
+        {
+            return new DisplayValue("Overspeed: service brake applied.", DisplayTone.Warning);
+        }
+
+        if (model.LeftDoorsOpen || model.RightDoorsOpen)
+        {
+            return new DisplayValue("Doors open: traction inhibited.", DisplayTone.Info);
+        }
+
+        return new DisplayValue(string.Empty, DisplayTone.Muted);
+    }
+
+    public static DisplayValue TrafficLightText(SignalState light) => light switch
+    {
+        SignalState.Red => new DisplayValue("RED", DisplayTone.Danger),
+        SignalState.Yellow => new DisplayValue("YELLOW", DisplayTone.Warning),
+        SignalState.Green => new DisplayValue("GREEN", DisplayTone.Good),
+        _ => new DisplayValue("Unknown", DisplayTone.Muted),
+    };
+
+    public static string FailuresText(ControllerFailure failures)
+    {
+        var parts = new List<string>();
+        if (failures.HasFlag(ControllerFailure.SignalPickup)) parts.Add("SIGNAL PICKUP FAILURE");
+        if (failures.HasFlag(ControllerFailure.Brake)) parts.Add("BRAKE FAILURE");
+        if (failures.HasFlag(ControllerFailure.Engine)) parts.Add("ENGINE FAILURE");
+        if (failures.HasFlag(ControllerFailure.HardwareLink)) parts.Add("HARDWARE LINK FAILURE");
+        return parts.Count == 0 ? "None" : string.Join(", ", parts);
+    }
+
+    private static DisplayValue FailureFlag(ControllerFailure failures, ControllerFailure flag) =>
+        (failures & flag) != 0
+            ? new DisplayValue("FAILURE", DisplayTone.Danger)
+            : new DisplayValue("OK", DisplayTone.Good);
+
+    private static DisplayValue FailureResetText(DriverDisplayState display)
+    {
+        if (display.Failures == ControllerFailure.None)
+        {
+            return new DisplayValue("Not needed", DisplayTone.Muted);
+        }
+
+        if (display.Failures.HasFlag(ControllerFailure.HardwareLink))
+        {
+            return new DisplayValue("Restore the Pi link, then press Reset failures", DisplayTone.Danger);
+        }
+
+        return display.FailureResetBlockedReason.Length > 0
+            ? new DisplayValue($"Blocked: {display.FailureResetBlockedReason}", DisplayTone.Danger)
+            : new DisplayValue("Available (press Reset failures)", DisplayTone.Warning);
+    }
+
+    private static DisplayValue EmergencyResetText(DriverDisplayState display)
+    {
+        if (!display.EmergencyBrakeLatched)
+        {
+            return new DisplayValue("Not needed", DisplayTone.Muted);
+        }
+
+        var pressCauses = display.EmergencyBrakeCauses & (EmergencyBrakeCause.Driver | EmergencyBrakeCause.Passenger);
+        if (pressCauses != EmergencyBrakeCause.None)
+        {
+            return display.EmergencyBrakeResetBlockedReason.Length > 0
+                ? new DisplayValue($"Blocked: {display.EmergencyBrakeResetBlockedReason}", DisplayTone.Danger)
+                : new DisplayValue("Available (press E-brake reset)", DisplayTone.Warning);
+        }
+
+        if ((display.EmergencyBrakeCauses & (EmergencyBrakeCause.BrakeFailure | EmergencyBrakeCause.HardwareCommunication)) != 0)
+        {
+            return new DisplayValue("Not used: press Reset failures", DisplayTone.Muted);
+        }
+
+        return display.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.AuthorityViolation)
+            ? new DisplayValue("Not used: releases automatically once stopped", DisplayTone.Muted)
+            : new DisplayValue("Not used", DisplayTone.Muted);
     }
 
     private static DisplayValue OnOff(bool on, DisplayTone onTone) =>

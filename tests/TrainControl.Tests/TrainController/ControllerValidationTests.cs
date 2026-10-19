@@ -105,7 +105,7 @@ public class ControllerValidationTests
             TrainId = "TRAIN-002",
             IsActive = true,
             ActualSpeedMetersPerSecond = 1.5,
-            AuthorizedSpeedMetersPerSecond = 12.5,
+            CommandedSpeedMetersPerSecond = 12.5,
             RemainingAuthorityMeters = 400.0,
             TrackSignalValid = true,
             BeaconValid = true,
@@ -123,7 +123,7 @@ public class ControllerValidationTests
 
         Assert.IsTrue(input.IsActive);
         Assert.AreEqual(1.5, input.ActualSpeedMetersPerSecond);
-        Assert.AreEqual(12.5, input.AuthorizedSpeedMetersPerSecond);
+        Assert.AreEqual(12.5, input.CommandedSpeedMetersPerSecond);
         Assert.AreEqual(400.0, input.RemainingAuthorityMeters);
         Assert.IsTrue(input.AuthorityUpdateReceived);
         Assert.IsTrue(input.TrackSignalValid);

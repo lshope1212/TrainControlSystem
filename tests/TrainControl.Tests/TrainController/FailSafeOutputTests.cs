@@ -31,6 +31,20 @@ public class FailSafeOutputTests
         FailSafeOutput.Create("TRAIN-004", 10, EmergencyBrakeCause.HardwareCommunication, "Pi timeout", model, Policy, previous);
 
     [TestMethod]
+    public void FailSafe_ForHardwareCommunication_MarksHardwareLinkFailure_OtherCausesKeepPreviousFailures()
+    {
+        var link = Create(new TrainModelInput(), PreviousWithDoorsCommandedOpen());
+        Assert.AreEqual(ControllerFailure.HardwareLink, link.Display.Failures);
+
+        var previous = PreviousWithDoorsCommandedOpen() with
+        {
+            Display = new DriverDisplayState { Failures = ControllerFailure.Engine },
+        };
+        var invalid = FailSafeOutput.Create("TRAIN-004", 10, EmergencyBrakeCause.InvalidInput, "bad", null, Policy, previous);
+        Assert.AreEqual(ControllerFailure.Engine, invalid.Display.Failures);
+    }
+
+    [TestMethod]
     public void FailSafe_IsZeroPowerAndEmergencyBrake_AndPassesValidation()
     {
         var failSafe = Create(new TrainModelInput { ActualSpeedMetersPerSecond = 15.0 }, PreviousWithDoorsCommandedOpen());

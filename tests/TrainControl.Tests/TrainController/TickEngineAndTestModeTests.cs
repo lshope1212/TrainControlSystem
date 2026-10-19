@@ -2,6 +2,7 @@ using TrainControl.Contracts.Messages;
 using TrainController.Abstractions.Outputs;
 using TrainController.Integration;
 using TrainController.Integration.Backends;
+using TrainController.Integration.Presentation;
 
 namespace TrainControl.Tests.TrainController;
 
@@ -13,7 +14,7 @@ public class TickEngineAndTestModeTests
         TrainId = trainId,
         IsActive = true,
         TrackSignalValid = true,
-        AuthorizedSpeedMetersPerSecond = 10.0,
+        CommandedSpeedMetersPerSecond = 10.0,
         RemainingAuthorityMeters = 10_000.0,
         CabinTemperatureCelsius = 21.0,
     };
@@ -160,7 +161,7 @@ public class TickEngineAndTestModeTests
         {
             var model = subsystem.Registry.Get(id).TestModel;
             model.IsActive = true;
-            model.AuthorizedSpeedMetersPerSecond = 10.0;
+            model.CommandedSpeedMetersPerSecond = 10.0;
             model.RemainingAuthorityMeters = 10_000.0;
         }
 
@@ -199,7 +200,7 @@ public class TickEngineAndTestModeTests
         var slot = subsystem.Registry.Get("TRAIN-001");
         slot.TestModel.IsActive = true;
         slot.TestModel.ActualSpeedMetersPerSecond = 5.0;
-        slot.TestModel.AuthorizedSpeedMetersPerSecond = 10.0;
+        slot.TestModel.CommandedSpeedMetersPerSecond = 10.0;
         slot.TestModel.RemainingAuthorityMeters = 5_000.0;
 
         // Passenger emergency, then the request is cleared and the WHOLE simulation is reset.
@@ -231,7 +232,7 @@ public class TickEngineAndTestModeTests
         var slot = subsystem.Registry.Get("TRAIN-001");
         slot.TestModel.IsActive = true;
         slot.TestModel.ActualSpeedMetersPerSecond = 13.4112;      // 30 mph
-        slot.TestModel.AuthorizedSpeedMetersPerSecond = 13.4112;
+        slot.TestModel.CommandedSpeedMetersPerSecond = 13.4112;
         slot.TestModel.RemainingAuthorityMeters = 30.48;           // 100 ft < ~108 ft emergency stopping distance
 
         await subsystem.Simulation.StepAsync();
@@ -241,6 +242,10 @@ public class TickEngineAndTestModeTests
         var display = slot.LastOutput!.Display;
         Assert.IsTrue(slot.LastOutput.Commands.EmergencyBrakeCommand);
         Assert.IsTrue(display.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.AuthorityViolation));
-        StringAssert.Contains(display.EmergencyBrakeResetBlockedReason, "authority");
+        // Authority emergency brake is a protection action: not released by the E-brake reset
+        // (so no E-brake-reset blocker), but released automatically once the train has stopped.
+        Assert.AreEqual(string.Empty, display.EmergencyBrakeResetBlockedReason);
+        Assert.IsTrue(display.Alerts.Any(a => a.Contains("Authority overrun risk")), "The alert says why.");
+        StringAssert.Contains(TrainControllerPresenter.BuildMain(slot, null).EmergencyReset.Text, "releases automatically once stopped");
     }
 }

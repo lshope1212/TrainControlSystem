@@ -27,7 +27,8 @@ public class SoftwareHardwareEquivalenceTests
     private delegate (TrainModelInput Model, DriverInput Driver) TickBuilder(int tick, double speed, bool leftOpen, bool rightOpen);
 
     /// <summary>Runs one scenario on both controllers; returns the Software outputs for scenario-specific asserts.</summary>
-    private static List<TrainControllerOutput> RunBoth(string scenario, int ticks, TickBuilder build, ControllerPolicy? policy = null)
+    private static List<TrainControllerOutput> RunBoth(string scenario, int ticks, TickBuilder build, ControllerPolicy? policy = null,
+        Func<int, bool>? serviceBrakeWorks = null, Func<int, bool>? engineWorks = null)
     {
         var software = new SoftwareTrainController("TRAIN-002");
         var hardware = new HardwareTrainController("TRAIN-002");
@@ -47,9 +48,10 @@ public class SoftwareHardwareEquivalenceTests
 
             // Test-only kinematics.
             var c = sw.Commands;
+            // (A failed service brake / engine simply has no effect: used to provoke failure detection.)
             var acceleration = c.EmergencyBrakeCommand ? -2.73
-                : c.ServiceBrakeCommand ? -1.2
-                : c.PowerCommandWatts > 0.0 ? 0.5 * Math.Min(1.0, c.PowerCommandWatts / 480_000.0)
+                : c.ServiceBrakeCommand ? (serviceBrakeWorks?.Invoke(tick) ?? true ? -1.2 : 0.0)
+                : c.PowerCommandWatts > 0.0 ? (engineWorks?.Invoke(tick) ?? true ? 0.5 * Math.Min(1.0, c.PowerCommandWatts / 480_000.0) : 0.0)
                 : 0.0;
             speed = Math.Max(0.0, speed + acceleration * Dt);
             left = c.LeftDoorsOpenCommand;
@@ -61,7 +63,7 @@ public class SoftwareHardwareEquivalenceTests
 
     private static TrainModelInput Moving(double speed, double authorized, double authority, bool leftOpen, bool rightOpen,
         BeaconData? beacon = null, bool authorityUpdate = false, bool passenger = false, bool signal = true) =>
-        Model(speed: speed, authorized: authorized, authority: authority, passengerEmergency: passenger,
+        Model(speed: speed, commanded: authorized, authority: authority, passengerEmergency: passenger,
             leftOpen: leftOpen, rightOpen: rightOpen, signalValid: signal, beacon: beacon) with { AuthorityUpdateReceived = authorityUpdate };
 
     [TestMethod]
@@ -79,15 +81,26 @@ public class SoftwareHardwareEquivalenceTests
     }
 
     [TestMethod]
-    public void Manual_PassThroughStation_ThenAuthorityStop()
+    public void Manual_StationStopIsAutomatic()
     {
-        var outputs = RunBoth("manual", 900, (tick, v, l, r) => (
+        var outputs = RunBoth("manual", 1_500, (tick, v, l, r) => (
             Moving(v, 20.0, 700.0, l, r, beacon: tick == 1 ? Beacon(300.0, "EDGEBROOK", PlatformSide.Right) : null),
             Manual(requested: 15.0)));
 
-        Assert.IsTrue(outputs.Any(o => o.Display.StationBrakingAdvised));
-        Assert.IsTrue(outputs.Any(o => o.Display.StationEvent == StationEvent.PassedWithoutStopping));
-        Assert.IsTrue(outputs.Any(o => o.Display.AuthorityProtectionActive), "Scenario reached the end of authority.");
+        Assert.IsTrue(outputs.Any(o => o.Display.StationBrakingActive), "Manual mode: the controller brakes for the station.");
+        Assert.IsTrue(outputs.Any(o => o.Display.StationEvent == StationEvent.Arrived));
+        Assert.IsTrue(outputs.Any(o => o.Commands.RightDoorsOpenCommand), "Doors opened automatically on the platform side.");
+    }
+
+    [TestMethod]
+    public void Manual_NoDriverRequest_FollowsCommandedSpeed()
+    {
+        var outputs = RunBoth("manual follow", 50, (tick, v, l, r) => (
+            Moving(v, 12.0, 10_000.0, l, r),
+            Manual(requested: null)));
+
+        Assert.AreEqual(12.0, outputs[49].Display.SetpointSpeedMetersPerSecond, 1e-9);
+        Assert.AreEqual(TargetSpeedConstraint.CommandedSpeed, outputs[49].Display.TargetLimitedBy);
     }
 
     [TestMethod]
@@ -106,15 +119,36 @@ public class SoftwareHardwareEquivalenceTests
     }
 
     [TestMethod]
-    public void TrackSignalLoss_BothPolicies()
+    public void TrackSignalLoss_LatchesSignalPickupFailure_ResetAfterSignalReturns()
     {
-        TickBuilder build = (tick, v, l, r) => (
+        var outputs = RunBoth("signal pickup", 200, (tick, v, l, r) => (
             Moving(v, 15.0, 10_000.0, l, r, signal: tick is < 50 or > 100),
-            Automatic() with { EmergencyBrakeResetRequested = tick == 130 });
+            Automatic() with { ResetFailuresRequested = tick is 80 or 130 }));
 
-        RunBoth("signal/service", 200, build);
-        var outputs = RunBoth("signal/emergency", 200, build, ControllerPolicy.Default with { TrackSignalLossResponse = TrackSignalLossResponse.EmergencyBrake });
-        Assert.IsTrue(outputs.Any(o => o.Display.EmergencyBrakeCauses.HasFlag(EmergencyBrakeCause.TrackSignalLoss)));
+        Assert.IsFalse(outputs[52].Display.Failures.HasFlag(ControllerFailure.SignalPickup), "4 invalid ticks: not yet latched.");
+        Assert.IsTrue(outputs[53].Display.Failures.HasFlag(ControllerFailure.SignalPickup), "5 invalid ticks (0.5 s): latched.");
+        Assert.IsTrue(outputs[79].Display.FailureResetRejected, "Reset rejected while the signal is still invalid.");
+        Assert.IsTrue(outputs[110].Display.Failures.HasFlag(ControllerFailure.SignalPickup), "Signal back alone does not clear it.");
+        Assert.IsTrue(outputs[110].Commands.ServiceBrakeCommand);
+        Assert.AreEqual(ControllerFailure.None, outputs[129].Display.Failures, "Reset with a valid signal clears it.");
+    }
+
+    [TestMethod]
+    public void EngineFailure_ThenFailedServiceBrake_EscalatesToEmergency_ResetWhenStopped()
+    {
+        var outputs = RunBoth("engine+brake failure", 400,
+            (tick, v, l, r) => (Moving(v, 15.0, 10_000.0, l, r), Automatic() with { ResetFailuresRequested = tick == 350 }),
+            serviceBrakeWorks: tick => tick < 100,
+            engineWorks: tick => tick < 100);
+
+        var engineTick = outputs.FindIndex(o => o.Display.Failures.HasFlag(ControllerFailure.Engine));
+        var brakeTick = outputs.FindIndex(o => o.Display.Failures.HasFlag(ControllerFailure.Brake));
+        NumericAssert.GreaterThan(engineTick, 99.0, "Engine failure detected after the engine stops working.");
+        Assert.IsTrue(outputs[engineTick].Commands.ServiceBrakeCommand, "Engine failure → service brake.");
+        Assert.AreEqual(0.0, outputs[engineTick].Commands.PowerCommandWatts);
+        NumericAssert.GreaterThan(brakeTick, engineTick, "Service brake ineffective → brake failure afterwards.");
+        Assert.IsTrue(outputs[brakeTick].Commands.EmergencyBrakeCommand, "Brake failure → emergency brake.");
+        Assert.AreEqual(ControllerFailure.None, outputs[349].Display.Failures, "Reset once stopped clears both.");
     }
 
     [TestMethod]
@@ -199,7 +233,7 @@ public class SoftwareHardwareEquivalenceTests
 
         var x = sw.Display;
         var y = hw.Display;
-        Assert.AreEqual(x.EffectiveTargetSpeedMetersPerSecond, y.EffectiveTargetSpeedMetersPerSecond, Tolerance, $"{context}: target");
+        Assert.AreEqual(x.SetpointSpeedMetersPerSecond, y.SetpointSpeedMetersPerSecond, Tolerance, $"{context}: target");
         Assert.AreEqual(x.TargetLimitedBy, y.TargetLimitedBy, $"{context}: limited by");
         Assert.AreEqual(x.RemainingAuthorityMeters, y.RemainingAuthorityMeters, Tolerance, $"{context}: authority");
         AssertNullableClose(x.DistanceToNextStationMeters, y.DistanceToNextStationMeters, $"{context}: station distance");
@@ -208,7 +242,6 @@ public class SoftwareHardwareEquivalenceTests
         Assert.AreEqual(x.ServiceBrakeStoppingDistanceMeters, y.ServiceBrakeStoppingDistanceMeters, Tolerance, $"{context}: stopping distance");
         Assert.AreEqual(x.NextStationName, y.NextStationName, $"{context}: station name");
         Assert.AreEqual(x.PlatformSide, y.PlatformSide, $"{context}: platform side");
-        Assert.AreEqual(x.StationBrakingAdvised, y.StationBrakingAdvised, $"{context}: advised");
         Assert.AreEqual(x.StationBrakingActive, y.StationBrakingActive, $"{context}: station braking");
         Assert.AreEqual(x.AtStation, y.AtStation, $"{context}: at station");
         Assert.AreEqual(x.StationEvent, y.StationEvent, $"{context}: station event");
@@ -223,6 +256,12 @@ public class SoftwareHardwareEquivalenceTests
         Assert.AreEqual(x.BeaconRecalibrated, y.BeaconRecalibrated, $"{context}: beacon");
         Assert.AreEqual(x.AuthorityRecalibrated, y.AuthorityRecalibrated, $"{context}: authority update");
         Assert.AreEqual(x.TrackSignalLost, y.TrackSignalLost, $"{context}: signal");
+        Assert.AreEqual(x.CommandedSpeedMetersPerSecond, y.CommandedSpeedMetersPerSecond, Tolerance, $"{context}: commanded speed");
+        Assert.AreEqual(x.TrafficLight, y.TrafficLight, $"{context}: traffic light");
+        Assert.AreEqual(x.Failures, y.Failures, $"{context}: failures");
+        Assert.AreEqual(x.FailureResetRejected, y.FailureResetRejected, $"{context}: failure reset rejected");
+        Assert.AreEqual(x.FailureResetRejectedReason, y.FailureResetRejectedReason, $"{context}: failure reset reason");
+        Assert.AreEqual(x.FailureResetBlockedReason, y.FailureResetBlockedReason, $"{context}: failure reset blocker");
     }
 
     private static void AssertNullableClose(double? expected, double? actual, string message)

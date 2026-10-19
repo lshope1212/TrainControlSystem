@@ -23,6 +23,10 @@ public sealed class TrainRuntimeSlot
     private TrainModelInput? _lastModelInput;
     private string _lastAnnouncement = string.Empty;
     private long _lastAnnouncementTick;
+    private string _lastEmergencyResetRejection = string.Empty;
+    private long _lastEmergencyResetRejectionTick;
+    private string _lastFailureResetRejection = string.Empty;
+    private long _lastFailureResetRejectionTick;
 
     internal TrainRuntimeSlot(string trainId, ControllerStartupDefaults defaults)
     {
@@ -79,6 +83,18 @@ public sealed class TrainRuntimeSlot
         get { lock (_gate) { return _lastAnnouncementTick; } }
     }
 
+    /// <summary>Last rejected E-brake reset (one-tick event kept for display) and its tick.</summary>
+    public (string Text, long Tick) LastEmergencyResetRejection
+    {
+        get { lock (_gate) { return (_lastEmergencyResetRejection, _lastEmergencyResetRejectionTick); } }
+    }
+
+    /// <summary>Last rejected "Reset failures" (one-tick event kept for display) and its tick.</summary>
+    public (string Text, long Tick) LastFailureResetRejection
+    {
+        get { lock (_gate) { return (_lastFailureResetRejection, _lastFailureResetRejectionTick); } }
+    }
+
     /// <exception cref="ArgumentOutOfRangeException">A gain is negative, NaN or infinite; settings unchanged.</exception>
     public void SetEngineerSettings(double kp, double ki)
     {
@@ -112,6 +128,18 @@ public sealed class TrainRuntimeSlot
                 _lastAnnouncement = output.Commands.StationAnnouncement;
                 _lastAnnouncementTick = output.TickId;
             }
+
+            if (output.Display.EmergencyBrakeResetRejected)
+            {
+                _lastEmergencyResetRejection = output.Display.EmergencyBrakeResetBlockedReason;
+                _lastEmergencyResetRejectionTick = output.TickId;
+            }
+
+            if (output.Display.FailureResetRejected)
+            {
+                _lastFailureResetRejection = output.Display.FailureResetRejectedReason;
+                _lastFailureResetRejectionTick = output.TickId;
+            }
         }
 
         OutputChanged?.Invoke(this, EventArgs.Empty);
@@ -129,6 +157,10 @@ public sealed class TrainRuntimeSlot
             _lastModelInput = null;
             _lastAnnouncement = string.Empty;
             _lastAnnouncementTick = 0;
+            _lastEmergencyResetRejection = string.Empty;
+            _lastEmergencyResetRejectionTick = 0;
+            _lastFailureResetRejection = string.Empty;
+            _lastFailureResetRejectionTick = 0;
         }
 
         Driver.ClearPendingPresses();

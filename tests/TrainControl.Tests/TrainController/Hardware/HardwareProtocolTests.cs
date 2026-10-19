@@ -75,7 +75,7 @@ public class HardwareProtocolTests
     [TestMethod]
     public void Protocol_RoundTripsCompleteSiInput_WithEnumsAsText()
     {
-        var input = Input(Model(speed: 7.5, authorized: 12.0, authority: 345.6, passengerEmergency: true, beacon: Beacon(250.0, "WHITED", TrainControl.Contracts.Enums.PlatformSide.Both)),
+        var input = Input(Model(speed: 7.5, commanded: 12.0, authority: 345.6, passengerEmergency: true, beacon: Beacon(250.0, "WHITED", TrainControl.Contracts.Enums.PlatformSide.Both)),
             Automatic(), tick: 42, trainId: "TRAIN-004");
         var envelope = new HardwareEnvelope { Type = HardwareMessageType.ControllerRequest, RequestId = 9, TrainId = "TRAIN-004", TickId = 42, Input = input };
 

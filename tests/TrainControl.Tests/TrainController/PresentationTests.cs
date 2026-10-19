@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Enums;
 using TrainController.Abstractions.Configuration;
 using TrainController.Abstractions.Inputs;
 using TrainController.Abstractions.Outputs;
@@ -73,7 +74,7 @@ public class PresentationTests
     public void MainStatus_ConvertsControllerOutputToImperial()
     {
         var slot = new TrainStateRegistry().Get("TRAIN-001");
-        var model = new TrainModelInput { IsActive = true, TrackSignalValid = true, ActualSpeedMetersPerSecond = 10.0, AuthorizedSpeedMetersPerSecond = 15.0, RemainingAuthorityMeters = 365.76 };
+        var model = new TrainModelInput { IsActive = true, TrackSignalValid = true, ActualSpeedMetersPerSecond = 10.0, CommandedSpeedMetersPerSecond = 15.0, RemainingAuthorityMeters = 365.76 };
         slot.RecordTickResult(model, new TrainControllerOutput
         {
             TrainId = "TRAIN-001",
@@ -86,19 +87,19 @@ public class PresentationTests
                 DistanceToStationBrakePointMeters = -1.0,
                 DistanceToAuthorityBrakePointMeters = 304.8,
                 NextStationName = "PIONEER",
-                StationBrakingAdvised = true,
+                StationBrakingActive = true,
             },
         });
 
         var status = TrainControllerPresenter.BuildMain(slot, null);
 
         Assert.AreEqual("22.4 mph", status.ActualSpeed.Text);
-        Assert.AreEqual("33.6 mph", status.AuthorizedSpeed.Text);
+        Assert.AreEqual("33.6 mph", status.CommandedSpeed.Text);
         Assert.AreEqual("1,200 ft", status.RemainingAuthority.Text);
         Assert.AreEqual("1,000 ft", status.DistanceToStation.Text);
         Assert.AreEqual("160.9 hp", status.CommandedPower.Text);
         Assert.AreEqual("Now", status.BrakePoint.Text);
-        Assert.AreEqual(DisplayTone.Warning, status.StationGuidance.Tone);
+        Assert.AreEqual(DisplayTone.Info, status.StationGuidance.Tone, "Automatic station braking (both modes).");
         Assert.IsTrue(status.Guidance.HasData);
         Assert.AreEqual(1200.0, status.Guidance.AuthorityEndFeet!.Value, 1e-6);
         Assert.AreEqual(1000.0, status.Guidance.StationFeet!.Value, 1e-6);
@@ -106,6 +107,86 @@ public class PresentationTests
         Assert.IsTrue(status.Guidance.BrakingDue);
         Assert.AreEqual(1000.0, status.Guidance.AuthorityBrakePointFeet!.Value, 1e-6);
         Assert.IsFalse(status.Guidance.AuthorityBrakingDue);
+    }
+
+    [TestMethod]
+    public void MainStatus_ShowsFailures_TrafficLight_TrackSignal_AndResetGuidance()
+    {
+        var slot = new TrainStateRegistry().Get("TRAIN-001");
+        var model = new TrainModelInput { IsActive = true, TrackSignalValid = false, ActualSpeedMetersPerSecond = 5.0, CommandedSpeedMetersPerSecond = 15.0, TrafficLight = SignalState.Red };
+        slot.RecordTickResult(model, new TrainControllerOutput
+        {
+            TrainId = "TRAIN-001",
+            TickId = 9,
+            Commands = new TrainModelCommand { ServiceBrakeCommand = true, EmergencyBrakeCommand = true },
+            Display = new DriverDisplayState
+            {
+                TrafficLight = SignalState.Red,
+                Failures = ControllerFailure.SignalPickup | ControllerFailure.Brake,
+                FailureResetBlockedReason = "track signal still invalid; train still moving",
+                EmergencyBrakeLatched = true,
+                EmergencyBrakeCauses = EmergencyBrakeCause.BrakeFailure,
+                TargetLimitedBy = TargetSpeedConstraint.TrackSignalLoss,
+            },
+        });
+
+        var status = TrainControllerPresenter.BuildMain(slot, null);
+
+        Assert.AreEqual("RED", status.TrafficLight.Text);
+        Assert.AreEqual(DisplayTone.Danger, status.TrafficLight.Tone);
+        Assert.AreEqual("INVALID", status.TrackSignal.Text);
+        StringAssert.Contains(status.CommandedSpeedNote, "Not trusted");
+        Assert.AreEqual("FAILURE", status.SignalPickupFailure.Text);
+        Assert.AreEqual("FAILURE", status.BrakeFailure.Text);
+        Assert.AreEqual("OK", status.EngineFailure.Text);
+        Assert.AreEqual("Not applicable", status.HardwareLinkFailure.Text, "Software train.");
+        Assert.IsTrue(status.AnyFailure);
+        StringAssert.Contains(status.FailureReset.Text, "Blocked");
+        StringAssert.Contains(status.EmergencyReset.Text, "Reset failures", "Brake-failure emergency brake is not released by the E-brake reset.");
+        Assert.AreEqual("Brake failure", status.EmergencyCauses.Text);
+    }
+
+    [TestMethod]
+    public void Banner_ShowsTheMostImportantOngoingCondition_AndRejectionsStayForAFewSeconds()
+    {
+        var model = new TrainModelInput { IsActive = true, TrackSignalValid = false, ActualSpeedMetersPerSecond = 5.0 };
+        TrainControllerOutput Output(long tick, DriverDisplayState display) => new TrainControllerOutput { TrainId = "TRAIN-001", TickId = tick, Display = display };
+
+        var none = TrainControllerPresenter.BannerText(Output(1, new DriverDisplayState()), model with { TrackSignalValid = true });
+        Assert.AreEqual(string.Empty, none.Text);
+
+        var signal = TrainControllerPresenter.BannerText(Output(1, new DriverDisplayState { TrackSignalLost = true, AuthorityProtectionActive = true }), model);
+        StringAssert.Contains(signal.Text, "Track signal lost", "Signal loss outranks authority protection.");
+
+        var emergency = TrainControllerPresenter.BannerText(Output(1, new DriverDisplayState
+        {
+            TrackSignalLost = true,
+            Failures = ControllerFailure.Brake,
+            EmergencyBrakeLatched = true,
+            EmergencyBrakeCauses = EmergencyBrakeCause.BrakeFailure,
+        }), model);
+        StringAssert.Contains(emergency.Text, "EMERGENCY BRAKE");
+        StringAssert.Contains(emergency.Text, "Reset failures");
+        Assert.AreEqual(DisplayTone.Danger, emergency.Tone);
+
+        var slot = new TrainStateRegistry().Get("TRAIN-001");
+        slot.RecordTickResult(model, Output(10, new DriverDisplayState { FailureResetRejected = true, FailureResetRejectedReason = "brake failure: train still moving" }));
+        StringAssert.Contains(TrainControllerPresenter.BuildMain(slot, null).FailureResetRejection, "train still moving");
+
+        slot.RecordTickResult(model, Output(10 + TrainControllerPresenter.RejectionDisplayTicks + 1, new DriverDisplayState()));
+        Assert.AreEqual(string.Empty, TrainControllerPresenter.BuildMain(slot, null).FailureResetRejection, "Gone after ~4 s.");
+    }
+
+    [TestMethod]
+    public void MainStatus_ManualWithoutRequest_ShowsFollowingCommandedSpeed()
+    {
+        var slot = new TrainStateRegistry().Get("TRAIN-001");
+        slot.Driver.Mode = OperatingMode.Manual;
+
+        Assert.AreEqual("Following commanded speed", TrainControllerPresenter.BuildMain(slot, null).DriverRequestedSpeed.Text);
+
+        slot.Driver.RequestedSpeedMetersPerSecond = 4.4704;
+        Assert.AreEqual("10.0 mph", TrainControllerPresenter.BuildMain(slot, null).DriverRequestedSpeed.Text);
     }
 
     [TestMethod]
@@ -215,7 +296,7 @@ public class PresentationTests
     [TestMethod]
     public void TargetLimitedBy_IsShownAsText()
     {
-        Assert.AreEqual("Authorized speed", TrainControllerPresenter.TargetConstraintText(TargetSpeedConstraint.AuthorizedSpeed).Text);
+        Assert.AreEqual("Commanded speed", TrainControllerPresenter.TargetConstraintText(TargetSpeedConstraint.CommandedSpeed).Text);
         Assert.AreEqual("Remaining authority", TrainControllerPresenter.TargetConstraintText(TargetSpeedConstraint.RemainingAuthority).Text);
         Assert.AreEqual(DisplayTone.Danger, TrainControllerPresenter.TargetConstraintText(TargetSpeedConstraint.EmergencyBrake).Tone);
         Assert.AreEqual("Driver service brake", TrainControllerPresenter.TargetConstraintText(TargetSpeedConstraint.DriverServiceBrake).Text);

@@ -31,16 +31,16 @@ public class TrainStateRegistryTests
     {
         var registry = new TrainStateRegistry();
 
+        registry.Get("TRAIN-001").Driver.Mode = OperatingMode.Manual;
         registry.Get("TRAIN-001").Driver.RequestedSpeedMetersPerSecond = 10.0;
-        registry.Get("TRAIN-001").Driver.Mode = OperatingMode.Automatic;
         registry.Get("TRAIN-002").Driver.ServiceBrakeRequested = true;
 
         Assert.AreEqual(10.0, registry.Get("TRAIN-001").Driver.RequestedSpeedMetersPerSecond);
-        Assert.AreEqual(OperatingMode.Automatic, registry.Get("TRAIN-001").Driver.Mode);
+        Assert.AreEqual(OperatingMode.Manual, registry.Get("TRAIN-001").Driver.Mode);
         Assert.IsFalse(registry.Get("TRAIN-001").Driver.ServiceBrakeRequested);
 
-        Assert.AreEqual(0.0, registry.Get("TRAIN-002").Driver.RequestedSpeedMetersPerSecond);
-        Assert.AreEqual(OperatingMode.Manual, registry.Get("TRAIN-002").Driver.Mode);
+        Assert.IsNull(registry.Get("TRAIN-002").Driver.RequestedSpeedMetersPerSecond);
+        Assert.AreEqual(OperatingMode.Automatic, registry.Get("TRAIN-002").Driver.Mode, "Default mode: Automatic.");
         Assert.IsTrue(registry.Get("TRAIN-002").Driver.ServiceBrakeRequested);
 
         foreach (var slot in registry.Trains.Skip(2))
@@ -205,7 +205,28 @@ public class TrainStateRegistryTests
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => driver.RequestedSpeedMetersPerSecond = -1.0);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => driver.RequestedSpeedMetersPerSecond = double.NaN);
-        Assert.AreEqual(0.0, driver.RequestedSpeedMetersPerSecond);
+        Assert.IsNull(driver.RequestedSpeedMetersPerSecond);
+    }
+
+    [TestMethod]
+    public void SwitchingToManual_ClearsRequest_ClearAlsoClears_ResetFailuresIsOneShot()
+    {
+        var driver = new TrainStateRegistry().Get("TRAIN-001").Driver;
+
+        driver.Mode = OperatingMode.Manual;
+        driver.RequestedSpeedMetersPerSecond = 6.0;
+        driver.Mode = OperatingMode.Automatic;
+        Assert.AreEqual(6.0, driver.RequestedSpeedMetersPerSecond, "Leaving Manual keeps the value (unused in Automatic).");
+        driver.Mode = OperatingMode.Manual;
+        Assert.IsNull(driver.RequestedSpeedMetersPerSecond, "Entering Manual starts by following the commanded speed.");
+
+        driver.RequestedSpeedMetersPerSecond = 4.0;
+        driver.ClearRequestedSpeed();
+        Assert.IsNull(driver.RequestedSpeedMetersPerSecond);
+
+        driver.PressResetFailures();
+        Assert.IsTrue(driver.TakeForTick().ResetFailuresRequested);
+        Assert.IsFalse(driver.TakeForTick().ResetFailuresRequested, "One-shot.");
     }
 
     [TestMethod]
@@ -248,25 +269,25 @@ public class TrainStateRegistryTests
     }
 
     [TestMethod]
-    public void StartupMode_DefaultsToManual_ProvisionalAndConfigurable()
+    public void StartupMode_DefaultsToAutomatic_AndIsConfigurable()
     {
-        Assert.AreEqual(OperatingMode.Manual, ControllerStartupDefaults.Default.InitialOperatingMode);
+        Assert.AreEqual(OperatingMode.Automatic, ControllerStartupDefaults.Default.InitialOperatingMode);
 
         foreach (var slot in new TrainStateRegistry().Trains)
         {
-            Assert.AreEqual(OperatingMode.Manual, slot.Driver.Mode);
+            Assert.AreEqual(OperatingMode.Automatic, slot.Driver.Mode);
         }
 
         var configured = new TrainStateRegistry(new ControllerStartupDefaults
         {
-            InitialOperatingMode = OperatingMode.Automatic,
+            InitialOperatingMode = OperatingMode.Manual,
             InitialCabinTemperatureSetpointCelsius = 19.0,
             InitialTestCabinTemperatureCelsius = 25.0,
         });
 
         foreach (var slot in configured.Trains)
         {
-            Assert.AreEqual(OperatingMode.Automatic, slot.Driver.Mode);
+            Assert.AreEqual(OperatingMode.Manual, slot.Driver.Mode);
             Assert.AreEqual(19.0, slot.Driver.CabinTemperatureSetpointCelsius);
             Assert.AreEqual(25.0, slot.TestModel.CabinTemperatureCelsius);
         }

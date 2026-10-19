@@ -1,6 +1,8 @@
 using TrainControl.Contracts.Enums;
 using TrainController.Abstractions.Configuration;
 using TrainController.Abstractions.Inputs;
+using TrainController.Abstractions.Outputs;
+using TrainController.Integration.Simulation;
 
 namespace TrainController.Integration.State;
 
@@ -33,9 +35,10 @@ public sealed class TestModelState
 
     private bool _isActive;
     private double _actualSpeedMetersPerSecond;
-    private double _authorizedSpeedMetersPerSecond;
+    private double _commandedSpeedMetersPerSecond;
     private double _remainingAuthorityMeters;
     private bool _trackSignalValid = true;
+    private SignalState _trafficLight = SignalState.Unknown;
     private bool _beaconValid;
     private bool _beaconReceptionPending;
     private bool _authorityUpdatePending;
@@ -61,7 +64,7 @@ public sealed class TestModelState
 
     public double ActualSpeedMetersPerSecond { get { lock (_gate) { return _actualSpeedMetersPerSecond; } } set => Set(ref _actualSpeedMetersPerSecond, value); }
 
-    public double AuthorizedSpeedMetersPerSecond { get { lock (_gate) { return _authorizedSpeedMetersPerSecond; } } set => Set(ref _authorizedSpeedMetersPerSecond, value); }
+    public double CommandedSpeedMetersPerSecond { get { lock (_gate) { return _commandedSpeedMetersPerSecond; } } set => Set(ref _commandedSpeedMetersPerSecond, value); }
 
     /// <summary>
     /// Authority value "sent" by the simulated Train Model. Changing it counts as a NEW authority
@@ -106,6 +109,9 @@ public sealed class TestModelState
     }
 
     public bool TrackSignalValid { get { lock (_gate) { return _trackSignalValid; } } set => Set(ref _trackSignalValid, value); }
+
+    /// <summary>Traffic light ahead (display-only in the controller). Independent of <see cref="TrackSignalValid"/>.</summary>
+    public SignalState TrafficLight { get { lock (_gate) { return _trafficLight; } } set => Set(ref _trafficLight, value); }
 
     public bool BeaconValid { get { lock (_gate) { return _beaconValid; } } set => Set(ref _beaconValid, value); }
 
@@ -178,6 +184,37 @@ public sealed class TestModelState
         return snapshot;
     }
 
+    /// <summary>
+    /// TEST TOOL ONLY (Test UI "Simple physics"): moves this Test Model state one tick using the
+    /// controller's commands, so normal scenarios behave plausibly without a Train Model. Speed
+    /// follows <see cref="SimplePlantModel"/>; doors and exterior lights follow their commands.
+    /// Not part of the controller, which never computes physics.
+    /// </summary>
+    public void ApplySimplePhysics(TrainModelCommand commands, VehicleSpecification vehicle, double deltaTimeSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        ArgumentNullException.ThrowIfNull(vehicle);
+
+        bool changed;
+        lock (_gate)
+        {
+            var speed = SimplePlantModel.NextSpeed(_actualSpeedMetersPerSecond, commands, vehicle, deltaTimeSeconds);
+            changed = !speed.Equals(_actualSpeedMetersPerSecond)
+                || _leftDoorsOpen != commands.LeftDoorsOpenCommand
+                || _rightDoorsOpen != commands.RightDoorsOpenCommand
+                || _exteriorLightsOn != commands.ExteriorLightsCommand;
+            _actualSpeedMetersPerSecond = speed;
+            _leftDoorsOpen = commands.LeftDoorsOpenCommand;
+            _rightDoorsOpen = commands.RightDoorsOpenCommand;
+            _exteriorLightsOn = commands.ExteriorLightsCommand;
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     /// <summary>Drops pending beacon / authority events (part of Test Simulation Reset). Entered values are kept.</summary>
     public void ClearPendingEvents()
     {
@@ -200,10 +237,11 @@ public sealed class TestModelState
     {
         IsActive = _isActive,
         ActualSpeedMetersPerSecond = _actualSpeedMetersPerSecond,
-        AuthorizedSpeedMetersPerSecond = _authorizedSpeedMetersPerSecond,
+        CommandedSpeedMetersPerSecond = _commandedSpeedMetersPerSecond,
         RemainingAuthorityMeters = _remainingAuthorityMeters,
         AuthorityUpdateReceived = authorityUpdated,
         TrackSignalValid = _trackSignalValid,
+        TrafficLight = _trafficLight,
         Beacon = new BeaconData
         {
             IsValid = _beaconValid,

@@ -15,8 +15,8 @@ namespace TrainController.Abstractions.Configuration;
 /// </remarks>
 public sealed record ControllerStartupDefaults
 {
-    /// <summary>PROVISIONAL default. Mode each train's Driver state starts in.</summary>
-    public OperatingMode InitialOperatingMode { get; init; } = OperatingMode.Manual;
+    /// <summary>Mode each train's Driver state starts in: Automatic (team decision).</summary>
+    public OperatingMode InitialOperatingMode { get; init; } = OperatingMode.Automatic;
 
     /// <summary>PROVISIONAL default (21 °C ≈ 70 °F). Initial driver cabin-temperature request.</summary>
     public double InitialCabinTemperatureSetpointCelsius { get; init; } = 21.0;

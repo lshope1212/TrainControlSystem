@@ -29,7 +29,7 @@ public class TcpHardwareBackendTests
     };
 
     private static TrainControllerInput HwInput(string trainId, long tick, double speed = 5.0, bool passenger = false, DriverInput? driver = null) =>
-        Input(Model(speed: speed, authorized: 10.0, passengerEmergency: passenger), driver ?? Automatic(), tick: tick, trainId: trainId);
+        Input(Model(speed: speed, commanded: 10.0, passengerEmergency: passenger), driver ?? Automatic(), tick: tick, trainId: trainId);
 
     // ------------------------------------------------------------------ happy path (real Pi server)
 
@@ -104,7 +104,7 @@ public class TcpHardwareBackendTests
         {
             var model = subsystem.Registry.Get(id).TestModel;
             model.IsActive = true;
-            model.AuthorizedSpeedMetersPerSecond = 10.0;
+            model.CommandedSpeedMetersPerSecond = 10.0;
             model.RemainingAuthorityMeters = 5_000.0;
         }
 
@@ -271,7 +271,7 @@ public class TcpHardwareBackendTests
     }
 
     [TestMethod]
-    public async Task AfterLinkFault_DriverResetRequired_ThenPiStateResynchronized()
+    public async Task AfterLinkFault_ResetFailuresRequired_ThenPiStateResynchronized()
     {
         await using var pi = ScriptedPiServer.Start();
         await using var backend = new TcpHardwareTrainControllerBackend(Options(pi.Port));
@@ -282,12 +282,15 @@ public class TcpHardwareBackendTests
 
         pi.Script = _ => PiScript.Normal; // link healthy again
         var stillLatched = await Assert.ThrowsExactlyAsync<ControllerCommunicationException>(() => backend.EvaluateAsync(HwInput("TRAIN-004", 3), CancellationToken.None));
-        StringAssert.Contains(stillLatched.Message, "E-brake reset");
+        StringAssert.Contains(stillLatched.Message, "Reset failures");
+
+        var ebResetOnly = await Assert.ThrowsExactlyAsync<ControllerCommunicationException>(() => backend.EvaluateAsync(HwInput("TRAIN-004", 3, driver: Automatic() with { EmergencyBrakeResetRequested = true }), CancellationToken.None));
+        StringAssert.Contains(ebResetOnly.Message, "Reset failures", "The E-brake reset does not clear a Hardware link failure.");
 
         var other = await backend.EvaluateAsync(HwInput("TRAIN-006", 3), CancellationToken.None);
         Assert.IsFalse(other.Commands.EmergencyBrakeCommand, "Other Hardware trains are unaffected.");
 
-        var resumed = await backend.EvaluateAsync(HwInput("TRAIN-004", 4, driver: Automatic() with { EmergencyBrakeResetRequested = true }), CancellationToken.None);
+        var resumed = await backend.EvaluateAsync(HwInput("TRAIN-004", 4, driver: Automatic() with { ResetFailuresRequested = true }), CancellationToken.None);
         Assert.AreEqual(4L, resumed.TickId);
         Assert.IsFalse(backend.IsFaultLatched("TRAIN-004"));
 

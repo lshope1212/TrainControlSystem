@@ -30,7 +30,7 @@ public sealed class TestWindowViewModel : ViewModelBase
     private TrainChoice _selectedTrain;
     private TestUiOutputs _outputs = new TestUiOutputs();
     private string _actualSpeedMphText = string.Empty;
-    private string _authorizedSpeedMphText = string.Empty;
+    private string _commandedSpeedMphText = string.Empty;
     private string _remainingAuthorityFeetText = string.Empty;
     private string _distanceToStationFeetText = string.Empty;
     private string _cabinTemperatureFahrenheitText = string.Empty;
@@ -174,15 +174,39 @@ public sealed class TestWindowViewModel : ViewModelBase
         }
     }
 
-    public string AuthorizedSpeedMphText
+    public string CommandedSpeedMphText
     {
-        get => _authorizedSpeedMphText;
+        get => _commandedSpeedMphText;
         set
         {
-            if (SetProperty(ref _authorizedSpeedMphText, value))
+            if (SetProperty(ref _commandedSpeedMphText, value))
             {
-                ApplyNumber(value, "Authorized speed", mph => Model.AuthorizedSpeedMetersPerSecond = DisplayUnits.FromMph(mph));
+                ApplyNumber(value, "Commanded speed", mph => Model.CommandedSpeedMetersPerSecond = DisplayUnits.FromMph(mph));
             }
+        }
+    }
+
+    /// <summary>Global Test Mode option: speed, doors and lights follow the controller's commands.</summary>
+    public bool SimplePhysicsEnabled
+    {
+        get => _subsystem.TestMode.SimplePhysicsEnabled;
+        set
+        {
+            _subsystem.TestMode.SetSimplePhysics(value);
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<SignalState> TrafficLights { get; } = Enum.GetValues<SignalState>();
+
+    /// <summary>Traffic light from the Track Model (display-only in the controller).</summary>
+    public SignalState TrafficLight
+    {
+        get => Model.TrafficLight;
+        set
+        {
+            Model.TrafficLight = value;
+            OnPropertyChanged();
         }
     }
 
@@ -365,6 +389,21 @@ public sealed class TestWindowViewModel : ViewModelBase
     {
         Outputs = TrainControllerPresenter.BuildTestOutputs(Slot);
 
+        if (SimplePhysicsEnabled)
+        {
+            // The Test Model state is moved by the simple physics each tick: show it.
+            var speedText = DisplayUnits.Number(DisplayUnits.ToMph(Model.ActualSpeedMetersPerSecond));
+            if (speedText != _actualSpeedMphText)
+            {
+                _actualSpeedMphText = speedText;
+                OnPropertyChanged(nameof(ActualSpeedMphText));
+            }
+
+            OnPropertyChanged(nameof(LeftDoorsOpen));
+            OnPropertyChanged(nameof(RightDoorsOpen));
+            OnPropertyChanged(nameof(ExteriorLightsOn));
+        }
+
         for (var i = 0; i < _subsystem.Registry.Trains.Count; i++)
         {
             var row = TrainControllerPresenter.BuildTestFleetRow(_subsystem.Registry.Trains[i]);
@@ -456,7 +495,7 @@ public sealed class TestWindowViewModel : ViewModelBase
     {
         var model = Model;
         _actualSpeedMphText = DisplayUnits.Number(DisplayUnits.ToMph(model.ActualSpeedMetersPerSecond));
-        _authorizedSpeedMphText = DisplayUnits.Number(DisplayUnits.ToMph(model.AuthorizedSpeedMetersPerSecond));
+        _commandedSpeedMphText = DisplayUnits.Number(DisplayUnits.ToMph(model.CommandedSpeedMetersPerSecond));
         _remainingAuthorityFeetText = DisplayUnits.Number(DisplayUnits.ToFeet(model.RemainingAuthorityMeters), 0);
         _distanceToStationFeetText = DisplayUnits.Number(DisplayUnits.ToFeet(model.DistanceToNextStationMeters), 0);
         _cabinTemperatureFahrenheitText = DisplayUnits.Number(DisplayUnits.ToFahrenheit(model.CabinTemperatureCelsius));
@@ -464,7 +503,7 @@ public sealed class TestWindowViewModel : ViewModelBase
 
         foreach (var name in new[]
         {
-            nameof(SelectedTrainId), nameof(IsActive), nameof(ActualSpeedMphText), nameof(AuthorizedSpeedMphText),
+            nameof(SelectedTrainId), nameof(IsActive), nameof(ActualSpeedMphText), nameof(CommandedSpeedMphText), nameof(TrafficLight), nameof(SimplePhysicsEnabled),
             nameof(RemainingAuthorityFeetText), nameof(TrackSignalValid), nameof(BeaconValid), nameof(NextStationName),
             nameof(DistanceToStationFeetText), nameof(PlatformSide), nameof(PassengerEmergencyBrakeRequested),
             nameof(LeftDoorsOpen), nameof(RightDoorsOpen), nameof(ExteriorLightsOn), nameof(CabinTemperatureFahrenheitText),

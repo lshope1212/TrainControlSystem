@@ -15,7 +15,7 @@ public class PiRequestHandlerTests
         RequestId = tick,
         TrainId = trainId,
         TickId = tick,
-        Input = Input(Model(speed: 5.0, authorized: 10.0, passengerEmergency: passenger), trainId: trainId, tick: tick),
+        Input = Input(Model(speed: 5.0, commanded: 10.0, passengerEmergency: passenger), trainId: trainId, tick: tick),
     };
 
     [TestMethod]
@@ -53,7 +53,7 @@ public class PiRequestHandlerTests
         var gains = ArbitraryTestGains;
 
         handler.Handle(Request("TRAIN-002", 1, passenger: true));
-        var t4 = handler.Handle(Request("TRAIN-004", 1) with { Input = Input(Model(speed: 5.0, authorized: 10.0), Automatic(), trainId: "TRAIN-004", tick: 1, engineer: gains) });
+        var t4 = handler.Handle(Request("TRAIN-004", 1) with { Input = Input(Model(speed: 5.0, commanded: 10.0), Automatic(), trainId: "TRAIN-004", tick: 1, engineer: gains) });
 
         Assert.AreEqual(EmergencyBrakeCause.Passenger, handler.Controller("TRAIN-002").LatchedEmergencyCauses);
         Assert.AreEqual(EmergencyBrakeCause.None, handler.Controller("TRAIN-004").LatchedEmergencyCauses);

@@ -1,3 +1,5 @@
+using TrainControl.Contracts.Enums;
+
 namespace TrainController.Abstractions.Inputs;
 
 /// <summary>
@@ -21,7 +23,11 @@ public sealed record TrainModelInput
 
     public double ActualSpeedMetersPerSecond { get; init; }
 
-    public double AuthorizedSpeedMetersPerSecond { get; init; }
+    /// <summary>
+    /// Commanded speed received from the track (via the Train Model). Only trusted while
+    /// <see cref="TrackSignalValid"/> is true. (Formerly "authorized speed".)
+    /// </summary>
+    public double CommandedSpeedMetersPerSecond { get; init; }
 
     /// <summary>Latest authority value received from the track (via the Train Model).</summary>
     public double RemainingAuthorityMeters { get; init; }
@@ -36,6 +42,12 @@ public sealed record TrainModelInput
 
     /// <summary>Defaults to false: an unset input must not look like a healthy track signal.</summary>
     public bool TrackSignalValid { get; init; }
+
+    /// <summary>
+    /// Traffic light ahead, from the Track Model. DISPLAY-ONLY: no control logic uses it yet,
+    /// and it is a separate concept from <see cref="TrackSignalValid"/> (signal pickup).
+    /// </summary>
+    public SignalState TrafficLight { get; init; } = SignalState.Unknown;
 
     public BeaconData Beacon { get; init; } = BeaconData.None;
 
