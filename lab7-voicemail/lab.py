@@ -1,4 +1,4 @@
-"""Portable launcher for the standalone Lab 7 voicemail example."""
+"""Command-line launcher and test runner."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -36,7 +36,8 @@ def execute(action):
         return subprocess.run(PROGRAM, input=events, text=True, cwd=ROOT,
                               check=False, timeout=10).returncode
     print("\nInteractive mode: enter one key or line of speech, then press Enter.")
-    print("Use H to hang up; Q to end this session. See README.md for a walkthrough.\n", flush=True)
+    print("Use H to hang up; Q to end this session.")
+    print("Enter each mailbox digit separately, then #. After the greeting, enter the passcode the same way.\n", flush=True)
     return subprocess.run(PROGRAM, cwd=ROOT, check=False).returncode
 
 
@@ -47,7 +48,7 @@ def menu():
         print("1. Test saving a greeting yourself - guided step by step")
         print("2. Test canceling a greeting yourself - guided step by step")
         print("3. Run automatic checks - no typing needed")
-        print("4. Original keypad mode - no step-by-step guidance")
+        print("4. Manual keypad input")
         print("0. Exit")
         choice = input("Choose 0-4: ").strip()
         if choice == "0":

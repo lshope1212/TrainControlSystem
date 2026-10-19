@@ -12,15 +12,6 @@ if not errorlevel 1 (
     goto run
 )
 
-set "LAB_BUNDLED=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-if exist "%LAB_BUNDLED%" (
-    "%LAB_BUNDLED%" -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1
-    if not errorlevel 1 (
-        set "LAB_PYTHON=%LAB_BUNDLED%"
-        goto run
-    )
-)
-
 python -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1
 if not errorlevel 1 (
     set "LAB_PYTHON=python"

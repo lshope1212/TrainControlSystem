@@ -1,4 +1,4 @@
-"""Step-by-step manual checks using the original voicemail classes and events."""
+"""Guided manual tests for greeting changes."""
 import contextlib
 import io
 
@@ -64,7 +64,6 @@ def run_guided(action):
 
         print("\nSTEP 2 - Log in as the mailbox owner")
         print("You have selected the mailbox; now enter its passcode to edit the greeting.")
-        print("The original program does not ask for this password, but it expects it here.")
         while connection.state != MAILBOX_MENU:
             password = ask("Passcode [" + str(int(extension)) + "]: ", default=str(int(extension)))
             if not (password.isascii() and password.isdigit()):

@@ -1,4 +1,4 @@
-"""End-to-end checks of the real command-line program; no extra packages."""
+"""End-to-end tests for greeting changes."""
 from pathlib import Path
 import subprocess
 import sys

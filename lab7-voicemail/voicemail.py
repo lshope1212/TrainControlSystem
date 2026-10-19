@@ -1,7 +1,7 @@
 """Voice Mail - Change the Greeting.
 Input, one per line: 0-9 or # = key, H = hang up, Q = quit, other text = voice.
 Run interactively: python voicemail.py
-Replay the supplied scenario: python lab.py demo-save
+Replay a scenario: python lab.py demo-save
 """
 import sys
 
@@ -108,7 +108,7 @@ class Connection:
             self.state, self.currentRecording = CHANGE_GREETING, ""
             self.phone.speak(GREETING_PROMPT)
         else:
-            self.phone.speak("Only option 3 (change greeting) is in this prototype.\n" + MAILBOX_MENU_TEXT)
+            self.phone.speak("Only option 3 (change greeting) is available.\n" + MAILBOX_MENU_TEXT)
 
     def changeGreeting(self, key: str):
         if key == "#":
