@@ -1,755 +1,866 @@
-I need you to implement train-location tracking in the CTC module of the
-TrainControlSystem repository.
+I need you to update and substantially expand the existing StarUML documentation for the CTC module of this repository.
 
-Repository:
-https://github.com/lshope1212/TrainControlSystem
+IMPORTANT: This is a UML/documentation task only. Do not modify production C# code, tests, XAML, shared contracts, or project files unless absolutely necessary for opening/validating the StarUML document. The source code is the authoritative reference for the diagrams.
 
-Work from my current CTC branch and inspect the existing implementation before
-making changes. Do not assume file/class structure from this prompt if the repo
-has changed slightly; adapt to the current architecture and naming conventions.
+The existing StarUML project is:
 
-BACKGROUND / IMPORTANT ARCHITECTURAL RULE
-==========================================
+    docs/uml/CTC_UseCase.mdj
 
-The CTC must NOT receive an explicit TrainId + CurrentBlock message.
+Do NOT create a separate unrelated UML project unless the existing file is truly unusable. Update this existing StarUML project so that it contains:
 
-There is deliberately no production I/O that tells CTC:
+1. The corrected/current CTC Use Case Diagram.
+2. One UML Sequence Diagram corresponding to EVERY final use-case bubble in that use case diagram.
 
-    Train 000 is in Block A4
+Before making changes, inspect the CURRENT CHECKED-OUT BRANCH of the repository. Do not rely on assumptions from old versions of the CTC.
 
-This train control system is modeling the behavior of real centralized traffic
-control / track-circuit systems.
+============================================================
+PART 1 — FIRST AUDIT THE CURRENT CTC IMPLEMENTATION
+============================================================
 
-The Track Controller reports anonymous block occupancy:
+Before editing the StarUML model, inspect at minimum:
 
-    Block A4 = Occupied
-    Block A3 = Clear
+    docs/uml/CTC_UseCase.mdj
 
-The track circuit tells CTC that SOMETHING occupies a block, but does not
-identify the train.
+    src/CTC/CTC.Wpf/MainWindow.xaml
+    src/CTC/CTC.Wpf/MainWindow.xaml.cs
 
-The CTC must determine train identity through sequential occupancy.
+    src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs
+    src/CTC/CTC.Wpf/ViewModels/ScheduleBuilderViewModel.cs
+    src/CTC/CTC.Wpf/ViewModels/ScheduleTemplateRowViewModel.cs
+    src/CTC/CTC.Wpf/ViewModels/DispatchedTrainViewModel.cs
+    src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs
 
-The principle is:
+    src/CTC/CTC.Core/Interfaces/ICTCService.cs
+    src/CTC/CTC.Core/Interfaces/IMessageSender.cs
+    src/CTC/CTC.Core/Services/CTCService.cs
 
-1. CTC knows where a train enters the system because CTC dispatched it.
-2. CTC therefore initially associates that train with its route start block.
-3. CTC knows the intended/active route for the train.
-4. As occupancy progresses from one block to the next along that route, CTC
-   logically moves the train identity with the occupancy.
-5. A normal block-boundary transition can temporarily have BOTH blocks occupied:
+    src/CTC/CTC.Core/Scheduling/
+    src/CTC/CTC.Core/Dispatching/
+    src/CTC/CTC.Core/Tracking/
 
-       A1 = Occupied
-       A2 = Occupied
+    src/CTC/CTC.Wpf/Services/NamedPipeMessageSender.cs
+    src/CTC/CTC.Wpf/Services/CtcNamedPipeReceiver.cs
 
-   followed by:
+    src/Shared/TrainControl.Contracts/Messages/
+    src/Shared/TrainControl.Common/Communication/
 
-       A1 = Clear
-       A2 = Occupied
+Also inspect the CTC tests, especially:
 
-   If Train 000 was in A1 and A2 is the next block on Train 000's active route,
-   the new A2 occupancy represents Train 000 progressing into A2.
+    tests/TrainControl.Tests/CTC/CtcScheduleTests.cs
+    tests/TrainControl.Tests/CTC/CtcScheduleCsvImportTests.cs
+    tests/TrainControl.Tests/CTC/CtcCloseBlockTests.cs
+    tests/TrainControl.Tests/CTC/CtcReopenBlockTests.cs
+    tests/TrainControl.Tests/CTC/CtcSwitchRequestTests.cs
+    tests/TrainControl.Tests/CTC/CtcTrainPlanUpdateTests.cs
+    tests/TrainControl.Tests/CTC/CtcTrainLocationTests.cs
+    tests/TrainControl.Tests/CTC/CtcUiMarkupTests.cs
 
-6. Clearing the old block does NOT move the train. Occupancy of the next block
-   moves the train identity forward.
-7. CTC must never guess when the occupancy cannot be uniquely associated with
-   one train.
+Use the tests as additional evidence for intended behavior, validation conditions, state changes, and message transmission.
 
-DO NOT:
-- add TrainOperatingStatusMessage
-- add TrainPositionMessage
-- add TrainId to BlockStatusMessage
-- modify production I/O to explicitly identify the train occupying a block
-- derive train identity from actual speed or some new telemetry
-- use scheduled arrival time as the primary mechanism for identifying trains
+Before editing anything, give me a concise audit containing:
 
-The production CTC must work only from its existing knowledge:
-- trains it dispatched
-- their current/active routes
-- track topology
-- anonymous BlockStatusMessage occupancy updates
+- all significant direct actions currently available to a human dispatcher in the CTC WPF window;
+- which of those should remain/become sea-level use cases;
+- whether any existing use-case bubble in CTC_UseCase.mdj is obsolete;
+- whether any new bubble is required;
+- the actual C# command/method that initiates each use case.
 
-CURRENT IMPLEMENTATION
-======================
+Then proceed with the UML work.
 
-Inspect these areas carefully before changing anything:
+============================================================
+PART 2 — USE CASE DIAGRAM RULES
+============================================================
 
-CTC.Core:
-- Models/DispatchedTrainState.cs
-- Models/CtcSystemState.cs
-- Models/CtcStateChangedEventArgs.cs
-- Models/CtcBlockState.cs
-- Services/CTCService.cs
-- Interfaces/ICTCService.cs
-- Dispatching/RouteManager.cs
-- Scheduling/ScheduledTrain.cs and ScheduledRouteBlock.cs
+The use case diagram is intended to be a graphical table of contents for the CTC use case set.
 
-CTC.Wpf:
-- ViewModels/DispatchedTrainViewModel.cs
-- ViewModels/MainWindowViewModel.cs
-- MainWindow.xaml
+It should contain exactly ONE primary actor:
 
-CTC.TestUI.Wpf:
-- existing BlockStatus input ViewModel/UI
-- ICtcMessageSender
-- existing TestUI message infrastructure
+    Dispatcher
 
-Also inspect existing CTC tests and follow their conventions.
+Do NOT add the following as actors to the use case diagram:
 
-At present:
-- DispatchedTrainState contains LastKnownBlockId.
-- DispatchTrainAsync initializes LastKnownBlockId to the schedule's StartBlockId.
-- ApplyBlockStatus updates CtcBlockState.Occupancy but does not associate that
-  occupancy with a dispatched train.
-- The Dispatched Trains table displays "Last Known Block".
-- UpdateDispatchedTrainPlanAsync routes from LastKnownBlockId.
-- The recently implemented mid-run destination/arrival-time editing therefore
-  depends on this location becoming accurate.
+- Track Controller
+- Track Model
+- Train Controller
+- System Clock
+- Test UI
+- CTC itself
+- message transport
+- any other software subsystem
 
-GOAL
-====
+The use cases should be DIRECT, meaningful actions that the human Dispatcher can initiate through the production CTC WPF window.
 
-Replace the static "Last Known Block" concept with an inferred "Current Block"
-that automatically progresses as anonymous block occupancy moves through the
-train's active route.
+Do NOT create use cases for passive/internal behavior such as:
 
-Example:
+- Receive Block Status
+- Receive Track Layout
+- Receive Ticket Sales
+- Receive System Time
+- Track Train Location
+- Process Occupancy
+- Calculate Suggested Speed
+- Calculate Authority
+- Send Named Pipe Message
+- Automatic Dispatch
 
-Scheduled/active route:
+Those may appear INSIDE sequence diagrams as supporting interactions when relevant, but they are not dispatcher use cases.
 
-    A1 -> A2 -> A3 -> A4 -> A5
+Do not turn simple UI navigation into unnecessary use cases. For example:
 
-After Train 000 is dispatched:
+- selecting a line,
+- selecting a block,
+- selecting a dispatched train,
+- viewing text,
+- viewing a table,
 
-    CurrentBlockId = A1
+should generally be treated as steps or preconditions of another use case rather than their own use-case bubble.
 
-Track Controller/TestUI reports:
+Likewise, do not make every helper function a use case.
 
-    A1 Occupied
+SEA-LEVEL INTENT:
+A bubble should represent a meaningful interaction the Dispatcher performs with the CTC and should be substantial enough to justify its own sequence diagram.
 
-No location change is required because Train 000 is already associated with A1.
+Based on the previous version and current implementation, I expect the final use cases to be close to:
 
-Then:
+    Generate Schedule Template
+    Upload Schedule
+    Queue Schedule
+    Clear Schedule
+    Toggle Maintenance Mode
+    Close Block
+    Reopen Block
+    Change Switch Position
+    Update Dispatched Train Plan
 
-    A2 Occupied
+BUT THIS LIST IS NOT BLINDLY AUTHORITATIVE.
 
-CTC should infer:
+Inspect the actual current code and existing CTC_UseCase.mdj first. Preserve valid existing use cases and adjust the list if the implementation requires it.
 
-    Train 000 CurrentBlockId = A2
+One recent feature that is especially important to check is the ability to modify an already-dispatched train's movement plan. The current implementation should expose something similar to:
 
-even if A1 is still occupied because the train may physically span both track
-circuits.
+    MainWindowViewModel.ApplyTrainPlanCommand
+        -> ApplyTrainPlanAsync()
+        -> ICTCService.UpdateDispatchedTrainPlanAsync(...)
 
-Then:
+If that functionality is present in the current code, add a sea-level use case named something clear such as:
 
-    A1 Clear
+    Update Dispatched Train Plan
 
-Train 000 must remain at A2.
-
-Then:
-
-    A3 Occupied
-
-Train 000 moves logically to A3.
-
-Then:
-
-    A2 Clear
-
-Train 000 remains at A3.
-
-The Dispatched Trains table should visibly update:
-
-    Train 000 | Current Block A1
-    Train 000 | Current Block A2
-    Train 000 | Current Block A3
-
-CORE DESIGN
-===========
-
-I want the train-location logic separated cleanly from the generic block-state
-logic. Prefer a small TrainLocationTracker or equivalent CTC.Core helper/service
-rather than putting a large amount of inference code directly into
-ApplyBlockStatus.
-
-The exact class design can follow existing project conventions, but the
-behavior below is required.
-
-DISPATCHED TRAIN STATE
-======================
-
-Refactor DispatchedTrainState.
-
-Rename:
-
-    LastKnownBlockId
-
-to:
-
-    CurrentBlockId
-
-Update all references, comments, exception messages, ViewModels, XAML, and
-tests accordingly.
-
-The state also needs enough information to know the ACTIVE route the train is
-currently expected to follow.
-
-Because the dispatcher can now change a dispatched train's destination,
-ScheduledTrain.Route by itself is not always sufficient.
-
-Add something conceptually like:
-
-    IList<string> ActiveRouteBlockIds
-    int ActiveRouteIndex
-
-Names may be adjusted to match existing style.
-
-ActiveRouteBlockIds represents the route that CTC currently expects this
-dispatched train to follow.
-
-ActiveRouteIndex identifies where CurrentBlockId is within that route.
-
-At initial dispatch:
-
-    CurrentBlockId = scheduledTrain.StartBlockId
-
-    ActiveRouteBlockIds =
-        scheduledTrain.Route.Select(routeBlock => routeBlock.BlockId)
-
-    ActiveRouteIndex = 0
-
-The scheduled route should remain unchanged. The active route is runtime state
-for the released train.
-
-MID-RUN REROUTING
-=================
-
-Update the existing UpdateDispatchedTrainPlanAsync implementation so this new
-tracking model works with the recently added dispatcher rerouting feature.
-
-The method currently uses RouteManager.FindRoute from the train's
-LastKnownBlockId.
-
-Change that to CurrentBlockId.
-
-When a new route is calculated from:
-
-    CurrentBlockId -> destinationBlockId
-
-and the MovementSuggestion is SUCCESSFULLY sent, update the dispatched train's
-active route to the newly calculated route.
-
-For example:
-
-Current block:
-
-    A4
-
-New destination:
-
-    B7
-
-RouteManager returns:
-
-    A4 -> A5 -> J1 -> B6 -> B7
-
-Then:
-
-    ActiveRouteBlockIds =
-        [A4, A5, J1, B6, B7]
-
-    ActiveRouteIndex = 0
-
-CurrentBlockId stays A4.
-
-Subsequent anonymous occupancies should now be interpreted according to this
-new route.
+This use case represents the dispatcher selecting a dispatched train and changing its destination and/or target arrival time, causing CTC to recalculate the route, suggested speed, and authority.
 
 IMPORTANT:
-Do not update the active route if sending the new MovementSuggestion fails.
-Preserve the existing transaction semantics: CTC should show only a movement
-plan it successfully issued.
+The newer CurrentBlockId / train-location tracking behavior is NOT its own dispatcher use case. It is supporting system behavior. It may be used in the sequence diagram for Update Dispatched Train Plan because the updated route begins from the train's current known block.
 
-BLOCK OCCUPANCY TRANSITION DETECTION
-====================================
+Keep the use case diagram visually simple:
 
-Modify ApplyBlockStatus carefully.
+- Dispatcher actor on the left.
+- CTC Module system boundary.
+- Use cases inside the boundary.
+- Standard UML associations from Dispatcher to each use case.
+- Avoid unnecessary <<include>> and <<extend>> relationships unless the actual use-case semantics clearly require them.
+- Do not make the diagram into a class diagram or architecture diagram.
 
-Before overwriting the block occupancy, capture the previous occupancy state.
+============================================================
+PART 3 — SEQUENCE DIAGRAM PHILOSOPHY
+============================================================
 
-Conceptually:
+Create ONE sequence diagram for EVERY final sea-level use-case bubble.
 
-    OccupancyState previousOccupancy = block.Occupancy;
+Use the naming convention:
 
-then apply the incoming BlockStatusMessage.
+    SD - Generate Schedule Template
+    SD - Upload Schedule
+    SD - Queue Schedule
+    SD - Clear Schedule
+    SD - Toggle Maintenance Mode
+    SD - Close Block
+    SD - Reopen Block
+    SD - Change Switch Position
+    SD - Update Dispatched Train Plan
 
-Train-location inference should care primarily about a transition INTO
-Occupied:
+Adjust names if the final use-case names differ.
 
-    previousOccupancy != Occupied
-    && message.Occupancy == Occupied
+Create/group the sequence diagrams logically inside the existing CTC model, for example under a package such as:
 
-Repeated status snapshots such as:
+    CTC
+      Use Cases
+      Sequence Diagrams
 
-    A2 Occupied
-    A2 Occupied
-    A2 Occupied
+Do not create duplicates of model elements unnecessarily.
 
-must NOT repeatedly advance a train.
+These diagrams are supposed to document HOW THE CURRENT CODE ACTUALLY IMPLEMENTS EACH USE CASE.
 
-This is critical because the real Track Controller may continuously send its
-current block states rather than only sending transitions.
+They are NOT generic conceptual sequence diagrams.
 
-CLEAR EVENTS
-============
+Every significant message in a sequence diagram should correspond to one of:
 
-A block changing from Occupied -> Clear must NEVER, by itself, advance or
-remove a train.
+- an actual method call;
+- an actual ICommand execution;
+- an actual property/state update;
+- an actual event;
+- an actual contract/message send;
+- or a clearly identified UI/user interaction.
 
-Example:
+Do not invent methods, classes, services, repositories, managers, or messages that do not exist.
 
-Before:
+Use exact class and method names from the repository wherever practical.
 
-    Train 000 current = A2
-    A1 = Occupied
-    A2 = Occupied
+============================================================
+PART 4 — SEQUENCE DIAGRAM NOTATION / STYLE
+============================================================
+
+Follow standard UML sequence diagram conventions and the style used in our System Modelling lecture:
+
+- Participants/objects are listed horizontally across the top.
+- Each participant has a vertical lifeline.
+- Time proceeds downward.
+- Method calls/messages are horizontal annotated arrows.
+- Activation bars should be shown where useful.
+- Return messages are optional; show them only when the returned value is important to understanding the scenario.
+- Prefer participant labels of the form:
+
+      objectName : ClassName
+
+  or:
+
+      :ClassName
+
+  Examples:
+
+      dispatcher : Dispatcher
+      mainVM : MainWindowViewModel
+      scheduleVM : ScheduleBuilderViewModel
+      ctc : CTCService
+      routeManager : RouteManager
+
+- The leftmost participant should normally be the Dispatcher actor for these user-initiated use cases.
+- The UI/ViewModel boundary should be visible when it materially explains how the action is initiated.
+- Do not show every framework implementation detail of ICommand, WPF binding internals, async state machines, property notification machinery, Task internals, etc.
+- It is acceptable to label the first message from Dispatcher to a ViewModel as the corresponding UI action / command, e.g.:
+
+      click "Queue Schedule"
+      QueueScheduleCommand.Execute()
+
+  Then transition to actual application methods.
+
+- Do NOT draw a sequence diagram like an activity diagram.
+- Do NOT attempt to represent every line of code.
+- Show the collaborations between the important objects.
+
+Our lecture emphasizes that a sequence diagram captures a SINGLE SCENARIO/use-case instance. Therefore make the normal/main-success path the primary sequence.
+
+Use UML combined fragments sparingly:
+
+    alt
+    opt
+    loop
+
+Only use them when a branch is important to understanding the use case.
+
+Do NOT expand every validation `if` statement into a giant conditional tree.
+
+For example, a single concise `alt` block such as:
+
+    [validation succeeds]
+    [validation fails]
+
+may be appropriate when validation is architecturally important.
+
+If detailed algorithms, loops, or conditional logic become complicated, summarize them in a note or one method call rather than exploding the diagram. The point is to show object collaboration.
+
+============================================================
+PART 5 — CODE ACCURACY REQUIREMENTS
+============================================================
+
+For every sequence diagram:
+
+1. Trace the use case from the actual WPF control/command.
+2. Trace into the relevant ViewModel method.
+3. Trace into CTC.Core or scheduling/dispatching helper classes.
+4. Trace important state modifications.
+5. Trace outbound communication when the use case sends a message.
+6. Trace the meaningful result/status back to the ViewModel/UI.
+
+Use exact names.
+
+Examples of the types of exact code details I want represented:
+
+    GenerateTemplateCommand
+    GenerateTemplate()
+    ScheduleTemplateFactory.Create(...)
+    ScheduleTemplate
+    ShowTemplate(...)
+    ScheduleTemplateRowViewModel
+
+rather than vague labels such as:
+
+    "generate schedule"
+    "system creates schedule"
+
+Likewise:
+
+    _ctc.CloseBlockAsync(block.BlockId)
+
+rather than:
+
+    "CTC closes block"
+
+And:
+
+    _messageSender.SendAsync(request, cancellationToken)
+
+rather than:
+
+    "send information"
+
+When a model field/property materially changes, show the actual property name as a note or state update.
+
+Examples:
+
+    RequestedMaintenanceState = MaintenanceState.Closed
+    TargetBlockId = destinationBlockId
+    TargetArrivalTime = targetArrivalTime
+    SuggestedSpeedMetersPerSecond = ...
+    SuggestedAuthorityMeters = ...
+    CurrentBlockId
+    ActiveRouteBlockIds
+    ActiveRouteIndex
+
+Only include fields/properties that are relevant to understanding that use case.
+
+============================================================
+PART 6 — EXPECTED SEQUENCE FLOWS TO INVESTIGATE
+============================================================
+
+The following are STARTING POINTS based on the architecture. Verify every item against the current source before putting it in StarUML.
+
+------------------------------
+A. GENERATE SCHEDULE TEMPLATE
+------------------------------
+
+Likely participants:
+
+    Dispatcher
+    scheduleVM : ScheduleBuilderViewModel
+    :TrainIds
+    :ScheduleTemplateFactory
+    template : ScheduleTemplate
+
+Potential flow to verify:
+
+    Dispatcher
+      -> GenerateTemplateCommand
+      -> ScheduleBuilderViewModel.GenerateTemplate()
+
+    GenerateTemplate():
+      validates Line / NumberOfTrainsText / block availability
+      -> TrainIds.NextAvailableNumber(_ctc.State)
+      -> ScheduleTemplateFactory.Create(...)
+      <- ScheduleTemplate
+      -> ShowTemplate(template)
+
+    ShowTemplate():
+      -> ClearTemplate()
+      populates TrainColumns
+      creates ScheduleTemplateRowViewModel objects in Rows
+
+Show meaningful UI result/status.
+
+Do not show every ObservableCollection.Add unless needed. It may be summarized as a state update/note.
+
+------------------------------
+B. UPLOAD SCHEDULE
+------------------------------
+
+Likely participants:
+
+    Dispatcher
+    scheduleVM : ScheduleBuilderViewModel
+    dialog : OpenFileDialog
+    :File
+    :TrainIds
+    :ScheduleCsvImporter
+    template : ScheduleTemplate
+
+Potential flow:
+
+    Dispatcher -> UploadScheduleCommand
+    -> ScheduleBuilderViewModel.UploadSchedule()
+    -> OpenFileDialog.ShowDialog()
+
+    if a file is selected:
+        -> File.ReadAllText(...)
+        -> TrainIds.NextAvailableNumber(_ctc.State)
+        -> ScheduleCsvImporter.Import(Line, csv, firstTrainNumber)
+        <- import result / ScheduleTemplate
+        -> ShowTemplate(template)
+
+Show that uploading loads the schedule into the builder for review but does NOT itself queue the schedule, if that remains true in current code.
+
+A small `alt` fragment for successful import vs invalid CSV may be useful, but keep the main scenario dominant.
+
+------------------------------
+C. QUEUE SCHEDULE
+------------------------------
+
+Likely participants:
+
+    Dispatcher
+    scheduleVM : ScheduleBuilderViewModel
+    :ScheduleTemplateConverter
+    ctc : CTCService
+
+and, if actually invoked during the current implementation:
+
+    :SpeedPlanner
+    CtcSystemState / relevant state object
+
+Potential flow:
+
+    Dispatcher -> QueueScheduleCommand
+    -> ScheduleBuilderViewModel.QueueSchedule()
+    -> ScheduleTemplateConverter.Convert(_template)
+    <- converted ScheduledTrain collection
+    -> ICTCService/CTCService.QueueSchedule(result.Trains)
+
+Trace what QueueSchedule actually does now:
+- validation,
+- schedule replacement,
+- feasibility checking,
+- dispatch queue rebuilding,
+- StateChanged notification,
+etc.
+
+Show actual calls/classes rather than guessing.
+
+IMPORTANT:
+Do NOT show automatic train dispatch as though the Dispatcher manually dispatches the train. Queue Schedule is the user action. Actual release/dispatch is time-triggered elsewhere unless the current code has changed to expose a manual dispatch action.
+
+------------------------------
+D. CLEAR SCHEDULE
+------------------------------
+
+Trace the actual command and methods.
+
+Likely:
+
+    Dispatcher -> ClearTemplateCommand
+    -> ScheduleBuilderViewModel.ClearTemplateAndReport()
+    -> ClearTemplate()
+
+State changes likely include:
+
+    _template = null
+    Rows.Clear()
+    TrainColumns.Clear()
+    StatusMessage = ...
+
+Keep this diagram relatively small because the implementation itself is small.
+
+Do not artificially add classes just to make the diagram larger.
+
+------------------------------
+E. TOGGLE MAINTENANCE MODE
+------------------------------
+
+Trace the current implementation.
+
+Likely:
+
+    Dispatcher
+      -> ToggleMaintenanceModeCommand
+      -> MainWindowViewModel.IsMaintenanceMode = !IsMaintenanceMode
+
+The property setter may:
+- raise property notifications;
+- update MaintenanceModeButtonText;
+- invalidate command CanExecute state.
+
+Only show framework-related notifications if useful.
+
+This is likely a deliberately small sequence diagram.
+
+If, after examining the requirements and existing model, this no longer deserves a sea-level use case, flag that BEFORE changing the diagram instead of silently deleting it.
+
+------------------------------
+F. CLOSE BLOCK
+------------------------------
+
+Likely participants:
+
+    Dispatcher
+    mainVM : MainWindowViewModel
+    ctc : CTCService
+    block : CtcBlockState
+    sender : IMessageSender / NamedPipeMessageSender
+    Track Controller external lifeline if useful
+
+Potential flow:
+
+    Dispatcher -> CloseSelectedBlockCommand
+    -> MainWindowViewModel.CloseSelectedBlockAsync()
+    -> ctc.CloseBlockAsync(block.BlockId)
+
+Inside CTCService verify sequence such as:
+
+    GetBlock(blockId)
+    CreateMaintenanceRequest(blockId, MaintenanceState.Closed)
+        -> MaintenanceRequestMessage
+    _messageSender.SendAsync(request, cancellationToken)
+
+After successful send:
+
+    block.RequestedMaintenanceState = MaintenanceState.Closed
+    OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId)
+
+IMPORTANT SEMANTIC DISTINCTION:
+Do not show the block as immediately confirmed Closed if the code does not do that.
+
+RequestedMaintenanceState means CTC successfully requested the closure.
+ConfirmedMaintenanceState is updated later when a BlockStatusMessage arrives from the Track Controller.
+
+The passive later confirmation does not have to dominate this Dispatcher-triggered sequence diagram. A note such as:
+
+    "ConfirmedMaintenanceState changes only after a later BlockStatusMessage"
+
+is appropriate if that accurately reflects current code.
+
+External software such as Track Controller MAY appear as a lifeline inside the sequence diagram when CTC actually communicates with it. It is simply not an actor in the use case diagram.
+
+------------------------------
+G. REOPEN BLOCK
+------------------------------
+
+Use the actual reopen path, likely:
+
+    ReopenSelectedBlockCommand
+    MainWindowViewModel.ReopenSelectedBlockAsync()
+    CTCService.ReopenBlockAsync(...)
+    CreateMaintenanceRequest(..., MaintenanceState.Open)
+    IMessageSender.SendAsync(...)
+    RequestedMaintenanceState = MaintenanceState.Open
+    OnStateChanged(...)
+
+Again distinguish requested vs confirmed maintenance state.
+
+Do not simply clone the Close Block diagram without checking the actual reopen implementation and guards.
+
+------------------------------
+H. CHANGE SWITCH POSITION
+------------------------------
+
+Trace:
+
+    ToggleSelectedBlockSwitchCommand
+    MainWindowViewModel.ToggleSelectedBlockSwitchAsync()
+
+Verify how the requested position is determined from the current position.
+
+Likely:
+
+    requestedPosition =
+        SwitchPosition.Normal ? SwitchPosition.Reverse
+                              : SwitchPosition.Normal
 
 then:
 
-    A1 = Clear
+    _ctc.SetSwitchPositionAsync(block.BlockId, requestedPosition)
 
-Train 000 must still be:
+Trace inside CTCService:
 
-    CurrentBlockId = A2
+    CreateSwitchPositionRequest(...)
+    SwitchPositionRequestMessage
+    _messageSender.SendAsync(...)
 
-Also tolerate the messages arriving in this order:
+IMPORTANT:
+If the actual displayed switch position only changes when a later BlockStatusMessage confirms the new position, represent that accurately. Do not make it look as though clicking the button directly mutates the confirmed switch state.
 
-    A1 = Clear
-    A2 = Occupied
+------------------------------
+I. UPDATE DISPATCHED TRAIN PLAN
+------------------------------
 
-rather than requiring:
+This is especially important because it is recent functionality.
 
-    A2 = Occupied
-    A1 = Clear
+Inspect:
 
-The current train identity should remain associated with A1 long enough for the
-direct next-block occupancy to establish the transition.
+    MainWindow.xaml
+    MainWindowViewModel.cs
+    DispatchedTrainViewModel.cs
+    ICTCService.cs
+    CTCService.cs
+    RouteManager.cs
+    SpeedPlanner.cs
+    AuthorityManager.cs
+    DispatchedTrainState.cs
+    TrainLocationTracker.cs
+    CtcTrainPlanUpdateTests.cs
+    CtcTrainLocationTests.cs
 
-Do not set CurrentBlockId to Unknown merely because the old block clears.
+Likely UI path to verify:
 
-SEQUENTIAL OCCUPANCY ALGORITHM
-==============================
+    Dispatcher selects an already-dispatched train
+    Dispatcher edits destination block and/or target arrival time
+    Dispatcher presses Apply / update-plan button
 
-When a block transitions into Occupied, determine whether that occupancy can
-uniquely represent one dispatched train moving to its NEXT expected active-route
-block.
+    ApplyTrainPlanCommand
+      -> MainWindowViewModel.ApplyTrainPlanAsync()
 
-For each dispatched train:
+Validation may use values such as:
 
-1. Ignore it if it is on another line.
+    SelectedDispatchedTrain
+    EditedDestinationBlockId
+    EditedArrivalTime
+    ScheduleTemplateConverter.TryParseTime(...)
 
-2. Ignore it if CurrentBlockId is empty or its active route is invalid.
+Then:
 
-3. Determine its expected next block using:
+    _ctc.UpdateDispatchedTrainPlanAsync(
+        train.TrainId,
+        destinationBlockId,
+        arrivalTime)
 
-       ActiveRouteBlockIds[ActiveRouteIndex + 1]
+Trace the ACTUAL service implementation.
 
-   if such a block exists.
+Based on current architecture it should be approximately:
 
-4. The newly occupied block is a location candidate for this train ONLY if it
-   exactly equals that next active-route block.
+    CTCService.UpdateDispatchedTrainPlanAsync(...)
 
-Do not skip route blocks.
+    -> validate trainId / destination
+    -> State.FindDispatchedTrain(trainId)
+    -> State.FindLine(train.LineId)
 
-Example:
+    Uses:
+        train.CurrentBlockId
 
-    active route = A1 -> A2 -> A3
-    current = A1
+    -> RouteManager.FindRoute(
+           line,
+           train.CurrentBlockId,
+           destinationBlockId)
 
-If A3 suddenly becomes occupied, DO NOT jump Train 000 directly from A1 to A3.
+    -> SpeedPlanner.CalculateSpeedToTarget(
+           route,
+           targetArrivalTime,
+           State.SystemTime)
 
-A2 must first have been established.
+    -> AuthorityManager.CalculateUpdatedAuthorityMeters(route)
 
-If exactly ONE dispatched train has this occupied block as its valid next block:
+    -> construct MovementSuggestionMessage
 
-    advance that train
+    -> _messageSender.SendAsync(
+           suggestion,
+           cancellationToken)
 
-Set:
+Only after successful transmission, verify/update relevant DispatchedTrainState fields such as:
 
-    CurrentBlockId = newlyOccupiedBlockId
-    ActiveRouteIndex++
+    TargetBlockId
+    TargetArrivalTime
+    SuggestedSpeedMetersPerSecond
+    SuggestedAuthorityMeters
 
-Raise a train-location state change so the WPF UI refreshes immediately.
+and active route state such as:
 
-If ZERO trains match:
-- leave the anonymous occupancy in CtcBlockState
-- do not move any train
-- do not throw merely because an occupancy cannot be identified
+    ActiveRouteBlockIds
+    ActiveRouteIndex
 
-There can legitimately be occupied blocks that CTC cannot currently associate
-with one of its dispatched trains.
+If the current code uses a helper such as:
 
-If MORE THAN ONE train matches:
-- DO NOT GUESS
-- do not move either train
-- preserve the occupancy state
-- keep their existing CurrentBlockIds
+    ReplaceActiveRoute(...)
 
-If useful within the current status/event architecture, emit a diagnostic or
-dispatcher-readable warning that the occupancy is ambiguous, but do not add a
-major new alert framework solely for this feature.
+show it if it helps explain the state change.
 
-CURRENT-BLOCK OCCUPANCY CHAIN
-=============================
+VERY IMPORTANT:
+Verify whether UpdateDispatchedTrainPlanAsync sends only a new MovementSuggestionMessage or also a MovementRequestMessage.
 
-Be conservative about establishing the sequential chain.
+If current code sends ONLY the updated MovementSuggestionMessage for an already-dispatched train, the diagram MUST show only that. Do not copy the initial-dispatch sequence and accidentally invent another movement request.
 
-A dispatched train is initially introduced at its start block by CTC, but the
-Track Controller should subsequently report that starting block occupied.
+The CurrentBlockId is an important prerequisite to this use case.
 
-If useful, maintain a small internal/state flag conceptually similar to:
+The train-location logic appears to infer current location from sequential occupancy along ActiveRouteBlockIds using TrainLocationTracker / ApplyBlockStatus behavior.
 
-    CurrentBlockOccupancyObserved
+However:
 
-This can establish that CTC has actually seen the track circuit corresponding
-to the train's current position.
+    Track Train Location
 
-Desired sequence:
+is NOT a separate dispatcher use-case bubble.
 
-    dispatch Train 000 -> A1
-    A1 Occupied
-    A2 Occupied
-    A1 Clear
-    A3 Occupied
-    A2 Clear
+For this sequence diagram, either:
+- show CurrentBlockId as existing state/precondition, or
+- add a concise UML note explaining that it is maintained from occupancy updates by TrainLocationTracker.
 
-Do not create a large confidence-scoring system.
+Do NOT bury the Update Train Plan diagram under the entire asynchronous occupancy-tracking lifecycle.
 
-The important safety principle is simply:
-if the occupancy sequence cannot be logically explained as the next step of
-exactly one train's active route, do not move a train identity.
+The focus is the Dispatcher-triggered replan.
 
-The implementation should remain understandable enough for an undergraduate
-systems project and should resemble real sequential track-circuit tracking.
+============================================================
+PART 7 — OUTBOUND COMMUNICATION
+============================================================
 
-Do not use arrival-time proximity as the deciding factor.
+When a use case communicates outside CTC, trace the real implementation.
 
-Arrival times may eventually be useful as diagnostics, but trains can be late
-or early. Route sequence and track occupancy are the source of location
-inference.
+Check:
 
-BOUNDARY / LONG-TRAIN BEHAVIOR
-==============================
+    IMessageSender
+    NamedPipeMessageSender
+    NamedPipeTransport
+    NamedPipeNames
+    TrainControl.Contracts.Messages
 
-Correctly support the normal overlap:
+If the CTC sends a:
 
-    A1 Occupied
-    A2 Occupied
+    MaintenanceRequestMessage
+    SwitchPositionRequestMessage
+    MovementSuggestionMessage
 
-before:
+show the actual message type in the sequence diagram.
 
-    A1 Clear
+A useful pattern may be:
 
-As soon as A2 becomes occupied and it is uniquely Train 000's next route block,
-CurrentBlockId should become A2.
+    ctc : CTCService
+       -> sender : IMessageSender
+          SendAsync(message)
 
-For this CTC display, "Current Block" means the foremost/latest block CTC has
-logically advanced the train into.
+    sender
+       -> track controller / transport
+          [actual transport call if useful]
 
-CTC does not need to model the rear of the train for this feature.
+Do not over-model named-pipe serialization/framing unless it is necessary to explain the use case.
 
-Do not move the CurrentBlock backward when the trailing block later clears.
+The application/domain interactions are more important than pipe internals.
 
-STATE CHANGE + WPF
-==================
+============================================================
+PART 8 — EVENTS / VIEW REFRESH
+============================================================
 
-Add an appropriate state change such as:
+CTC uses StateChanged to notify the WPF layer about state changes.
 
-    CtcStateChangeKind.TrainLocationUpdated
+Where it materially completes the use case, show the event flow:
 
-or an equivalent name consistent with the codebase.
+    CTCService
+       -> MainWindowViewModel
+          StateChanged / OnCtcStateChanged(...)
 
-Include the TrainId.
+and the corresponding rebuild/refresh method if relevant, such as:
 
-MainWindowViewModel should respond by refreshing the corresponding
-DispatchedTrainViewModel rather than unnecessarily rebuilding unrelated state.
+    RebuildDispatchQueue()
+    RebuildDispatchedTrains()
+    BlockViewModel.Refresh()
 
-Refactor DispatchedTrainViewModel:
+ONLY show this when it clarifies the visible result of the user's action.
 
-    LastKnownBlock
+Do not add repetitive property-notification details to every diagram.
 
-to:
+============================================================
+PART 9 — STARUML REQUIREMENTS
+============================================================
 
-    CurrentBlock
+The final output must remain an editable StarUML `.mdj` model.
 
-or another clearly equivalent property.
+Preferred approach:
 
-Update MainWindow.xaml.
+1. Use StarUML itself / its supported model manipulation mechanism / GUI automation if accessible in this environment.
+2. Reuse the existing model elements wherever practical.
+3. Add actual UMLSequenceDiagram elements and UML interaction/lifeline/message model elements, not screenshots or embedded images.
+4. If direct manipulation of the `.mdj` JSON is necessary, FIRST inspect how the existing StarUML file represents model elements and views. Modify it carefully and validate all `$ref` references.
+5. Do not fake sequence diagrams using arbitrary rectangles and lines if StarUML supports real sequence-diagram elements.
+6. Preserve the existing valid use case diagram and its editable UML elements.
+7. Make sure StarUML can reopen the resulting file without repair/errors.
 
-Change the DataGrid header:
+Validate the JSON syntactically after editing.
 
-    Last Known Block
+If StarUML is installed and can be launched, open the finished .mdj in StarUML and visually inspect every diagram.
 
-to:
+============================================================
+PART 10 — DIAGRAM READABILITY
+============================================================
 
-    Current Block
+The diagrams will be submitted/reviewed by humans, so layout matters.
 
-Update the selected-train details panel similarly.
+For every sequence diagram:
 
-Also rewrite the explanatory text above the dispatched trains table.
+- Dispatcher should be leftmost when it initiates the use case.
+- Order remaining participants approximately from UI -> ViewModel -> domain/service -> helper/service -> messaging/external system.
+- Avoid crossing messages where possible.
+- Give participants enough horizontal space for class names.
+- Give messages enough vertical space to read.
+- Avoid overlapping text.
+- Use consistent font/layout conventions across all diagrams.
+- Keep each diagram focused enough to fit on a page/screen.
+- Use notes for state changes or important semantic distinctions.
+- Do not add decorative styling that obscures standard UML notation.
 
-It should no longer say that occupancy cannot update train location.
+Some diagrams will legitimately be short. Do not artificially add lifelines just to make them look complex.
 
-It should say, concisely, that Current Block is inferred from sequential track
-occupancy along the train's active route.
+============================================================
+PART 11 — SOURCE TRACEABILITY
+============================================================
 
-UPDATE REROUTING UI/COMMENTS
-============================
+For each sequence diagram, create either:
 
-Search the entire CTC codebase for:
+A. a StarUML note on the diagram, or
+B. documentation/property text associated with the interaction,
 
-    LastKnownBlock
-    LastKnownBlockId
-    "last known block"
-    "cannot track trains"
-    "train-position message"
-    TODO comments relating to explicit train-position messages
+listing the main implementation source files/methods used to construct the diagram.
 
-Update or remove all stale assumptions.
+For example:
 
-The dispatcher rerouting feature should now say it routes from the train's
-CURRENT inferred block.
+    Implementation references:
+    - ScheduleBuilderViewModel.GenerateTemplate()
+    - ScheduleTemplateFactory.Create()
+    - ScheduleBuilderViewModel.ShowTemplate()
 
-Do not leave old documentation suggesting that a future TrainId/location
-message is expected.
+For Update Dispatched Train Plan, include references similar to:
 
-TESTUI REQUIREMENTS
-===================
+    - MainWindowViewModel.ApplyTrainPlanAsync()
+    - ICTCService.UpdateDispatchedTrainPlanAsync()
+    - CTCService.UpdateDispatchedTrainPlanAsync()
+    - RouteManager.FindRoute()
+    - SpeedPlanner.CalculateSpeedToTarget()
+    - AuthorityManager.CalculateUpdatedAuthorityMeters()
+    - IMessageSender.SendAsync()
 
-DO NOT add a fake TrainId/current-block input to TestUI.
+ONLY list methods that actually exist in the current branch.
 
-That would bypass the feature we are trying to test.
+This is important because these diagrams are intended to reflect the implemented code, not merely conceptual requirements.
 
-The CTC.TestUI must continue to simulate the real Track Controller by sending
-anonymous BlockStatusMessage objects.
+============================================================
+PART 12 — DO NOT MODIFY SYSTEM BEHAVIOR
+============================================================
 
-The existing manual Block Status input should continue working.
+This task is DOCUMENTATION ONLY.
 
-I also want a small TestUI convenience tool for exercising sequential occupancy
-without manually sending every transition one at a time.
+Do not "fix" the code to make it match the UML.
 
-Add a clearly labeled TEST-ONLY section such as:
+Instead:
 
-    Occupancy Sequence Simulator
+    UML must match code.
 
-It can accept a route as block IDs, for example:
+If you discover a discrepancy between what I expected above and the actual implementation, use the implementation as the source of truth and tell me about the discrepancy.
 
-    A1,A2,A3,A4,A5
+Do not refactor CTC classes while doing this task.
 
-and a configurable delay or a simple Next Step button.
+============================================================
+PART 13 — FINAL VALIDATION / REPORT
+============================================================
 
-Prefer a "Next Step" approach if it fits the current TestUI better, because it
-makes the inference visible during a demonstration.
+After completing the StarUML work:
 
-For a sequence:
+1. Parse/validate the resulting JSON.
+2. If possible, open it in StarUML and check every diagram.
+3. Verify that every final use-case bubble has exactly one corresponding sequence diagram.
+4. Verify that no sequence diagram refers to nonexistent methods/classes.
+5. Verify that the Use Case Diagram still has exactly one actor: Dispatcher.
+6. Verify that passive incoming CTC data is not incorrectly represented as a Dispatcher use case.
+7. Verify that Update Dispatched Train Plan is represented if the current UI implements it.
+8. Verify that the new train-location/current-block support is represented only where relevant rather than as a fake Dispatcher action.
 
-    A1,A2,A3
+At the end, report:
 
-the simulator should generate ONLY normal BlockStatusMessage traffic.
-
-One possible sequence is:
-
-Initial:
-    A1 Occupied
-
-Advance once:
-    A2 Occupied
-    A1 Clear
-
-Advance again:
-    A3 Occupied
-    A2 Clear
-
-For realism, when advancing from A1 to A2, send A2 Occupied BEFORE A1 Clear so
-there is briefly overlapping occupancy.
-
-The simulator must not send the train ID to CTC.
-
-The simulator does not need to know which train CTC will associate with the
-occupancy. Its job is only to imitate track circuits changing state.
-
-Use the same ICtcMessageSender / named-pipe path as the existing Block Status
-input. Do not call CTCService directly from TestUI.
-
-If adding this helper would require major architectural changes, keep it small:
-a route text field, Reset/Start button, and Next Occupancy Step button are
-sufficient.
-
-Suggested demonstration workflow:
-
-1. Send/load the sample Blue Line layout.
-2. Build a schedule where Train 000 begins at A1 and follows the known route.
-3. Advance system time until Train 000 dispatches.
-4. The Dispatched Trains table should immediately show:
-       Train 000 | Current Block A1
-5. Start the occupancy simulator with the same block route.
-6. Report A1 Occupied.
-7. Advance one step:
-       A2 Occupied
-       A1 Clear
-8. CTC should show:
-       Train 000 | Current Block A2
-9. Advance again:
-       A3 Occupied
-       A2 Clear
-10. CTC should show:
-       Train 000 | Current Block A3
-
-The exact simulation clock time of these occupancy messages must NOT be required
-for the location inference to work.
-
-UNIT TESTS
-==========
-
-Add thorough CTC.Core tests.
-
-At minimum cover:
-
-1. Dispatch initializes CurrentBlockId to StartBlockId.
-
-2. Start-block occupancy does not incorrectly advance the train.
-
-3. Next-route-block becoming occupied advances CurrentBlockId.
-
-4. New block can become occupied BEFORE old block clears:
-       A1 occupied
-       A2 occupied
-   -> current becomes A2.
-
-5. Clearing the trailing block after advancement does not move CurrentBlockId
-   backward or set it unknown.
-
-6. Clear-old-first ordering is tolerated:
-       A1 occupied
-       A1 clear
-       A2 occupied
-   -> current becomes A2.
-
-7. Repeated A2=Occupied snapshots do not advance more than once.
-
-8. An unrelated block becoming occupied does not move the train.
-
-9. A block farther ahead on the route does not allow skipping:
-       current A1
-       A3 occupied
-   -> still A1.
-
-10. Two dispatched trains on different parts of the line are tracked
-    independently.
-
-11. An occupancy that could match more than one train is treated as ambiguous
-    and no train is advanced.
-
-12. Occupancy on another line cannot advance a train.
-
-13. Unknown occupancy does not advance a train.
-
-14. After a successful dispatcher reroute, occupancy follows the NEW active
-    route rather than the original ScheduledTrain.Route.
-
-For the reroute test, use something like:
-
-Original:
-    A1 -> A2 -> A3 -> A4
-
-Current:
-    A2
-
-New route:
-    A2 -> B1 -> B2
-
-After applying the new destination:
-    B1 Occupied
-
-should move the train to B1.
-
-An occupancy on the old A3 path should no longer advance it.
-
-15. If the reroute MovementSuggestion send fails, the old active route must
-    remain in effect.
-
-16. Existing block status, dispatch, schedule, maintenance, speed/authority,
-    and rerouting tests must continue passing.
-
-Do not weaken existing assertions just to accommodate this feature.
-
-CODE QUALITY
-============
-
-Keep all train-identification logic in CTC.Core.
-
-WPF should only present CTC state.
-
-TestUI should only generate realistic anonymous inputs.
-
-Do not couple CTC.Core to WPF.
-
-Do not add a database.
-
-Do not add timers to production CTC for train tracking.
-
-Do not poll CTC state.
-
-The location tracker should react to incoming BlockStatusMessage occupancy
-transitions.
-
-Reuse the existing RouteManager/topology and current state models rather than
-building a parallel graph representation unless absolutely necessary.
-
-Keep the algorithm deterministic and easy to explain.
-
-EXPECTED RESULT
-===============
-
-After implementation, the system should demonstrate this:
-
-    CTC dispatches Train 000 at A1
-              |
-              v
-        Current Block A1
-
-    anonymous track circuit:
-        A1 Occupied
-
-    anonymous track circuit:
-        A2 Occupied
-              |
-              v
-    CTC knows A2 is the next block
-    on Train 000's active route
-              |
-              v
-        Current Block A2
-
-    anonymous track circuit:
-        A1 Clear
-              |
-              v
-        Current Block stays A2
-
-No incoming message ever says that A2 belongs to Train 000.
-
-The association is entirely CTC logic based on:
-- initial dispatch identity
-- active route
-- sequential occupancy
-
-Finally:
-- build the complete solution
-- run all existing tests
-- run the new tests
-- fix any regressions caused by this change
-- summarize exactly which files were changed
-- explain the final sequential-occupancy algorithm
-- explain how to manually demonstrate it using CTC.TestUI
-- do not commit or push unless explicitly asked
+- final use-case names;
+- sequence-diagram names;
+- the main classes/methods represented in each sequence;
+- any changes made to the original use-case diagram;
+- any assumptions or ambiguities you found;
+- exact files modified;
+- whether the .mdj was successfully validated/opened;
+- `git diff --stat`;
+- and DO NOT commit or push unless I explicitly ask.
