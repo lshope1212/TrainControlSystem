@@ -19,6 +19,11 @@ public static class AuthorizationGuard
             return output.AuthorizedSpeedMetersPerSecond == 0;
         }
 
+        if (output.AuthorizedSpeedMetersPerSecond <= 0)
+        {
+            return false;
+        }
+
         if (output.AuthorizedAuthorityMeters > output.SuggestedAuthorityMeters || output.AuthorizedSpeedMetersPerSecond > output.SuggestedSpeedMetersPerSecond)
         {
             return false;
@@ -35,7 +40,7 @@ public static class AuthorizationGuard
         }
 
         double remaining = output.AuthorizedAuthorityMeters;
-        for (int i = 0; i < sequence.Length && remaining > 0.000001; i++)
+        for (int i = 0; i < sequence.Length && (i == 0 || remaining > 0.000001); i++)
         {
             var block = blocks.SingleOrDefault(blockStatus => blockStatus.BlockId == sequence[i]);
             if (block is null || !block.IsFresh || block.IsFaulted || block.Occupancy == OccupancyState.Unknown || (i == 0 ? block.Occupancy != OccupancyState.Occupied : block.Occupancy != OccupancyState.Clear) || block.Maintenance == "Closed" || (i > 0 && block.Maintenance != "Open") || output.AuthorizedSpeedMetersPerSecond > block.SpeedLimitMetersPerSecond)

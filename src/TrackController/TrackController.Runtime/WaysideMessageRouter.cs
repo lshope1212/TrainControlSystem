@@ -65,6 +65,10 @@ public sealed class WaysideMessageRouter(ITrackControllerService controller)
                     break;
                 case nameof(WaysidePlcProgramMessage):
                     var program = Read<WaysidePlcProgramMessage>(envelope);
+                    if (program.TerritoryId is not null && program.TerritoryId != controller.GetConfiguration().WaysideId)
+                    {
+                        throw new ArgumentException("PLC target does not match this territory.");
+                    }
                     controller.LoadPlc(program.Name, program.Source);
                     detail = "PLC loaded. Resume explicitly.";
                     break;

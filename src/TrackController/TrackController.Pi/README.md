@@ -1,31 +1,14 @@
 # TrackController.Pi
 
-The Windows application owns the UI, test inputs, and routing. Each block has one controller owner. A software territory runs locally on the PC; a hardware territory runs on the Pi. Both execute the same `TrackController.Core` code, Boolean interpreter, and `wayside.plc` source. They control different territories; they are not redundant copies voting on one territory.
+The Windows application owns the UI, test inputs, and routing. Each block has one controller owner. A software territory runs locally on the PC; a hardware territory runs on the Pi. Both execute the same `TrackController.Core` code, Boolean interpreter. Each territory has its own PLC assignment, defaulting to `wayside.plc`. They control different territories; they are not redundant copies voting on one territory.
 
 The original **PLC program** option was only a local preview. To execute on hardware, use **Controller setup → Track and controllers**. One shared track map, named territory ownership lists, and editable PC/Pi placement are explained in the [territory guide](../TrackController.Runtime/README.md). The selected block inspector shows its execution target.
 
 ## What the PLC file means
 
-Here, PLC means a separately loaded control-rule program. Our `.plc` file uses a small Boolean-only language implemented for this project. It is not an IEC 61131-3 ladder-logic file, a Python script, or firmware that can run alone.
+The Pi executes the assigned `plc boolean_v1` source with the same scalar Boolean interpreter as Windows. The program evaluates the interlocks and calculates commanded speed and authority through explicit AND/OR/NOT equations in the PLC file. C# handles I/O, unit encoding/decoding, clocks, and an independent unsafe-output veto. It does not precompute the normal movement decision for the PLC.
 
-The runtime receives blocks, occupancy, faults, equipment feedback, and movement requests. It calculates route conditions and supplies Boolean inputs to the file. The file returns permission/protection decisions. The runtime still calculates numeric speed/authority and applies its independent final protection check.
-
-The supplied program contains:
-
-```text
-movement_enabled = route_safe and running
-allow_route = movement_enabled
-signal_clear = movement_enabled
-switch_normal = requested_normal
-crossing_close = crossing_required or not running
-```
-
-- `allow_route`: allow the candidate movement only after route checks pass and operation is resumed.
-- `signal_clear`: allow a proceed signal under those same conditions. Actual signal feedback is checked separately.
-- `switch_normal`: select the requested switch position. False means reverse, not “move now.” The runtime separately requires the protection zone to be safe before moving a switch.
-- `crossing_close`: close when protection requires it, or while paused/in maintenance mode.
-
-The full file has comments explaining every input. The PC router reads one PLC source and sends exactly that source to the Pi during initialization and whenever **Advanced → Replace PLC…** replaces it. A routed deployment requires PLC logic on both targets. The earlier **Software logic** choice remains available under **Advanced**.
+The [PLC language contract](../TrackController.Core/Control/README.md) explains the inputs, output bits, fixed-point representation and scan sequence. Select **PLC territory → Advanced → Replace selected PLC…** while paused to assign a program, then save applied choices to retain it. The source is uploaded when establishing each Pi session. Old permission-only PLC files are rejected. Rebuild/redeploy the Pi package for protocol version 6.
 
 ## Recommended connection at school
 
@@ -108,7 +91,7 @@ Keep this terminal open too. It forwards `127.0.0.1:11405` on Windows to the Pi'
 8. To demonstrate local execution, use a clear preset, report block 1 occupied in the Blocks editor, send feedback, and submit a request from 1 over `2, 3` with a distinct train label. The PC evaluates it. One request must stay within its assigned territory.
 9. Disconnect the SSH tunnel. The Pi territory becomes unavailable and its last authorizations become zero. The LED monitor treats expired outputs as stopped. Reconnect: the Pi session starts paused, with no old requests or feedback. Send fresh feedback and explicitly resume. If the PC territory is still running, select **Pause**, then **Resume** to resume both together.
 
-Each Pi runtime permits one owner at a time. The external Test UI talks to the existing PC controller; it does not open a second Pi session. Use a separate runtime and tunnel port for each independent Pi territory. This deployment uses protocol version 3; update the Pi package alongside Windows when replacing an older version.
+Each Pi runtime permits one owner at a time. The external Test UI talks to the existing PC controller; it does not open a second Pi session. Use a separate runtime and tunnel port for each independent Pi territory. This deployment uses protocol version 6; update the Pi package alongside Windows when replacing an older version.
 
 Local testing without a Pi is also possible: run `TrackController.Pi` on Windows as a second application, then load the same deployment with no SSH tunnel. This verifies the network/runtime path, but it is not hardware validation.
 

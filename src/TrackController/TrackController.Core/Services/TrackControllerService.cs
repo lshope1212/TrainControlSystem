@@ -42,7 +42,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
     private readonly Dictionary<string, Request> _requests = [];
     private readonly Dictionary<string, RequestOrigin> _requestOrigins = [];
     private readonly HashSet<string> _retiredRequests = [];
-    private BooleanPlcProgram? _plc;
+    private VitalPlcProgram? _plc;
     private string _plcName = "No program loaded";
     private string _plcStatus = "Load a Boolean PLC program to enable hardware mode.";
     private bool _paused = true;
@@ -153,7 +153,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
             _plcName = "No program loaded";
             try
             {
-                _plc = BooleanPlcProgram.Compile(source);
+                _plc = VitalPlcProgram.Compile(source);
                 _plcName = name;
                 _plcStatus = "Program loaded. Resume explicitly when ready.";
             }
@@ -271,7 +271,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
                     _retiredRequests.Add(request.Value.RequestId);
                 }
 
-                if (block.Maintenance == "Pending closure" && IsFresh(block) && feedback.Occupancy == OccupancyState.Clear)
+                if (block.Maintenance == "Pending closure" && ClosurePlc(block))
                 {
                     block.Maintenance = "Closed";
                 }

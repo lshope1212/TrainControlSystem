@@ -107,7 +107,7 @@ public sealed class PiRuntimeServer : IAsyncDisposable
                         }
                         else if (input.MessageType == nameof(WaysideControllerModeMessage) && !MessageSerializer.DeserializePayload<WaysideControllerModeMessage>(input).IsHardwareMode)
                         {
-                            response = RuntimeMessages.CreateRejection(input.MessageType, "The Pi runs the shared PLC program. Software-only mode is available in the standalone controller.");
+                            response = RuntimeMessages.CreateRejection(input.MessageType, "The Pi runs its assigned PLC program. Software-only mode is available in the standalone controller.");
                         }
                         else
                         {

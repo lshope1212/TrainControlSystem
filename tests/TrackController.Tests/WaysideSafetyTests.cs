@@ -11,7 +11,9 @@ namespace TrackController.Tests;
 [TestClass]
 public sealed class WaysideSafetyTests
 {
-    private const string GoodPlc = "allow_route = route_safe and running\nswitch_normal = requested_normal\nsignal_clear = route_safe and running\ncrossing_close = crossing_required";
+    private static string GoodPlc => PiRuntimeTests.ProgramSource;
+
+    private const string LegacyPlc = "allow_route = route_safe and running\nswitch_normal = requested_normal\nsignal_clear = route_safe and running\ncrossing_close = crossing_required";
 
     private sealed class Clock : TimeProvider
     {
@@ -97,9 +99,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that clear route approves metric speed and authority without plc in software mode.</summary>
     [TestMethod]
-    public void SubmitMovement_ClearSoftwareRoute_ApprovesMetricLimits()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_ClearSoftwareRoute_ApprovesMetricLimits(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var authorization = fixture.Submit();
         Assert.AreEqual(350d, authorization.AuthorizedAuthorityMeters);
         Assert.AreEqual(12d, authorization.AuthorizedSpeedMetersPerSecond);
@@ -169,7 +173,7 @@ public sealed class WaysideSafetyTests
     public void SubmitMovement_RestrictivePlc_WithholdsSafeRoute()
     {
         var fixture = new Fixture(true);
-        fixture.Service.LoadPlc("stop", GoodPlc.Replace("allow_route = route_safe and running", "allow_route = false"));
+        fixture.Service.LoadPlc("stop", GoodPlc.Replace("allow_route = movement_enabled", "allow_route = false"));
         fixture.Service.SetSimulation(new()
         {
             IsPaused = false
@@ -182,7 +186,7 @@ public sealed class WaysideSafetyTests
     public void SubmitMovement_PermissivePlc_StillBlocksOccupiedRoute()
     {
         var fixture = new Fixture(true);
-        fixture.Service.LoadPlc("permissive", GoodPlc.Replace("route_safe and running", "true"));
+        fixture.Service.LoadPlc("permissive", GoodPlc.Replace("allow_route = movement_enabled", "allow_route = true"));
         fixture.Service.SetSimulation(new()
         {
             IsPaused = false
@@ -193,9 +197,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that speed limit uses lowest covered block limit.</summary>
     [TestMethod]
-    public void SubmitMovement_MultipleSpeedLimits_UsesLowestCoveredLimit()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_MultipleSpeedLimits_UsesLowestCoveredLimit(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var request = fixture.Request("10", "11", "12");
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "10").Occupancy = OccupancyState.Occupied);
         Assert.AreEqual(8d, fixture.Submit(request).AuthorizedSpeedMetersPerSecond);
@@ -203,9 +209,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Locates the authority endpoint from the block entry without requiring train position.</summary>
     [TestMethod]
-    public void SubmitMovement_BlockEntryAndTerritoryEnd_LimitsAuthority()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_BlockEntryAndTerritoryEnd_LimitsAuthority(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var request = fixture.Request();
         request.SuggestedAuthorityMeters = 900;
         var result = fixture.Submit(request);
@@ -215,18 +223,22 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that unknown block withholds movement.</summary>
     [TestMethod]
-    public void SubmitMovement_UnknownOccupancy_WithholdsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_UnknownOccupancy_WithholdsMovement(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "7").Occupancy = OccupancyState.Unknown);
         Assert.AreEqual(0d, fixture.Submit().AuthorizedAuthorityMeters);
     }
 
     /// <summary>Verifies that stale feedback stops and fresh feedback recovers.</summary>
     [TestMethod]
-    public void ApplyFeedback_StaleThenFresh_StopsThenRecoversMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyFeedback_StaleThenFresh_StopsThenRecoversMovement(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         fixture.Clock.Advance(5.1);
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
@@ -236,9 +248,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that fresh feedback cannot revive an expired request.</summary>
     [TestMethod]
-    public void ApplyFeedback_ExpiredRequest_DoesNotRestoreMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyFeedback_ExpiredRequest_DoesNotRestoreMovement(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         fixture.Clock.Advance(10.1);
         fixture.Feedback();
@@ -248,9 +262,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that stale samples cannot refresh watchdog.</summary>
     [TestMethod]
-    public void ApplyFeedback_OldSamples_DoesNotRefreshWatchdog()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyFeedback_OldSamples_DoesNotRefreshWatchdog(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         var old = fixture.Clock.Now;
         fixture.Clock.Advance(5.2);
@@ -263,9 +279,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that switch mismatch waits for real feedback.</summary>
     [TestMethod]
-    public void RequestSwitch_MismatchedFeedback_WithholdsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestSwitch_MismatchedFeedback_WithholdsMovement(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "6").Switch = SwitchPosition.Reverse);
         Assert.AreEqual(0d, fixture.Submit().AuthorizedAuthorityMeters);
         StringAssert.Contains(fixture.Output.Reason, "needs 7");
@@ -275,9 +293,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that switch command does not fabricate feedback.</summary>
     [TestMethod]
-    public void RequestSwitch_AcceptedCommand_DoesNotFabricateFeedback()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestSwitch_AcceptedCommand_DoesNotFabricateFeedback(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = OccupancyState.Clear));
         fixture.Service.RequestSwitch(new()
         {
@@ -291,9 +311,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that occupied approach blocks switch movement.</summary>
     [TestMethod]
-    public void RequestSwitch_OccupiedApproach_RejectsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestSwitch_OccupiedApproach_RejectsMovement(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
         StringAssert.Contains(exception.Message, "block 5");
         StringAssert.Contains(exception.Message, "occupied");
@@ -301,9 +323,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that unknown reservation blocks switch movement.</summary>
     [TestMethod]
-    public void RequestSwitch_UnknownReservation_RejectsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestSwitch_UnknownReservation_RejectsMovement(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.ForEach(feedback =>
         {
             feedback.Occupancy = OccupancyState.Clear;
@@ -315,9 +339,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Rejects a paused request explicitly rather than silently applying it after a later resume.</summary>
     [TestMethod]
-    public void RequestSwitch_Paused_RejectsWithoutQueuingCommand()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestSwitch_Paused_RejectsWithoutQueuingCommand(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = OccupancyState.Clear));
         fixture.Service.SetSimulation(new() { IsPaused = true });
         var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
@@ -341,9 +367,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that maintenance on occupied block allows exit then closes.</summary>
     [TestMethod]
-    public void RequestMaintenance_OccupiedBlock_AllowsExitBeforeClosure()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestMaintenance_OccupiedBlock_AllowsExitBeforeClosure(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         fixture.Service.RequestMaintenance(new()
         {
@@ -358,9 +386,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that closed block prevents new entry and requires explicit reopen.</summary>
     [TestMethod]
-    public void RequestMaintenance_ClosedBlock_RequiresExplicitReopen()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestMaintenance_ClosedBlock_RequiresExplicitReopen(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Service.RequestMaintenance(new()
         {
             BlockId = "7",
@@ -380,9 +410,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that faults remain restrictive after connection recovery.</summary>
     [TestMethod]
-    public void ApplyFeedback_RecoveredConnectionWithFault_WithholdsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyFeedback_RecoveredConnectionWithFault_WithholdsMovement(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         fixture.Clock.Advance(5.1);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "7").IsFaulted = true);
@@ -392,9 +424,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that conflicting requests both withhold authority.</summary>
     [TestMethod]
-    public void SubmitMovement_OverlappingRequests_WithholdsBothAuthorities()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_OverlappingRequests_WithholdsBothAuthorities(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "6").Occupancy = OccupancyState.Occupied);
         fixture.Submit(fixture.Request("6", "7", "8"));
@@ -403,9 +437,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that crossing waits for closed feedback and signals stay red.</summary>
     [TestMethod]
-    public void SubmitMovement_CrossingNotConfirmedClosed_HoldsSignalsRed()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_CrossingNotConfirmedClosed_HoldsSignalsRed(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "8").Crossing = CrossingState.Open);
         Assert.AreEqual(0d, fixture.Submit().AuthorizedAuthorityMeters);
         Assert.AreEqual(CrossingState.Closed, fixture.Service.GetSnapshot().Blocks.Single(blockStatus => blockStatus.BlockId == "8").CommandedCrossing);
@@ -416,9 +452,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that crossing remains closed until entire protection zone clears.</summary>
     [TestMethod]
-    public void GetSnapshot_OccupiedCrossingZone_KeepsCrossingClosed()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void GetSnapshot_OccupiedCrossingZone_KeepsCrossingClosed(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "9").Occupancy = OccupancyState.Occupied);
         Assert.AreEqual(CrossingState.Closed, fixture.Service.GetSnapshot().Blocks.Single(blockStatus => blockStatus.BlockId == "8").CommandedCrossing);
         fixture.Feedback();
@@ -427,9 +465,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that manual controls require maintenance and protection.</summary>
     [TestMethod]
-    public void ApplyManual_UnprotectedOrNonMaintenanceMode_RejectsCommand()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyManual_UnprotectedOrNonMaintenanceMode_RejectsCommand(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(new() { BlockId = "4", Signal = SignalState.Red }));
         fixture.Service.SetMaintenanceMode(true);
         fixture.Service.ApplyManual(new()
@@ -443,9 +483,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that paused clock stops but watchdog still runs.</summary>
     [TestMethod]
-    public void SetSimulation_Paused_StopsClockButKeepsWatchdogActive()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SetSimulation_Paused_StopsClockButKeepsWatchdogActive(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Clock.Advance(2);
         fixture.Service.SetSimulation(new()
         {
@@ -460,9 +502,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that simulation multiplier applies to clock.</summary>
     [TestMethod]
-    public void SetSimulation_SpeedMultiplier_ScalesClock()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SetSimulation_SpeedMultiplier_ScalesClock(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Service.SetSimulation(new()
         {
             IsPaused = false,
@@ -475,9 +519,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that cleared origin cannot authorize anew occupant with old request.</summary>
     [TestMethod]
-    public void SubmitMovement_RetiredOrigin_RejectsReusedRequest()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_RetiredOrigin_RejectsReusedRequest(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var request = fixture.Request();
         fixture.Submit(request);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "5").Occupancy = OccupancyState.Clear);
@@ -488,9 +534,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that same id cannot change authority origin.</summary>
     [TestMethod]
-    public void SubmitMovement_ChangedOriginWithSameId_RejectsRequest()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_ChangedOriginWithSameId_RejectsRequest(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var request = fixture.Request();
         fixture.Submit(request);
         request.TargetBlockId = "6";
@@ -501,9 +549,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that repeated request may change limits but cannot mutate its route.</summary>
     [TestMethod]
-    public void SubmitMovement_RepeatedId_AllowsNewLimitsButRejectsNewRoute()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_RepeatedId_AllowsNewLimitsButRejectsNewRoute(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var request = fixture.Request();
         fixture.Submit(request);
         request.SuggestedSpeedMetersPerSecond = 3;
@@ -545,9 +595,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that snapshot lease cannot outlive supporting feedback.</summary>
     [TestMethod]
-    public void GetSnapshot_ExpiringFeedback_LimitsOutputLease()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void GetSnapshot_ExpiringFeedback_LimitsOutputLease(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         fixture.Clock.Advance(4.9);
         var snapshot = fixture.Service.GetSnapshot();
@@ -556,9 +608,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that wrong cancellation id cannot remove new request.</summary>
     [TestMethod]
-    public void SubmitMovement_WrongCancellationId_PreservesCurrentRequest()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_WrongCancellationId_PreservesCurrentRequest(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Submit();
         Assert.Throws<ArgumentException>(() => fixture.Service.SubmitMovement(new() { TargetBlockId = "5", RequestId = "old", IsActive = false }));
         Assert.AreEqual(350d, fixture.Output.AuthorizedAuthorityMeters);
@@ -566,9 +620,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that yellow command caps speed before feedback catches up.</summary>
     [TestMethod]
-    public void SubmitMovement_YellowSignalCommand_CapsSpeedBeforeFeedback()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_YellowSignalCommand_CapsSpeedBeforeFeedback(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "7").Occupancy = OccupancyState.Occupied);
         Assert.AreEqual(5d, fixture.Submit().AuthorizedSpeedMetersPerSecond);
     }
@@ -590,18 +646,22 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that reverse route through aligned switch is supported.</summary>
     [TestMethod]
-    public void SubmitMovement_AlignedReverseRoute_ApprovesMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_AlignedReverseRoute_ApprovesMovement(bool hardware)
     {
-        var fixture = new Fixture(configuration: Bidirectional());
+        var fixture = new Fixture(hardware, configuration: Bidirectional());
         fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = feedback.BlockId == "7" ? OccupancyState.Occupied : OccupancyState.Clear));
         Assert.AreEqual(350d, fixture.Submit(fixture.Request("7", "6", "5", "4")).AuthorizedAuthorityMeters);
     }
 
     /// <summary>Verifies that reverse route cannot enter misaligned switch.</summary>
     [TestMethod]
-    public void SubmitMovement_MisalignedReverseRoute_RejectsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_MisalignedReverseRoute_RejectsMovement(bool hardware)
     {
-        var fixture = new Fixture(configuration: Bidirectional());
+        var fixture = new Fixture(hardware, configuration: Bidirectional());
         fixture.Feedback(rows => rows.ForEach(feedback =>
         {
             feedback.Occupancy = feedback.BlockId == "7" ? OccupancyState.Occupied : OccupancyState.Clear;
@@ -612,18 +672,22 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that turnout cannot connect two branches to each other.</summary>
     [TestMethod]
-    public void SubmitMovement_BranchToBranchRoute_RejectsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_BranchToBranchRoute_RejectsMovement(bool hardware)
     {
-        var fixture = new Fixture(configuration: Bidirectional());
+        var fixture = new Fixture(hardware, configuration: Bidirectional());
         fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = feedback.BlockId == "7" ? OccupancyState.Occupied : OccupancyState.Clear));
         Assert.AreEqual(0d, fixture.Submit(fixture.Request("7", "6", "10")).AuthorizedAuthorityMeters);
     }
 
     /// <summary>Verifies that origin on switch requires its entry block.</summary>
     [TestMethod]
-    public void SubmitMovement_OriginOnSwitch_RequiresEntryBlock()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_OriginOnSwitch_RequiresEntryBlock(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = feedback.BlockId == "6" ? OccupancyState.Occupied : OccupancyState.Clear));
         Assert.AreEqual(0d, fixture.Submit(fixture.Request("6", "7", "8")).AuthorizedAuthorityMeters);
         var request = fixture.Request("6", "7", "8");
@@ -633,9 +697,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that incoming contracts are defensively copied.</summary>
     [TestMethod]
-    public void ApplyFeedback_CallerMutatesInput_PreservesAcceptedState()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyFeedback_CallerMutatesInput_PreservesAcceptedState(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var request = fixture.Request();
         fixture.Submit(request);
         request.PathBlockIds.Clear();
@@ -646,9 +712,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that invalid route and numeric inputs are rejected.</summary>
     [TestMethod]
-    public void SubmitMovement_InvalidRouteOrNumbers_RejectsRequest()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_InvalidRouteOrNumbers_RejectsRequest(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         Assert.Throws<ArgumentException>(() => fixture.Submit(fixture.Request("5", "9")));
         foreach (double value in new[]
         {
@@ -671,9 +739,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that invalid feedback batch does not partially apply.</summary>
     [TestMethod]
-    public void ApplyFeedback_InvalidBatch_DoesNotPartiallyApply()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyFeedback_InvalidBatch_DoesNotPartiallyApply(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         Assert.Throws<ArgumentException>(() => fixture.Service.ApplyFeedback(new() { Blocks = [new() { BlockId = "5", ObservedAtUtc = fixture.Clock.Now.AddMilliseconds(1), Occupancy = OccupancyState.Clear }, new() { BlockId = "foreign", ObservedAtUtc = fixture.Clock.Now }] }));
         Assert.AreEqual(OccupancyState.Occupied, fixture.Service.GetSnapshot().Blocks.Single(blockStatus => blockStatus.BlockId == "5").Occupancy);
     }
@@ -692,9 +762,11 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that independent guard rejects excessive or misdirected output.</summary>
     [TestMethod]
-    public void IsSafe_ExcessiveOrMisdirectedAuthority_RejectsOutput()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void IsSafe_ExcessiveOrMisdirectedAuthority_RejectsOutput(bool hardware)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(hardware);
         var authorization = fixture.Submit();
         var snapshot = fixture.Service.GetSnapshot();
         Assert.IsFalse(AuthorizationGuard.IsSafe(authorization with
@@ -715,7 +787,7 @@ public sealed class WaysideSafetyTests
     [TestMethod]
     public void Compile_BooleanExpressions_RespectsPrecedenceAndRejectsHostCode()
     {
-        var program = BooleanPlcProgram.Compile(GoodPlc.Replace("allow_route = route_safe and running", "allow_route = false or route_safe and not running"));
+        var program = BooleanPlcProgram.Compile(LegacyPlc.Replace("allow_route = route_safe and running", "allow_route = false or route_safe and not running"));
         var result = program.Execute(new Dictionary<string, bool> { ["route_safe"] = true, ["switch_safe"] = true, ["requested_normal"] = true, ["crossing_required"] = false, ["running"] = false });
         Assert.IsTrue(result["allow_route"]);
         foreach (string bad in new[]
@@ -723,8 +795,8 @@ public sealed class WaysideSafetyTests
             "allow_route = System.IO.File.Delete(\"file\")",
             "allow_route = 1",
             "allow_route = missing",
-            GoodPlc + "\nallow_route = true",
-            GoodPlc.Replace("route_safe and running", new string ('!', 40) + "true")
+            LegacyPlc + "\nallow_route = true",
+            LegacyPlc.Replace("route_safe and running", new string ('!', 40) + "true")
         }
 
         )
@@ -735,12 +807,14 @@ public sealed class WaysideSafetyTests
 
     /// <summary>Verifies that random occupancy never grants entry into an occupied block.</summary>
     [TestMethod]
-    public void SubmitMovement_RandomOccupancy_NeverEntersOccupiedBlock()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_RandomOccupancy_NeverEntersOccupiedBlock(bool hardware)
     {
         var random = new Random(1140);
         for (int sample = 0; sample < 100; sample++)
         {
-            var fixture = new Fixture();
+            var fixture = new Fixture(hardware);
             int obstruction = random.Next(6, 9);
             fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == obstruction.ToString()).Occupancy = OccupancyState.Occupied);
             var authorization = fixture.Submit();

@@ -6,7 +6,7 @@ The track controller separates three decisions:
 | --- | --- |
 | `track-map.json` | One physical track map: block lengths, connections, equipment, protection zones, and drawing coordinates. |
 | `territories.json` | Named territories and the block IDs each owns. |
-| `all-pc.deployment.json` or `pc-and-pi.deployment.json` | References those two files and the shared PLC, then chooses PC/Pi execution per territory. |
+| `all-pc.deployment.json` or `pc-and-pi.deployment.json` | References those two files and the default PLC, with optional PLC overrides and PC/Pi execution per territory. |
 
 Territory names do not imply hardware or software. The same territory can run on either target, using the same logic. Changing execution does not move blocks between owners or edit connections. The unprefixed examples use the illustrative 12-block Green Line map, not the team's final track data.
 
@@ -20,7 +20,7 @@ The `blue-line-*` files are the same three decisions for the course Blue Line pr
 4. For a Pi, use its local SSH tunnel endpoint. The default junction endpoint is `127.0.0.1:11405`; see [Pi setup](../TrackController.Pi/README.md). Each additional Pi territory needs a separate runtime/tunnel port. Two territories cannot share one runtime process.
 5. Select **Apply execution**. This validates the choices, verifies that all controllers are paused, and replaces the deployment. Feedback and movement requests are cleared; the current valid PLC source is retained. It restarts paused, and a missing Pi stays unavailable.
 6. Send fresh feedback and explicitly resume. Test UI requests still enter through the normal module message interface.
-7. Optionally select **Save applied choices**. This writes only execution placement to the deployment JSON that was loaded. The shared map, ownership file, and PLC file are unchanged. **Apply** by itself does not save to disk.
+7. Optionally select **Save applied choices**. This writes execution placement and PLC assignments to the loaded deployment JSON. Assigned programs are saved as content-addressed `.plc` copies beside that JSON; original PLC files, the map, and ownership remain unchanged. **Apply** by itself does not save to disk.
 
 **Applied** shows the execution target currently in use; **Run on** is an editable draft until Apply. Changes while running are refused. An invalid assignment leaves the existing deployment in place. The save operation detects an externally edited deployment file and asks you to reload it rather than overwriting that edit.
 
@@ -68,6 +68,18 @@ a local controller. Fresh feedback and an explicit resume are required afterward
 
 Older deployments that reference `configurationFile` still load. `legacy-pc-and-pi.deployment.json` preserves the previous demonstration; use the new shared-map examples for further development.
 
-The Pi protocol is version 3: authority is a fixed route limit from the target block's entry, with no train offset input, and signal feedback accepts Super Green. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected so the two ends cannot interpret authority differently.
+The Pi protocol is version 6 to require matching Boolean output controls and territory PLC targeting on both ends: authority is a fixed route limit from the target block's entry, with no train offset input, and signal feedback accepts Super Green. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected so the two ends cannot interpret authority differently.
 
 Automated checks cover intact boundary edges, exclusive command ownership, invalid partitions and split protection zones, feedback fan-out, direct Pi ownership enforcement, equivalent local/Pi decisions, explicit placement saving, and the operator execution editor receiving external Test UI inputs through module pipes. Device-level Pi/LED verification and cross-territory handoff remain separate integration work.
+
+## Per-territory PLC assignment
+
+Pause, then open Controller setup and select a **PLC territory** under Controller logic. The source viewer shows that assignment. Under Advanced, choose **Replace selected PLC…**. The replacement is validated before sending and targets only that territory on PC or Pi; inspect the reported PLC status before explicitly resuming. Reset and Apply execution retain the individual assignments. **Save applied choices** saves portable PLC copies and assignment references next to the loaded deployment file.
+
+The deployment-level `plcFile` remains the default. Each entry in `territories` may override it with its own relative `plcFile`. Every referenced PLC is validated before runtimes are created. Paths must remain inside the deployment folder. Existing deployments need no changes. A PLC message with `territoryId` targets that owner; omitting it retains the legacy broadcast behavior.
+
+## Vital Boolean PLC control
+
+The assigned PLC now owns route interlocking, numeric speed/authority selection using explicit Boolean gates, signals, switch interlocking, crossings, and closure completion. C# supplies individual facts and encoded input words, decodes the PLC output words, and independently vetoes unsafe results. It no longer supplies precomputed route permission or normal numeric movement limits to the PLC. See the [language and execution contract](../TrackController.Core/Control/README.md).
+
+Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 6. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.

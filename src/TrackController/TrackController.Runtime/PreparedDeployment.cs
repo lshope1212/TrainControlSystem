@@ -67,11 +67,31 @@ public sealed class PreparedDeployment
     /// <summary>Creates a deployment carrying replacement PLC source for the next runtime session.</summary>
     public PreparedDeployment WithProgram(string name, string source)
     {
-        BooleanPlcProgram.Compile(source);
-        return new(SourcePath, _source, _document, Territories, name, source);
+        VitalPlcProgram.Compile(source);
+        return new(SourcePath, _source, _document, Territories.Select(territory => territory with { ProgramName = name, ProgramSource = source }).ToArray(), name, source);
     }
 
-    /// <summary>Explicit save of execution placement only; never rewrites topology, ownership, or PLC source.</summary>
+    /// <summary>Assigns validated PLC source to one territory without changing other assignments.</summary>
+    public PreparedDeployment WithTerritoryProgram(string territoryId, string name, string source)
+    {
+        if (!Territories.Any(territory => territory.Id == territoryId))
+        {
+            throw new ArgumentException("Unknown PLC territory.");
+        }
+
+        if (System.Text.Encoding.UTF8.GetByteCount(source) > VitalPlcProgram.MaximumSourceBytes)
+        {
+            throw new ArgumentException("PLC file exceeds 256 KiB.");
+        }
+
+        VitalPlcProgram.Compile(source);
+        var territories = Territories.Select(territory => territory.Id == territoryId
+            ? territory with { ProgramName = Path.GetFileName(name), ProgramSource = source }
+            : territory).ToArray();
+        return new(SourcePath, _source, _document, territories, ProgramName, ProgramSource);
+    }
+
+    /// <summary>Saves placement and PLC assignments without rewriting topology or original PLC files.</summary>
     public void SaveExecution()
     {
         if (File.ReadAllText(SourcePath) != _source)
@@ -79,7 +99,25 @@ public sealed class PreparedDeployment
             throw new IOException("Deployment file changed on disk. Reload it before saving execution choices.");
         }
 
-        string text = JsonSerializer.Serialize(_document, WaysideDeployment.Json) + Environment.NewLine;
+        var document = JsonSerializer.Deserialize<WaysideDeployment>(JsonSerializer.Serialize(_document, WaysideDeployment.Json), WaysideDeployment.Json)!;
+        foreach (var territory in Territories.Where(territory => territory.ProgramSource is not null))
+        {
+            // Content-addressed copies preserve original files and keep saved setups portable.
+            string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(territory.ProgramSource!)));
+            string file = $"assigned-{hash}.plc";
+            string destination = Path.Combine(Path.GetDirectoryName(SourcePath)!, file);
+            if (!File.Exists(destination))
+            {
+                File.WriteAllText(destination, territory.ProgramSource);
+            }
+            else if (File.ReadAllText(destination) != territory.ProgramSource)
+            {
+                throw new IOException("Saved PLC copy has changed on disk.");
+            }
+            document.Territories.Single(assignment => assignment.TerritoryId == territory.Id).PlcFile = file;
+        }
+
+        string text = JsonSerializer.Serialize(document, WaysideDeployment.Json) + Environment.NewLine;
         string temporary = SourcePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
@@ -100,7 +138,11 @@ public sealed class PreparedDeployment
     public TerritoryRuntimeRouter CreateRuntime()
     {
         WaysideDeployment.ValidateTargets(Territories);
-        BooleanPlcProgram.Compile(ProgramSource);
+        VitalPlcProgram.Compile(ProgramSource);
+        foreach (var territory in Territories)
+        {
+            VitalPlcProgram.Compile(territory.ProgramSource ?? ProgramSource);
+        }
         var entries = new List<TerritoryRuntimeRouter.Entry>();
         try
         {
@@ -109,12 +151,12 @@ public sealed class PreparedDeployment
                 IWaysideRuntime runtime;
                 if (territory.Execution == "Pi")
                 {
-                    runtime = new PiWaysideRuntime(territory.Host, territory.Port, territory.Configuration, ProgramName, ProgramSource);
+                    runtime = new PiWaysideRuntime(territory.Host, territory.Port, territory.Configuration, territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource);
                 }
                 else
                 {
                     var service = new TrackControllerService(territory.Configuration);
-                    service.LoadPlc(ProgramName, ProgramSource);
+                    service.LoadPlc(territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource);
                     runtime = new LocalWaysideRuntime(service);
                 }
 

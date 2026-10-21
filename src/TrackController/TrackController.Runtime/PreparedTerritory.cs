@@ -14,4 +14,9 @@ public sealed record PreparedTerritory(
     WaysideConfigurationMessage Configuration,
     string Execution,
     string Host,
-    int Port);
+    int Port)
+{
+    public string? ProgramName { get; init; }
+
+    public string? ProgramSource { get; init; }
+}

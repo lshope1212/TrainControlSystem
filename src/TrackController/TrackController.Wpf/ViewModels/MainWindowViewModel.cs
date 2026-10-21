@@ -420,19 +420,41 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         }
     }
 
+    /// <summary>Loads a PLC for the selected territory through the operator command path.</summary>
+    public Task LoadSelectedPlcAsync(string path) => RunAsync(() => LoadPlcFileAsync(path));
+
     private async Task LoadPlcFileAsync(string path)
     {
-        await SendAsync(new WaysideSimulationMessage { IsPaused = true, SpeedMultiplier = Snapshot.SpeedMultiplier });
-        if (new FileInfo(path).Length > 65536)
+        if (new FileInfo(path).Length > 262144)
         {
-            throw new ArgumentException("PLC file exceeds 64 KiB.");
+            throw new ArgumentException("PLC file exceeds 256 KiB.");
         }
 
         string source = File.ReadAllText(path);
-        PlcSource = source;
-        _programSource = source;
-        _programName = Path.GetFileName(path);
-        await SendAsync(new WaysidePlcProgramMessage { Name = Path.GetFileName(path), Source = source });
+        if (ActivePlan is { } plan)
+        {
+            var selected = SelectedPlcTerritory ?? throw new InvalidOperationException("Select a PLC territory first.");
+            if (!(await _host.PollForSetupAsync(_lifetime.Token)).IsPaused)
+            {
+                throw new InvalidOperationException("Pause the controller before assigning a PLC.");
+            }
+            string id = selected.Id;
+            var replacement = plan.WithTerritoryProgram(id, Path.GetFileName(path), source);
+            await SendAsync(new WaysidePlcProgramMessage { TerritoryId = id, Name = Path.GetFileName(path), Source = source });
+            _plan = replacement;
+            var displayed = replacement.Territories.SingleOrDefault(territory => territory.Id == SelectedPlcTerritory?.Id);
+            PlcSource = displayed?.ProgramSource ?? replacement.ProgramSource;
+            OnPropertyChanged(nameof(SelectedPlcName));
+            Status = $"PLC sent to {selected.Name}. Check PLC status before resuming; Save applied choices preserves the assignment.";
+        }
+        else
+        {
+            PlcSource = source;
+            _programSource = source;
+            _programName = Path.GetFileName(path);
+            await SendAsync(new WaysidePlcProgramMessage { Name = Path.GetFileName(path), Source = source });
+            OnPropertyChanged(nameof(SelectedPlcName));
+        }
     }
 
     private async Task ChooseLayoutAsync()

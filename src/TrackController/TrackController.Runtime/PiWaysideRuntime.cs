@@ -60,6 +60,10 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
                 // Preserve the requested replacement even if receipt is lost or compilation fails.
                 // Reconnection must never silently restore an older, permissive program.
                 var replacement = MessageSerializer.DeserializePayload<WaysidePlcProgramMessage>(message);
+                if (replacement.TerritoryId is not null && replacement.TerritoryId != _configuration.WaysideId)
+                {
+                    return RuntimeMessages.CreateRejection(message.MessageType, "PLC target does not match this territory.");
+                }
                 _programName = replacement.Name;
                 _programSource = replacement.Source;
             }

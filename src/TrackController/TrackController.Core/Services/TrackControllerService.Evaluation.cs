@@ -7,19 +7,6 @@ namespace TrackController.Core.Services;
 /// <summary>Evaluates track conditions and rejects movement or equipment commands that violate protection rules.</summary>
 public sealed partial class TrackControllerService
 {
-    private IReadOnlyDictionary<string, bool> EvaluatePlc(bool routeSafe, bool switchSafe = false, bool requestedNormal = true, bool crossingRequired = false)
-    {
-        var inputs = new Dictionary<string, bool>
-        {
-            ["route_safe"] = routeSafe,
-            ["switch_safe"] = switchSafe,
-            ["requested_normal"] = requestedNormal,
-            ["crossing_required"] = crossingRequired,
-            ["running"] = !_paused && !_maintenanceMode
-        };
-        return _plc!.Execute(inputs);
-    }
-
     private void Reevaluate()
     {
         var now = _clock.GetUtcNow();
@@ -35,7 +22,7 @@ public sealed partial class TrackControllerService
             if (block.Definition.HasCrossing)
             {
                 bool required = CrossingRequired(block) || block.ManualCrossingClosed;
-                bool plcClose = _hardwareMode && (_plc is null || EvaluatePlc(false, crossingRequired: required)["crossing_close"]);
+                bool plcClose = _hardwareMode && (_plc is null || CrossingPlc(block)["crossing_close"][0]);
                 block.CommandedCrossing = required || plcClose ? CrossingState.Closed : CrossingState.Open;
             }
 
@@ -44,24 +31,28 @@ public sealed partial class TrackControllerService
                 var reported = IsFresh(block) ? block.Feedback!.Switch : SwitchPosition.Unknown;
                 var desired = block.DesiredSwitch == SwitchPosition.Unknown ? reported : block.DesiredSwitch;
                 bool safe = CanMoveSwitch(block);
+                bool plcMove = !_hardwareMode;
                 if (_hardwareMode && _plc is not null)
                 {
-                    desired = EvaluatePlc(false, safe, desired == SwitchPosition.Normal)["switch_normal"] ? SwitchPosition.Normal : SwitchPosition.Reverse;
+                    var outputs = SwitchPlc(block, desired);
+                    desired = outputs["switch_normal"][0] ? SwitchPosition.Normal : SwitchPosition.Reverse;
+                    plcMove = outputs["switch_move"][0];
                 }
 
-                block.CommandedSwitch = safe && (!_paused || _maintenanceMode) && (!_hardwareMode || _plc is not null) ? desired : reported;
+                block.CommandedSwitch = plcMove && safe && (!_paused || _maintenanceMode) && (!_hardwareMode || _plc is not null) ? desired : reported;
             }
         }
 
         var candidates = _requests.Values.Select(Evaluate).ToList();
-        foreach (var authorization in candidates.Where(authorization => authorization.AuthorizedAuthorityMeters > 0 && GetCoveredBlocks(authorization).All(id => !GetBlock(id).Definition.HasCrossing || GetBlock(id).Feedback?.Crossing == CrossingState.Closed)))
+        foreach (var authorization in candidates.Where(authorization => !_hardwareMode && authorization.AuthorizedAuthorityMeters > 0 && GetCoveredBlocks(authorization).All(id => !GetBlock(id).Definition.HasCrossing || GetBlock(id).Feedback?.Crossing == CrossingState.Closed)))
         {
-            foreach (string id in GetCoveredBlocks(authorization))
+            foreach (string id in _hardwareMode ? Enumerable.Empty<string>() : GetCoveredBlocks(authorization))
             {
                 var block = GetBlock(id);
                 if (block.Definition.HasSignal && !block.ManualRed)
                 {
-                    block.CommandedSignal = authorization.AuthorizedAuthorityMeters < authorization.SuggestedAuthorityMeters ? SignalState.Yellow : SignalState.Green;
+                    bool restricted = authorization.AuthorizedAuthorityMeters < authorization.SuggestedAuthorityMeters;
+                    block.CommandedSignal = restricted ? SignalState.Yellow : SignalState.Green;
                 }
             }
         }
@@ -71,7 +62,7 @@ public sealed partial class TrackControllerService
         foreach (var authorization in candidates)
         {
             var result = authorization;
-            foreach (string id in GetCoveredBlocks(authorization))
+            foreach (string id in _hardwareMode ? Enumerable.Empty<string>() : GetCoveredBlocks(authorization))
             {
                 var block = GetBlock(id);
                 if (block.Definition.HasSignal && (block.CommandedSignal == SignalState.Yellow || block.Feedback?.Signal == SignalState.Yellow))
@@ -101,6 +92,18 @@ public sealed partial class TrackControllerService
 
             authorizations.Add(result);
         }
+
+        // Rejected PLC candidates cannot leave a proceed aspect behind.
+        var permittedBlocks = authorizations.Where(authorization => authorization.AuthorizedAuthorityMeters > 0)
+            .SelectMany(GetCoveredBlocks).ToHashSet(StringComparer.Ordinal);
+        foreach (var block in _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId) && block.Definition.HasSignal))
+        {
+            if (!permittedBlocks.Contains(block.Definition.BlockId))
+            {
+                block.CommandedSignal = SignalState.Red;
+            }
+        }
+        blockStatuses = _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId)).Select(ToStatus).ToArray();
 
         var validUntil = now.AddSeconds(1.5);
         foreach (var authorization in authorizations.Where(authorization => authorization.AuthorizedAuthorityMeters > 0))
@@ -140,7 +143,10 @@ public sealed partial class TrackControllerService
         };
     }
 
-    private WaysideAuthorization Evaluate(Request receivedRequest)
+    private WaysideAuthorization Evaluate(Request request) => _hardwareMode ? EvaluateVital(request) : EvaluateSoftware(request);
+
+    /// <summary>Standalone no-PLC comparison mode only; routed PC/Pi territories use EvaluateVital.</summary>
+    private WaysideAuthorization EvaluateSoftware(Request receivedRequest)
     {
         var request = receivedRequest.Value;
         var output = new WaysideAuthorization(request.RequestId, request.TrainId, request.TargetBlockId, request.EntryBlockId, request.PathBlockIds.AsReadOnly(), request.SuggestedSpeedMetersPerSecond, request.SuggestedAuthorityMeters, 0, 0, "Withheld", "");
@@ -240,15 +246,6 @@ public sealed partial class TrackControllerService
             return Stop(output, "Zero speed or no available authority.");
         }
 
-        if (_hardwareMode)
-        {
-            var values = EvaluatePlc(true);
-            if (!values["allow_route"] || !values["signal_clear"])
-            {
-                return Stop(output, "PLC withholds movement permission.");
-            }
-        }
-
         return output with
         {
             AuthorizedAuthorityMeters = distance,
@@ -261,16 +258,18 @@ public sealed partial class TrackControllerService
     private IEnumerable<string> GetCoveredBlocks(WaysideAuthorization authorization)
     {
         double remaining = authorization.AuthorizedAuthorityMeters;
+        bool first = true;
         foreach (string id in new[]
         {
             authorization.TargetBlockId
         }.Concat(authorization.PathBlockIds))
         {
-            if (remaining <= 0.000001)
+            if (remaining <= 0 || (!first && remaining <= 0.000001))
             {
                 yield break;
             }
 
+            first = false;
             yield return id;
             remaining -= GetBlock(id).Definition.LengthMeters;
         }

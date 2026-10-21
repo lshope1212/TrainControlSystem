@@ -62,7 +62,7 @@ public sealed class MovementProgressTests
         var inputs = session.Inputs;
         inputs.RequestedPath = "5";
         await ExecuteAsync(inputs.SendMovementCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().PathBlockIds.Count == 1);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().PathBlockIds.Count == 1);
         SetOccupancy(inputs, occupyFirst ? "5" : "4", occupyFirst ? OccupancyState.Occupied : OccupancyState.Clear);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == (occupyFirst ? "5" : "4")).Occupancy == (occupyFirst ? OccupancyState.Occupied : OccupancyState.Clear));
@@ -174,14 +174,14 @@ public sealed class MovementProgressTests
         string originalId = inputs.Snapshot.Authorizations.Single().RequestId;
         SetOccupancy(inputs, occupyFirst ? "5" : "4", occupyFirst ? OccupancyState.Occupied : OccupancyState.Clear);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters < 200);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters < 200);
         await Task.Delay(1250);
         Assert.AreEqual("4", inputs.TargetBlock);
         Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().RequestId);
         Assert.DoesNotContain("target block cleared", inputs.LastReceipt, "The repeat loop must not resend a retired request during an occupancy gap.");
         SetOccupancy(inputs, occupyFirst ? "4" : "5", occupyFirst ? OccupancyState.Clear : OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().TargetBlockId == "5");
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().TargetBlockId == "5");
         Assert.AreEqual("Approved", inputs.Snapshot.Authorizations.Single().Status);
     });
 
@@ -201,7 +201,7 @@ public sealed class MovementProgressTests
         Assert.AreEqual(original.RequestId, inputs.Snapshot.Authorizations.Single().RequestId);
         Assert.AreEqual(OccupancyState.Occupied, inputs.Blocks.Single(block => block.BlockId == "4").Occupancy);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().TargetBlockId == "5");
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().TargetBlockId == "5");
         Assert.AreEqual("6, 7, 8", inputs.RequestedPath);
         Assert.AreEqual("25", inputs.SuggestedSpeed);
         Assert.AreEqual(original.SuggestedAuthorityMeters - 50, inputs.Snapshot.Authorizations.Single().SuggestedAuthorityMeters);
@@ -216,7 +216,7 @@ public sealed class MovementProgressTests
         string originalId = inputs.Snapshot.Authorizations.Single().RequestId;
         SetOccupancy(inputs, "4", OccupancyState.Clear);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
         Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().RequestId);
         Assert.AreEqual("4", inputs.TargetBlock);
         StringAssert.Contains(inputs.MovementProgress, "not observed clear");
@@ -236,7 +236,7 @@ public sealed class MovementProgressTests
         SetOccupancy(inputs, "4", OccupancyState.Unknown);
         SetOccupancy(inputs, "5", OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
         Assert.AreEqual("4", inputs.TargetBlock);
     });
 
@@ -257,7 +257,7 @@ public sealed class MovementProgressTests
         StringAssert.Contains(inputs.LastResult, "fault");
         inputs.FeedbackRows.Single(row => row.BlockId == "5").IsFaulted = false;
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Single().Status == "Approved");
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().Status == "Approved");
         Assert.AreEqual(result.RequestId, inputs.Snapshot.Authorizations.Single().RequestId);
     });
 

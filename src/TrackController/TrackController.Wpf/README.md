@@ -24,14 +24,14 @@ open a `.deployment.json` file. A setup includes its track, territory ownership,
 PC/Pi assignments, and PLC program. Loading requires pause and fresh feedback
 afterward. Choosing an item alone does not replace the active setup.
 
-The collapsed **Advanced** section contains **Replace PLC…** to change only the
-program, preserving the track and assignments. The built-in setup already loads
+The collapsed **Advanced** section contains **Replace selected PLC…** to change only the
+selected territory’s program, preserving the track and other PLC assignments. The built-in setup already loads
 its PLC, so no additional program-loading step is needed for a demonstration.
 
 **Advanced → Use standalone controller** returns to the
 original PC controller for software-logic or single-territory tests. It does not
 load the selected line or a PLC automatically. Check the logic/program status;
-use **Change territory…**, the logic selector, and **Replace PLC…** for this advanced workflow.
+use **Change territory…**, the logic selector, and **Replace selected PLC…** for this advanced workflow.
 
 The footer shows CTC and Track Model connection states together and changes only
 when a receiver becomes available or unavailable. Routine feedback and output
@@ -127,18 +127,7 @@ Automated tests remain in the existing repository `tests` directory:
 
 ## Boolean PLC files
 
-`Samples/wayside.plc` is a working external program. Load it from disk; there is intentionally no embedded editor. The source viewer is read-only.
-
-```text
-allow_route = route_safe and running
-switch_normal = requested_normal
-signal_clear = route_safe and running
-crossing_close = crossing_required
-```
-
-Inputs are `route_safe`, `switch_safe`, `requested_normal`, `crossing_required`, and `running`. Required outputs are `allow_route`, `switch_normal`, `signal_clear`, and `crossing_close`. Temporary Boolean names may be assigned once and used by later lines. Names are case-sensitive. Operators: `not`/`!`, `and`/`&&`, `or`/`||`, parentheses, and `true`/`false`; precedence is NOT, AND, OR. `#` begins a comment; trailing semicolons are optional. Arithmetic, loops, host-language code, unknown names, duplicate assignments, and missing outputs are rejected. Limits: 32,768 source characters, 128 assignments, 256 tokens per expression, and nesting depth 32.
-
-The controller supplies route inputs per movement request and equipment inputs per equipment evaluation. PLC outputs are always subject to the independent protection rules: a program returning `true` cannot grant authority into an occupied block or open a protected crossing. An invalid replacement unloads the previous program and remains paused. Software mode runs its own route/equipment rules without requiring a PLC.
+Load the updated `Samples/wayside.plc` through the selected territory's PLC control. The source viewer is read-only. The program uses individual Boolean track facts and bit-vector circuits to calculate its commands; see [Vital Boolean PLC control](#vital-boolean-plc-control) and the linked language contract. Legacy permission-only files are no longer accepted.
 
 ## Module integration
 
@@ -186,4 +175,16 @@ dotnet build TrainControlSystem.sln
 dotnet test TrainControlSystem.sln
 ```
 
-Tests cover positive and restricted movement, software/PLC modes, unsafe PLC output clamping, malformed programs, stale/replayed feedback, fault recovery, switch interlocks, crossing protection, pending maintenance, direction/topology validation, conflicts, old-origin retirement, defensive copying, SI limits, simulation timing, malformed JSON, legacy send-only framing, snapshot publication, isolated peer receivers, send-only framing, and independent test-state isolation. Integration tests run the actual Test UI commands on a WPF dispatcher, observe results exclusively over the output pipes, and verify that stopped receivers and missing output listeners cannot be concealed by direct in-process calls.
+Tests cover positive and restricted movement, software/PLC modes, unsafe PLC output rejection, malformed programs, stale/replayed feedback, fault recovery, switch interlocks, crossing protection, pending maintenance, direction/topology validation, conflicts, old-origin retirement, defensive copying, SI limits, simulation timing, malformed JSON, legacy send-only framing, snapshot publication, isolated peer receivers, send-only framing, and independent test-state isolation. Integration tests run the actual Test UI commands on a WPF dispatcher, observe results exclusively over the output pipes, and verify that stopped receivers and missing output listeners cannot be concealed by direct in-process calls.
+
+## Per-territory PLC assignment
+
+Pause, then open Controller setup and select a **PLC territory** under Controller logic. The source viewer shows that assignment. Under Advanced, choose **Replace selected PLC…**. The replacement is validated before sending and targets only that territory on PC or Pi; inspect the reported PLC status before explicitly resuming. Reset and Apply execution retain the individual assignments. **Save applied choices** saves portable PLC copies and assignment references next to the loaded deployment file.
+
+The deployment-level `plcFile` remains the default. Each entry in `territories` may override it with its own relative `plcFile`. Every referenced PLC is validated before runtimes are created. Paths must remain inside the deployment folder. Existing deployments need no changes. A PLC message with `territoryId` targets that owner; omitting it retains the legacy broadcast behavior.
+
+## Vital Boolean PLC control
+
+The assigned PLC now owns route interlocking, numeric speed/authority selection using explicit Boolean gates, signals, switch interlocking, crossings, and closure completion. C# supplies individual facts and encoded input words, decodes the PLC output words, and independently vetoes unsafe results. It no longer supplies precomputed route permission or normal numeric movement limits to the PLC. See the [language and execution contract](../TrackController.Core/Control/README.md).
+
+Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 6. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.

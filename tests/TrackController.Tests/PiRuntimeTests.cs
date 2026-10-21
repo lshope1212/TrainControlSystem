@@ -174,7 +174,7 @@ public sealed class PiRuntimeTests
         var hardware = Section("HW", "4", "5");
         await using var router = new TerritoryRuntimeRouter("Both", [new(software, "Local", Local(software)), new(hardware, "Pi", new PiWaysideRuntime("127.0.0.1", server.Port, hardware, "wayside.plc", ProgramSource))]);
         await router.PollAsync();
-        var result = await Send(router, new WaysidePlcProgramMessage { Name = "deny.plc", Source = "allow_route = false\nsignal_clear = false\nswitch_normal = requested_normal\ncrossing_close = true" });
+        var result = await Send(router, new WaysidePlcProgramMessage { Name = "deny.plc", Source = ProgramSource.Replace("allow_route = movement_enabled", "allow_route = false") });
         Assert.IsTrue(result.IsAccepted);
         var snapshot = await router.PollAsync();
         Assert.IsTrue(snapshot.IsPaused);

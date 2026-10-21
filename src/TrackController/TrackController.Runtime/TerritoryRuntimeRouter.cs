@@ -88,6 +88,17 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
                 return Receipt(message.MessageType, await Task.WhenAll(_entries.Where(entry => _observed[entry].Contains(id)).Select(entry => entry.Runtime.ReceiveAsync(message, cancellationToken))));
             }
 
+            if (message.MessageType == nameof(WaysidePlcProgramMessage))
+            {
+                var program = MessageSerializer.DeserializePayload<WaysidePlcProgramMessage>(message);
+                if (program.TerritoryId is not null)
+                {
+                    var territory = _entries.SingleOrDefault(entry => entry.Configuration.WaysideId == program.TerritoryId)
+                        ?? throw new ArgumentException("Unknown PLC territory.");
+                    return await territory.Runtime.ReceiveAsync(message, cancellationToken);
+                }
+            }
+
             Entry? target = message.MessageType switch
             {
                 nameof(WaysideMovementRequestMessage) => MovementOwner(MessageSerializer.DeserializePayload<WaysideMovementRequestMessage>(message)),
@@ -108,7 +119,7 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
 
             if (message.MessageType == nameof(WaysideControllerModeMessage) && !MessageSerializer.DeserializePayload<WaysideControllerModeMessage>(message).IsHardwareMode)
             {
-                throw new ArgumentException("A routed deployment uses the same PLC program on PC and Pi. Software-only logic is available in the local demo.");
+                throw new ArgumentException("A routed deployment uses PLC logic on both PC and Pi. Software-only logic is available in the local demo.");
             }
 
             if (message.MessageType is not (nameof(WaysideSimulationMessage) or nameof(WaysideControllerModeMessage) or nameof(WaysideMaintenanceModeMessage) or nameof(WaysidePlcProgramMessage)))
@@ -194,7 +205,7 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
     private WaysideSnapshotMessage Combine()
     {
         var snapshots = _entries.Select(entry => entry.Runtime.LatestSnapshot.ValidUntilUtc > DateTimeOffset.UtcNow ? entry.Runtime.LatestSnapshot : UnavailableOutput.CreateStopSnapshot(entry.Runtime.LatestSnapshot, $"{entry.Configuration.WaysideId} output expired.")).ToArray();
-        return new(_name, snapshots[0].LineName, snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId}: {snapshot.PlcStatus}")), snapshots.SelectMany(snapshot => snapshot.Blocks).ToArray(), snapshots.SelectMany(snapshot => snapshot.Authorizations).ToArray());
+        return new(_name, snapshots[0].LineName, snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId} ({snapshot.PlcName}): {snapshot.PlcStatus}")), snapshots.SelectMany(snapshot => snapshot.Blocks).ToArray(), snapshots.SelectMany(snapshot => snapshot.Authorizations).ToArray());
     }
 
     /// <summary>Stops owned background operations and releases connections before returning.</summary>

@@ -10,6 +10,32 @@ namespace TrackController.Wpf.Tests;
 [TestClass]
 public sealed class ExecutionSetupUiTests
 {
+    [TestMethod]
+    public async Task SelectedPlc_PersistsThroughResetPlacementAndSave()
+    {
+        using var files = new DeploymentFiles();
+        string source = files.Read().ProgramSource + "\n# Assigned to junction only\n";
+        File.WriteAllText(files.PathFor("junction.plc"), source);
+        await RunAsync(async session =>
+        {
+            var controller = session.Controller;
+            await controller.LoadDeploymentAsync(files.PathFor("all-pc.deployment.json"));
+            controller.SelectedPlcTerritory = controller.ExecutionRows.Single(row => row.Id == "wayside-b");
+            await controller.LoadSelectedPlcAsync(files.PathFor("junction.plc"));
+            await UntilAsync(() => controller.Snapshot.PlcName.Contains("junction.plc"));
+            Assert.AreEqual(source, controller.PlcSource);
+            controller.SelectedPlcTerritory = controller.ExecutionRows.Single(row => row.Id == "wayside-a");
+            Assert.AreNotEqual(source, controller.PlcSource);
+            await ExecuteAsync(controller.ResetControllerCommand);
+            await UntilAsync(() => controller.Snapshot.PlcName.Contains("junction.plc"));
+            controller.ExecutionRows[0].Port = "11407";
+            await ExecuteAsync(controller.ApplyExecutionCommand);
+            await ExecuteAsync(controller.SaveExecutionCommand);
+            Assert.IsNull(files.Read().Territories[0].ProgramSource);
+            Assert.AreEqual(source, files.Read().Territories[1].ProgramSource);
+        });
+    }
+
     /// <summary>Checks paused placement changes, saving, and resetting an applied PC/Pi deployment.</summary>
     [TestMethod]
     public async Task ApplyExecution_RunningController_RequiresPauseAndRetainsPlacement()

@@ -333,7 +333,7 @@
                                 <DataGridTextColumn Header="Suggested mph"
                                                     Binding="{Binding SuggestedSpeed}"
                                                     Width="100"/>
-                                <DataGridTextColumn Header="Requested limit (ft)"
+                                <DataGridTextColumn Header="Suggested authority (ft)"
                                                     Binding="{Binding RequestedAuthority}"
                                                     Width="140"/>
                                 <DataGridTextColumn Header="Authorized mph"
@@ -451,9 +451,6 @@
                                         <DataGridTextColumn Header="Owned blocks"
                                                             Binding="{Binding Blocks}"
                                                             Width="1.4*"/>
-                                        <DataGridTextColumn Header="Observe only"
-                                                            Binding="{Binding Neighbors}"
-                                                            Width="0.7*"/>
                                         <DataGridTemplateColumn Header="Run on" Width="85">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
@@ -502,7 +499,7 @@
                                         <Button Content="Save applied choices"
                                                 Command="{Binding SaveExecutionCommand}"
                                                 IsEnabled="{Binding CanSaveExecution}"
-                                                ToolTip="Saves applied placement to the loaded deployment JSON. Track map and territory ownership are separate files."/>
+                                                ToolTip="Saves applied placement and PLC assignments to the loaded deployment JSON. Track map and territory ownership are separate files."/>
                                     </WrapPanel>
                                     <TextBlock Text="{Binding ExecutionDraftStatus}"
                                                Style="{StaticResource Hint}"
@@ -523,18 +520,24 @@
                                 <StackPanel>
                                     <TextBlock Text="Controller logic" Style="{StaticResource SectionHeading}"/>
                                     <TextBlock Text="{Binding ControllerMode}" Margin="0,0,0,8"/>
-                                    <TextBlock Text="Loading a setup also loads its PLC program."
+                                    <TextBlock Text="PLC territory" Style="{StaticResource Label}"/>
+                                    <ComboBox ItemsSource="{Binding ExecutionRows}"
+                                              SelectedItem="{Binding SelectedPlcTerritory}"
+                                              DisplayMemberPath="Name"
+                                              IsEnabled="{Binding IsRoutedDeployment}"
+                                              Margin="0,0,0,8"/>
+                                    <TextBlock Text="Loading a setup loads each territory's assigned PLC."
                                                Style="{StaticResource Hint}" Margin="0,0,0,8"/>
-                                    <TextBlock Text="{Binding Snapshot.PlcName}"
+                                    <TextBlock Text="{Binding SelectedPlcName}"
                                                FontWeight="SemiBold"
                                                Margin="0,8,0,8"/>
                                     <TextBlock Text="{Binding PlcSummary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                     <Expander Header="Advanced" Margin="0,12,0,0">
                                         <StackPanel Margin="0,10,0,0">
                                             <TextBlock Text="Custom PLC" Style="{StaticResource SectionHeading}"/>
-                                            <TextBlock Text="Replace only the PLC program, keeping the current track and assignments."
+                                            <TextBlock Text="Pause, then replace the selected territory’s PLC. It stays paused; check status before resuming. Save applied choices to retain the assignment."
                                                        Style="{StaticResource Hint}" Margin="0,0,0,8"/>
-                                            <Button Content="Replace PLC…" Command="{Binding LoadPlcCommand}"
+                                            <Button Content="Replace selected PLC…" Command="{Binding LoadPlcCommand}" IsEnabled="{Binding Snapshot.IsPaused}"
                                                     HorizontalAlignment="Left" Margin="0,0,0,16"/>
                                             <TextBlock Text="Standalone testing" Style="{StaticResource SectionHeading}"/>
                                             <TextBlock Text="Returns to the original PC controller for software-logic or single-territory tests. Does not load the selected line or a PLC file. Pause first."

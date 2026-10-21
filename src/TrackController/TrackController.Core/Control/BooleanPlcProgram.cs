@@ -7,6 +7,14 @@ public sealed class BooleanPlcProgram
 {
     public static readonly string[] InputNames = ["route_safe", "switch_safe", "requested_normal", "crossing_required", "running"];
     public static readonly string[] OutputNames = ["allow_route", "switch_normal", "signal_clear", "crossing_close"];
+    public static readonly string[] AdditionalInputNames = ["route_restricted", "maintenance"];
+    private static readonly (string Name, string Expression)[] LegacyOutputs =
+    [
+        ("speed_enable", "allow_route"),
+        ("authority_enable", "allow_route"),
+        ("switch_move", "switch_safe and (running or maintenance)"),
+        ("signal_yellow", "signal_clear and route_restricted")
+    ];
     private readonly List<(string Name, Func<IReadOnlyDictionary<string, bool>, bool> Evaluate)> _assignments;
 
     private BooleanPlcProgram(List<(string, Func<IReadOnlyDictionary<string, bool>, bool>)> assignments) => _assignments = assignments;
@@ -19,7 +27,7 @@ public sealed class BooleanPlcProgram
             throw new ArgumentException("PLC source must contain 1–32,768 characters.");
         }
 
-        var known = new HashSet<string>(InputNames, StringComparer.Ordinal);
+        var known = new HashSet<string>(InputNames.Concat(AdditionalInputNames), StringComparer.Ordinal);
         var assignments = new List<(string, Func<IReadOnlyDictionary<string, bool>, bool>)>();
         int lineNumber = 0;
         foreach (string raw in source.Replace("\r", "").Split('\n'))
@@ -58,6 +66,16 @@ public sealed class BooleanPlcProgram
             throw new ArgumentException("PLC must assign allow_route, switch_normal, signal_clear, and crossing_close.");
         }
 
+        // Older four-output files are expanded into explicit Boolean output assignments.
+        // New programs should declare these outputs themselves for review and demonstration.
+        foreach (var (name, expression) in LegacyOutputs)
+        {
+            if (known.Add(name))
+            {
+                assignments.Add((name, new Parser(expression, known, lineNumber).Parse()));
+            }
+        }
+
         return new BooleanPlcProgram(assignments);
     }
 
@@ -70,8 +88,14 @@ public sealed class BooleanPlcProgram
         }
 
         var values = new Dictionary<string, bool>(inputs, StringComparer.Ordinal);
+        foreach (string name in AdditionalInputNames)
+        {
+            values.TryAdd(name, false);
+        }
         foreach (var (name, evaluate) in _assignments)
+        {
             values[name] = evaluate(values);
+        }
         return values;
     }
 

@@ -268,7 +268,7 @@ public sealed class WaysideTransportTests
     public async Task SendAsync_PlcAndManualCommands_UsesProductionInterface()
     {
         await using var fixture = new NetworkFixture();
-        await fixture.Peers.SendAsync(new WaysidePlcProgramMessage { Name = "wire.plc", Source = "allow_route = route_safe and running\nswitch_normal = requested_normal\nsignal_clear = route_safe and running\ncrossing_close = crossing_required" });
+        await fixture.Peers.SendAsync(new WaysidePlcProgramMessage { Name = "wire.plc", Source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "PiSamples", "wayside.plc")) });
         await fixture.SnapshotAsync(snapshot => snapshot.PlcName == "wire.plc" && snapshot.IsPaused);
         await fixture.FeedbackAsync();
         await fixture.Peers.SendAsync(new WaysideMaintenanceModeMessage { IsEnabled = true });

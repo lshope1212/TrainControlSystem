@@ -105,7 +105,7 @@ public sealed partial class TrackControllerService
                 throw new ArgumentException("Invalid maintenance state.");
             }
 
-            block.Maintenance = message.RequestedState == MaintenanceState.Open ? "Open" : IsFresh(block) && block.Feedback?.Occupancy == OccupancyState.Clear ? "Closed" : "Pending closure";
+            block.Maintenance = message.RequestedState == MaintenanceState.Open ? "Open" : ClosurePlc(block) ? "Closed" : "Pending closure";
             Reevaluate();
             return $"Block {message.BlockId}: {block.Maintenance}.";
         }
@@ -173,6 +173,12 @@ public sealed partial class TrackControllerService
             throw new InvalidOperationException($"Switch {block.Definition.BlockId}: simulation is paused. Resume or enable maintenance mode before sending a switch command.");
         }
 
+        if (_hardwareMode && !SwitchPlc(block, position)["switch_move"][0])
+        {
+            throw new InvalidOperationException(GetSwitchProtectionReason(block) ?? $"Switch {block.Definition.BlockId}: PLC withholds switch movement.");
+        }
+
+        // Independent veto after the PLC decision.
         if (GetSwitchProtectionReason(block) is { } reason)
         {
             throw new InvalidOperationException(reason);

@@ -14,6 +14,9 @@ public sealed class TerritoryAssignment
 
     public string? ConfigurationFile { get; set; }
 
+    /// <summary>Optional territory PLC file; omitted assignments use the deployment default.</summary>
+    public string? PlcFile { get; set; }
+
     public string Execution { get; set; } = "Local";
 
     public string Host { get; set; } = "127.0.0.1";

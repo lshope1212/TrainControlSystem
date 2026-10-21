@@ -11,6 +11,24 @@ namespace TrackController.Wpf.ViewModels;
 public sealed partial class MainWindowViewModel
 {
     private PreparedDeployment? _plan;
+    private ExecutionRow? _selectedPlcTerritory;
+
+    public ExecutionRow? SelectedPlcTerritory
+    {
+        get => _selectedPlcTerritory;
+        set
+        {
+            if (SetProperty(ref _selectedPlcTerritory, value))
+            {
+                var territory = ActivePlan?.Territories.SingleOrDefault(item => item.Id == value?.Id);
+                PlcSource = territory?.ProgramSource ?? ActivePlan?.ProgramSource ?? _programSource;
+                OnPropertyChanged(nameof(SelectedPlcName));
+            }
+        }
+    }
+
+    public string SelectedPlcName => ActivePlan?.Territories.SingleOrDefault(item => item.Id == SelectedPlcTerritory?.Id)?.ProgramName ?? ActivePlan?.ProgramName ?? _programName;
+
     private string _programName = "wayside.plc";
     private readonly ObservableCollection<ExecutionRow> _executionRows = [];
 
@@ -58,7 +76,7 @@ public sealed partial class MainWindowViewModel
 
     public bool CanSaveExecution => IsRoutedDeployment && !HasExecutionChanges;
 
-    public string ExecutionDraftStatus => !IsRoutedDeployment ? "Load a setup to choose where each territory runs." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement to the loaded setup file.";
+    public string ExecutionDraftStatus => !IsRoutedDeployment ? "Load a setup to choose where each territory runs." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement and PLC assignments to the loaded setup file.";
 
     private Task LoadSelectedSetupAsync()
     {
@@ -115,7 +133,7 @@ public sealed partial class MainWindowViewModel
     private async Task ApplyExecutionAsync()
     {
         var plan = ActivePlan ?? throw new InvalidOperationException("Load a deployment first.");
-        var replacement = plan.WithExecution(ExecutionRows.Select(row => row.ToAssignment())).WithProgram(_programName, PlcSource);
+        var replacement = plan.WithExecution(ExecutionRows.Select(row => row.ToAssignment()));
         await UseDeploymentAsync(replacement);
     }
 
@@ -127,7 +145,7 @@ public sealed partial class MainWindowViewModel
         }
 
         ActivePlan.SaveExecution();
-        Status = $"Execution choices saved to {ActivePlan.SourcePath}. Shared map, ownership, and PLC files are unchanged.";
+        Status = $"Placement and PLC assignments saved to {ActivePlan.SourcePath}. Original PLC files, map, and ownership are unchanged.";
         return Task.CompletedTask;
     }
 
@@ -177,6 +195,7 @@ public sealed partial class MainWindowViewModel
         PlcSource = plan?.ProgramSource ?? "Select a .plc file to view its Boolean program.";
         _programSource = PlcSource;
         _programName = plan?.ProgramName ?? "wayside.plc";
+        string? selectedPlcId = SelectedPlcTerritory?.Id;
         foreach (var row in ExecutionRows)
         {
             row.PropertyChanged -= ExecutionEdited;
@@ -191,16 +210,18 @@ public sealed partial class MainWindowViewModel
                 ExecutionRows.Add(row);
             }
         }
+        SelectedPlcTerritory = ExecutionRows.FirstOrDefault(row => row.Id == selectedPlcId) ?? ExecutionRows.FirstOrDefault();
+        OnPropertyChanged(nameof(SelectedPlcName));
         OnPropertyChanged(nameof(IsRoutedDeployment));
         OnPropertyChanged(nameof(CanChooseLogic));
         OnPropertyChanged(nameof(DeploymentDescription));
         NotifyExecutionEditor();
-        Status = plan is null ? "Standalone controller selected and paused. Check controller logic and send fresh feedback before resuming." : $"{plan.Name} loaded with {plan.ProgramName}. Paused; send fresh feedback before resuming.";
+        Status = plan is null ? "Standalone controller selected and paused. Check controller logic and send fresh feedback before resuming." : $"{plan.Name} loaded with {string.Join(" / ", plan.Territories.Select(territory => territory.ProgramName ?? plan.ProgramName).Distinct())}. Paused; send fresh feedback before resuming.";
     }
 
     private async Task ResetControllerAsync()
     {
-        var plan = _plan?.WithProgram(_programName, _programSource);
+        var plan = _plan;
         await SendAsync(new WaysideSimulationMessage { IsPaused = true, SpeedMultiplier = Snapshot.SpeedMultiplier });
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         deadline.CancelAfter(3000);

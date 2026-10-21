@@ -41,8 +41,8 @@ public sealed class WaysideDeployment
             throw new ArgumentException("Name the deployment and provide 1–16 territory assignments.");
         }
 
-        string plc = ReadBounded(Resolve(folder, plan.PlcFile), 65_536);
-        BooleanPlcProgram.Compile(plc);
+        string plc = ReadBounded(Resolve(folder, plan.PlcFile), VitalPlcProgram.MaximumSourceBytes);
+        VitalPlcProgram.Compile(plc);
         var prepared = new List<PreparedTerritory>();
         if (plan.TrackFile is not null || plan.TerritoriesFile is not null)
         {
@@ -91,6 +91,17 @@ public sealed class WaysideDeployment
                 var config = ReadConfiguration(Resolve(folder, assignment.ConfigurationFile ?? ""));
                 assignment.TerritoryId = config.WaysideId;
                 prepared.Add(new(config.WaysideId, config.WaysideId, config, assignment.Execution, assignment.Host, assignment.Port));
+            }
+        }
+
+        for (int i = 0; i < prepared.Count; i++)
+        {
+            var assignment = plan.Territories.Single(item => item.TerritoryId == prepared[i].Id);
+            if (assignment.PlcFile is { } file)
+            {
+                string territorySource = ReadBounded(Resolve(folder, file), VitalPlcProgram.MaximumSourceBytes);
+                VitalPlcProgram.Compile(territorySource);
+                prepared[i] = prepared[i] with { ProgramName = Path.GetFileName(file), ProgramSource = territorySource };
             }
         }
 

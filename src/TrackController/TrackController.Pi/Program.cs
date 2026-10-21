@@ -62,7 +62,7 @@ runtime.SnapshotProduced += snapshot =>
 };
 runtime.Start();
 Console.WriteLine($"Pi controller listening on 127.0.0.1:{runtime.Port}. Status: {statusFile}");
-Console.WriteLine("Waiting for the PC router to upload its assigned territory and shared PLC program. Ctrl+C stops.");
+Console.WriteLine("Waiting for the PC router to upload its assigned territory and its PLC program. Ctrl+C stops.");
 try
 {
     await Task.Delay(Timeout.Infinite, stop.Token);

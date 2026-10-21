@@ -25,6 +25,10 @@ foreach ($projectName in @('TrackController.Pi', 'TrackController.Runtime', 'Tra
     Copy-Item -LiteralPath (Join-Path $moduleRoot "$projectName\README.md") -Destination (Join-Path $documentationPath 'README.md') -Force
 }
 
+$plcDocumentation = Join-Path $documentationRoot 'TrackController.Core\Control'
+New-Item -ItemType Directory -Path $plcDocumentation -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $moduleRoot 'TrackController.Core\Control\README.md') -Destination (Join-Path $plcDocumentation 'README.md') -Force
+
 $archivePath = Join-Path (Split-Path -Parent $OutputDirectory) 'track-controller-pi5.tar.gz'
 & tar -czf $archivePath -C $OutputDirectory .
 if ($LASTEXITCODE -ne 0)
