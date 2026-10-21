@@ -747,8 +747,12 @@
                         <!-- Schedule matrix. Every block cell accepts the time
                              (HH:mm:ss) the train ENTERS that block. Only some
                              blocks need a time: CTC routes the train between
-                             timed blocks through the blank ones. Length and
-                             speed limit are read-only track data. -->
+                             timed blocks through the blank ones. Each train
+                             also has a Dwell (sec) column: filled with the
+                             block's default (45 s at a station, otherwise 0)
+                             when the train is given a time there, then
+                             editable. Length and speed limit are read-only
+                             track data. -->
                         <DataGrid Grid.Row="1"
                                   ItemsSource="{Binding Rows}"
                                   behaviors:DataGridTrainColumns.Source="{Binding TrainColumns}"
@@ -881,15 +885,17 @@
                      DISPATCHED TRAINS
                      Each train's active movement plan and the latest
                      speed/authority CTC suggested. The dispatcher edits
-                     only the destination and arrival time (Active
-                     Movement Plan); CTC recalculates speed and authority,
-                     which stay read-only.
+                     only each stop's destination, arrival time and dwell
+                     time (Active Movement Plan); CTC recalculates timing,
+                     speed and authority, which stay read-only.
                      ============================================== -->
                 <TabItem Header="Dispatched Trains">
 
                     <Grid Margin="10">
 
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
@@ -901,7 +907,7 @@
                         </Grid.ColumnDefinitions>
 
                         <TextBlock Grid.ColumnSpan="3"
-                                   Text="Trains already released from the queue. Current Block is inferred from sequential track occupancy along the train's active route. Suggested Speed and Suggested Authority are the latest values CTC sent to the Track Controller, toward the Destination at the Arrival Time. Select a train to change its destination or arrival time; CTC then routes it from its Current Block and sends a new movement suggestion."
+                                   Text="Trains already released from the queue. Current Block is inferred from sequential track occupancy along the train's active route. Suggested Speed and Suggested Authority are the latest values CTC sent to the Track Controller, toward the Destination at the Arrival Time. Select a train, then a stop of its movement plan, to change its destination, arrival time or dwell time; CTC re-routes from the Current Block if the destination changes, recalculates the timing, and sends a new movement suggestion when the movement under way changes. A stop's departure is its arrival plus its dwell, so a longer dwell leaves less time for the next movement."
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    TextWrapping="Wrap"
@@ -933,6 +939,14 @@
                                                     Binding="{Binding TargetArrivalTimeDisplay}"
                                                     Width="90"/>
 
+                                <DataGridTextColumn Header="Dwell (sec)"
+                                                    Binding="{Binding TargetDwellSecondsDisplay}"
+                                                    Width="80"/>
+
+                                <DataGridTextColumn Header="Status"
+                                                    Binding="{Binding MovementStatus}"
+                                                    Width="150"/>
+
                                 <DataGridTextColumn Header="Suggested Speed"
                                                     Binding="{Binding SuggestedSpeed,
                                                                       StringFormat={}{0:F1} mph}"
@@ -948,10 +962,70 @@
                         </DataGrid>
 
 
-                        <!-- Active movement plan of the selected train.
-                             Only the objective (destination/arrival time)
-                             is editable; nothing is sent until Apply Changes. -->
+                        <!-- Stops of the selected train's Active Movement Plan,
+                             current stop first. Departure = Arrival + Dwell;
+                             Planned Speed is for the movement ending at the
+                             stop, from the previous stop's departure. -->
+                        <TextBlock Grid.Row="2"
+                                   Text="Active Movement Plan: stops of the selected train (select one to edit it)"
+                                   Style="{StaticResource SectionHeaderStyle}"
+                                   Margin="0,10,0,4"/>
+
+                        <DataGrid Grid.Row="3"
+                                  ItemsSource="{Binding SelectedDispatchedTrain.Stops}"
+                                  SelectedItem="{Binding SelectedStop}"
+                                  SelectionMode="Single"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserSortColumns="False"
+                                  IsReadOnly="True">
+
+                            <DataGrid.Columns>
+
+                                <DataGridTextColumn Header="Stop"
+                                                    Binding="{Binding StopNumber}"
+                                                    Width="45"/>
+
+                                <DataGridTextColumn Header="Destination"
+                                                    Binding="{Binding BlockId}"
+                                                    Width="90"/>
+
+                                <DataGridTextColumn Header="Arrival Time"
+                                                    Binding="{Binding ArrivalTimeDisplay}"
+                                                    Width="90"/>
+
+                                <DataGridTextColumn Header="Dwell (sec)"
+                                                    Binding="{Binding DwellSecondsDisplay}"
+                                                    Width="80"/>
+
+                                <DataGridTextColumn Header="Departure Time"
+                                                    Binding="{Binding DepartureTimeDisplay}"
+                                                    Width="105"/>
+
+                                <DataGridTextColumn Header="Planned Speed"
+                                                    Binding="{Binding PlannedSpeed,
+                                                                      StringFormat={}{0:F1} mph}"
+                                                    Width="105"/>
+
+                                <DataGridTextColumn Header="Status"
+                                                    Binding="{Binding Status}"
+                                                    Width="150"/>
+
+                                <DataGridTextColumn Header="Timing Warning"
+                                                    Binding="{Binding TimingWarning}"
+                                                    Width="*"/>
+
+                            </DataGrid.Columns>
+
+                        </DataGrid>
+
+
+                        <!-- Edits one stop of the selected train's plan.
+                             Only the objective (destination, arrival time,
+                             dwell time) is editable; nothing changes until
+                             Apply Changes. -->
                         <Border Grid.Row="1"
+                                Grid.RowSpan="3"
                                 Grid.Column="2"
                                 Style="{StaticResource InsetPanelStyle}"
                                 IsEnabled="{Binding HasSelectedDispatchedTrain}">
@@ -959,6 +1033,8 @@
                             <Grid>
 
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
@@ -1000,20 +1076,30 @@
                                            Margin="8,4,0,4"/>
 
                                 <TextBlock Grid.Row="3"
+                                           Text="Editing:"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+
+                                <TextBlock Grid.Row="3"
+                                           Grid.Column="1"
+                                           Text="{Binding EditedStopLabel}"
+                                           Style="{StaticResource ValueStyle}"
+                                           Margin="8,4,0,4"/>
+
+                                <TextBlock Grid.Row="4"
                                            Text="Destination:"
                                            Style="{StaticResource FieldLabelStyle}"/>
 
-                                <ComboBox Grid.Row="3"
+                                <ComboBox Grid.Row="4"
                                           Grid.Column="1"
                                           ItemsSource="{Binding DestinationBlockIds}"
                                           SelectedItem="{Binding EditedDestinationBlockId}"
                                           Margin="8,4,0,4"/>
 
-                                <TextBlock Grid.Row="4"
+                                <TextBlock Grid.Row="5"
                                            Text="Arrival Time:"
                                            Style="{StaticResource FieldLabelStyle}"/>
 
-                                <TextBox Grid.Row="4"
+                                <TextBox Grid.Row="5"
                                          Grid.Column="1"
                                          Text="{Binding EditedArrivalTime,
                                                         UpdateSourceTrigger=PropertyChanged}"
@@ -1021,7 +1107,22 @@
                                          VerticalContentAlignment="Center"
                                          Margin="8,4,0,4"/>
 
-                                <Button Grid.Row="5"
+                                <!-- Reset to the destination's default (45 s at a
+                                     station, otherwise 0 s) when the destination
+                                     changes; editable afterwards. -->
+                                <TextBlock Grid.Row="6"
+                                           Text="Dwell (sec):"
+                                           Style="{StaticResource FieldLabelStyle}"/>
+
+                                <TextBox Grid.Row="6"
+                                         Grid.Column="1"
+                                         Text="{Binding EditedDwellTime,
+                                                        UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Whole seconds the train stays at this stop before its next movement; 0 = no intentional stop."
+                                         VerticalContentAlignment="Center"
+                                         Margin="8,4,0,4"/>
+
+                                <Button Grid.Row="7"
                                         Grid.ColumnSpan="2"
                                         Content="Apply Changes"
                                         FontWeight="SemiBold"

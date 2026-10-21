@@ -7,9 +7,10 @@ using CTC.Core.Models;
 namespace CTC.Wpf.Behaviors;
 
 /// <summary>
-/// Attached behavior that appends one time column per train to a schedule DataGrid, since
-/// the number of trains is only known at run time. Column N binds to
-/// <c>TrainTimes[N].TimeText</c> on each row. Presentation only: no schedule logic here.
+/// Attached behavior that appends an Arrival Time and a Dwell (sec) column per train to a
+/// schedule DataGrid, since the number of trains is only known at run time. Train N's columns
+/// bind to <c>TrainTimes[N].TimeText</c> and <c>TrainTimes[N].DwellText</c> on each row.
+/// Presentation only: no schedule logic here.
 /// </summary>
 /// <example>
 /// <c>&lt;DataGrid behaviors:DataGridTrainColumns.Source="{Binding TrainColumns}" /&gt;</c>
@@ -61,6 +62,19 @@ public static class DataGridTrainColumns
         },
     };
 
+    // Filled with the block's default when the train is given a time there; committed when the
+    // cell is left, so a value is validated whole rather than keystroke by keystroke.
+    private static DataGridColumn CreateDwellColumn(string trainId, int column) => new DataGridTextColumn
+    {
+        Header = $"{TrainIds.DisplayName(trainId)} Dwell (sec)",
+        Width = new DataGridLength(130),
+        Binding = new Binding($"TrainTimes[{column}].DwellText")
+        {
+            Mode = BindingMode.TwoWay,
+            UpdateSourceTrigger = UpdateSourceTrigger.LostFocus,
+        },
+    };
+
     private sealed class ColumnState
     {
         private readonly DataGrid _grid;
@@ -105,9 +119,13 @@ public static class DataGridTrainColumns
             int index = 0;
             foreach (var trainId in _source)
             {
-                var column = CreateTrainColumn(trainId, index++);
-                _addedColumns.Add(column);
-                _grid.Columns.Add(column);
+                foreach (var column in new[] { CreateTrainColumn(trainId, index), CreateDwellColumn(trainId, index) })
+                {
+                    _addedColumns.Add(column);
+                    _grid.Columns.Add(column);
+                }
+
+                index++;
             }
         }
     }

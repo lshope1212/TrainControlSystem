@@ -104,12 +104,14 @@ public class CtcTrainLocationTests
         Assert.AreEqual("A2", Current(service));
         Assert.AreEqual(1, Train(service).ActiveRouteIndex);
 
-        // The block's own status change first, then the train's location.
-        Assert.HasCount(2, changes);
+        // The block's own status change first, then the train's location, then (every block of
+        // this schedule is a timed stop) its arrival at stop A2.
+        Assert.HasCount(3, changes);
         Assert.AreEqual(CtcStateChangeKind.BlockStatus, changes[0].Kind);
         Assert.AreEqual(CtcStateChangeKind.TrainLocationUpdated, changes[1].Kind);
         Assert.AreEqual("000", changes[1].TrainId);
         Assert.AreEqual("A2", changes[1].BlockId);
+        Assert.AreEqual(CtcStateChangeKind.TrainMovementPhaseChanged, changes[2].Kind);
     }
 
     [TestMethod]

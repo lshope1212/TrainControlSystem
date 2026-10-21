@@ -39,10 +39,19 @@ public sealed class ScheduleCsvImportResult
 /// <see cref="ScheduleTemplateConverter"/> routes trains through the blank blocks exactly as
 /// it does for a manually entered schedule. This importer only checks the file's structure;
 /// time text is copied as-is and validated by the converter when the schedule is queued.
+/// <para>
+/// An optional <c>DwellTimeSeconds</c> column (anywhere after Block Number) gives the dwell, in
+/// whole seconds, for every train timed at that row's block. When the column or a value is
+/// missing, each stop gets its block's default from <see cref="DwellTimePolicy"/> (45 s at a
+/// station, otherwise 0 s), so files written before dwell times existed import unchanged.
+/// </para>
 /// </remarks>
 public static class ScheduleCsvImporter
 {
     private static readonly string[] RequiredColumns = ["Line", "Section", "Block Number"];
+
+    /// <summary>Accepted headers for the optional dwell column (matched ignoring case and spaces).</summary>
+    private static readonly string[] DwellColumnNames = ["DwellTimeSeconds", "Dwell Time (sec)", "Dwell (sec)"];
 
     /// <param name="line">The line the schedule is for; the CSV must name this line.</param>
     /// <param name="csv">The file contents.</param>
@@ -74,7 +83,20 @@ public static class ScheduleCsvImporter
                 "Required columns Line, Section, and Block Number were not found. The first row must start with Line,Section,Block Number.");
         }
 
-        int trainCount = header.Count - RequiredColumns.Length;
+        // An optional dwell column may sit anywhere after Block Number; every other column is a train.
+        var dwellColumns = Enumerable.Range(RequiredColumns.Length, header.Count - RequiredColumns.Length)
+            .Where(index => DwellColumnNames.Any(name => IsColumnName(header[index], name)))
+            .ToList();
+        if (dwellColumns.Count > 1)
+        {
+            return ScheduleCsvImportResult.Failure($"The header has more than one {DwellColumnNames[0]} column.");
+        }
+
+        int? dwellColumn = dwellColumns.Count == 1 ? dwellColumns[0] : null;
+        var trainFieldIndexes = Enumerable.Range(RequiredColumns.Length, header.Count - RequiredColumns.Length)
+            .Where(index => index != dwellColumn)
+            .ToList();
+        int trainCount = trainFieldIndexes.Count;
         if (trainCount == 0)
         {
             return ScheduleCsvImportResult.Failure("The schedule contains no train columns.");
@@ -127,9 +149,21 @@ public static class ScheduleCsvImporter
                 return ScheduleCsvImportResult.Failure($"Block {row.BlockId} appears more than once.");
             }
 
+            string dwellText = dwellColumn is { } index ? fields[index].Trim() : string.Empty;
             for (int column = 0; column < trainCount; column++)
             {
-                row.TrainTimes[column] = fields[RequiredColumns.Length + column].Trim();
+                row.SetTrainTime(column, fields[trainFieldIndexes[column]].Trim());
+
+                // The row's dwell applies to every train timed at this block. Blank (or no dwell
+                // column at all) keeps the block's default: 45 s at a station, otherwise 0 s.
+                if (dwellText.Length > 0 && !string.IsNullOrWhiteSpace(row.TrainTimes[column]))
+                {
+                    string? dwellError = row.TrySetTrainDwellTime(column, dwellText);
+                    if (dwellError is not null)
+                    {
+                        return ScheduleCsvImportResult.Failure($"Row {record.LineNumber}: {dwellError}");
+                    }
+                }
             }
         }
 

@@ -121,7 +121,8 @@ public class ScheduleBuilderViewModel : ViewModelBase
 
         StatusMessage = $"Generated a {trainCount}-train template for {Line.Name}. "
             + $"Enter each train's route start time and the time it enters any later blocks (e.g. stations) as {ScheduleTemplateConverter.TimeFormat}; "
-            + "CTC routes the train through the blank blocks in between.";
+            + "CTC routes the train through the blank blocks in between. "
+            + "Each timed stop gets a default Dwell (45 s at a station, otherwise 0 s), which you can change.";
     }
 
     private void QueueSchedule()
@@ -235,7 +236,7 @@ public class ScheduleBuilderViewModel : ViewModelBase
 
         foreach (var row in template.Rows)
         {
-            Rows.Add(new ScheduleTemplateRowViewModel(template, row));
+            Rows.Add(new ScheduleTemplateRowViewModel(template, row, error => StatusMessage = error));
         }
     }
 

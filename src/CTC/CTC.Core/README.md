@@ -48,6 +48,24 @@ never another `MovementRequestMessage`. The train's state, including its active 
 changes only after that send succeeds. An arrival time that cannot be met gives the
 maximum permitted speed and a warning; a limit is never exceeded.
 
+### Dwell times
+
+Every timed stop has a dwell time (`ScheduledRouteBlock.DwellTime`,
+`MovementPlanStop.DwellTime`). `Scheduling/DwellTimePolicy` is the only place the default
+is decided: 45 s when the track layout gives the block a station name, otherwise 0 s.
+The Schedule Builder fills the default when a block is given a time for a train (and keeps
+manual edits); the CSV import accepts an optional `DwellTimeSeconds` column (missing or
+blank = default). Dwell never moves a stop's arrival: `Departure = Arrival + Dwell`, and the
+speed of the next movement is planned over `NextArrival - Departure`. A dwell that leaves
+no time for the next movement is rejected.
+
+After release, `DispatchedTrainState.Stops` is the Active Movement Plan
+(`Dispatching/MovementPlanner`). `UpdateMovementPlanStopAsync` edits any remaining stop's
+destination, arrival or dwell; a dwell change only recalculates the planned timing. At
+run time a train entering its current stop becomes `Dwelling` (or `Arrived` with no dwell);
+on the SystemTime update at which its dwell has elapsed CTC sends the suggestion for the
+next movement and the train is `EnRoute` again, or `Completed` at its final stop.
+
 ### Train location: sequential occupancy
 
 `BlockStatusMessage` reports only that something occupies a block, never which train.

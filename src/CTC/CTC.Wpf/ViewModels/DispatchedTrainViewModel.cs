@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using CTC.Core.Models;
+using CTC.Core.Scheduling;
 using TrainControl.Common.Utilities;
 
 namespace CTC.Wpf.ViewModels;
@@ -7,7 +9,7 @@ namespace CTC.Wpf.ViewModels;
 /// Presentation of a <see cref="DispatchedTrainState"/> for the Dispatched Trains grid. Shows
 /// the train's active movement plan and the LATEST speed/authority CTC suggested (at release,
 /// or after the dispatcher changed the plan), not what the Track Controller authorized.
-/// Read-only: the plan is changed through <see cref="MainWindowViewModel.ApplyTrainPlanCommand"/>.
+/// Read-only: the plan (its <see cref="Stops"/>) is changed through <see cref="MainWindowViewModel.ApplyTrainPlanCommand"/>.
 /// CTC stores SI units; the grid shows imperial units.
 /// </summary>
 public class DispatchedTrainViewModel : ViewModelBase
@@ -17,6 +19,7 @@ public class DispatchedTrainViewModel : ViewModelBase
     public DispatchedTrainViewModel(DispatchedTrainState train)
     {
         _train = train ?? throw new ArgumentNullException(nameof(train));
+        Refresh();
     }
 
     public string TrainId => _train.TrainId;
@@ -42,6 +45,35 @@ public class DispatchedTrainViewModel : ViewModelBase
     /// <summary><see cref="TargetArrivalTime"/> as HH:mm:ss, matching the simulation clock.</summary>
     public string TargetArrivalTimeDisplay => _train.TargetArrivalTime.ToString(@"hh\:mm\:ss");
 
+    /// <summary>Planned dwell at <see cref="TargetBlockId"/>, in whole seconds.</summary>
+    public string TargetDwellSecondsDisplay => DwellTimePolicy.FormatSeconds(_train.TargetDwellTime);
+
+    /// <summary>Where the train is relative to its current stop, e.g. "Dwelling until 12:01:45".</summary>
+    public string MovementStatus => _train.Phase == TrainMovementPhase.Dwelling && _train.ReadyToDepartTime is { } ready
+        ? $@"Dwelling until {ready:hh\:mm\:ss}"
+        : DescribePhase(_train.Phase);
+
+    /// <summary>The remaining stops of the Active Movement Plan, current stop first.</summary>
+    public ObservableCollection<MovementPlanStopViewModel> Stops { get; } = new ObservableCollection<MovementPlanStopViewModel>();
+
     /// <summary>Re-reads all values from the underlying CTC train state.</summary>
-    public void Refresh() => OnPropertyChanged(string.Empty);
+    public void Refresh()
+    {
+        Stops.Clear();
+        for (int i = 0; i < _train.Stops.Count; i++)
+        {
+            Stops.Add(new MovementPlanStopViewModel(_train, i));
+        }
+
+        OnPropertyChanged(string.Empty);
+    }
+
+    internal static string DescribePhase(TrainMovementPhase phase) => phase switch
+    {
+        TrainMovementPhase.EnRoute => "En Route",
+        TrainMovementPhase.Arrived => "Arrived (ready to proceed)",
+        TrainMovementPhase.Dwelling => "Dwelling",
+        TrainMovementPhase.Completed => "Completed",
+        _ => phase.ToString(),
+    };
 }

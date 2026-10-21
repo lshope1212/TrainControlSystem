@@ -18,8 +18,9 @@ public class DispatchedTrainState
 
     /// <summary>
     /// Speed in the latest MovementSuggestion CTC successfully sent for this train (NOT what
-    /// the Track Controller authorized). Set at release and whenever the dispatcher changes the
-    /// movement plan; it is not recalculated automatically as the train moves.
+    /// the Track Controller authorized). Set at release, whenever the dispatcher changes the
+    /// movement under way, and when the train starts its next movement after a stop; it is not
+    /// recalculated as the train moves from block to block.
     /// </summary>
     public double SuggestedSpeedMetersPerSecond { get; set; }
 
@@ -62,12 +63,46 @@ public class DispatchedTrainState
     public bool CurrentBlockOccupancyObserved { get; set; }
 
     /// <summary>
-    /// Block the latest suggested speed is planned to reach: at release, the next timed block
-    /// of the schedule; afterwards, the destination the dispatcher chose. Not necessarily the
+    /// The Active Movement Plan: the stops the train has not yet left, in travel order. At
+    /// release, every timed block of the schedule after the route start (with its dwell);
+    /// afterwards, as edited by the dispatcher. <c>Stops[0]</c> is <see cref="CurrentStop"/>;
+    /// a stop is removed when the train departs it. Each stop's
+    /// <see cref="MovementPlanStop.RouteIndex"/> points into <see cref="ActiveRouteBlockIds"/>.
+    /// </summary>
+    public IList<MovementPlanStop> Stops { get; } = new List<MovementPlanStop>();
+
+    /// <summary>The stop the train is travelling to, dwelling at, or (when completed) finished at; null if none.</summary>
+    public MovementPlanStop? CurrentStop => Stops.Count > 0 ? Stops[0] : null;
+
+    /// <summary>Where the train is relative to <see cref="CurrentStop"/>.</summary>
+    public TrainMovementPhase Phase { get; set; }
+
+    /// <summary>Time of simulation day CTC saw the train enter <see cref="CurrentStop"/>; null while en route.</summary>
+    public TimeSpan? ActualArrivalTime { get; set; }
+
+    /// <summary>
+    /// When the train may leave <see cref="CurrentStop"/>: its actual arrival plus its dwell;
+    /// null while en route.
+    /// </summary>
+    public TimeSpan? ReadyToDepartTime => ActualArrivalTime + CurrentStop?.DwellTime;
+
+    /// <summary>
+    /// The train started its movement to <see cref="CurrentStop"/> without CTC having sent the
+    /// suggestion for it yet (it was seen leaving the previous stop before a SystemTime update);
+    /// the suggestion is sent on the next SystemTime update.
+    /// </summary>
+    public bool IsLegSuggestionPending { get; set; }
+
+    /// <summary>
+    /// Block the latest suggested speed is planned to reach: the current stop of the Active
+    /// Movement Plan. At release, the next timed block of the schedule. Not necessarily the
     /// schedule's final block.
     /// </summary>
-    public string TargetBlockId { get; set; } = string.Empty;
+    public string TargetBlockId => CurrentStop?.BlockId ?? string.Empty;
 
     /// <summary>Time of simulation day the train is planned to enter <see cref="TargetBlockId"/>.</summary>
-    public TimeSpan TargetArrivalTime { get; set; }
+    public TimeSpan TargetArrivalTime => CurrentStop?.ArrivalTime ?? TimeSpan.Zero;
+
+    /// <summary>Planned dwell at <see cref="TargetBlockId"/>.</summary>
+    public TimeSpan TargetDwellTime => CurrentStop?.DwellTime ?? TimeSpan.Zero;
 }

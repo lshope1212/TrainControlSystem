@@ -96,8 +96,9 @@ public static class SpeedPlanner
     /// <summary>
     /// Checks every span between consecutive timed blocks: covering the span's distance (the
     /// lengths of the blocks from the span's first block up to, not including, the block it
-    /// ends by entering) in the scheduled time must not need more than the permitted maximum.
-    /// An impossible schedule is rejected, never silently clamped.
+    /// ends by entering) in the time between DEPARTING the first block (its arrival plus its
+    /// dwell) and entering the last must not need more than the permitted maximum. A dwell that
+    /// leaves no travel time is rejected. An impossible schedule is rejected, never silently clamped.
     /// </summary>
     /// <returns>A dispatcher-readable reason the schedule is infeasible, or null when it is feasible.</returns>
     public static string? ValidateFeasibility(ScheduledTrain train, IReadOnlyList<CtcBlockState> route)
@@ -122,7 +123,16 @@ public static class SpeedPlanner
             var from = route[spanStart];
             var to = route[end];
             double distance = DistanceMeters(route, spanStart, end);
-            double travelSeconds = (train.Route[end].ArrivalTime!.Value - train.Route[spanStart].ArrivalTime!.Value).TotalSeconds;
+
+            // The train only starts the span once it has finished dwelling at its first block.
+            var departure = train.Route[spanStart].DepartureTime!.Value;
+            var arrival = train.Route[end].ArrivalTime!.Value;
+            double travelSeconds = AvailableTravelTime(departure, arrival).TotalSeconds;
+
+            if (train.Route[spanStart].DwellTime > TimeSpan.Zero && travelSeconds <= 0)
+            {
+                return DwellConflictMessage(train.TrainId, from.BlockId, train.Route[spanStart].DwellTime, departure, to.BlockId, arrival);
+            }
 
             if (distance <= 0)
             {
@@ -208,6 +218,37 @@ public static class SpeedPlanner
 
         return PlanSpeed(route, route.Count - 1, targetArrivalTime, systemTime);
     }
+
+    /// <summary>
+    /// Time the train has to travel from one stop to the next:
+    /// <c>nextArrival - previousDeparture</c>, where <c>previousDeparture = previousArrival + previousDwell</c>.
+    /// Zero or negative means the dwell (or the times) leave no time to travel.
+    /// </summary>
+    public static TimeSpan AvailableTravelTime(TimeSpan previousDeparture, TimeSpan nextArrival) => nextArrival - previousDeparture;
+
+    /// <summary>
+    /// Speed for a movement leg that cannot start before <paramref name="departureTime"/> (the
+    /// previous stop's arrival plus its dwell): the train has from
+    /// <c>max(departureTime, systemTime)</c> until <paramref name="targetArrivalTime"/> to cover
+    /// <paramref name="route"/>. Same rules and exceptions as <see cref="CalculateSpeedToTarget"/>.
+    /// </summary>
+    public static SpeedSuggestion CalculateLegSpeed(IReadOnlyList<CtcBlockState> route, TimeSpan departureTime, TimeSpan targetArrivalTime, TimeSpan systemTime) =>
+        CalculateSpeedToTarget(route, targetArrivalTime, departureTime > systemTime ? departureTime : systemTime);
+
+    /// <summary>
+    /// Dispatcher-readable explanation that a dwell leaves no time to reach the next stop,
+    /// e.g. the train would not leave A until 10:05:00 but must enter B at 10:04:00.
+    /// </summary>
+    public static string DwellConflictMessage(string trainId, string fromBlockId, TimeSpan dwellTime, TimeSpan departureTime, string toBlockId, TimeSpan arrivalTime) =>
+        string.Format(
+            CultureInfo.InvariantCulture,
+            @"{0} dwells {1:0} s at {2} and does not depart until {3:hh\:mm\:ss}, so it cannot enter {4} at {5:hh\:mm\:ss}. Shorten the dwell or make the arrival later.",
+            TrainIds.DisplayName(trainId),
+            dwellTime.TotalSeconds,
+            fromBlockId,
+            departureTime,
+            toBlockId,
+            arrivalTime);
 
     /// <summary>
     /// The speed rule shared by initial and updated suggestions: one constant speed from the

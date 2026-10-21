@@ -36,12 +36,29 @@ public enum CtcStateChangeKind
     DispatchFailed,
 
     /// <summary>
-    /// The dispatcher changed a released train's destination and/or arrival time, and the
-    /// recalculated MovementSuggestion was sent. <see cref="CtcStateChangedEventArgs.TrainId"/>
-    /// names the train; <see cref="CtcStateChangedEventArgs.Message"/> carries a warning
-    /// (e.g. the arrival time cannot be met) or is null.
+    /// The dispatcher changed a stop of a released train's Active Movement Plan (destination,
+    /// arrival time and/or dwell time) and CTC recalculated the dependent timing; a new
+    /// MovementSuggestion was sent if the current movement or the route changed.
+    /// <see cref="CtcStateChangedEventArgs.TrainId"/> names the train;
+    /// <see cref="CtcStateChangedEventArgs.Message"/> carries a warning (e.g. the arrival time
+    /// cannot be met) or is null.
     /// </summary>
     TrainMovementPlanUpdated,
+
+    /// <summary>
+    /// A train's <see cref="TrainMovementPhase"/> changed: it arrived at a stop, started or
+    /// finished dwelling, departed toward its next stop (its new MovementSuggestion was sent),
+    /// or completed its plan. <see cref="CtcStateChangedEventArgs.TrainId"/> names the train;
+    /// <see cref="CtcStateChangedEventArgs.Message"/> describes the change.
+    /// </summary>
+    TrainMovementPhaseChanged,
+
+    /// <summary>
+    /// The MovementSuggestion for a train's next movement (after dwelling) could not be sent.
+    /// The train keeps its plan and the send is retried on the next SystemTime update;
+    /// <see cref="CtcStateChangedEventArgs.Message"/> gives the reason.
+    /// </summary>
+    TrainMovementSuggestionFailed,
 
     /// <summary>
     /// A block became occupied that is the next active-route block of exactly one dispatched

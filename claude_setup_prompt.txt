@@ -1,866 +1,377 @@
-I need you to update and substantially expand the existing StarUML documentation for the CTC module of this repository.
+Please modify the CTC module's scheduling and Active Movement Plan functionality to support configurable **dwell times** at destination/stop blocks.
 
-IMPORTANT: This is a UML/documentation task only. Do not modify production C# code, tests, XAML, shared contracts, or project files unless absolutely necessary for opening/validating the StarUML document. The source code is the authoritative reference for the diagrams.
+First, inspect the current CTC implementation and understand how:
+- the Schedule Builder stores destinations and arrival times,
+- schedules are converted into an Active Movement Plan when a train is dispatched,
+- suggested speed and authority are calculated,
+- station information is represented in the imported track/block data,
+- active movement-plan timing is recalculated when a dispatcher changes an arrival time or destination.
 
-The existing StarUML project is:
+Do not unnecessarily redesign the existing architecture. Add this functionality in a way that fits the current models, ViewModels, services, and UI patterns.
 
-    docs/uml/CTC_UseCase.mdj
+## Required behavior
 
-Do NOT create a separate unrelated UML project unless the existing file is truly unusable. Update this existing StarUML project so that it contains:
+Each scheduled destination/stop should now have a **Dwell Time**.
 
-1. The corrected/current CTC Use Case Diagram.
-2. One UML Sequence Diagram corresponding to EVERY final use-case bubble in that use case diagram.
+The default dwell time depends on the destination block:
 
-Before making changes, inspect the CURRENT CHECKED-OUT BRANCH of the repository. Do not rely on assumptions from old versions of the CTC.
+- If the block contains a station: **45 seconds**
+- If the block does not contain a station: **0 seconds**
 
-============================================================
-PART 1 — FIRST AUDIT THE CURRENT CTC IMPLEMENTATION
-============================================================
-
-Before editing the StarUML model, inspect at minimum:
-
-    docs/uml/CTC_UseCase.mdj
-
-    src/CTC/CTC.Wpf/MainWindow.xaml
-    src/CTC/CTC.Wpf/MainWindow.xaml.cs
-
-    src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs
-    src/CTC/CTC.Wpf/ViewModels/ScheduleBuilderViewModel.cs
-    src/CTC/CTC.Wpf/ViewModels/ScheduleTemplateRowViewModel.cs
-    src/CTC/CTC.Wpf/ViewModels/DispatchedTrainViewModel.cs
-    src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs
-
-    src/CTC/CTC.Core/Interfaces/ICTCService.cs
-    src/CTC/CTC.Core/Interfaces/IMessageSender.cs
-    src/CTC/CTC.Core/Services/CTCService.cs
-
-    src/CTC/CTC.Core/Scheduling/
-    src/CTC/CTC.Core/Dispatching/
-    src/CTC/CTC.Core/Tracking/
-
-    src/CTC/CTC.Wpf/Services/NamedPipeMessageSender.cs
-    src/CTC/CTC.Wpf/Services/CtcNamedPipeReceiver.cs
-
-    src/Shared/TrainControl.Contracts/Messages/
-    src/Shared/TrainControl.Common/Communication/
-
-Also inspect the CTC tests, especially:
-
-    tests/TrainControl.Tests/CTC/CtcScheduleTests.cs
-    tests/TrainControl.Tests/CTC/CtcScheduleCsvImportTests.cs
-    tests/TrainControl.Tests/CTC/CtcCloseBlockTests.cs
-    tests/TrainControl.Tests/CTC/CtcReopenBlockTests.cs
-    tests/TrainControl.Tests/CTC/CtcSwitchRequestTests.cs
-    tests/TrainControl.Tests/CTC/CtcTrainPlanUpdateTests.cs
-    tests/TrainControl.Tests/CTC/CtcTrainLocationTests.cs
-    tests/TrainControl.Tests/CTC/CtcUiMarkupTests.cs
-
-Use the tests as additional evidence for intended behavior, validation conditions, state changes, and message transmission.
-
-Before editing anything, give me a concise audit containing:
-
-- all significant direct actions currently available to a human dispatcher in the CTC WPF window;
-- which of those should remain/become sea-level use cases;
-- whether any existing use-case bubble in CTC_UseCase.mdj is obsolete;
-- whether any new bubble is required;
-- the actual C# command/method that initiates each use case.
-
-Then proceed with the UML work.
-
-============================================================
-PART 2 — USE CASE DIAGRAM RULES
-============================================================
-
-The use case diagram is intended to be a graphical table of contents for the CTC use case set.
-
-It should contain exactly ONE primary actor:
-
-    Dispatcher
-
-Do NOT add the following as actors to the use case diagram:
-
-- Track Controller
-- Track Model
-- Train Controller
-- System Clock
-- Test UI
-- CTC itself
-- message transport
-- any other software subsystem
-
-The use cases should be DIRECT, meaningful actions that the human Dispatcher can initiate through the production CTC WPF window.
-
-Do NOT create use cases for passive/internal behavior such as:
-
-- Receive Block Status
-- Receive Track Layout
-- Receive Ticket Sales
-- Receive System Time
-- Track Train Location
-- Process Occupancy
-- Calculate Suggested Speed
-- Calculate Authority
-- Send Named Pipe Message
-- Automatic Dispatch
-
-Those may appear INSIDE sequence diagrams as supporting interactions when relevant, but they are not dispatcher use cases.
-
-Do not turn simple UI navigation into unnecessary use cases. For example:
-
-- selecting a line,
-- selecting a block,
-- selecting a dispatched train,
-- viewing text,
-- viewing a table,
-
-should generally be treated as steps or preconditions of another use case rather than their own use-case bubble.
-
-Likewise, do not make every helper function a use case.
-
-SEA-LEVEL INTENT:
-A bubble should represent a meaningful interaction the Dispatcher performs with the CTC and should be substantial enough to justify its own sequence diagram.
-
-Based on the previous version and current implementation, I expect the final use cases to be close to:
-
-    Generate Schedule Template
-    Upload Schedule
-    Queue Schedule
-    Clear Schedule
-    Toggle Maintenance Mode
-    Close Block
-    Reopen Block
-    Change Switch Position
-    Update Dispatched Train Plan
-
-BUT THIS LIST IS NOT BLINDLY AUTHORITATIVE.
-
-Inspect the actual current code and existing CTC_UseCase.mdj first. Preserve valid existing use cases and adjust the list if the implementation requires it.
-
-One recent feature that is especially important to check is the ability to modify an already-dispatched train's movement plan. The current implementation should expose something similar to:
-
-    MainWindowViewModel.ApplyTrainPlanCommand
-        -> ApplyTrainPlanAsync()
-        -> ICTCService.UpdateDispatchedTrainPlanAsync(...)
-
-If that functionality is present in the current code, add a sea-level use case named something clear such as:
-
-    Update Dispatched Train Plan
-
-This use case represents the dispatcher selecting a dispatched train and changing its destination and/or target arrival time, causing CTC to recalculate the route, suggested speed, and authority.
-
-IMPORTANT:
-The newer CurrentBlockId / train-location tracking behavior is NOT its own dispatcher use case. It is supporting system behavior. It may be used in the sequence diagram for Update Dispatched Train Plan because the updated route begins from the train's current known block.
-
-Keep the use case diagram visually simple:
-
-- Dispatcher actor on the left.
-- CTC Module system boundary.
-- Use cases inside the boundary.
-- Standard UML associations from Dispatcher to each use case.
-- Avoid unnecessary <<include>> and <<extend>> relationships unless the actual use-case semantics clearly require them.
-- Do not make the diagram into a class diagram or architecture diagram.
-
-============================================================
-PART 3 — SEQUENCE DIAGRAM PHILOSOPHY
-============================================================
-
-Create ONE sequence diagram for EVERY final sea-level use-case bubble.
-
-Use the naming convention:
-
-    SD - Generate Schedule Template
-    SD - Upload Schedule
-    SD - Queue Schedule
-    SD - Clear Schedule
-    SD - Toggle Maintenance Mode
-    SD - Close Block
-    SD - Reopen Block
-    SD - Change Switch Position
-    SD - Update Dispatched Train Plan
-
-Adjust names if the final use-case names differ.
-
-Create/group the sequence diagrams logically inside the existing CTC model, for example under a package such as:
-
-    CTC
-      Use Cases
-      Sequence Diagrams
-
-Do not create duplicates of model elements unnecessarily.
-
-These diagrams are supposed to document HOW THE CURRENT CODE ACTUALLY IMPLEMENTS EACH USE CASE.
-
-They are NOT generic conceptual sequence diagrams.
-
-Every significant message in a sequence diagram should correspond to one of:
-
-- an actual method call;
-- an actual ICommand execution;
-- an actual property/state update;
-- an actual event;
-- an actual contract/message send;
-- or a clearly identified UI/user interaction.
-
-Do not invent methods, classes, services, repositories, managers, or messages that do not exist.
-
-Use exact class and method names from the repository wherever practical.
-
-============================================================
-PART 4 — SEQUENCE DIAGRAM NOTATION / STYLE
-============================================================
-
-Follow standard UML sequence diagram conventions and the style used in our System Modelling lecture:
-
-- Participants/objects are listed horizontally across the top.
-- Each participant has a vertical lifeline.
-- Time proceeds downward.
-- Method calls/messages are horizontal annotated arrows.
-- Activation bars should be shown where useful.
-- Return messages are optional; show them only when the returned value is important to understanding the scenario.
-- Prefer participant labels of the form:
-
-      objectName : ClassName
-
-  or:
-
-      :ClassName
-
-  Examples:
-
-      dispatcher : Dispatcher
-      mainVM : MainWindowViewModel
-      scheduleVM : ScheduleBuilderViewModel
-      ctc : CTCService
-      routeManager : RouteManager
-
-- The leftmost participant should normally be the Dispatcher actor for these user-initiated use cases.
-- The UI/ViewModel boundary should be visible when it materially explains how the action is initiated.
-- Do not show every framework implementation detail of ICommand, WPF binding internals, async state machines, property notification machinery, Task internals, etc.
-- It is acceptable to label the first message from Dispatcher to a ViewModel as the corresponding UI action / command, e.g.:
-
-      click "Queue Schedule"
-      QueueScheduleCommand.Execute()
-
-  Then transition to actual application methods.
-
-- Do NOT draw a sequence diagram like an activity diagram.
-- Do NOT attempt to represent every line of code.
-- Show the collaborations between the important objects.
-
-Our lecture emphasizes that a sequence diagram captures a SINGLE SCENARIO/use-case instance. Therefore make the normal/main-success path the primary sequence.
-
-Use UML combined fragments sparingly:
-
-    alt
-    opt
-    loop
-
-Only use them when a branch is important to understanding the use case.
-
-Do NOT expand every validation `if` statement into a giant conditional tree.
-
-For example, a single concise `alt` block such as:
-
-    [validation succeeds]
-    [validation fails]
-
-may be appropriate when validation is architecturally important.
-
-If detailed algorithms, loops, or conditional logic become complicated, summarize them in a note or one method call rather than exploding the diagram. The point is to show object collaboration.
-
-============================================================
-PART 5 — CODE ACCURACY REQUIREMENTS
-============================================================
-
-For every sequence diagram:
-
-1. Trace the use case from the actual WPF control/command.
-2. Trace into the relevant ViewModel method.
-3. Trace into CTC.Core or scheduling/dispatching helper classes.
-4. Trace important state modifications.
-5. Trace outbound communication when the use case sends a message.
-6. Trace the meaningful result/status back to the ViewModel/UI.
-
-Use exact names.
-
-Examples of the types of exact code details I want represented:
-
-    GenerateTemplateCommand
-    GenerateTemplate()
-    ScheduleTemplateFactory.Create(...)
-    ScheduleTemplate
-    ShowTemplate(...)
-    ScheduleTemplateRowViewModel
-
-rather than vague labels such as:
-
-    "generate schedule"
-    "system creates schedule"
-
-Likewise:
-
-    _ctc.CloseBlockAsync(block.BlockId)
-
-rather than:
-
-    "CTC closes block"
-
-And:
-
-    _messageSender.SendAsync(request, cancellationToken)
-
-rather than:
-
-    "send information"
-
-When a model field/property materially changes, show the actual property name as a note or state update.
-
-Examples:
-
-    RequestedMaintenanceState = MaintenanceState.Closed
-    TargetBlockId = destinationBlockId
-    TargetArrivalTime = targetArrivalTime
-    SuggestedSpeedMetersPerSecond = ...
-    SuggestedAuthorityMeters = ...
-    CurrentBlockId
-    ActiveRouteBlockIds
-    ActiveRouteIndex
-
-Only include fields/properties that are relevant to understanding that use case.
-
-============================================================
-PART 6 — EXPECTED SEQUENCE FLOWS TO INVESTIGATE
-============================================================
-
-The following are STARTING POINTS based on the architecture. Verify every item against the current source before putting it in StarUML.
-
-------------------------------
-A. GENERATE SCHEDULE TEMPLATE
-------------------------------
-
-Likely participants:
-
-    Dispatcher
-    scheduleVM : ScheduleBuilderViewModel
-    :TrainIds
-    :ScheduleTemplateFactory
-    template : ScheduleTemplate
-
-Potential flow to verify:
-
-    Dispatcher
-      -> GenerateTemplateCommand
-      -> ScheduleBuilderViewModel.GenerateTemplate()
-
-    GenerateTemplate():
-      validates Line / NumberOfTrainsText / block availability
-      -> TrainIds.NextAvailableNumber(_ctc.State)
-      -> ScheduleTemplateFactory.Create(...)
-      <- ScheduleTemplate
-      -> ShowTemplate(template)
-
-    ShowTemplate():
-      -> ClearTemplate()
-      populates TrainColumns
-      creates ScheduleTemplateRowViewModel objects in Rows
-
-Show meaningful UI result/status.
-
-Do not show every ObservableCollection.Add unless needed. It may be summarized as a state update/note.
-
-------------------------------
-B. UPLOAD SCHEDULE
-------------------------------
-
-Likely participants:
-
-    Dispatcher
-    scheduleVM : ScheduleBuilderViewModel
-    dialog : OpenFileDialog
-    :File
-    :TrainIds
-    :ScheduleCsvImporter
-    template : ScheduleTemplate
-
-Potential flow:
-
-    Dispatcher -> UploadScheduleCommand
-    -> ScheduleBuilderViewModel.UploadSchedule()
-    -> OpenFileDialog.ShowDialog()
-
-    if a file is selected:
-        -> File.ReadAllText(...)
-        -> TrainIds.NextAvailableNumber(_ctc.State)
-        -> ScheduleCsvImporter.Import(Line, csv, firstTrainNumber)
-        <- import result / ScheduleTemplate
-        -> ShowTemplate(template)
-
-Show that uploading loads the schedule into the builder for review but does NOT itself queue the schedule, if that remains true in current code.
-
-A small `alt` fragment for successful import vs invalid CSV may be useful, but keep the main scenario dominant.
-
-------------------------------
-C. QUEUE SCHEDULE
-------------------------------
-
-Likely participants:
-
-    Dispatcher
-    scheduleVM : ScheduleBuilderViewModel
-    :ScheduleTemplateConverter
-    ctc : CTCService
-
-and, if actually invoked during the current implementation:
-
-    :SpeedPlanner
-    CtcSystemState / relevant state object
-
-Potential flow:
-
-    Dispatcher -> QueueScheduleCommand
-    -> ScheduleBuilderViewModel.QueueSchedule()
-    -> ScheduleTemplateConverter.Convert(_template)
-    <- converted ScheduledTrain collection
-    -> ICTCService/CTCService.QueueSchedule(result.Trains)
-
-Trace what QueueSchedule actually does now:
-- validation,
-- schedule replacement,
-- feasibility checking,
-- dispatch queue rebuilding,
-- StateChanged notification,
-etc.
-
-Show actual calls/classes rather than guessing.
-
-IMPORTANT:
-Do NOT show automatic train dispatch as though the Dispatcher manually dispatches the train. Queue Schedule is the user action. Actual release/dispatch is time-triggered elsewhere unless the current code has changed to expose a manual dispatch action.
-
-------------------------------
-D. CLEAR SCHEDULE
-------------------------------
-
-Trace the actual command and methods.
-
-Likely:
-
-    Dispatcher -> ClearTemplateCommand
-    -> ScheduleBuilderViewModel.ClearTemplateAndReport()
-    -> ClearTemplate()
-
-State changes likely include:
-
-    _template = null
-    Rows.Clear()
-    TrainColumns.Clear()
-    StatusMessage = ...
-
-Keep this diagram relatively small because the implementation itself is small.
-
-Do not artificially add classes just to make the diagram larger.
-
-------------------------------
-E. TOGGLE MAINTENANCE MODE
-------------------------------
-
-Trace the current implementation.
-
-Likely:
-
-    Dispatcher
-      -> ToggleMaintenanceModeCommand
-      -> MainWindowViewModel.IsMaintenanceMode = !IsMaintenanceMode
-
-The property setter may:
-- raise property notifications;
-- update MaintenanceModeButtonText;
-- invalidate command CanExecute state.
-
-Only show framework-related notifications if useful.
-
-This is likely a deliberately small sequence diagram.
-
-If, after examining the requirements and existing model, this no longer deserves a sea-level use case, flag that BEFORE changing the diagram instead of silently deleting it.
-
-------------------------------
-F. CLOSE BLOCK
-------------------------------
-
-Likely participants:
-
-    Dispatcher
-    mainVM : MainWindowViewModel
-    ctc : CTCService
-    block : CtcBlockState
-    sender : IMessageSender / NamedPipeMessageSender
-    Track Controller external lifeline if useful
-
-Potential flow:
-
-    Dispatcher -> CloseSelectedBlockCommand
-    -> MainWindowViewModel.CloseSelectedBlockAsync()
-    -> ctc.CloseBlockAsync(block.BlockId)
-
-Inside CTCService verify sequence such as:
-
-    GetBlock(blockId)
-    CreateMaintenanceRequest(blockId, MaintenanceState.Closed)
-        -> MaintenanceRequestMessage
-    _messageSender.SendAsync(request, cancellationToken)
-
-After successful send:
-
-    block.RequestedMaintenanceState = MaintenanceState.Closed
-    OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId)
-
-IMPORTANT SEMANTIC DISTINCTION:
-Do not show the block as immediately confirmed Closed if the code does not do that.
-
-RequestedMaintenanceState means CTC successfully requested the closure.
-ConfirmedMaintenanceState is updated later when a BlockStatusMessage arrives from the Track Controller.
-
-The passive later confirmation does not have to dominate this Dispatcher-triggered sequence diagram. A note such as:
-
-    "ConfirmedMaintenanceState changes only after a later BlockStatusMessage"
-
-is appropriate if that accurately reflects current code.
-
-External software such as Track Controller MAY appear as a lifeline inside the sequence diagram when CTC actually communicates with it. It is simply not an actor in the use case diagram.
-
-------------------------------
-G. REOPEN BLOCK
-------------------------------
-
-Use the actual reopen path, likely:
-
-    ReopenSelectedBlockCommand
-    MainWindowViewModel.ReopenSelectedBlockAsync()
-    CTCService.ReopenBlockAsync(...)
-    CreateMaintenanceRequest(..., MaintenanceState.Open)
-    IMessageSender.SendAsync(...)
-    RequestedMaintenanceState = MaintenanceState.Open
-    OnStateChanged(...)
-
-Again distinguish requested vs confirmed maintenance state.
-
-Do not simply clone the Close Block diagram without checking the actual reopen implementation and guards.
-
-------------------------------
-H. CHANGE SWITCH POSITION
-------------------------------
-
-Trace:
-
-    ToggleSelectedBlockSwitchCommand
-    MainWindowViewModel.ToggleSelectedBlockSwitchAsync()
-
-Verify how the requested position is determined from the current position.
-
-Likely:
-
-    requestedPosition =
-        SwitchPosition.Normal ? SwitchPosition.Reverse
-                              : SwitchPosition.Normal
-
-then:
-
-    _ctc.SetSwitchPositionAsync(block.BlockId, requestedPosition)
-
-Trace inside CTCService:
-
-    CreateSwitchPositionRequest(...)
-    SwitchPositionRequestMessage
-    _messageSender.SendAsync(...)
-
-IMPORTANT:
-If the actual displayed switch position only changes when a later BlockStatusMessage confirms the new position, represent that accurately. Do not make it look as though clicking the button directly mutates the confirmed switch state.
-
-------------------------------
-I. UPDATE DISPATCHED TRAIN PLAN
-------------------------------
-
-This is especially important because it is recent functionality.
-
-Inspect:
-
-    MainWindow.xaml
-    MainWindowViewModel.cs
-    DispatchedTrainViewModel.cs
-    ICTCService.cs
-    CTCService.cs
-    RouteManager.cs
-    SpeedPlanner.cs
-    AuthorityManager.cs
-    DispatchedTrainState.cs
-    TrainLocationTracker.cs
-    CtcTrainPlanUpdateTests.cs
-    CtcTrainLocationTests.cs
-
-Likely UI path to verify:
-
-    Dispatcher selects an already-dispatched train
-    Dispatcher edits destination block and/or target arrival time
-    Dispatcher presses Apply / update-plan button
-
-    ApplyTrainPlanCommand
-      -> MainWindowViewModel.ApplyTrainPlanAsync()
-
-Validation may use values such as:
-
-    SelectedDispatchedTrain
-    EditedDestinationBlockId
-    EditedArrivalTime
-    ScheduleTemplateConverter.TryParseTime(...)
-
-Then:
-
-    _ctc.UpdateDispatchedTrainPlanAsync(
-        train.TrainId,
-        destinationBlockId,
-        arrivalTime)
-
-Trace the ACTUAL service implementation.
-
-Based on current architecture it should be approximately:
-
-    CTCService.UpdateDispatchedTrainPlanAsync(...)
-
-    -> validate trainId / destination
-    -> State.FindDispatchedTrain(trainId)
-    -> State.FindLine(train.LineId)
-
-    Uses:
-        train.CurrentBlockId
-
-    -> RouteManager.FindRoute(
-           line,
-           train.CurrentBlockId,
-           destinationBlockId)
-
-    -> SpeedPlanner.CalculateSpeedToTarget(
-           route,
-           targetArrivalTime,
-           State.SystemTime)
-
-    -> AuthorityManager.CalculateUpdatedAuthorityMeters(route)
-
-    -> construct MovementSuggestionMessage
-
-    -> _messageSender.SendAsync(
-           suggestion,
-           cancellationToken)
-
-Only after successful transmission, verify/update relevant DispatchedTrainState fields such as:
-
-    TargetBlockId
-    TargetArrivalTime
-    SuggestedSpeedMetersPerSecond
-    SuggestedAuthorityMeters
-
-and active route state such as:
-
-    ActiveRouteBlockIds
-    ActiveRouteIndex
-
-If the current code uses a helper such as:
-
-    ReplaceActiveRoute(...)
-
-show it if it helps explain the state change.
-
-VERY IMPORTANT:
-Verify whether UpdateDispatchedTrainPlanAsync sends only a new MovementSuggestionMessage or also a MovementRequestMessage.
-
-If current code sends ONLY the updated MovementSuggestionMessage for an already-dispatched train, the diagram MUST show only that. Do not copy the initial-dispatch sequence and accidentally invent another movement request.
-
-The CurrentBlockId is an important prerequisite to this use case.
-
-The train-location logic appears to infer current location from sequential occupancy along ActiveRouteBlockIds using TrainLocationTracker / ApplyBlockStatus behavior.
-
-However:
-
-    Track Train Location
-
-is NOT a separate dispatcher use-case bubble.
-
-For this sequence diagram, either:
-- show CurrentBlockId as existing state/precondition, or
-- add a concise UML note explaining that it is maintained from occupancy updates by TrainLocationTracker.
-
-Do NOT bury the Update Train Plan diagram under the entire asynchronous occupancy-tracking lifecycle.
-
-The focus is the Dispatcher-triggered replan.
-
-============================================================
-PART 7 — OUTBOUND COMMUNICATION
-============================================================
-
-When a use case communicates outside CTC, trace the real implementation.
-
-Check:
-
-    IMessageSender
-    NamedPipeMessageSender
-    NamedPipeTransport
-    NamedPipeNames
-    TrainControl.Contracts.Messages
-
-If the CTC sends a:
-
-    MaintenanceRequestMessage
-    SwitchPositionRequestMessage
-    MovementSuggestionMessage
-
-show the actual message type in the sequence diagram.
-
-A useful pattern may be:
-
-    ctc : CTCService
-       -> sender : IMessageSender
-          SendAsync(message)
-
-    sender
-       -> track controller / transport
-          [actual transport call if useful]
-
-Do not over-model named-pipe serialization/framing unless it is necessary to explain the use case.
-
-The application/domain interactions are more important than pipe internals.
-
-============================================================
-PART 8 — EVENTS / VIEW REFRESH
-============================================================
-
-CTC uses StateChanged to notify the WPF layer about state changes.
-
-Where it materially completes the use case, show the event flow:
-
-    CTCService
-       -> MainWindowViewModel
-          StateChanged / OnCtcStateChanged(...)
-
-and the corresponding rebuild/refresh method if relevant, such as:
-
-    RebuildDispatchQueue()
-    RebuildDispatchedTrains()
-    BlockViewModel.Refresh()
-
-ONLY show this when it clarifies the visible result of the user's action.
-
-Do not add repetitive property-notification details to every diagram.
-
-============================================================
-PART 9 — STARUML REQUIREMENTS
-============================================================
-
-The final output must remain an editable StarUML `.mdj` model.
-
-Preferred approach:
-
-1. Use StarUML itself / its supported model manipulation mechanism / GUI automation if accessible in this environment.
-2. Reuse the existing model elements wherever practical.
-3. Add actual UMLSequenceDiagram elements and UML interaction/lifeline/message model elements, not screenshots or embedded images.
-4. If direct manipulation of the `.mdj` JSON is necessary, FIRST inspect how the existing StarUML file represents model elements and views. Modify it carefully and validate all `$ref` references.
-5. Do not fake sequence diagrams using arbitrary rectangles and lines if StarUML supports real sequence-diagram elements.
-6. Preserve the existing valid use case diagram and its editable UML elements.
-7. Make sure StarUML can reopen the resulting file without repair/errors.
-
-Validate the JSON syntactically after editing.
-
-If StarUML is installed and can be launched, open the finished .mdj in StarUML and visually inspect every diagram.
-
-============================================================
-PART 10 — DIAGRAM READABILITY
-============================================================
-
-The diagrams will be submitted/reviewed by humans, so layout matters.
-
-For every sequence diagram:
-
-- Dispatcher should be leftmost when it initiates the use case.
-- Order remaining participants approximately from UI -> ViewModel -> domain/service -> helper/service -> messaging/external system.
-- Avoid crossing messages where possible.
-- Give participants enough horizontal space for class names.
-- Give messages enough vertical space to read.
-- Avoid overlapping text.
-- Use consistent font/layout conventions across all diagrams.
-- Keep each diagram focused enough to fit on a page/screen.
-- Use notes for state changes or important semantic distinctions.
-- Do not add decorative styling that obscures standard UML notation.
-
-Some diagrams will legitimately be short. Do not artificially add lifelines just to make them look complex.
-
-============================================================
-PART 11 — SOURCE TRACEABILITY
-============================================================
-
-For each sequence diagram, create either:
-
-A. a StarUML note on the diagram, or
-B. documentation/property text associated with the interaction,
-
-listing the main implementation source files/methods used to construct the diagram.
+The dispatcher must be able to override this value manually.
 
 For example:
 
-    Implementation references:
-    - ScheduleBuilderViewModel.GenerateTemplate()
-    - ScheduleTemplateFactory.Create()
-    - ScheduleBuilderViewModel.ShowTemplate()
+| Destination | Station? | Default Dwell |
+|---|---|---:|
+| Block A1 | No | 0 sec |
+| Block C4 | Yes | 45 sec |
+| Block D7 | No | 0 sec |
 
-For Update Dispatched Train Plan, include references similar to:
+However, the dispatcher should be allowed to change any of these values, such as:
+- station block: 45 → 60 seconds
+- station block: 45 → 30 seconds
+- regular block: 0 → 20 seconds
 
-    - MainWindowViewModel.ApplyTrainPlanAsync()
-    - ICTCService.UpdateDispatchedTrainPlanAsync()
-    - CTCService.UpdateDispatchedTrainPlanAsync()
-    - RouteManager.FindRoute()
-    - SpeedPlanner.CalculateSpeedToTarget()
-    - AuthorityManager.CalculateUpdatedAuthorityMeters()
-    - IMessageSender.SendAsync()
+A dwell time of `0` means the train does not intentionally stop at that block.
 
-ONLY list methods that actually exist in the current branch.
+## Data model
 
-This is important because these diagrams are intended to reflect the implemented code, not merely conceptual requirements.
+Add an appropriate dwell-time property to the schedule/movement-plan model.
 
-============================================================
-PART 12 — DO NOT MODIFY SYSTEM BEHAVIOR
-============================================================
+Prefer a strongly typed representation such as:
 
-This task is DOCUMENTATION ONLY.
+```csharp
+TimeSpan DwellTime
+```
 
-Do not "fix" the code to make it match the UML.
+if that works cleanly with the existing architecture.
 
-Instead:
+If the current project represents timing primarily using integer seconds, using something like:
 
-    UML must match code.
+```csharp
+int DwellTimeSeconds
+```
 
-If you discover a discrepancy between what I expected above and the actual implementation, use the implementation as the source of truth and tell me about the discrepancy.
+is also acceptable.
 
-Do not refactor CTC classes while doing this task.
+Follow the existing conventions of the project rather than introducing unnecessary conversion complexity.
 
-============================================================
-PART 13 — FINAL VALIDATION / REPORT
-============================================================
+The important requirement is that dwell time is explicitly stored for each applicable schedule/movement-plan entry.
 
-After completing the StarUML work:
+## Default dwell-time logic
 
-1. Parse/validate the resulting JSON.
-2. If possible, open it in StarUML and check every diagram.
-3. Verify that every final use-case bubble has exactly one corresponding sequence diagram.
-4. Verify that no sequence diagram refers to nonexistent methods/classes.
-5. Verify that the Use Case Diagram still has exactly one actor: Dispatcher.
-6. Verify that passive incoming CTC data is not incorrectly represented as a Dispatcher use case.
-7. Verify that Update Dispatched Train Plan is represented if the current UI implements it.
-8. Verify that the new train-location/current-block support is represented only where relevant rather than as a fake Dispatcher action.
+Create centralized logic for determining the default dwell time for a block.
 
-At the end, report:
+Conceptually:
 
-- final use-case names;
-- sequence-diagram names;
-- the main classes/methods represented in each sequence;
-- any changes made to the original use-case diagram;
-- any assumptions or ambiguities you found;
-- exact files modified;
-- whether the .mdj was successfully validated/opened;
-- `git diff --stat`;
-- and DO NOT commit or push unless I explicitly ask.
+```text
+if block has station
+    dwell = 45 seconds
+else
+    dwell = 0 seconds
+```
+
+Do NOT scatter checks like this throughout the UI.
+
+Put the logic somewhere appropriate in the CTC Core/service layer so both the Schedule Builder and Active Movement Plan can use the same behavior.
+
+Use the existing track-layout/block model to determine whether a block contains a station.
+
+Do not identify stations using hard-coded block numbers.
+
+## Schedule Builder
+
+Add a **Dwell Time** field/column to each Schedule Builder destination.
+
+When the dispatcher selects or changes the destination block:
+
+1. Determine whether the selected block contains a station.
+2. Populate the default dwell time:
+   - station = 45 seconds
+   - regular block = 0 seconds
+3. Allow the dispatcher to manually edit the value afterward.
+
+Important:
+
+Do not continuously overwrite a user-entered dwell time just because the selected block is a station.
+
+The default should be assigned when the destination is initially selected or changed.
+
+For example:
+
+1. User chooses Station Block C4.
+2. Dwell automatically becomes 45 seconds.
+3. User changes it to 60 seconds.
+4. It should remain 60 seconds.
+
+If the user then changes the destination to another block, the dwell time can reset to the appropriate default for the newly selected block.
+
+Validate the dwell value so that negative dwell times cannot be entered.
+
+## Active Movement Plan
+
+Also display the dwell time associated with each applicable destination/stop in the Active Movement Plan.
+
+The dispatcher must be able to edit the dwell time of a future/current movement-plan stop after the train has been dispatched.
+
+This should work similarly to the existing functionality for modifying:
+- destination
+- arrival time
+
+When the dwell time changes, recalculate any timing information that depends on it.
+
+Do not require the train to be redispatched.
+
+## Timing semantics
+
+Treat **Arrival Time** and **Dwell Time** as separate concepts.
+
+For a movement-plan stop:
+
+```text
+Arrival Time = time the train reaches the destination block
+
+Departure Time = Arrival Time + Dwell Time
+```
+
+For example:
+
+```text
+Arrival:   10:05:00
+Dwell:     45 sec
+Departure: 10:05:45
+```
+
+The dwell time should NOT change the calculated arrival time at that same destination.
+
+Instead, it delays when the train begins the next movement.
+
+Therefore, when determining the available travel time for the next movement:
+
+```text
+NextLegStartTime = PreviousArrivalTime + PreviousDwellTime
+```
+
+Then suggested speed for the next leg should be calculated using the time between:
+
+```text
+Previous departure time
+        ↓
+Next destination arrival time
+```
+
+rather than simply:
+
+```text
+Previous arrival time
+        ↓
+Next destination arrival time
+```
+
+This is important because dwell time reduces the amount of actual travel time available between scheduled stops.
+
+Example:
+
+```text
+Destination A arrival: 10:00:00
+Destination A dwell:   45 sec
+
+Destination B arrival: 10:05:00
+```
+
+The train only has:
+
+```text
+10:00:45 → 10:05:00
+```
+
+or **4 minutes 15 seconds** of travel time.
+
+The suggested speed calculation for the A → B movement must use that time interval.
+
+## Recalculation
+
+When the dispatcher modifies any of the following in the Active Movement Plan:
+
+- destination
+- arrival time
+- dwell time
+
+recalculate all dependent timing/suggested-speed information as necessary.
+
+A dwell-time change at one stop may affect the suggested speed of the movement immediately following that stop.
+
+If the existing Active Movement Plan already has a centralized recalculation method for destination/arrival changes, extend that existing mechanism rather than creating duplicate logic.
+
+Authority should continue to be calculated using the existing routing/authority logic.
+
+Only modify authority if the destination/path itself changes.
+
+Changing dwell time alone should generally affect timing/suggested speed, not the route or authority.
+
+## Runtime train behavior
+
+When a train actually reaches a movement-plan destination whose dwell time is greater than zero, the CTC's state/timing representation should treat the train as dwelling at that destination for the configured period before proceeding to the next movement.
+
+At minimum, the Active Movement Plan should accurately represent:
+
+```text
+Arrived → Dwelling → Ready/Proceeding to next destination
+```
+
+using whatever states currently make sense in the CTC architecture.
+
+Do not create an unnecessary real-time simulation system if one does not already exist.
+
+Fit the dwell behavior into the existing train/movement-plan state machine.
+
+## Station behavior
+
+The primary rule is:
+
+```text
+Station destination → default 45-second dwell
+Regular destination → default 0-second dwell
+```
+
+The value must still be editable for either type.
+
+If the current route-generation implementation explicitly creates movement-plan entries for station blocks that the train encounters along its route, apply the same 45-second default to those station stops.
+
+Do not create duplicate stops if a station block is already represented as the destination of an existing movement-plan entry.
+
+## CSV / uploaded schedules
+
+If the current schedule CSV/import functionality stores destination stops, extend it to support dwell time if practical.
+
+Ideally allow an optional field such as:
+
+```text
+DwellTimeSeconds
+```
+
+If dwell time is omitted from an imported schedule:
+
+- use 45 seconds for station destinations
+- use 0 seconds for regular destinations
+
+Existing schedules without a dwell column should continue to work.
+
+Do not break backwards compatibility just to add this feature.
+
+## UI
+
+Keep the UI consistent with the existing CTC design.
+
+Add something similar to:
+
+```text
+Destination | Arrival Time | Dwell Time
+```
+
+for Schedule Builder entries.
+
+For the Active Movement Plan, add the dwell-time information near the existing destination/arrival/suggested-speed information.
+
+Use a simple editable numeric value in seconds unless the existing UI already has a good TimeSpan/time-entry control.
+
+Examples:
+
+```text
+Dwell (sec)
+45
+```
+
+or
+
+```text
+Dwell Time
+00:00:45
+```
+
+Choose whichever fits the current UI best.
+
+## Validation
+
+Handle at least the following cases:
+
+- dwell time cannot be negative
+- dwell time of 0 is valid
+- station defaults to 45 seconds
+- non-station defaults to 0 seconds
+- manually entered dwell times must not be overwritten unexpectedly
+- changing a destination should assign the new destination's default dwell time
+- changing dwell after dispatch should update dependent suggested-speed calculations
+- invalid timing where dwell leaves zero/negative travel time for the next leg should be caught
+
+For example:
+
+```text
+Stop A arrival = 10:00
+Stop A dwell = 5 minutes
+Stop B arrival = 10:04
+```
+
+This is impossible because the train would not depart Stop A until 10:05.
+
+Use the existing CTC validation/error-notification pattern to inform the dispatcher rather than allowing an invalid suggested-speed calculation.
+
+## Tests
+
+Add/update unit tests covering at minimum:
+
+1. Station destination defaults to 45 seconds.
+2. Regular block defaults to 0 seconds.
+3. Dispatcher can override station dwell.
+4. Dispatcher can assign dwell to a non-station block.
+5. Changing destination resets dwell to the new block's appropriate default.
+6. Dwell cannot be negative.
+7. Dwell affects the available travel time for the following movement.
+8. Suggested speed is recalculated correctly when dwell changes.
+9. Changing dwell after dispatch updates the Active Movement Plan.
+10. A dwell time that makes the next scheduled arrival impossible is rejected or flagged.
+11. Existing schedule imports without dwell information still work.
+
+## Important architectural requirement
+
+Please treat dwell time as part of the **movement/schedule timing model**, not merely a UI field.
+
+The intended relationship should conceptually be:
+
+```text
+             ARRIVE
+                ↓
+Destination Block
+                ↓
+        Dwell for N seconds
+                ↓
+             DEPART
+                ↓
+       Travel to next stop
+                ↓
+             ARRIVE
+```
+
+Thus:
+
+```text
+Departure[n] = Arrival[n] + Dwell[n]
+
+AvailableTravelTime[n → n+1]
+    = Arrival[n+1] - Departure[n]
+```
+
+and the suggested speed for the next movement should use that available travel time.
+
+After implementing the change, give me a concise summary containing:
+
+1. Files/classes changed
+2. Where dwell time is stored
+3. How the 45-second station default is determined
+4. How Schedule Builder editing works
+5. How Active Movement Plan editing works
+6. How dwell affects suggested-speed calculations
+7. Any changes made to CSV schedule importing
+8. Tests added/updated
+9. Any architectural assumptions you had to make

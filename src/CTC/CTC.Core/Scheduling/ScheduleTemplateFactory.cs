@@ -44,6 +44,7 @@ public static class ScheduleTemplateFactory
             SpeedLimitKilometersPerHour = block.SpeedLimitKilometersPerHour,
             ConnectedBlockIds = block.ConnectedBlockIds.ToList(),
             IsRouteStart = block == startBlock,
+            DefaultDwellTime = DwellTimePolicy.GetDefaultDwellTime(block),
         });
 
         return new ScheduleTemplate(line.LineId, trainIds, rows);

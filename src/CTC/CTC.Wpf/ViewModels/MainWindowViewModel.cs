@@ -29,7 +29,10 @@ public class MainWindowViewModel : ViewModelBase
     private DispatchedTrainViewModel? _selectedDispatchedTrain;
     private string? _editedDestinationBlockId;
     private string _editedArrivalTime = string.Empty;
+    private string _editedDwellTime = string.Empty;
+    private MovementPlanStopViewModel? _selectedStop;
     private bool _isRebuildingDispatchedTrains;
+    private bool _isLoadingEditedPlan;
 
     public MainWindowViewModel(ICTCService ctc)
     {
@@ -70,7 +73,7 @@ public class MainWindowViewModel : ViewModelBase
 
     /// <summary>
     /// Dispatched train whose movement plan the dispatcher is editing. Choosing a different
-    /// train loads its current destination and arrival time into the edit fields.
+    /// train selects its current stop and loads it into the edit fields.
     /// </summary>
     public DispatchedTrainViewModel? SelectedDispatchedTrain
     {
@@ -83,6 +86,7 @@ public class MainWindowViewModel : ViewModelBase
                 // A grid rebuild re-selects the same train; keep the dispatcher's unsaved edits then.
                 if (!_isRebuildingDispatchedTrains && value?.TrainId != previousTrainId)
                 {
+                    SelectedStop = value?.Stops.FirstOrDefault();
                     LoadEditedPlan();
                 }
 
@@ -94,10 +98,41 @@ public class MainWindowViewModel : ViewModelBase
 
     public bool HasSelectedDispatchedTrain => SelectedDispatchedTrain is not null;
 
+    /// <summary>
+    /// Stop of <see cref="SelectedDispatchedTrain"/>'s Active Movement Plan being edited (its
+    /// current stop by default). Choosing a different stop loads it into the edit fields.
+    /// </summary>
+    public MovementPlanStopViewModel? SelectedStop
+    {
+        get => _selectedStop;
+        set
+        {
+            int? previousIndex = _selectedStop?.StopIndex;
+            if (SetProperty(ref _selectedStop, value))
+            {
+                // A refresh re-selects the same stop; keep the dispatcher's unsaved edits then.
+                if (!_isRebuildingDispatchedTrains && value is not null && value.StopIndex != previousIndex)
+                {
+                    LoadEditedPlan();
+                }
+
+                OnPropertyChanged(nameof(EditedStopLabel));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+
+    /// <summary>Which stop the edit fields apply to, e.g. "Stop 2 (A5)".</summary>
+    public string EditedStopLabel => SelectedStop is { } stop ? $"Stop {stop.StopNumber} ({stop.BlockId})" : "Current stop";
+
     /// <summary>Blocks on the selected line the dispatcher can send a dispatched train to.</summary>
     public ObservableCollection<string> DestinationBlockIds { get; } = new ObservableCollection<string>();
 
-    /// <summary>Destination chosen for <see cref="SelectedDispatchedTrain"/>; applied only by <see cref="ApplyTrainPlanCommand"/>.</summary>
+    /// <summary>
+    /// Destination chosen for the selected stop; applied only by <see cref="ApplyTrainPlanCommand"/>.
+    /// Choosing a different block resets <see cref="EditedDwellTime"/> to that block's default
+    /// (45 s at a station, otherwise 0 s), which the dispatcher can then change.
+    /// </summary>
     public string? EditedDestinationBlockId
     {
         get => _editedDestinationBlockId;
@@ -105,9 +140,24 @@ public class MainWindowViewModel : ViewModelBase
         {
             if (SetProperty(ref _editedDestinationBlockId, value))
             {
+                if (!_isLoadingEditedPlan && SelectedLine is not null && value is not null)
+                {
+                    EditedDwellTime = DwellTimePolicy.FormatSeconds(DwellTimePolicy.GetDefaultDwellTime(SelectedLine, value));
+                }
+
                 CommandManager.InvalidateRequerySuggested();
             }
         }
+    }
+
+    /// <summary>
+    /// Dwell typed for the selected stop, in whole seconds; validated (not negative) only by
+    /// <see cref="ApplyTrainPlanCommand"/>. Blank means the destination's default.
+    /// </summary>
+    public string EditedDwellTime
+    {
+        get => _editedDwellTime;
+        set => SetProperty(ref _editedDwellTime, value ?? string.Empty);
     }
 
     /// <summary>
@@ -348,13 +398,21 @@ public class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        CommunicationStatus = $"Sending updated movement suggestion for {train.TrainDisplayName}...";
+        TimeSpan dwellTime = SelectedLine is null ? TimeSpan.Zero : DwellTimePolicy.GetDefaultDwellTime(SelectedLine, destinationBlockId);
+        if (!string.IsNullOrWhiteSpace(EditedDwellTime) && DwellTimePolicy.TryParseSeconds(EditedDwellTime, out dwellTime) is { } dwellError)
+        {
+            CommunicationStatus = $"Unable to update {train.TrainDisplayName}: {dwellError}";
+            return;
+        }
+
+        int stopIndex = SelectedStop?.StopIndex ?? 0;
+        CommunicationStatus = $"Updating {train.TrainDisplayName}'s movement plan...";
 
         try
         {
-            // Route, speed and authority are all calculated by CTC. On success the status is
-            // set from the TrainMovementPlanUpdated state change.
-            await _ctc.UpdateDispatchedTrainPlanAsync(train.TrainId, destinationBlockId, arrivalTime);
+            // Route, timing, speed and authority are all calculated by CTC. On success the status
+            // is set from the TrainMovementPlanUpdated state change.
+            await _ctc.UpdateMovementPlanStopAsync(train.TrainId, stopIndex, destinationBlockId, arrivalTime, dwellTime);
         }
         catch (Exception ex)
         {
@@ -364,11 +422,62 @@ public class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Loads <see cref="SelectedDispatchedTrain"/>'s active plan into the edit fields.</summary>
+    /// <summary>Loads the selected stop (or the selected train's current stop) into the edit fields.</summary>
     private void LoadEditedPlan()
     {
-        EditedDestinationBlockId = SelectedDispatchedTrain?.TargetBlockId;
-        EditedArrivalTime = SelectedDispatchedTrain?.TargetArrivalTimeDisplay ?? string.Empty;
+        var stop = SelectedStop ?? SelectedDispatchedTrain?.Stops.FirstOrDefault();
+
+        // Loading a stop's own dwell must not be replaced by its destination's default.
+        _isLoadingEditedPlan = true;
+        try
+        {
+            EditedDestinationBlockId = stop?.BlockId ?? SelectedDispatchedTrain?.TargetBlockId;
+            EditedArrivalTime = stop?.ArrivalTimeDisplay ?? SelectedDispatchedTrain?.TargetArrivalTimeDisplay ?? string.Empty;
+            EditedDwellTime = stop?.DwellSecondsDisplay ?? SelectedDispatchedTrain?.TargetDwellSecondsDisplay ?? string.Empty;
+        }
+        finally
+        {
+            _isLoadingEditedPlan = false;
+        }
+    }
+
+    /// <summary>
+    /// Re-reads one train after CTC changed it in place, keeping the selected stop. When the
+    /// selected stop is gone or now refers to a different block (e.g. the train departed its
+    /// current stop), the current stop is selected and loaded instead.
+    /// </summary>
+    private DispatchedTrainViewModel? RefreshDispatchedTrain(string? trainId, bool reloadEdits)
+    {
+        var train = DispatchedTrains.FirstOrDefault(train => train.TrainId == trainId);
+        if (train is null)
+        {
+            return null;
+        }
+
+        bool isSelected = train == SelectedDispatchedTrain;
+        var previousStop = SelectedStop;
+
+        _isRebuildingDispatchedTrains = true;
+        try
+        {
+            train.Refresh();
+            if (isSelected)
+            {
+                SelectedStop = previousStop is null ? null : train.Stops.ElementAtOrDefault(previousStop.StopIndex);
+            }
+        }
+        finally
+        {
+            _isRebuildingDispatchedTrains = false;
+        }
+
+        if (isSelected && (reloadEdits || SelectedStop is null || SelectedStop.BlockId != previousStop?.BlockId))
+        {
+            SelectedStop ??= train.Stops.FirstOrDefault();
+            LoadEditedPlan();
+        }
+
+        return train;
     }
 
     private void OnCtcStateChanged(object? sender, CtcStateChangedEventArgs e)
@@ -422,22 +531,33 @@ public class MainWindowViewModel : ViewModelBase
 
             case CtcStateChangeKind.TrainMovementPlanUpdated:
                 // The DispatchedTrainState was updated in place; just re-read it.
-                var updated = DispatchedTrains.FirstOrDefault(train => train.TrainId == e.TrainId);
-                updated?.Refresh();
-                if (updated is not null && updated == SelectedDispatchedTrain)
-                {
-                    LoadEditedPlan();
-                }
+                var updated = RefreshDispatchedTrain(e.TrainId, reloadEdits: true);
 
                 CommunicationStatus = $"{TrainIds.DisplayName(e.TrainId ?? string.Empty)} movement plan updated"
-                    + (updated is null ? string.Empty : $": {updated.TargetBlockId} at {updated.TargetArrivalTimeDisplay}")
-                    + " (movement suggestion sent)."
+                    + (updated is null ? string.Empty : $": {updated.TargetBlockId} at {updated.TargetArrivalTimeDisplay}, dwell {updated.TargetDwellSecondsDisplay} s")
+                    + " (timing recalculated)."
                     + (e.Message is null ? string.Empty : $" Warning: {e.Message}");
                 break;
 
             case CtcStateChangeKind.TrainLocationUpdated:
-                // Only the current block of one train changed; its plan and the edit fields did not.
-                DispatchedTrains.FirstOrDefault(train => train.TrainId == e.TrainId)?.Refresh();
+                // Only the current block of one train changed; the dispatcher's edits are kept.
+                RefreshDispatchedTrain(e.TrainId, reloadEdits: false);
+                break;
+
+            case CtcStateChangeKind.TrainMovementPhaseChanged:
+                // Arrived, dwelling, departed or completed. Departing removes the current stop, in
+                // which case the edit fields move to the new current stop.
+                RefreshDispatchedTrain(e.TrainId, reloadEdits: false);
+                if (e.Message is not null)
+                {
+                    CommunicationStatus = e.Message;
+                }
+
+                break;
+
+            case CtcStateChangeKind.TrainMovementSuggestionFailed:
+                // The train keeps its plan; CTC retries on the next time update.
+                CommunicationStatus = $"{e.Message} Will retry on the next time update.";
                 break;
 
             case CtcStateChangeKind.TrainLocationAmbiguous:
@@ -483,6 +603,7 @@ public class MainWindowViewModel : ViewModelBase
     private void RebuildDispatchedTrains()
     {
         var selectedTrainId = SelectedDispatchedTrain?.TrainId;
+        var selectedStopIndex = SelectedStop?.StopIndex;
 
         // Clearing the grid briefly deselects the train; that must not discard the edits.
         _isRebuildingDispatchedTrains = true;
@@ -498,6 +619,7 @@ public class MainWindowViewModel : ViewModelBase
 
             // Keep the dispatcher's selection (and unsaved edits) when the train is still listed.
             SelectedDispatchedTrain = DispatchedTrains.FirstOrDefault(train => train.TrainId == selectedTrainId);
+            SelectedStop = selectedStopIndex is { } index ? SelectedDispatchedTrain?.Stops.ElementAtOrDefault(index) : null;
         }
         finally
         {
@@ -507,6 +629,10 @@ public class MainWindowViewModel : ViewModelBase
         if (SelectedDispatchedTrain is null)
         {
             LoadEditedPlan();
+        }
+        else
+        {
+            SelectedStop ??= SelectedDispatchedTrain.Stops.FirstOrDefault();
         }
 
         OnPropertyChanged(nameof(DispatchedTrainCount));

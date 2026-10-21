@@ -89,4 +89,16 @@ public interface ICTCService
     /// <exception cref="Exceptions.DispatchException">The plan cannot be applied (dispatcher-readable reason); nothing was sent.</exception>
     /// <exception cref="Exceptions.MessageSendException">The suggestion could not be delivered; nothing changed.</exception>
     Task<string?> UpdateDispatchedTrainPlanAsync(string trainId, string destinationBlockId, TimeSpan targetArrivalTime, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Changes one stop (<paramref name="stopIndex"/> 0 = current stop) of an already-dispatched
+    /// train's Active Movement Plan: its destination, arrival time and dwell time. CTC validates
+    /// the timing (each stop entered after the previous stop's arrival + dwell), recalculates the
+    /// dependent suggested speeds, and sends a new MovementSuggestion only when the movement under
+    /// way or the route changed. A dwell change alone never changes the route or authority.
+    /// </summary>
+    /// <returns>A dispatcher-readable warning (e.g. an arrival time cannot be met), or null.</returns>
+    /// <exception cref="Exceptions.DispatchException">The change cannot be applied (dispatcher-readable reason); nothing was sent or changed.</exception>
+    /// <exception cref="Exceptions.MessageSendException">The suggestion could not be delivered; nothing changed.</exception>
+    Task<string?> UpdateMovementPlanStopAsync(string trainId, int stopIndex, string destinationBlockId, TimeSpan arrivalTime, TimeSpan dwellTime, CancellationToken cancellationToken = default);
 }

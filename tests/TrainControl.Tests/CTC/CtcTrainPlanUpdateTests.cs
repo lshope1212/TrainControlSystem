@@ -100,11 +100,12 @@ public class CtcTrainPlanUpdateTests
         var suggestion = (MovementSuggestionMessage)sender.SentMessages[2];
         Assert.HasCount(1, Requests(sender));
 
-        // 100 m (A1, A2) in 900 s; authority A1..A3 is 150 m.
+        // 100 m (A1, A2) in 900 s. Only the time changed, so the route (and the later stop
+        // B10) is kept and the authority still covers the whole remaining A1..B10 route.
         Assert.AreEqual("000", suggestion.TrainId);
         Assert.AreEqual(100.0 / 900.0, suggestion.SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.IsLessThan(initialSpeed, suggestion.SuggestedSpeedMetersPerSecond);
-        Assert.AreEqual(150.0, suggestion.SuggestedAuthorityMeters);
+        Assert.AreEqual(500.0, suggestion.SuggestedAuthorityMeters);
 
         var train = service.State.DispatchedTrains.Single();
         Assert.AreEqual("A3", train.TargetBlockId);

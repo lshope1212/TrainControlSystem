@@ -120,6 +120,27 @@ public class CtcUiMarkupTests
     }
 
     [TestMethod]
+    public void ScheduleBuilder_HasDwellColumnPerTrain()
+    {
+        string behavior = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "Behaviors", "DataGridTrainColumns.cs"));
+
+        Assert.Contains("$\"{TrainIds.DisplayName(trainId)} Dwell (sec)\"", behavior);
+        Assert.Contains("TrainTimes[{column}].DwellText", behavior);
+    }
+
+    [TestMethod]
+    public void ActiveMovementPlan_ShowsAndEditsDwellTime()
+    {
+        string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
+
+        Assert.Contains("{Binding EditedDwellTime", xaml);
+        Assert.Contains("ItemsSource=\"{Binding SelectedDispatchedTrain.Stops}\"", xaml);
+        Assert.Contains("SelectedItem=\"{Binding SelectedStop}\"", xaml);
+        Assert.Contains("Header=\"Dwell (sec)\"", xaml);
+        Assert.Contains("Header=\"Departure Time\"", xaml);
+    }
+
+    [TestMethod]
     public void ScheduleBuilder_HasClearTemplateButton()
     {
         string xaml = File.ReadAllText(RepoPath("src", "CTC", "CTC.Wpf", "MainWindow.xaml"));
