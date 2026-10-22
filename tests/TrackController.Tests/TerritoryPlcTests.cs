@@ -1,3 +1,4 @@
+using TrainControl.Common.Communication;
 using TrackController.Contracts.Messages;
 using TrackController.Runtime;
 
@@ -24,12 +25,12 @@ public sealed class TerritoryPlcTests
         server.Start();
         await using var runtime = saved.WithExecution(TerritoryDeploymentTests.Choices(saved, "Pi", server.Port)).CreateRuntime();
         Assert.IsTrue((await PiRuntimeTests.Send(runtime, PiRuntimeTests.Clear(saved.Territories[0].Configuration))).IsAccepted);
-        Assert.IsTrue((await PiRuntimeTests.Send(runtime, new WaysideSimulationMessage { IsPaused = false })).IsAccepted);
+        Assert.IsTrue((await PiRuntimeTests.Send(runtime, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }))).IsAccepted);
         Assert.IsTrue((await PiRuntimeTests.Send(runtime, PiRuntimeTests.Movement())).IsAccepted);
         Assert.AreEqual(0d, (await runtime.PollAsync()).Authorizations.Single().AuthorizedAuthorityMeters);
-        Assert.IsTrue((await PiRuntimeTests.Send(runtime, new WaysidePlcProgramMessage { TerritoryId = "wayside-b", Name = "restored.plc", Source = original.ProgramSource })).IsAccepted);
+        Assert.IsTrue((await PiRuntimeTests.Send(runtime, MessageSerializer.CreateEnvelope("LoadPlc", new { territoryId = "wayside-b", name = "restored.plc", source = original.ProgramSource }))).IsAccepted);
         Assert.IsTrue((await PiRuntimeTests.Send(runtime, PiRuntimeTests.Clear(saved.Territories[0].Configuration))).IsAccepted);
-        Assert.IsTrue((await PiRuntimeTests.Send(runtime, new WaysideSimulationMessage { IsPaused = false })).IsAccepted);
+        Assert.IsTrue((await PiRuntimeTests.Send(runtime, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }))).IsAccepted);
         Assert.IsTrue((await PiRuntimeTests.Send(runtime, PiRuntimeTests.Movement())).IsAccepted);
         var restored = await runtime.PollAsync();
         Assert.IsGreaterThan(0d, restored.Authorizations.Single().AuthorizedAuthorityMeters);
@@ -43,13 +44,13 @@ public sealed class TerritoryPlcTests
         using var files = new DeploymentFiles();
         var plan = files.Read();
         await using var runtime = plan.CreateRuntime();
-        Assert.IsTrue((await PiRuntimeTests.Send(runtime, new WaysidePlcProgramMessage { TerritoryId = "wayside-b", Name = "junction.plc", Source = plan.ProgramSource })).IsAccepted);
+        Assert.IsTrue((await PiRuntimeTests.Send(runtime, MessageSerializer.CreateEnvelope("LoadPlc", new { territoryId = "wayside-b", name = "junction.plc", source = plan.ProgramSource }))).IsAccepted);
         string names = (await runtime.PollAsync()).PlcName;
         StringAssert.Contains(names, "junction.plc");
         StringAssert.Contains(names, plan.ProgramName);
-        Assert.IsFalse((await PiRuntimeTests.Send(runtime, new WaysidePlcProgramMessage { TerritoryId = "missing", Name = "wrong.plc", Source = plan.ProgramSource })).IsAccepted);
+        Assert.IsFalse((await PiRuntimeTests.Send(runtime, MessageSerializer.CreateEnvelope("LoadPlc", new { territoryId = "missing", name = "wrong.plc", source = plan.ProgramSource }))).IsAccepted);
         Assert.AreEqual(names, (await runtime.PollAsync()).PlcName);
-        Assert.IsFalse((await PiRuntimeTests.Send(runtime, new WaysidePlcProgramMessage { TerritoryId = "wayside-b", Name = "invalid.plc", Source = "invalid" })).IsAccepted);
+        Assert.IsFalse((await PiRuntimeTests.Send(runtime, MessageSerializer.CreateEnvelope("LoadPlc", new { territoryId = "wayside-b", name = "invalid.plc", source = "invalid" }))).IsAccepted);
         StringAssert.Contains((await runtime.PollAsync()).PlcName, plan.ProgramName);
         Assert.ThrowsExactly<ArgumentException>(() => plan.WithTerritoryProgram("wayside-b", "invalid.plc", "invalid"));
     }

@@ -17,8 +17,6 @@ public class MessageDisplayNameFormatterTests
     [DataRow(nameof(SystemTimeMessage), "System time")]
     [DataRow(nameof(TicketSalesMessage), "Ticket sales")]
     [DataRow(nameof(TrackLayoutMessage), "Track layout")]
-    [DataRow(nameof(TrackStateMessage), "Track state")]
-    [DataRow(nameof(TrainAuthorizationStatusMessage), "Train authorization status")]
     [DataRow(nameof(TrainStateMessage), "Train state")]
     public void ToDisplayName_KnownContract_ReturnsMappedName(string messageType, string expected)
     {

@@ -20,14 +20,17 @@ public static class MessageSerializer
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        var envelope = new MessageEnvelope
-        {
-            MessageType = message.GetType().Name,
-            Payload = JsonSerializer.SerializeToElement(message, message.GetType(), Options),
-        };
+        var envelope = message as MessageEnvelope ?? CreateEnvelope(message.GetType().Name, message);
 
         return JsonSerializer.Serialize(envelope, Options);
     }
+
+    /// <summary>Names an operation with plain data, without requiring a class for that operation.</summary>
+    public static MessageEnvelope CreateEnvelope(string messageType, object payload) => new()
+    {
+        MessageType = messageType,
+        Payload = JsonSerializer.SerializeToElement(payload, payload.GetType(), Options),
+    };
 
     /// <exception cref="JsonException">The text is not a valid envelope.</exception>
     public static MessageEnvelope Deserialize(string json)
@@ -56,5 +59,17 @@ public static class MessageSerializer
 
         return envelope.Payload.Deserialize<TMessage>(Options)
             ?? throw new JsonException($"Payload of '{envelope.MessageType}' is empty.");
+    }
+
+    /// <summary>Reads a named value from an operation payload, using the shared enum/JSON rules.</summary>
+    public static TValue ReadValue<TValue>(MessageEnvelope envelope, string propertyName)
+        where TValue : notnull
+    {
+        if (!envelope.Payload.TryGetProperty(propertyName, out var payload))
+        {
+            throw new JsonException($"Payload of '{envelope.MessageType}' has no '{propertyName}'.");
+        }
+        return payload.Deserialize<TValue>(Options)
+            ?? throw new JsonException($"Payload of '{envelope.MessageType}' has an empty '{propertyName}'.");
     }
 }

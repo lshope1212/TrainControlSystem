@@ -1,3 +1,4 @@
+using Pipe = TrackController.Wpf.Services.WaysidePipeHost.Pipe;
 using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.IO;
@@ -21,7 +22,7 @@ public sealed class WaysideTransportTests
     [TestMethod]
     public async Task PublishAsync_ReceiversChange_ReportsCombinedConnectionTransitions()
     {
-        var endpoints = WaysideEndpoints.CreateIsolated();
+        var endpoints = WaysidePipeHost.CreatePipeNames(isolated: true);
         await using var host = new WaysidePipeHost(new TrackControllerService(), endpoints);
         var states = new ConcurrentQueue<string>();
         var errors = new ConcurrentQueue<Exception>();
@@ -33,7 +34,7 @@ public sealed class WaysideTransportTests
         using var ctcStop = new CancellationTokenSource();
         using var recoveryStop = new CancellationTokenSource();
         long snapshots = 0;
-        var trackListener = NamedPipeTransport.ListenAsync(endpoints.TrackModelOutput, _ =>
+        var trackListener = NamedPipeTransport.ListenAsync(endpoints[(int)Pipe.TrackModel], _ =>
         {
             Interlocked.Increment(ref snapshots);
             return Task.CompletedTask;
@@ -43,7 +44,7 @@ public sealed class WaysideTransportTests
         try
         {
             await UntilAsync(() => states.LastOrDefault() == "CTC: unavailable · Track Model: connected");
-            ctcListener = NamedPipeTransport.ListenAsync(endpoints.CtcOutput, _ => Task.CompletedTask, errors.Enqueue, ctcStop.Token);
+            ctcListener = NamedPipeTransport.ListenAsync(endpoints[(int)Pipe.Ctc], _ => Task.CompletedTask, errors.Enqueue, ctcStop.Token);
             await UntilAsync(() => states.LastOrDefault() == "CTC: connected · Track Model: connected");
             int notifications = states.Count;
             long previousSnapshots = Interlocked.Read(ref snapshots);
@@ -53,7 +54,7 @@ public sealed class WaysideTransportTests
             await ctcStop.CancelAsync();
             await ctcListener;
             await UntilAsync(() => states.LastOrDefault() == "CTC: unavailable · Track Model: connected");
-            recoveryListener = NamedPipeTransport.ListenAsync(endpoints.CtcOutput, _ => Task.CompletedTask, errors.Enqueue, recoveryStop.Token);
+            recoveryListener = NamedPipeTransport.ListenAsync(endpoints[(int)Pipe.Ctc], _ => Task.CompletedTask, errors.Enqueue, recoveryStop.Token);
             await UntilAsync(() => states.LastOrDefault() == "CTC: connected · Track Model: connected");
             Assert.IsEmpty(errors);
         }
@@ -68,7 +69,7 @@ public sealed class WaysideTransportTests
 
     private sealed class NetworkFixture : IAsyncDisposable
     {
-        public WaysideEndpoints Endpoints { get; } = WaysideEndpoints.CreateIsolated();
+        public string[] Endpoints { get; } = WaysidePipeHost.CreatePipeNames(isolated: true);
 
         public WaysideTestConnection Peers { get; }
 
@@ -77,7 +78,7 @@ public sealed class WaysideTransportTests
         /// <summary>Creates an isolated production pipe host and simulated external peers.</summary>
         public NetworkFixture()
         {
-            Peers = new(Endpoints.Input, Endpoints.CtcOutput, Endpoints.TrackModelOutput);
+            Peers = new(Endpoints[(int)Pipe.Input], Endpoints[(int)Pipe.Ctc], Endpoints[(int)Pipe.TrackModel]);
             Peers.Start();
             _host = new WaysidePipeHost(new TrackControllerService(), Endpoints);
             _host.Start();
@@ -96,18 +97,18 @@ public sealed class WaysideTransportTests
         /// <summary>Waits for real published outputs after initializing the test controller.</summary>
         public async Task ReadyAsync()
         {
-            await Peers.SendAsync(new WaysideControllerModeMessage { IsHardwareMode = false });
+            await Peers.SendAsync(MessageSerializer.CreateEnvelope("SetControllerMode", new { hardwareMode = false }));
             await FeedbackAsync();
-            await Peers.SendAsync(new WaysideSimulationMessage { IsPaused = false });
+            await Peers.SendAsync(MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }));
             await SnapshotAsync(snapshot => !snapshot.IsPaused && snapshot.Blocks.All(blockStatus => blockStatus.IsFresh));
         }
 
         /// <summary>Sends fresh sample measurements through the actual named-pipe input.</summary>
-        public Task FeedbackAsync(Action<List<WaysideBlockFeedback>>? change = null)
+        public Task FeedbackAsync(Action<List<TrackModelBlockStateMessage>>? change = null)
         {
-            var blocks = Enumerable.Range(1, 12).Select(index => new WaysideBlockFeedback { BlockId = index.ToString(), ObservedAtUtc = DateTimeOffset.UtcNow, Occupancy = index == 5 ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList();
+            var blocks = Enumerable.Range(1, 12).Select(index => new TrackModelBlockStateMessage { BlockId = index.ToString(), ObservedAtUtc = DateTimeOffset.UtcNow, Occupancy = index == 5 ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList();
             change?.Invoke(blocks);
-            return Peers.SendAsync(new WaysideFeedbackMessage { Blocks = blocks });
+            return Peers.SendAsync(blocks);
         }
 
         /// <summary>Waits for a published snapshot satisfying the test condition.</summary>
@@ -125,7 +126,7 @@ public sealed class WaysideTransportTests
         }
     }
 
-    private static WaysideMovementRequestMessage Movement() => new()
+    private static MovementSuggestionMessage Movement() => new()
     {
         RequestId = Guid.NewGuid().ToString("N"),
         TrainId = "101",
@@ -148,43 +149,50 @@ public sealed class WaysideTransportTests
 
     /// <summary>Verifies that legacy train only request is rejected without guessing occupancy.</summary>
     [TestMethod]
-    public void Receive_TrainOnlyMovement_RejectsWithoutGuessingPosition()
+    public async Task Receive_TrainOnlyMovement_RejectsWithoutGuessingPosition()
     {
-        var router = new WaysideMessageRouter(new TrackControllerService());
-        var reply = (WaysideAcknowledgementMessage)router.Receive(MessageSerializer.Serialize(new MovementSuggestionMessage { TrainId = "101" }));
+        await using var runtime = new LocalWaysideRuntime(new TrackControllerService());
+        var reply = (WaysideAcknowledgementMessage)await runtime.ReceiveAsync(MessageSerializer.Deserialize(MessageSerializer.Serialize(new MovementSuggestionMessage { TrainId = "101" })));
         Assert.IsFalse(reply.IsAccepted);
         StringAssert.Contains(reply.Detail, "target block");
     }
 
     /// <summary>Rejects the old position-based message instead of silently changing the meaning of its authority.</summary>
     [TestMethod]
-    public void Receive_LegacyFrontOffset_RejectsBeforeGrantingAuthority()
+    public async Task Receive_LegacyFrontOffset_RejectsBeforeGrantingAuthority()
     {
-        var router = new WaysideMessageRouter(new TrackControllerService());
+        await using var runtime = new LocalWaysideRuntime(new TrackControllerService());
         var payload = System.Text.Json.Nodes.JsonNode.Parse(MessageSerializer.Serialize(Movement()))!;
         payload["payload"]!["frontOffsetMeters"] = 60;
-        var result = (WaysideAcknowledgementMessage)router.Receive(payload.ToJsonString());
+        var result = (WaysideAcknowledgementMessage)await runtime.ReceiveAsync(MessageSerializer.Deserialize(payload.ToJsonString()));
         Assert.IsFalse(result.IsAccepted);
         StringAssert.Contains(result.Detail, "frontOffsetMeters");
     }
 
-    /// <summary>Verifies that invalid json enums nulls and unknown types return rejections.</summary>
+    /// <summary>Malformed envelopes fail at the transport parser; invalid payloads are rejected by the runtime.</summary>
     [TestMethod]
-    public void Receive_InvalidEnvelopeOrEnums_ReturnsRejection()
+    public async Task Receive_InvalidEnvelopeOrEnums_ReturnsRejection()
     {
-        var router = new WaysideMessageRouter(new TrackControllerService());
+        await using var runtime = new LocalWaysideRuntime(new TrackControllerService());
         foreach (string json in new[]
         {
             "{bad",
             "{}",
-            "{\"messageType\":\"Unknown\",\"payload\":{}}",
-            "{\"messageType\":\"WaysideMovementRequestMessage\",\"payload\":null}",
-            "{\"messageType\":\"MaintenanceRequestMessage\",\"payload\":{\"blockId\":\"5\",\"requestedState\":99}}"
+            "{\"messageType\":\"MovementSuggestionMessage\",\"payload\":null}"
         }
 
         )
         {
-            Assert.IsFalse(((WaysideAcknowledgementMessage)router.Receive(json)).IsAccepted);
+            Assert.ThrowsExactly<System.Text.Json.JsonException>(() => MessageSerializer.Deserialize(json));
+        }
+
+        foreach (string json in new[]
+        {
+            "{\"messageType\":\"Unknown\",\"payload\":{}}",
+            "{\"messageType\":\"MaintenanceRequestMessage\",\"payload\":{\"blockId\":\"5\",\"requestedState\":99}}"
+        })
+        {
+            Assert.IsFalse(((WaysideAcknowledgementMessage)await runtime.ReceiveAsync(MessageSerializer.Deserialize(json))).IsAccepted);
         }
     }
 
@@ -196,11 +204,11 @@ public sealed class WaysideTransportTests
         await fixture.ReadyAsync();
         var request = Movement();
         await fixture.Peers.SendAsync(request);
-        var output = await fixture.SnapshotAsync(snapshot => snapshot.Authorizations.Any(authorization => authorization.RequestId == request.RequestId && authorization.AuthorizedAuthorityMeters > 0));
+        var output = await fixture.SnapshotAsync(snapshot => snapshot.Authorizations.Any(authorization => authorization.Request!.RequestId == request.RequestId && authorization.AuthorizedAuthorityMeters > 0));
         Assert.AreEqual(365.76, output.Authorizations.Single().AuthorizedAuthorityMeters);
-        Assert.AreEqual(WaysideMovementRequestMessage.BlockEntryReference, output.Authorizations.Single().AuthorityReference);
+        Assert.AreEqual(MovementSuggestionMessage.BlockEntryReference, output.Authorizations.Single().Request!.AuthorityReference);
         Assert.AreEqual(11.176, output.Authorizations.Single().AuthorizedSpeedMetersPerSecond);
-        await UntilAsync(() => fixture.Peers.RecentMessages.Any(envelope => envelope.MessageType == nameof(TrainAuthorizationStatusMessage) && MessageSerializer.DeserializePayload<TrainAuthorizationStatusMessage>(envelope).AuthorizedAuthorityMeters == 365.76));
+        await UntilAsync(() => fixture.Peers.RecentMessages.Any(envelope => envelope.MessageType == nameof(TrackModelCommandMessage) && MessageSerializer.DeserializePayload<TrackModelCommandMessage>(envelope).AuthorityMeters == 365.76));
         Assert.IsGreaterThan(0L, fixture.Peers.CtcReceivedCount);
         Assert.IsGreaterThan(0L, fixture.Peers.TrackModelReceivedCount);
     }
@@ -211,10 +219,29 @@ public sealed class WaysideTransportTests
     {
         await using var fixture = new NetworkFixture();
         // This is the exact Common transport now called by CTC's production sender.
-        await NamedPipeTransport.SendAsync(fixture.Endpoints.Input, new MaintenanceRequestMessage { BlockId = "12", RequestedState = MaintenanceState.Closed });
+        await NamedPipeTransport.SendAsync(fixture.Endpoints[(int)Pipe.Input], new MaintenanceRequestMessage { BlockId = "12", RequestedState = MaintenanceState.Closed });
         await fixture.SnapshotAsync(snapshot => snapshot.Blocks.Single(blockStatus => blockStatus.BlockId == "12").Maintenance == "Pending closure");
         await fixture.Peers.SendAsync(new MaintenanceRequestMessage { BlockId = "12", RequestedState = MaintenanceState.Open });
         await fixture.SnapshotAsync(snapshot => snapshot.Blocks.Single(blockStatus => blockStatus.BlockId == "12").Maintenance == "Open");
+    }
+
+    [TestMethod]
+    public async Task PublishAsync_MaintenanceChanges_ReportsConfirmedClosureAndReopeningToCtc()
+    {
+        await using var fixture = new NetworkFixture();
+        await fixture.ReadyAsync();
+        MaintenanceState? ReportedMaintenance() => fixture.Peers.RecentMessages
+            .Where(envelope => envelope.MessageType == nameof(BlockStatusMessage))
+            .Select(MessageSerializer.DeserializePayload<BlockStatusMessage>)
+            .LastOrDefault(message => message.BlockId == "12")?.Maintenance;
+
+        await fixture.Peers.SendAsync(new MaintenanceRequestMessage { BlockId = "12", RequestedState = MaintenanceState.Closed });
+        await fixture.SnapshotAsync(snapshot => snapshot.Blocks.Single(block => block.BlockId == "12").Maintenance == "Closed");
+        await UntilAsync(() => ReportedMaintenance() == MaintenanceState.Closed);
+
+        await fixture.Peers.SendAsync(new MaintenanceRequestMessage { BlockId = "12", RequestedState = MaintenanceState.Open });
+        await fixture.SnapshotAsync(snapshot => snapshot.Blocks.Single(block => block.BlockId == "12").Maintenance == "Open");
+        await UntilAsync(() => ReportedMaintenance() == MaintenanceState.Open);
     }
 
     /// <summary>Verifies that typed input is serialized before controller observes it.</summary>
@@ -228,8 +255,8 @@ public sealed class WaysideTransportTests
         request.PathBlockIds.Clear();
         request.SuggestedAuthorityMeters = 99999;
         var output = await fixture.SnapshotAsync(snapshot => snapshot.Authorizations.Count == 1);
-        Assert.HasCount(3, output.Authorizations[0].PathBlockIds);
-        Assert.AreEqual(365.76, output.Authorizations[0].SuggestedAuthorityMeters);
+        Assert.HasCount(3, output.Authorizations[0].Request!.PathBlockIds);
+        Assert.AreEqual(365.76, output.Authorizations[0].Request!.SuggestedAuthorityMeters);
     }
 
     /// <summary>Verifies that malformed connection does not kill shared receiver.</summary>
@@ -237,7 +264,7 @@ public sealed class WaysideTransportTests
     public async Task ListenAsync_MalformedConnection_ContinuesReceiving()
     {
         await using var fixture = new NetworkFixture();
-        await using (var client = new NamedPipeClientStream(".", fixture.Endpoints.Input, PipeDirection.Out, PipeOptions.Asynchronous))
+        await using (var client = new NamedPipeClientStream(".", fixture.Endpoints[(int)Pipe.Input], PipeDirection.Out, PipeOptions.Asynchronous))
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             await client.ConnectAsync(deadline.Token);
@@ -258,7 +285,7 @@ public sealed class WaysideTransportTests
         var request = Movement();
         request.PathBlockIds = ["foreign"];
         await fixture.Peers.SendAsync(request);
-        await UntilAsync(() => Results(fixture.Peers).Any(acknowledgement => !acknowledgement.IsAccepted && acknowledgement.MessageType == nameof(WaysideMovementRequestMessage)));
+        await UntilAsync(() => Results(fixture.Peers).Any(acknowledgement => !acknowledgement.IsAccepted && acknowledgement.MessageType == nameof(MovementSuggestionMessage)));
         var snapshot = await fixture.SnapshotAsync(snapshot => snapshot.Authorizations.Count == 0);
         Assert.IsEmpty(snapshot.Authorizations);
     }
@@ -268,12 +295,12 @@ public sealed class WaysideTransportTests
     public async Task SendAsync_PlcAndManualCommands_UsesProductionInterface()
     {
         await using var fixture = new NetworkFixture();
-        await fixture.Peers.SendAsync(new WaysidePlcProgramMessage { Name = "wire.plc", Source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "PiSamples", "wayside.plc")) });
+        await fixture.Peers.SendAsync(MessageSerializer.CreateEnvelope("LoadPlc", new { name = "wire.plc", source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "PiSamples", "wayside.plc")) }));
         await fixture.SnapshotAsync(snapshot => snapshot.PlcName == "wire.plc" && snapshot.IsPaused);
         await fixture.FeedbackAsync();
-        await fixture.Peers.SendAsync(new WaysideMaintenanceModeMessage { IsEnabled = true });
-        await fixture.Peers.SendAsync(new WaysideManualCommandMessage { BlockId = "4", Signal = SignalState.Red });
-        await UntilAsync(() => Results(fixture.Peers).Any(acknowledgement => acknowledgement.IsAccepted && acknowledgement.MessageType == nameof(WaysideManualCommandMessage)));
+        await fixture.Peers.SendAsync(MessageSerializer.CreateEnvelope("SetMaintenanceMode", new { enabled = true }));
+        await fixture.Peers.SendAsync(MessageSerializer.CreateEnvelope("ApplyManual", new { blockId = "4", signal = SignalState.Red }));
+        await UntilAsync(() => Results(fixture.Peers).Any(acknowledgement => acknowledgement.IsAccepted && acknowledgement.MessageType == "ApplyManual"));
         await fixture.SnapshotAsync(snapshot => snapshot.IsMaintenanceMode && snapshot.Blocks.Single(blockStatus => blockStatus.BlockId == "4").CommandedSignal == SignalState.Red);
     }
 
@@ -291,7 +318,7 @@ public sealed class WaysideTransportTests
         }
 
         Assert.AreEqual(9L, fixture.Peers.SentCount);
-        await fixture.SnapshotAsync(snapshot => snapshot.Authorizations.Any(authorization => authorization.RequestId == request.RequestId && authorization.AuthorizedAuthorityMeters > 0));
+        await fixture.SnapshotAsync(snapshot => snapshot.Authorizations.Any(authorization => authorization.Request!.RequestId == request.RequestId && authorization.AuthorizedAuthorityMeters > 0));
     }
 
     /// <summary>Verifies that lost controller cannot be hidden by direct call fallback.</summary>
@@ -310,10 +337,10 @@ public sealed class WaysideTransportTests
     [TestMethod]
     public async Task SendAsync_MissingOutputListener_DoesNotExposePrivateState()
     {
-        var endpoints = WaysideEndpoints.CreateIsolated();
+        var endpoints = WaysidePipeHost.CreatePipeNames(isolated: true);
         await using var host = new WaysidePipeHost(new TrackControllerService(), endpoints);
         host.Start();
-        await using var peers = new WaysideTestConnection(endpoints.Input, endpoints.CtcOutput, endpoints.TrackModelOutput); // Deliberately do not start output listeners.
+        await using var peers = new WaysideTestConnection(endpoints[(int)Pipe.Input], endpoints[(int)Pipe.Ctc], endpoints[(int)Pipe.TrackModel]); // Deliberately do not start output listeners.
         await peers.SendAsync(new MaintenanceRequestMessage { BlockId = "12", RequestedState = MaintenanceState.Closed });
         Assert.IsNull(peers.LatestSnapshot);
         Assert.IsFalse(peers.IsSnapshotCurrent);
@@ -331,28 +358,30 @@ public sealed class WaysideTransportTests
         Assert.AreEqual("Open", untouched.Blocks.Single(blockStatus => blockStatus.BlockId == "12").Maintenance);
     }
 
-    /// <summary>Verifies that ctc receives measured feedback and revocation after cancellation.</summary>
+    /// <summary>Verifies cancellation stops Track Model movement while CTC receives measured block feedback.</summary>
     [TestMethod]
-    public async Task PublishAsync_CancelledMovement_RevokesCtcAuthorization()
+    public async Task PublishAsync_CancelledMovement_StopsTrackModelCommand()
     {
         await using var fixture = new NetworkFixture();
         await fixture.ReadyAsync();
         var request = Movement();
         await fixture.Peers.SendAsync(request);
-        await UntilAsync(() => fixture.Peers.RecentMessages.Any(envelope => envelope.MessageType == nameof(TrainAuthorizationStatusMessage) && MessageSerializer.DeserializePayload<TrainAuthorizationStatusMessage>(envelope).AuthorizedAuthorityMeters > 0));
+        await UntilAsync(() => fixture.Peers.RecentMessages.Any(envelope => envelope.MessageType == nameof(TrackModelCommandMessage) && MessageSerializer.DeserializePayload<TrackModelCommandMessage>(envelope).AuthorityMeters > 0));
         request.IsActive = false;
         await fixture.Peers.SendAsync(request);
-        await UntilAsync(() => fixture.Peers.RecentMessages.Any(envelope => envelope.MessageType == nameof(TrainAuthorizationStatusMessage) && MessageSerializer.DeserializePayload<TrainAuthorizationStatusMessage>(envelope).TrainId == "101" && MessageSerializer.DeserializePayload<TrainAuthorizationStatusMessage>(envelope).AuthorizedAuthorityMeters == 0));
+        await fixture.SnapshotAsync(snapshot => snapshot.Authorizations.Count == 0);
+        await UntilAsync(() => fixture.Peers.RecentMessages.Where(envelope => envelope.MessageType == nameof(TrackModelCommandMessage))
+            .Select(MessageSerializer.DeserializePayload<TrackModelCommandMessage>).LastOrDefault(command => command.BlockId == request.TargetBlockId) is { AuthorityMeters: 0, CommandedSpeedMetersPerSecond: 0 });
         var block = fixture.Peers.RecentMessages.Where(envelope => envelope.MessageType == nameof(BlockStatusMessage)).Select(MessageSerializer.DeserializePayload<BlockStatusMessage>).Last(blockStatus => blockStatus.BlockId == "6");
         Assert.AreEqual(SwitchPosition.Normal, block.Switch);
     }
 
-    /// <summary>Verifies that snapshot request responds through normal output pipe.</summary>
+    /// <summary>Verifies that snapshot requests use the diagnostic pipe while module outputs continue separately.</summary>
     [TestMethod]
-    public async Task Receive_SnapshotRequest_UsesNormalOutputPipe()
+    public async Task Receive_SnapshotRequest_UsesDiagnosticOutputPipe()
     {
         await using var fixture = new NetworkFixture();
-        await fixture.Peers.SendAsync(new WaysideSnapshotRequest());
+        await fixture.Peers.SendAsync(MessageSerializer.CreateEnvelope("GetSnapshot", new { }));
         await fixture.SnapshotAsync(snapshot => snapshot.Blocks.Count == 12);
         Assert.IsGreaterThan(0L, fixture.Peers.TrackModelReceivedCount);
     }

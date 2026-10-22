@@ -137,36 +137,43 @@ The live input pipe is `TrainControl.TrackController`. It accepts one UTF-8, new
 {"messageType":"MaintenanceRequestMessage","payload":{"blockId":"12","requestedState":"Closed"}}
 ```
 
-Supported inputs (identical in the production host): `WaysideConfigurationMessage`, `WaysideFeedbackMessage`, `WaysideMovementRequestMessage`, `WaysideSimulationMessage`, `WaysideManualCommandMessage`, `WaysideMaintenanceModeMessage`, `WaysideControllerModeMessage`, `WaysidePlcProgramMessage`, `WaysideSnapshotRequest`, and the existing `MaintenanceRequestMessage`, `SwitchPositionRequestMessage`, `BlockStatusMessage`, and `TrackStateMessage`. Live transport never exposes test reset.
+Shared inputs are `MovementSuggestionMessage`, `TrackModelBlockStateMessage`, `MaintenanceRequestMessage`, and `SwitchPositionRequestMessage`. Legacy `BlockStatusMessage` input is also accepted. Movement suggestions include request ID, target block, entry block, route, and fixed authority measured from the target block entry. CTC now supplies this context in its shared suggestion. Feedback uses the shared Track Model state directly, including individual failures and closure, measurement time, optional speed, and optional reservation status.
 
-The `Wayside*` inputs and outputs are controller extensions used by the external Test UI peers and Pi runtime. They are exposed identically on the production host, but are not yet agreed inter-module contracts. Adopting them for CTC or Track Model requires a team-approved shared contract or an adapter inside Track Controller; other modules should not reference `TrackController.Contracts`.
+Use `MessageSerializer.Serialize` for shared contracts. Small UI controls use `MessageSerializer.CreateEnvelope(operation, payload)`; they need no separate message classes:
 
-Use the Common serializer rather than building JSON by hand. Existing shared feedback is timestamped on arrival; it cannot provide reservation confirmation or all richer fault data. The test/Pi extension `WaysideFeedbackMessage` carries explicit measurement timestamps, optional actual speed, reservation status, and equipment feedback. Mode/program requests are operator/simulation controls; they still pass through the same validation boundary in the test UI.
+| Operation | Payload fields |
+| --- | --- |
+| `SetSimulation` | `paused`, `speedMultiplier` |
+| `SetControllerMode` | `hardwareMode` |
+| `SetMaintenanceMode` | `enabled` |
+| `LoadPlc` | `name`, `source`, optional `territoryId` |
+| `ApplyManual` | `blockId`, optional `switchPosition`, `signal`, `crossing` |
+| `GetSnapshot` | empty object |
+| `TrackModelBlockStates` | `blocks`: array of shared `TrackModelBlockStateMessage` values |
+
+A batch validates all measurements before changing the local controller. Single Track Model updates and batches use the same controller method. The test UI sends batches; the actual Track Model sends one shared state per block. The Pi client translates measurement timestamps to the Pi clock. Reservation `null` remains unknown and cannot unlock a protected switch.
 
 ```json
-{"messageType":"WaysideMovementRequestMessage","payload":{"requestId":"example-1","trainId":"Train 101","targetBlockId":"5","authorityReference":"TargetBlockEntry","pathBlockIds":["6","7","8"],"suggestedSpeedMetersPerSecond":11.176,"suggestedAuthorityMeters":365.76,"active":true}}
+{"messageType":"MovementSuggestionMessage","payload":{"requestId":"example-1","trainId":"Train 101","targetBlockId":"5","authorityReference":"TargetBlockEntry","pathBlockIds":["6","7","8"],"suggestedSpeedMetersPerSecond":11.176,"suggestedAuthorityMeters":365.76,"active":true}}
 ```
 
 ```json
-{"messageType":"WaysideFeedbackMessage","payload":{"blocks":[{"blockId":"5","observedAtUtc":"2026-10-02T12:00:00Z","occupancy":"Occupied","signal":"Unknown","switch":"Unknown","crossing":"Unknown","faulted":false,"reservedByCtc":false}]}}
+{"messageType":"TrackModelBlockStateMessage","payload":{"blockId":"5","observedAtUtc":"2026-10-22T12:00:00Z","occupancy":"Occupied","signal":"Green","switch":"Normal","crossing":"Closed","brokenRail":false,"isReservedByCtc":false}}
 ```
 
-Replace the example timestamp with the actual current observation time. Update all relevant blocks before requesting movement. A cancellation uses the current request ID and target with `active:false`.
+Replace the example timestamp with the actual measurement time. Update relevant blocks before requesting movement. A cancellation uses the current request ID and target with `active:false`.
 
-The transport is the team's one-way, one-envelope-per-connection protocol. There is no duplex reply on the input connection. The controller publishes `WaysideAcknowledgementMessage` on the Track Model output pipe after handling an input. An acknowledgement means the input was accepted, **not** that movement was granted or equipment changed. Send a `WaysideSnapshotRequest` with an empty payload object to request a snapshot on that same output pipe:
+`WaysideConfigurationMessage` configures the standalone runtime. Routed territory ownership is configured through deployment loading. Live transport does not expose test reset.
 
-```json
-{"messageType":"WaysideSnapshotRequest","payload":{}}
-```
+The input connection remains one-way. Outputs use separate pipes:
 
-The CTC/input endpoints use the unchanged shared `NamedPipeNames`. The Track Model output name is declared locally in `WaysideEndpoints.TrackModelInput`:
+- `TrainControl.CTC`: shared `BlockStatusMessage` containing measured block/equipment status. Movement results stay on the target blocks in runtime/monitor snapshots and supply the Track Model commands; no authorization response is published to the CTC.
+- `TrainControl.TrackModel`: shared `TrackModelCommandMessage`, combining commanded equipment with authorized movement for the occupied target block.
+- `TrainControl.TrackController.Monitor`: `WaysideSnapshotMessage` and `WaysideAcknowledgementMessage` for UI/testing. An acknowledgement means an input was accepted; inspect the resulting authorization and measured equipment to confirm its effect. `GetSnapshot` publishes here.
 
-- `TrainControl.CTC`: `BlockStatusMessage` (measured occupancy/equipment, never commanded equipment) and `TrainAuthorizationStatusMessage`, matching the CTC receiver added on current `main`. Cancellation publishes a zero authorization for the previous train label. Multiple active records with the same label produce a conservative zero indication.
-- `TrainControl.TrackModel`: full `WaysideSnapshotMessage` packets plus application result messages. Snapshots contain block statuses, commanded/reported equipment, and movement decisions. Only snapshots are actuator/state data; a receipt is not an actuator command.
+Both module destinations share `PublishAsync`, their output projection, and `TrySendAsync`. The monitor is separate. Snapshot validity is bounded to 1.5 seconds and shortened by feedback/request expiry; the Pi client stops outputs on expiry or communication loss.
 
-Each destination publishes independently about every 0.5 seconds when connected; a missing CTC receiver does not block Track Model publication. The shared transport's completed send means delivery only. Failed connections are reported in the live footer and retried. No positive outputs are queued for later delivery. Each snapshot carries `EvaluatedAtUtc` and `ValidUntilUtc` (at most 1.5 seconds, shortened to relevant feedback/request expiry). The receiver must reject old/expired snapshots, stop when its lease expires, and preserve the anchored-authority semantics. CTC's legacy authorization message is for its displayed authorization state; the richer snapshot remains the movement/actuator contract.
-
-**Remaining integration work:** CTC's old outbound movement messages still contain only a train label and numeric suggestions, so they cannot safely identify a block or route. They are explicitly rejected. Integration needs an agreed shared message with the missing route/origin fields and a controller-side mapping to its internal request; no CTC changes are included here. CTC now has receivers for its standard status messages; its loaded block IDs must agree with this controller's configured territory. Track Model integration still needs agreed actuator messages and an adapter; the controller-specific snapshot is currently exercised by the test peer. The Pi runtime, SSH link, ownership routing, and optional indication LEDs are implemented; device testing and final territory allocation remain. Requests spanning owners and inter-territory handoff are not implemented. Whole-system operation still needs those adapters and team-agreed track data, approach distances, braking policy, and timing thresholds.
+Remaining integration limits: route handoff between owners and CTC yard release/continuing route updates are not implemented. CTC still sends its separate release intent after a suggestion; that intent has no implemented Track Controller handler. Track IDs, reservation reporting, and deployment territories must agree across modules. Reusing the shared contracts does not complete those behaviors.
 
 ## Verification
 
@@ -187,4 +194,4 @@ The deployment-level `plcFile` remains the default. Each entry in `territories` 
 
 The assigned PLC now owns route interlocking, numeric speed/authority selection using explicit Boolean gates, signals, switch interlocking, crossings, and closure completion. C# supplies individual facts and encoded input words, decodes the PLC output words, and independently vetoes unsafe results. It no longer supplies precomputed route permission or normal numeric movement limits to the PLC. See the [language and execution contract](../TrackController.Core/Control/README.md).
 
-Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 6. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.
+Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 8. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.

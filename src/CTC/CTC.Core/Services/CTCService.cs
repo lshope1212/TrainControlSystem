@@ -202,7 +202,10 @@ public class CTCService : ICTCService
 
         var suggestion = new MovementSuggestionMessage
         {
+            RequestId = Guid.NewGuid().ToString("N"),
             TrainId = scheduledTrain.TrainId,
+            TargetBlockId = route[0].BlockId,
+            PathBlockIds = route.Skip(1).Select(block => block.BlockId).ToList(),
             SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond,
             SuggestedAuthorityMeters = authority,
         };

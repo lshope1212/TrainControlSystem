@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TrackController.Contracts.Messages;
 using TrackController.Core.Control;
 using TrackController.Core.Services;
 
@@ -7,6 +8,20 @@ namespace TrackController.Runtime;
 /// <summary>Validated map/ownership plus replaceable execution choices. Reading/editing never starts a controller.</summary>
 public sealed class PreparedDeployment
 {
+    /// <summary>Validated territory data used to construct its runtime; this record does not execute a controller.</summary>
+    public sealed record PreparedTerritory(
+        string Id,
+        string Name,
+        WaysideConfigurationMessage Configuration,
+        string Execution,
+        string Host,
+        int Port)
+    {
+        public string? ProgramName { get; init; }
+
+        public string? ProgramSource { get; init; }
+    }
+
     private string _source;
     private readonly WaysideDeployment _document;
 
@@ -62,13 +77,6 @@ public sealed class PreparedDeployment
         }
 
         return new(SourcePath, _source, document, territories, ProgramName, ProgramSource);
-    }
-
-    /// <summary>Creates a deployment carrying replacement PLC source for the next runtime session.</summary>
-    public PreparedDeployment WithProgram(string name, string source)
-    {
-        VitalPlcProgram.Compile(source);
-        return new(SourcePath, _source, _document, Territories.Select(territory => territory with { ProgramName = name, ProgramSource = source }).ToArray(), name, source);
     }
 
     /// <summary>Assigns validated PLC source to one territory without changing other assignments.</summary>
@@ -138,12 +146,11 @@ public sealed class PreparedDeployment
     public TerritoryRuntimeRouter CreateRuntime()
     {
         WaysideDeployment.ValidateTargets(Territories);
-        VitalPlcProgram.Compile(ProgramSource);
-        foreach (var territory in Territories)
+        foreach (string source in Territories.Select(territory => territory.ProgramSource ?? ProgramSource).Distinct(StringComparer.Ordinal))
         {
-            VitalPlcProgram.Compile(territory.ProgramSource ?? ProgramSource);
+            VitalPlcProgram.Compile(source);
         }
-        var entries = new List<TerritoryRuntimeRouter.Entry>();
+        var entries = new List<(WaysideConfigurationMessage Configuration, string Execution, IWaysideRuntime Runtime, string? Name)>();
         try
         {
             foreach (var territory in Territories)
@@ -160,13 +167,10 @@ public sealed class PreparedDeployment
                     runtime = new LocalWaysideRuntime(service);
                 }
 
-                entries.Add(new(territory.Configuration, territory.Execution, runtime, territory.Name));
+                entries.Add((territory.Configuration, territory.Execution, runtime, territory.Name));
             }
 
-            return new(Name, entries)
-            {
-                InitialProgramSource = ProgramSource
-            };
+            return new(Name, entries);
         }
         catch
         {

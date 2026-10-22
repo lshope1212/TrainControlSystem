@@ -1,3 +1,5 @@
+using MovementResult = (TrainControl.Contracts.Messages.MovementSuggestionMessage Request, double AuthorizedSpeedMetersPerSecond, double AuthorizedAuthorityMeters, string Status, string Reason);
+using TrainControl.Contracts.Messages;
 using TrackController.Contracts.Messages;
 using TrackController.Core.Control;
 using TrainControl.Contracts.Enums;
@@ -12,7 +14,7 @@ public sealed partial class TrackControllerService
         var inputs = VitalPlcProgram.BooleanInputs.ToDictionary(name => name, _ => new[] { false }, StringComparer.Ordinal);
         foreach (string name in VitalPlcProgram.WordInputs)
         {
-            inputs[name] = new bool[PlcBits.Width];
+            inputs[name] = new bool[VitalPlcProgram.Width];
         }
         inputs["running"] = [!_paused];
         inputs["maintenance"] = [_maintenanceMode];
@@ -26,7 +28,7 @@ public sealed partial class TrackControllerService
         inputs["block_clear"] = [feedback?.Occupancy == OccupancyState.Clear];
         inputs["block_unknown"] = [feedback is null || feedback.Occupancy == OccupancyState.Unknown];
         inputs["block_faulted"] = [feedback?.IsFaulted ?? false];
-        inputs["block_closed"] = [block.Maintenance == "Closed"];
+        inputs["block_closed"] = [block.Maintenance == "Closed" || feedback?.IsClosed == true];
         inputs["block_pending"] = [block.Maintenance == "Pending closure"];
         inputs["has_signal"] = [block.Definition.HasSignal];
         inputs["signal_proceed"] = [feedback?.Signal is SignalState.Green or SignalState.SuperGreen or SignalState.Yellow];
@@ -49,28 +51,13 @@ public sealed partial class TrackControllerService
         inputs["zone_ok_in"] = [true];
         inputs["requested_normal"] = [desired == SwitchPosition.Normal];
         inputs["switch_request_known"] = [desired is SwitchPosition.Normal or SwitchPosition.Reverse];
-        inputs["movement_locked"] = [_snapshot?.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.TargetBlockId }.Concat(authorization.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any()) == true];
+        inputs["movement_locked"] = [_snapshot?.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any()) == true];
         IReadOnlyDictionary<string, bool[]>? outputs = null;
         foreach (string id in block.Definition.SwitchProtectionBlockIds)
         {
             SetBlockInputs(inputs, GetBlock(id));
             outputs = _plc!.Execute(inputs);
             inputs["zone_ok_in"] = outputs["zone_ok"];
-        }
-        return outputs ?? _plc!.Execute(inputs);
-    }
-
-    private IReadOnlyDictionary<string, bool[]> CrossingPlc(Block block)
-    {
-        var inputs = PlcInputs();
-        inputs["active_route"] = [_requests.Values.Any(request => IsActive(request) && GetRequestPath(request).Contains(block.Definition.BlockId))];
-        inputs["manual_crossing_close"] = [block.ManualCrossingClosed];
-        IReadOnlyDictionary<string, bool[]>? outputs = null;
-        foreach (string id in block.Definition.CrossingProtectionBlockIds)
-        {
-            SetBlockInputs(inputs, GetBlock(id));
-            outputs = _plc!.Execute(inputs);
-            inputs["crossing_needed_in"] = outputs["crossing_needed"];
         }
         return outputs ?? _plc!.Execute(inputs);
     }
@@ -92,10 +79,10 @@ public sealed partial class TrackControllerService
         return requested && IsFresh(block) && block.Feedback?.Occupancy == OccupancyState.Clear;
     }
 
-    private WaysideAuthorization EvaluateVital(Request receivedRequest)
+    private MovementResult EvaluateVital((MovementSuggestionMessage Value, DateTimeOffset Received) receivedRequest)
     {
         var request = receivedRequest.Value;
-        var output = new WaysideAuthorization(request.RequestId, request.TrainId, request.TargetBlockId, request.EntryBlockId, request.PathBlockIds.AsReadOnly(), request.SuggestedSpeedMetersPerSecond, request.SuggestedAuthorityMeters, 0, 0, "Withheld", "");
+        MovementResult output = (request, 0, 0, "Withheld", "");
         if (_plc is null)
         {
             return Stop(output, "No valid PLC program.");
@@ -108,8 +95,8 @@ public sealed partial class TrackControllerService
             inputs["request_retired"] = [_retiredRequests.Contains(request.RequestId)];
             inputs["origin_occupied"] = [GetBlock(request.TargetBlockId).Feedback?.Occupancy == OccupancyState.Occupied];
             inputs["route_conflict"] = [_requests.Values.Any(other => other != receivedRequest && IsActive(other) && GetRequestPath(other).Intersect(path).Any())];
-            inputs["suggested_speed"] = PlcBits.Encode(request.SuggestedSpeedMetersPerSecond);
-            inputs["suggested_authority"] = PlcBits.Encode(request.SuggestedAuthorityMeters);
+            inputs["suggested_speed"] = VitalPlcProgram.Encode(request.SuggestedSpeedMetersPerSecond);
+            inputs["suggested_authority"] = VitalPlcProgram.Encode(request.SuggestedAuthorityMeters);
             inputs["speed_in"] = inputs["suggested_speed"];
             inputs["remaining_in"] = inputs["suggested_authority"];
             inputs["scan_live"] = [true];
@@ -119,8 +106,8 @@ public sealed partial class TrackControllerService
                 var block = GetBlock(path[i]);
                 SetBlockInputs(inputs, block);
                 inputs["is_origin"] = [i == 0];
-                inputs["block_length"] = PlcBits.Encode(block.Definition.LengthMeters);
-                inputs["track_limit"] = PlcBits.Encode(block.Definition.SpeedLimitMetersPerSecond);
+                inputs["block_length"] = VitalPlcProgram.Encode(block.Definition.LengthMeters);
+                inputs["track_limit"] = VitalPlcProgram.Encode(block.Definition.SpeedLimitMetersPerSecond);
                 inputs["has_next"] = [i + 1 < path.Length];
                 inputs["has_stem"] = [block.Definition.StemBlockId is not null];
                 string? entry = i == 0 ? request.EntryBlockId : path[i - 1];
@@ -146,8 +133,8 @@ public sealed partial class TrackControllerService
                 }
             }
             var final = _plc.Execute(inputs);
-            double speed = PlcBits.Decode(final["authorized_speed"]);
-            double authority = PlcBits.Decode(final["authorized_authority"]);
+            double speed = VitalPlcProgram.Decode(final["authorized_speed"]);
+            double authority = VitalPlcProgram.Decode(final["authorized_authority"]);
             output = output with
             {
                 AuthorizedSpeedMetersPerSecond = speed,

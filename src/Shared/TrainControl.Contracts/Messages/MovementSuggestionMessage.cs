@@ -1,14 +1,34 @@
+using System.Text.Json.Serialization;
+using TrainControl.Contracts.Enums;
+
 namespace TrainControl.Contracts.Messages;
 
 /// <summary>
-/// Suggested speed and authority for a train.
-/// Direction: CTC -> Track Controller.
+/// Authority defines a fixed route limit from the entry of TargetBlockId along TargetBlockId + PathBlockIds.
+/// It is not remaining distance from the train. The receiver must locate the train relative to that limit.
+/// TrainId is a CTC label, not inferred from occupancy.
 /// </summary>
-public class MovementSuggestionMessage
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class MovementSuggestionMessage
 {
-    public string TrainId { get; set; } = string.Empty;
+    public const string BlockEntryReference = "TargetBlockEntry";
+
+    public string RequestId { get; set; } = "";
+
+    public string TrainId { get; set; } = "";
+
+    public string TargetBlockId { get; set; } = "";
+
+    public string? EntryBlockId { get; set; }
+
+    public string AuthorityReference { get; set; } = BlockEntryReference;
+
+    public List<string> PathBlockIds { get; set; } = [];
 
     public double SuggestedSpeedMetersPerSecond { get; set; }
 
     public double SuggestedAuthorityMeters { get; set; }
+
+    [JsonPropertyName("active")]
+    public bool IsActive { get; set; } = true;
 }

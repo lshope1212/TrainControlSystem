@@ -9,41 +9,33 @@ namespace TrackController.Runtime;
 /// <summary>Block ownership routes one logical module's inputs to PC or Pi; it does not vote or duplicate control.</summary>
 public sealed class TerritoryRuntimeRouter : IWaysideRuntime
 {
-    /// <summary>Associates an owned territory with its runtime and execution target.</summary>
-    public sealed record Entry(WaysideConfigurationMessage Configuration, string Execution, IWaysideRuntime Runtime, string? Name = null);
-
-    private readonly Entry[] _entries;
-    private readonly Dictionary<string, Entry> _owners;
-    private readonly Dictionary<Entry, HashSet<string>> _observed;
+    private readonly (WaysideConfigurationMessage Configuration, string Execution, IWaysideRuntime Runtime, string? Name, HashSet<string> Observed)[] _entries;
+    private readonly Dictionary<string, int> _owners;
     private readonly string _name;
     private readonly SemaphoreSlim _operations = new(1, 1);
 
     public WaysideSnapshotMessage LatestSnapshot { get; private set; }
 
-    public string InitialProgramSource { get; init; } = "";
-
-    public string Description => string.Join(" · ", _entries.Select(entry => $"{entry.Name ?? entry.Configuration.WaysideId}: {(entry.Execution == "Pi" ? "Pi 5" : "PC")} [{string.Join(", ", WaysideConfiguration.GetOwnedIds(entry.Configuration))}]"));
-
     /// <summary>Returns the applied controller and execution target for a block.</summary>
-    public string GetOwnerDescription(string blockId) => _owners.TryGetValue(blockId, out var owner) ? $"{owner.Name ?? owner.Configuration.WaysideId} · {(owner.Execution == "Pi" ? "Pi 5" : "Local PC")}" : "Unassigned";
+    public string GetOwnerDescription(string blockId) => _owners.TryGetValue(blockId, out int owner) ? $"{_entries[owner].Name ?? _entries[owner].Configuration.WaysideId} · {(_entries[owner].Execution == "Pi" ? "Pi 5" : "Local PC")}" : "Unassigned";
 
     /// <summary>Validates unique ownership and connects each territory to its assigned runtime.</summary>
-    public TerritoryRuntimeRouter(string name, IEnumerable<Entry> entries)
+    public TerritoryRuntimeRouter(string name, IEnumerable<(WaysideConfigurationMessage Configuration, string Execution, IWaysideRuntime Runtime, string? Name)> entries)
     {
         _name = name;
-        _entries = entries.ToArray();
+        _entries = entries.Select(entry => (entry.Configuration, entry.Execution, entry.Runtime, entry.Name,
+            WaysideConfiguration.GetOwnedIds(entry.Configuration).Union(WaysideConfiguration.GetNeighborIds(entry.Configuration)).ToHashSet(StringComparer.Ordinal))).ToArray();
         if (_entries.Length == 0)
         {
             throw new ArgumentException("No territories configured.");
         }
 
         _owners = new(StringComparer.Ordinal);
-        _observed = _entries.ToDictionary(entry => entry, entry => WaysideConfiguration.GetOwnedIds(entry.Configuration).Union(WaysideConfiguration.GetNeighborIds(entry.Configuration)).ToHashSet(StringComparer.Ordinal));
-        foreach (var entry in _entries)
+        for (int owner = 0; owner < _entries.Length; owner++)
         {
-            foreach (string id in WaysideConfiguration.GetOwnedIds(entry.Configuration))
+            foreach (string id in WaysideConfiguration.GetOwnedIds(_entries[owner].Configuration))
             {
-                if (!_owners.TryAdd(id, entry))
+                if (!_owners.TryAdd(id, owner))
                 {
                     throw new ArgumentException($"Block {id} has more than one owner.");
                 }
@@ -59,57 +51,59 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
         await _operations.WaitAsync(cancellationToken);
         try
         {
-            if (message.MessageType == nameof(WaysideSnapshotRequest))
+            if (message.MessageType == "GetSnapshot")
             {
                 return await PollAllAsync(cancellationToken);
             }
 
-            if (message.MessageType == nameof(WaysideFeedbackMessage))
+            if (message.MessageType == "TrackModelBlockStates")
             {
-                var feedback = MessageSerializer.DeserializePayload<WaysideFeedbackMessage>(message);
-                if (feedback.Blocks is null || feedback.Blocks.Any(feedback => feedback is null) || feedback.Blocks.Select(feedback => feedback.BlockId).Distinct().Count() != feedback.Blocks.Count)
+                var feedback = MessageSerializer.ReadValue<List<TrackModelBlockStateMessage>>(message, "blocks");
+                if (feedback.Any(feedback => feedback is null) || feedback.Select(feedback => feedback.BlockId).Distinct().Count() != feedback.Count)
                 {
                     throw new ArgumentException("Feedback must have distinct blocks.");
                 }
                 // Validate every owner before delivering any subset.
-                foreach (var block in feedback.Blocks)
+                foreach (var block in feedback)
                 {
                     Owner(block.BlockId);
                 }
 
-                var replies = await Task.WhenAll(_entries.Select(entry => (Entry: entry, Blocks: feedback.Blocks.Where(feedback => _observed[entry].Contains(feedback.BlockId)).ToList())).Where(part => part.Blocks.Count > 0).Select(part => part.Entry.Runtime.ReceiveAsync(RuntimeMessages.CreateEnvelope(new WaysideFeedbackMessage { Blocks = part.Blocks }), cancellationToken)));
+                var replies = await Task.WhenAll(_entries.Select(entry => (entry.Runtime, Blocks: feedback.Where(feedback => entry.Observed.Contains(feedback.BlockId)).ToList())).Where(part => part.Blocks.Count > 0).Select(part => part.Runtime.ReceiveAsync(MessageSerializer.CreateEnvelope("TrackModelBlockStates", new { blocks = part.Blocks }), cancellationToken)));
                 return Receipt(message.MessageType, replies);
             }
 
-            if (message.MessageType is nameof(BlockStatusMessage) or nameof(TrackStateMessage))
+            if (message.MessageType is nameof(TrackModelBlockStateMessage) or nameof(BlockStatusMessage))
             {
-                string id = message.MessageType == nameof(BlockStatusMessage) ? MessageSerializer.DeserializePayload<BlockStatusMessage>(message).BlockId : MessageSerializer.DeserializePayload<TrackStateMessage>(message).BlockId;
+                string id = message.MessageType == nameof(TrackModelBlockStateMessage)
+                    ? MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(message).BlockId
+                    : MessageSerializer.DeserializePayload<BlockStatusMessage>(message).BlockId;
                 Owner(id);
-                return Receipt(message.MessageType, await Task.WhenAll(_entries.Where(entry => _observed[entry].Contains(id)).Select(entry => entry.Runtime.ReceiveAsync(message, cancellationToken))));
+                return Receipt(message.MessageType, await Task.WhenAll(_entries.Where(entry => entry.Observed.Contains(id)).Select(entry => entry.Runtime.ReceiveAsync(message, cancellationToken))));
             }
 
-            if (message.MessageType == nameof(WaysidePlcProgramMessage))
+            if (message.MessageType == "LoadPlc")
             {
-                var program = MessageSerializer.DeserializePayload<WaysidePlcProgramMessage>(message);
-                if (program.TerritoryId is not null)
+                string? territoryId = message.Payload.TryGetProperty("territoryId", out var targetId) ? targetId.GetString() : null;
+                if (territoryId is not null)
                 {
-                    var territory = _entries.SingleOrDefault(entry => entry.Configuration.WaysideId == program.TerritoryId)
-                        ?? throw new ArgumentException("Unknown PLC territory.");
+                    var territory = _entries.SingleOrDefault(entry => entry.Configuration.WaysideId == territoryId);
+                    if (territory.Runtime is null) throw new ArgumentException("Unknown PLC territory.");
                     return await territory.Runtime.ReceiveAsync(message, cancellationToken);
                 }
             }
 
-            Entry? target = message.MessageType switch
+            int? target = message.MessageType switch
             {
-                nameof(WaysideMovementRequestMessage) => MovementOwner(MessageSerializer.DeserializePayload<WaysideMovementRequestMessage>(message)),
+                nameof(MovementSuggestionMessage) => MovementOwner(MessageSerializer.DeserializePayload<MovementSuggestionMessage>(message)),
                 nameof(SwitchPositionRequestMessage) => Owner(MessageSerializer.DeserializePayload<SwitchPositionRequestMessage>(message).BlockId),
                 nameof(MaintenanceRequestMessage) => Owner(MessageSerializer.DeserializePayload<MaintenanceRequestMessage>(message).BlockId),
-                nameof(WaysideManualCommandMessage) => Owner(MessageSerializer.DeserializePayload<WaysideManualCommandMessage>(message).BlockId),
+                "ApplyManual" => Owner(MessageSerializer.ReadValue<string>(message, "blockId")),
                 _ => null
             };
             if (target is not null)
             {
-                return await target.Runtime.ReceiveAsync(message, cancellationToken);
+                return await _entries[target.Value].Runtime.ReceiveAsync(message, cancellationToken);
             }
 
             if (message.MessageType == nameof(WaysideConfigurationMessage))
@@ -117,28 +111,28 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
                 throw new ArgumentException("Use Load SW/HW deployment to change routed territory ownership.");
             }
 
-            if (message.MessageType == nameof(WaysideControllerModeMessage) && !MessageSerializer.DeserializePayload<WaysideControllerModeMessage>(message).IsHardwareMode)
+            if (message.MessageType == "SetControllerMode" && !MessageSerializer.ReadValue<bool>(message, "hardwareMode"))
             {
                 throw new ArgumentException("A routed deployment uses PLC logic on both PC and Pi. Software-only logic is available in the local demo.");
             }
 
-            if (message.MessageType is not (nameof(WaysideSimulationMessage) or nameof(WaysideControllerModeMessage) or nameof(WaysideMaintenanceModeMessage) or nameof(WaysidePlcProgramMessage)))
+            if (message.MessageType is not ("SetSimulation" or "SetControllerMode" or "SetMaintenanceMode" or "LoadPlc"))
             {
                 throw new ArgumentException($"Unsupported routed input: {message.MessageType}. Movement must identify its target and route.");
             }
 
             var results = await Task.WhenAll(_entries.Select(entry => entry.Runtime.ReceiveAsync(message, cancellationToken)));
             var result = Receipt(message.MessageType, results);
-            if (!result.IsAccepted && message.MessageType == nameof(WaysideSimulationMessage) && !MessageSerializer.DeserializePayload<WaysideSimulationMessage>(message).IsPaused)
+            if (!result.IsAccepted && message.MessageType == "SetSimulation" && !MessageSerializer.ReadValue<bool>(message, "paused"))
             {
-                await Task.WhenAll(_entries.Select(entry => entry.Runtime.ReceiveAsync(RuntimeMessages.CreateEnvelope(new WaysideSimulationMessage { IsPaused = true }), cancellationToken)));
+                await Task.WhenAll(_entries.Select(entry => entry.Runtime.ReceiveAsync(MessageSerializer.CreateEnvelope("SetSimulation", new { paused = true, speedMultiplier = 1 }), cancellationToken)));
             }
 
             return result;
         }
         catch (Exception ex) when (ex is ArgumentException or JsonException or InvalidOperationException)
         {
-            return RuntimeMessages.CreateRejection(message.MessageType, ex.Message);
+            return new WaysideAcknowledgementMessage(false, ex.Message, message.MessageType);
         }
         finally
         {
@@ -173,9 +167,9 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
         return LatestSnapshot = Combine();
     }
 
-    private Entry Owner(string id) => id is not null && _owners.TryGetValue(id, out var owner) ? owner : throw new ArgumentException($"Block '{id}' has no owner in this deployment.");
+    private int Owner(string id) => id is not null && _owners.TryGetValue(id, out int owner) ? owner : throw new ArgumentException($"Block '{id}' has no owner in this deployment.");
 
-    private Entry MovementOwner(WaysideMovementRequestMessage request)
+    private int MovementOwner(MovementSuggestionMessage request)
     {
         var owner = Owner(request.TargetBlockId);
         if (request.PathBlockIds is null)
@@ -188,7 +182,7 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
             throw new ArgumentException("Movement cannot cross a territory boundary until handoff coordination is implemented. Authority must end within its owner.");
         }
 
-        if (request.EntryBlockId is not null && !_observed[owner].Contains(request.EntryBlockId))
+        if (request.EntryBlockId is not null && !_entries[owner].Observed.Contains(request.EntryBlockId))
         {
             throw new ArgumentException("Movement entry must be in this territory or an adjacent observed block.");
         }
@@ -204,8 +198,8 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
 
     private WaysideSnapshotMessage Combine()
     {
-        var snapshots = _entries.Select(entry => entry.Runtime.LatestSnapshot.ValidUntilUtc > DateTimeOffset.UtcNow ? entry.Runtime.LatestSnapshot : UnavailableOutput.CreateStopSnapshot(entry.Runtime.LatestSnapshot, $"{entry.Configuration.WaysideId} output expired.")).ToArray();
-        return new(_name, snapshots[0].LineName, snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId} ({snapshot.PlcName}): {snapshot.PlcStatus}")), snapshots.SelectMany(snapshot => snapshot.Blocks).ToArray(), snapshots.SelectMany(snapshot => snapshot.Authorizations).ToArray());
+        var snapshots = _entries.Select(entry => entry.Runtime.LatestSnapshot.ValidUntilUtc > DateTimeOffset.UtcNow ? entry.Runtime.LatestSnapshot : entry.Runtime.LatestSnapshot.CreateStopSnapshot($"{entry.Configuration.WaysideId} output expired.")).ToArray();
+        return new(_name, snapshots[0].LineName, snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId} ({snapshot.PlcName}): {snapshot.PlcStatus}")), snapshots.SelectMany(snapshot => snapshot.Blocks).ToArray());
     }
 
     /// <summary>Stops owned background operations and releases connections before returning.</summary>

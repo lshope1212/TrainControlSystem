@@ -26,9 +26,6 @@ public sealed class WaysideDeployment
 
     public List<TerritoryAssignment> Territories { get; set; } = [];
 
-    /// <summary>Validates deployment files and creates the corresponding territory runtime router.</summary>
-    public static TerritoryRuntimeRouter Load(string path) => Read(path).CreateRuntime();
-
     /// <summary>Loads and validates deployment files before any controller connection is opened.</summary>
     public static PreparedDeployment Read(string path)
     {
@@ -43,7 +40,7 @@ public sealed class WaysideDeployment
 
         string plc = ReadBounded(Resolve(folder, plan.PlcFile), VitalPlcProgram.MaximumSourceBytes);
         VitalPlcProgram.Compile(plc);
-        var prepared = new List<PreparedTerritory>();
+        var prepared = new List<PreparedDeployment.PreparedTerritory>();
         if (plan.TrackFile is not null || plan.TerritoriesFile is not null)
         {
             if (plan.TrackFile is null || plan.TerritoriesFile is null || plan.Territories.Any(assignment => assignment.ConfigurationFile is not null))
@@ -109,7 +106,7 @@ public sealed class WaysideDeployment
         return new(path, source, plan, prepared, Path.GetFileName(plan.PlcFile), plc);
     }
 
-    internal static void ValidateTargets(IReadOnlyList<PreparedTerritory> territories)
+    internal static void ValidateTargets(IReadOnlyList<PreparedDeployment.PreparedTerritory> territories)
     {
         if (territories.Count is < 1 or > 16 || territories.Select(territory => territory.Id).Distinct().Count() != territories.Count || territories.Select(territory => territory.Configuration.LineName).Distinct().Count() != 1)
         {

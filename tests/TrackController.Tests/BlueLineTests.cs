@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Messages;
 using System.Text.Json;
 using TrackController.Contracts.Messages;
 using TrackController.Core.Models;
@@ -45,20 +46,20 @@ public sealed class BlueLineTests
             }
 
             Feedback();
-            Service.SetSimulation(new() { IsPaused = false });
+            Service.SetSimulation(false, 1);
         }
 
         /// <summary>Supplies fresh measurements: train on block 1, switch normal, crossing closed, proceed signals.</summary>
-        public void Feedback(Action<List<WaysideBlockFeedback>>? change = null)
+        public void Feedback(Action<List<TrackModelBlockStateMessage>>? change = null)
         {
             Clock.Advance(0.01);
-            var rows = Service.GetConfiguration().Blocks.Select(blockDefinition => new WaysideBlockFeedback { BlockId = blockDefinition.BlockId, ObservedAtUtc = Clock.Now, Occupancy = blockDefinition.BlockId == "1" ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList();
+            var rows = Service.GetConfiguration().Blocks.Select(blockDefinition => new TrackModelBlockStateMessage { BlockId = blockDefinition.BlockId, ObservedAtUtc = Clock.Now, Occupancy = blockDefinition.BlockId == "1" ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList();
             change?.Invoke(rows);
-            Service.ApplyFeedback(new() { Blocks = rows });
+            Service.ApplyFeedback(rows);
         }
 
         /// <summary>Requests movement from the yard-side block through the supplied route.</summary>
-        public WaysideAuthorization Submit(string target, string[] path, double authorityMeters = 450, double speed = 20)
+        public WaysideBlockStatus Submit(string target, string[] path, double authorityMeters = 450, double speed = 20)
         {
             Service.SubmitMovement(new()
             {
@@ -201,7 +202,7 @@ public sealed class BlueLineTests
         var authorization = fixture.Submit("1", ToStationB);
         Assert.AreEqual(450d, authorization.AuthorizedAuthorityMeters);
         Assert.AreEqual(SpeedLimit, authorization.AuthorizedSpeedMetersPerSecond, 1e-9);
-        Assert.AreEqual("Restricted", authorization.Status);
+        Assert.AreEqual("Restricted", authorization.MovementStatus);
         Assert.AreEqual(SignalState.Green, fixture.Block("6").CommandedSignal);
     }
 
@@ -210,7 +211,7 @@ public sealed class BlueLineTests
     public void SubmitMovement_ToStationC_RequiresReverseSwitchFeedback()
     {
         var fixture = new Fixture();
-        StringAssert.Contains(fixture.Submit("1", ToStationC).Reason, "switch 5", StringComparison.OrdinalIgnoreCase);
+        StringAssert.Contains(fixture.Submit("1", ToStationC).MovementReason, "switch 5", StringComparison.OrdinalIgnoreCase);
         Assert.AreEqual(0d, fixture.Service.GetSnapshot().Authorizations.Last().AuthorizedAuthorityMeters);
         fixture.Service.RequestSwitch(new() { BlockId = "5", RequestedPosition = SwitchPosition.Reverse });
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "5").Switch = SwitchPosition.Reverse);
@@ -229,7 +230,7 @@ public sealed class BlueLineTests
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "5").Switch = SwitchPosition.Reverse);
         var authorization = fixture.Submit("1", ToStationB);
         Assert.AreEqual(0d, authorization.AuthorizedAuthorityMeters);
-        StringAssert.Contains(authorization.Reason, "connects to 11");
+        StringAssert.Contains(authorization.MovementReason, "connects to 11");
     }
 
     /// <summary>Verifies that the outbound-only map offers no route from one branch back through the junction to the other.</summary>
@@ -253,7 +254,7 @@ public sealed class BlueLineTests
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "8").Occupancy = OccupancyState.Occupied);
         var authorization = fixture.Submit("1", ToStationB);
         Assert.AreEqual(7 * BlockMeters, authorization.AuthorizedAuthorityMeters);
-        StringAssert.Contains(authorization.Reason, "block 8");
+        StringAssert.Contains(authorization.MovementReason, "block 8");
     }
 
     /// <summary>Verifies that a route over crossing 3 waits for closed feedback.</summary>
@@ -264,7 +265,7 @@ public sealed class BlueLineTests
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "3").Crossing = CrossingState.Open);
         var authorization = fixture.Submit("1", ToStationB);
         Assert.AreEqual(0d, authorization.AuthorizedAuthorityMeters);
-        StringAssert.Contains(authorization.Reason, "crossing 3");
+        StringAssert.Contains(authorization.MovementReason, "crossing 3");
         fixture.Feedback();
         Assert.AreEqual(450d, fixture.Service.GetSnapshot().Authorizations.Last().AuthorizedAuthorityMeters);
     }

@@ -68,7 +68,7 @@ a local controller. Fresh feedback and an explicit resume are required afterward
 
 Older deployments that reference `configurationFile` still load. `legacy-pc-and-pi.deployment.json` preserves the previous demonstration; use the new shared-map examples for further development.
 
-The Pi protocol is version 6 to require matching Boolean output controls and territory PLC targeting on both ends: authority is a fixed route limit from the target block's entry, with no train offset input, and signal feedback accepts Super Green. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected so the two ends cannot interpret authority differently.
+The Pi protocol is version 8 to carry movement results on their target block snapshots, alongside shared movement requests and feedback contracts: authority is a fixed route limit from the target block's entry, with no train offset input, and signal feedback accepts Super Green. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected so the two ends cannot interpret authority differently.
 
 Automated checks cover intact boundary edges, exclusive command ownership, invalid partitions and split protection zones, feedback fan-out, direct Pi ownership enforcement, equivalent local/Pi decisions, explicit placement saving, and the operator execution editor receiving external Test UI inputs through module pipes. Device-level Pi/LED verification and cross-territory handoff remain separate integration work.
 
@@ -82,4 +82,4 @@ The deployment-level `plcFile` remains the default. Each entry in `territories` 
 
 The assigned PLC now owns route interlocking, numeric speed/authority selection using explicit Boolean gates, signals, switch interlocking, crossings, and closure completion. C# supplies individual facts and encoded input words, decodes the PLC output words, and independently vetoes unsafe results. It no longer supplies precomputed route permission or normal numeric movement limits to the PLC. See the [language and execution contract](../TrackController.Core/Control/README.md).
 
-Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 6. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.
+Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 8. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.

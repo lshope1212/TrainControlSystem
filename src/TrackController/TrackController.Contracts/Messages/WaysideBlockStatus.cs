@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using TrainControl.Contracts.Enums;
+using TrainControl.Contracts.Messages;
 
 namespace TrackController.Contracts.Messages;
 /// <summary>Combines block conditions with separate commanded and reported equipment states.</summary>
@@ -26,4 +27,11 @@ public sealed record WaysideBlockStatus(
     CrossingState ReportedCrossing,
     double? ActualSpeedMetersPerSecond,
     string Status,
-    string? StationName = null);
+    string? StationName = null)
+{
+    public MovementSuggestionMessage? Request { get; init; }
+    public double AuthorizedSpeedMetersPerSecond { get; init; }
+    public double AuthorizedAuthorityMeters { get; init; }
+    public string MovementStatus { get; init; } = "";
+    public string MovementReason { get; init; } = "";
+}

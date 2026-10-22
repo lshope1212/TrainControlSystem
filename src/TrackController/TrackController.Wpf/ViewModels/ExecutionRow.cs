@@ -14,8 +14,6 @@ public sealed class ExecutionRow : ViewModelBase
 
     public string Blocks { get; }
 
-    public string Neighbors { get; }
-
     public string AppliedTarget { get; }
 
     public string[] Targets { get; } = ["PC", "Pi"];
@@ -47,13 +45,11 @@ public sealed class ExecutionRow : ViewModelBase
     }
 
     /// <summary>Copies applied placement into independently editable UI fields.</summary>
-    public ExecutionRow(PreparedTerritory territory)
+    public ExecutionRow(PreparedDeployment.PreparedTerritory territory)
     {
         Id = territory.Id;
         Name = territory.Name;
         Blocks = string.Join(", ", WaysideConfiguration.GetOwnedIds(territory.Configuration));
-        var neighbors = WaysideConfiguration.GetNeighborIds(territory.Configuration);
-        Neighbors = neighbors.Count == 0 ? "None" : string.Join(", ", neighbors);
         _target = AppliedTarget = territory.Execution == "Pi" ? "Pi" : "PC";
         _host = territory.Host;
         _port = territory.Port.ToString();

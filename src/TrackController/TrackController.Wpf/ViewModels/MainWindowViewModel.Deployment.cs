@@ -1,3 +1,4 @@
+using TrainControl.Common.Communication;
 using System.Collections.ObjectModel;
 using System.IO;
 using Microsoft.Win32;
@@ -20,29 +21,26 @@ public sealed partial class MainWindowViewModel
         {
             if (SetProperty(ref _selectedPlcTerritory, value))
             {
-                var territory = ActivePlan?.Territories.SingleOrDefault(item => item.Id == value?.Id);
-                PlcSource = territory?.ProgramSource ?? ActivePlan?.ProgramSource ?? _programSource;
+                var territory = _plan?.Territories.SingleOrDefault(item => item.Id == value?.Id);
+                PlcSource = territory?.ProgramSource ?? _plan?.ProgramSource ?? PlcSource;
                 OnPropertyChanged(nameof(SelectedPlcName));
             }
         }
     }
 
-    public string SelectedPlcName => ActivePlan?.Territories.SingleOrDefault(item => item.Id == SelectedPlcTerritory?.Id)?.ProgramName ?? ActivePlan?.ProgramName ?? _programName;
+    public string SelectedPlcName => _plan?.Territories.SingleOrDefault(item => item.Id == SelectedPlcTerritory?.Id)?.ProgramName ?? _plan?.ProgramName ?? _programName;
 
     private string _programName = "wayside.plc";
-    private readonly ObservableCollection<ExecutionRow> _executionRows = [];
-
     private const string SavedSetupChoice = "Saved setup file…";
-    private string _selectedSetup = SampleLines[0].Name;
+    private string _selectedSetup = SetupFiles.Keys.First();
 
-    /// <summary>Built-in lines loaded with their PLC; other setups can be opened from a deployment file.</summary>
-    public static IReadOnlyList<SampleLine> SampleLines { get; } =
-    [
-        new("Green Line", "all-pc.deployment.json"),
-        new("Blue Line", "blue-line-all-pc.deployment.json")
-    ];
+    private static readonly Dictionary<string, string> SetupFiles = new()
+    {
+        ["Green Line"] = "all-pc.deployment.json",
+        ["Blue Line"] = "blue-line-all-pc.deployment.json"
+    };
 
-    public static IReadOnlyList<string> SetupChoices { get; } = [.. SampleLines.Select(line => line.Name), SavedSetupChoice];
+    public static IReadOnlyList<string> SetupChoices { get; } = [.. SetupFiles.Keys, SavedSetupChoice];
 
     public string SelectedSetup
     {
@@ -56,15 +54,13 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private PreparedDeployment? ActivePlan => _plan;
+    public ObservableCollection<ExecutionRow> ExecutionRows { get; } = [];
 
-    public ObservableCollection<ExecutionRow> ExecutionRows => _executionRows;
+    public string LayoutDescription => _plan?.LayoutDescription ?? "No line setup loaded. Choose a line above and select Load setup.";
 
-    public string LayoutDescription => ActivePlan?.LayoutDescription ?? "No line setup loaded. Choose a line above and select Load setup.";
+    public string DeploymentFile => _plan?.SourcePath ?? "";
 
-    public string DeploymentFile => ActivePlan?.SourcePath ?? "";
-
-    public bool HasExecutionChanges => ActivePlan is { } plan && ExecutionRows.Any(row =>
+    public bool HasExecutionChanges => _plan is { } plan && ExecutionRows.Any(row =>
         {
             var applied = plan.Territories.Single(territory => territory.Id == row.Id);
             return row.Target != (applied.Execution == "Pi" ? "Pi" : "PC") || row.Host != applied.Host || row.Port != applied.Port.ToString();
@@ -78,35 +74,36 @@ public sealed partial class MainWindowViewModel
 
     public string ExecutionDraftStatus => !IsRoutedDeployment ? "Load a setup to choose where each territory runs." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement and PLC assignments to the loaded setup file.";
 
-    private Task LoadSelectedSetupAsync()
+    private async Task LoadSelectedSetupAsync()
     {
+        string path;
         if (SelectedSetup == SavedSetupChoice)
         {
-            return ChooseDeploymentAsync();
+            var dialog = new OpenFileDialog
+            {
+                Title = "Open controller setup: track, territories, PC/Pi assignments and PLC",
+                Filter = "Wayside deployments (*.deployment.json)|*.deployment.json|JSON files (*.json)|*.json",
+                InitialDirectory = Path.Combine(AppContext.BaseDirectory, "Samples")
+            };
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+            path = dialog.FileName;
         }
-
-        var line = SampleLines.SingleOrDefault(line => line.Name == SelectedSetup) ?? throw new ArgumentException("Choose a built-in line or a saved setup file.");
-        return ReplaceDeploymentAsync(Path.Combine(AppContext.BaseDirectory, "Samples", line.DeploymentFile));
-    }
-
-    private async Task ChooseDeploymentAsync()
-    {
-        var dialog = new OpenFileDialog
+        else
         {
-            Title = "Open controller setup: track, territories, PC/Pi assignments and PLC",
-            Filter = "Wayside deployments (*.deployment.json)|*.deployment.json|JSON files (*.json)|*.json",
-            InitialDirectory = Path.Combine(AppContext.BaseDirectory, "Samples")
-        };
-        if (dialog.ShowDialog() == true)
-        {
-            await ReplaceDeploymentAsync(dialog.FileName);
+            if (!SetupFiles.TryGetValue(SelectedSetup, out var file))
+            {
+                throw new ArgumentException("Choose a built-in line or a saved setup file.");
+            }
+            path = Path.Combine(AppContext.BaseDirectory, "Samples", file);
         }
+        await UseDeploymentAsync(WaysideDeployment.Read(path));
     }
 
     /// <summary>Loads a deployment through the same serialized operation path used by the UI command.</summary>
-    public Task LoadDeploymentAsync(string path) => RunAsync(() => ReplaceDeploymentAsync(path));
-
-    private Task ReplaceDeploymentAsync(string? path) => UseDeploymentAsync(path is null ? null : WaysideDeployment.Read(path));
+    public Task LoadDeploymentAsync(string path) => RunAsync(() => UseDeploymentAsync(path is null ? null : WaysideDeployment.Read(path)));
 
     private void ExecutionEdited(object? sender, System.ComponentModel.PropertyChangedEventArgs eventArgs) => NotifyExecutionEditor();
 
@@ -132,24 +129,22 @@ public sealed partial class MainWindowViewModel
 
     private async Task ApplyExecutionAsync()
     {
-        var plan = ActivePlan ?? throw new InvalidOperationException("Load a deployment first.");
+        var plan = _plan ?? throw new InvalidOperationException("Load a deployment first.");
         var replacement = plan.WithExecution(ExecutionRows.Select(row => row.ToAssignment()));
         await UseDeploymentAsync(replacement);
     }
 
     private Task SaveExecutionAsync()
     {
-        if (ActivePlan is null || HasExecutionChanges)
+        if (_plan is null || HasExecutionChanges)
         {
             throw new InvalidOperationException("Apply execution choices before saving them.");
         }
 
-        ActivePlan.SaveExecution();
-        Status = $"Placement and PLC assignments saved to {ActivePlan.SourcePath}. Original PLC files, map, and ownership are unchanged.";
+        _plan.SaveExecution();
+        Status = $"Placement and PLC assignments saved to {_plan.SourcePath}. Original PLC files, map, and ownership are unchanged.";
         return Task.CompletedTask;
     }
-
-    private Task RestoreLocalDemoAsync() => UseDeploymentAsync(null);
 
     private void ObserveHost()
     {
@@ -157,7 +152,7 @@ public sealed partial class MainWindowViewModel
         _host.InputReceived += text => Post(() => Status = text);
         _host.AcknowledgementReceived += receipt => Post(() =>
         {
-            if (receipt.MessageType == nameof(WaysideManualCommandMessage))
+            if (receipt.MessageType == "ApplyManual")
             {
                 ManualCommandResult = $"{(receipt.IsAccepted ? "Accepted" : "Rejected")}: {receipt.Detail}";
                 OnPropertyChanged(nameof(ManualCommandResult));
@@ -177,10 +172,8 @@ public sealed partial class MainWindowViewModel
         {
             await _host.DisposeAsync();
             _controller.ResetTestState();
-            _host = routed is null ? new WaysidePipeHost(_controller, _endpoints) : new WaysidePipeHost(routed, _endpoints);
+            _host = routed is null ? new WaysidePipeHost(_controller, _pipeNames) : new WaysidePipeHost(routed, _pipeNames);
             _plan = plan;
-            _deploymentPath = plan?.SourcePath;
-            _deploymentDescription = routed?.Description ?? "Standalone controller · local PC";
             ObserveHost();
             _host.Start();
         }
@@ -193,7 +186,6 @@ public sealed partial class MainWindowViewModel
             throw;
         }
         PlcSource = plan?.ProgramSource ?? "Select a .plc file to view its Boolean program.";
-        _programSource = PlcSource;
         _programName = plan?.ProgramName ?? "wayside.plc";
         string? selectedPlcId = SelectedPlcTerritory?.Id;
         foreach (var row in ExecutionRows)
@@ -214,7 +206,6 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(SelectedPlcName));
         OnPropertyChanged(nameof(IsRoutedDeployment));
         OnPropertyChanged(nameof(CanChooseLogic));
-        OnPropertyChanged(nameof(DeploymentDescription));
         NotifyExecutionEditor();
         Status = plan is null ? "Standalone controller selected and paused. Check controller logic and send fresh feedback before resuming." : $"{plan.Name} loaded with {string.Join(" / ", plan.Territories.Select(territory => territory.ProgramName ?? plan.ProgramName).Distinct())}. Paused; send fresh feedback before resuming.";
     }
@@ -222,7 +213,7 @@ public sealed partial class MainWindowViewModel
     private async Task ResetControllerAsync()
     {
         var plan = _plan;
-        await SendAsync(new WaysideSimulationMessage { IsPaused = true, SpeedMultiplier = Snapshot.SpeedMultiplier });
+        await SendAsync(MessageSerializer.CreateEnvelope("SetSimulation", new { paused = true, speedMultiplier = Snapshot.SpeedMultiplier }));
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         deadline.CancelAfter(3000);
         while (!(await _host.PollForSetupAsync(deadline.Token)).IsPaused)

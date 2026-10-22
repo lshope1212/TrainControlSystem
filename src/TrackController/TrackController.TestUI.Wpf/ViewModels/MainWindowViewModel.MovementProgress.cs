@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Messages;
 using System.Globalization;
 using TrackController.Contracts.Messages;
 using TrainControl.Contracts.Enums;
@@ -19,7 +20,7 @@ public sealed partial class MainWindowViewModel
 
     // A cleared origin retires its request in the controller. Keep refreshing feedback while
     // the user edits the next occupancy, but do not repeatedly send that retired request.
-    private bool HasMovementOriginCleared => _movementOriginObserved && _appliedFeedback?.Blocks.Any(block => block.BlockId == _appliedRequest?.TargetBlockId && block.Occupancy == OccupancyState.Clear) == true;
+    private bool HasMovementOriginCleared => _movementOriginObserved && _appliedFeedback?.Any(block => block.BlockId == _appliedRequest?.TargetBlockId && block.Occupancy == OccupancyState.Clear) == true;
 
     private List<string> ParseRequestedPath() => RequestedPath.Split([',', ' ', '→', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
@@ -56,15 +57,15 @@ public sealed partial class MainWindowViewModel
         return double.IsFinite(distance) ? distance : null;
     }
 
-    private async Task FollowMovementAsync(WaysideFeedbackMessage feedback)
+    private async Task FollowMovementAsync(List<TrackModelBlockStateMessage> feedback)
     {
         if (_appliedRequest is not { } request)
         {
             return;
         }
 
-        var origin = feedback.Blocks.SingleOrDefault(block => block.BlockId == request.TargetBlockId);
-        var next = feedback.Blocks.SingleOrDefault(block => block.BlockId == request.PathBlockIds.FirstOrDefault());
+        var origin = feedback.SingleOrDefault(block => block.BlockId == request.TargetBlockId);
+        var next = feedback.SingleOrDefault(block => block.BlockId == request.PathBlockIds.FirstOrDefault());
         _movementOriginObserved |= origin?.Occupancy == OccupancyState.Occupied;
         _nextBlockObservedClear |= next?.Occupancy == OccupancyState.Clear;
         if (!_movementOriginObserved || origin?.Occupancy != OccupancyState.Clear)
@@ -99,7 +100,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        var updated = new WaysideMovementRequestMessage
+        var updated = new MovementSuggestionMessage
         {
             RequestId = Guid.NewGuid().ToString("N"),
             TrainId = request.TrainId,
@@ -117,7 +118,6 @@ public sealed partial class MainWindowViewModel
         RequestedPath = string.Join(", ", updated.PathBlockIds);
         SuggestedSpeed = (updated.SuggestedSpeedMetersPerSecond / DisplayUnits.MetersPerSecondPerMph).ToString("0.######", CultureInfo.CurrentCulture);
         TrainLabel = updated.TrainId;
-        SelectedBlockId = updated.TargetBlockId;
         if (updated.PathBlockIds.Count == 0 || updated.SuggestedAuthorityMeters <= 0)
         {
             RequestedPath = "";

@@ -49,7 +49,7 @@ public sealed class MovementProgressTests
         SetOccupancy(inputs, previous, OccupancyState.Clear);
         SetOccupancy(inputs, next, OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations[0].TargetBlockId == next);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations[0].Request!.TargetBlockId == next);
     }
 
     /// <summary>Arrival ends the last movement without clearing destination occupancy or renewing the request.</summary>
@@ -62,7 +62,7 @@ public sealed class MovementProgressTests
         var inputs = session.Inputs;
         inputs.RequestedPath = "5";
         await ExecuteAsync(inputs.SendMovementCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().PathBlockIds.Count == 1);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().Request!.PathBlockIds.Count == 1);
         SetOccupancy(inputs, occupyFirst ? "5" : "4", occupyFirst ? OccupancyState.Occupied : OccupancyState.Clear);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == (occupyFirst ? "5" : "4")).Occupancy == (occupyFirst ? OccupancyState.Occupied : OccupancyState.Clear));
@@ -90,33 +90,33 @@ public sealed class MovementProgressTests
         await StartRouteAsync(session);
         var inputs = session.Inputs;
         var initial = inputs.Snapshot.Authorizations.Single();
-        var requestIds = new HashSet<string> { initial.RequestId };
-        Assert.AreEqual(200, initial.SuggestedAuthorityMeters);
+        var requestIds = new HashSet<string> { initial.Request!.RequestId };
+        Assert.AreEqual(200, initial.Request!.SuggestedAuthorityMeters);
         for (int target = 5; target < 8; target++)
         {
             await AdvanceAsync(inputs, (target - 1).ToString(), target.ToString());
             var result = inputs.Snapshot.Authorizations.Single();
             double remaining = 200 - (target - 4) * 50;
-            Assert.IsTrue(requestIds.Add(result.RequestId), "Each new target needs a new request ID.");
-            Assert.AreEqual((target - 1).ToString(), result.EntryBlockId);
-            CollectionAssert.AreEqual(Enumerable.Range(target + 1, 8 - target).Select(block => block.ToString()).ToArray(), result.PathBlockIds.ToArray());
-            Assert.AreEqual(remaining, result.SuggestedAuthorityMeters, 0.00000001);
+            Assert.IsTrue(requestIds.Add(result.Request!.RequestId), "Each new target needs a new request ID.");
+            Assert.AreEqual((target - 1).ToString(), result.Request!.EntryBlockId);
+            CollectionAssert.AreEqual(Enumerable.Range(target + 1, 8 - target).Select(block => block.ToString()).ToArray(), result.Request!.PathBlockIds.ToArray());
+            Assert.AreEqual(remaining, result.Request!.SuggestedAuthorityMeters, 0.00000001);
             Assert.AreEqual(remaining, result.AuthorizedAuthorityMeters, 0.00000001);
-            Assert.AreEqual(initial.SuggestedSpeedMetersPerSecond, result.AuthorizedSpeedMetersPerSecond);
-            Assert.AreEqual("Approved", result.Status);
-            Assert.AreEqual(result.TargetBlockId, inputs.TargetBlock);
-            Assert.AreEqual(result.EntryBlockId, inputs.EntryBlock);
-            Assert.AreEqual(string.Join(", ", result.PathBlockIds), inputs.RequestedPath);
+            Assert.AreEqual(initial.Request!.SuggestedSpeedMetersPerSecond, result.AuthorizedSpeedMetersPerSecond);
+            Assert.AreEqual("Approved", result.MovementStatus);
+            Assert.AreEqual(result.Request!.TargetBlockId, inputs.TargetBlock);
+            Assert.AreEqual(result.Request!.EntryBlockId, inputs.EntryBlock);
+            Assert.AreEqual(string.Join(", ", result.Request!.PathBlockIds), inputs.RequestedPath);
             Assert.AreEqual(remaining / DisplayUnits.MetersPerFoot, double.Parse(inputs.RequestedAuthority, CultureInfo.CurrentCulture), 0.005);
             StringAssert.Contains(inputs.LastResult, $"Block {target}: Approved");
             StringAssert.Contains(inputs.CancelMovementLabel, $"block {target}");
-            await UntilAsync(() => session.Controller.Snapshot.Authorizations.Any(authorization => authorization.RequestId == result.RequestId));
+            await UntilAsync(() => session.Controller.Snapshot.Authorizations.Any(authorization => authorization.Request!.RequestId == result.Request!.RequestId));
             Assert.AreEqual(result.AuthorizedAuthorityMeters, session.Controller.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters);
         }
 
-        string finalId = inputs.Snapshot.Authorizations.Single().RequestId;
+        string finalId = inputs.Snapshot.Authorizations.Single().Request!.RequestId;
         await Task.Delay(1250);
-        Assert.AreEqual(finalId, inputs.Snapshot.Authorizations.Single().RequestId, "Repeating unchanged inputs must not advance or recreate a request.");
+        Assert.AreEqual(finalId, inputs.Snapshot.Authorizations.Single().Request!.RequestId, "Repeating unchanged inputs must not advance or recreate a request.");
         SetOccupancy(inputs, "7", OccupancyState.Clear);
         SetOccupancy(inputs, "8", OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
@@ -147,12 +147,12 @@ public sealed class MovementProgressTests
         });
         await StartRouteAsync(session, deploymentPath: files.PathFor("blue-line-all-pc.deployment.json"));
         var inputs = session.Inputs;
-        Assert.AreEqual(301.5, inputs.Snapshot.Authorizations.Single().SuggestedAuthorityMeters);
+        Assert.AreEqual(301.5, inputs.Snapshot.Authorizations.Single().Request!.SuggestedAuthorityMeters);
         foreach (var step in new[] { (Previous: "4", Next: "5", Remaining: 241.25), (Previous: "5", Next: "6", Remaining: 151.125), (Previous: "6", Next: "7", Remaining: 110.375) })
         {
             await AdvanceAsync(inputs, step.Previous, step.Next);
             var result = inputs.Snapshot.Authorizations.Single();
-            Assert.AreEqual(step.Remaining, result.SuggestedAuthorityMeters, 0.00000001);
+            Assert.AreEqual(step.Remaining, result.Request!.SuggestedAuthorityMeters, 0.00000001);
             Assert.AreEqual(step.Remaining, result.AuthorizedAuthorityMeters, 0.00000001);
         }
 
@@ -171,18 +171,18 @@ public sealed class MovementProgressTests
     {
         await StartRouteAsync(session);
         var inputs = session.Inputs;
-        string originalId = inputs.Snapshot.Authorizations.Single().RequestId;
+        string originalId = inputs.Snapshot.Authorizations.Single().Request!.RequestId;
         SetOccupancy(inputs, occupyFirst ? "5" : "4", occupyFirst ? OccupancyState.Occupied : OccupancyState.Clear);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters < 200);
         await Task.Delay(1250);
         Assert.AreEqual("4", inputs.TargetBlock);
-        Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().RequestId);
+        Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().Request!.RequestId);
         Assert.DoesNotContain("target block cleared", inputs.LastReceipt, "The repeat loop must not resend a retired request during an occupancy gap.");
         SetOccupancy(inputs, occupyFirst ? "4" : "5", occupyFirst ? OccupancyState.Clear : OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().TargetBlockId == "5");
-        Assert.AreEqual("Approved", inputs.Snapshot.Authorizations.Single().Status);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().Request!.TargetBlockId == "5");
+        Assert.AreEqual("Approved", inputs.Snapshot.Authorizations.Single().MovementStatus);
     });
 
     /// <summary>Requires an explicit feedback send and does not transmit unrelated movement drafts during progression.</summary>
@@ -198,13 +198,13 @@ public sealed class MovementProgressTests
         SetOccupancy(inputs, "4", OccupancyState.Clear);
         SetOccupancy(inputs, "5", OccupancyState.Occupied);
         await Task.Delay(1250);
-        Assert.AreEqual(original.RequestId, inputs.Snapshot.Authorizations.Single().RequestId);
+        Assert.AreEqual(original.Request!.RequestId, inputs.Snapshot.Authorizations.Single().Request!.RequestId);
         Assert.AreEqual(OccupancyState.Occupied, inputs.Blocks.Single(block => block.BlockId == "4").Occupancy);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().TargetBlockId == "5");
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().Request!.TargetBlockId == "5");
         Assert.AreEqual("6, 7, 8", inputs.RequestedPath);
         Assert.AreEqual("25", inputs.SuggestedSpeed);
-        Assert.AreEqual(original.SuggestedAuthorityMeters - 50, inputs.Snapshot.Authorizations.Single().SuggestedAuthorityMeters);
+        Assert.AreEqual(original.Request!.SuggestedAuthorityMeters - 50, inputs.Snapshot.Authorizations.Single().Request!.SuggestedAuthorityMeters);
     });
 
     /// <summary>Does not mistake an existing obstacle for the tracked test train.</summary>
@@ -213,11 +213,11 @@ public sealed class MovementProgressTests
     {
         await StartRouteAsync(session, occupiedNext: true);
         var inputs = session.Inputs;
-        string originalId = inputs.Snapshot.Authorizations.Single().RequestId;
+        string originalId = inputs.Snapshot.Authorizations.Single().Request!.RequestId;
         SetOccupancy(inputs, "4", OccupancyState.Clear);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
-        Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().RequestId);
+        Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().Request!.RequestId);
         Assert.AreEqual("4", inputs.TargetBlock);
         StringAssert.Contains(inputs.MovementProgress, "not observed clear");
     });
@@ -250,15 +250,15 @@ public sealed class MovementProgressTests
         inputs.FeedbackRows.Single(row => row.BlockId == "5").IsFaulted = true;
         await AdvanceAsync(inputs, "4", "5");
         var result = inputs.Snapshot.Authorizations.Single();
-        Assert.IsGreaterThan(0, result.SuggestedAuthorityMeters);
+        Assert.IsGreaterThan(0, result.Request!.SuggestedAuthorityMeters);
         Assert.AreEqual(0, result.AuthorizedAuthorityMeters);
         Assert.AreEqual(0, result.AuthorizedSpeedMetersPerSecond);
-        Assert.AreEqual("Withheld", result.Status);
+        Assert.AreEqual("Withheld", result.MovementStatus);
         StringAssert.Contains(inputs.LastResult, "fault");
         inputs.FeedbackRows.Single(row => row.BlockId == "5").IsFaulted = false;
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().Status == "Approved");
-        Assert.AreEqual(result.RequestId, inputs.Snapshot.Authorizations.Single().RequestId);
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().MovementStatus == "Approved");
+        Assert.AreEqual(result.Request!.RequestId, inputs.Snapshot.Authorizations.Single().Request!.RequestId);
     });
 
     /// <summary>Calculates draft authority from the selected route and rejects invalid topology before sending.</summary>
@@ -267,7 +267,7 @@ public sealed class MovementProgressTests
     {
         await StartRouteAsync(session);
         var inputs = session.Inputs;
-        string originalId = inputs.Snapshot.Authorizations.Single().RequestId;
+        string originalId = inputs.Snapshot.Authorizations.Single().Request!.RequestId;
         Assert.AreEqual(200 / DisplayUnits.MetersPerFoot, double.Parse(inputs.RequestedAuthority, CultureInfo.CurrentCulture), 0.005);
         inputs.RequestedPath = "5, 6";
         Assert.AreEqual(100 / DisplayUnits.MetersPerFoot, double.Parse(inputs.RequestedAuthority, CultureInfo.CurrentCulture), 0.005);
@@ -282,7 +282,7 @@ public sealed class MovementProgressTests
             Assert.AreEqual("—", inputs.RequestedAuthority);
             await ExecuteAsync(inputs.SendMovementCommand);
             StringAssert.Contains(inputs.Status, "connected route");
-            Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().RequestId);
+            Assert.AreEqual(originalId, inputs.Snapshot.Authorizations.Single().Request!.RequestId);
         }
     });
 
@@ -322,33 +322,33 @@ public sealed class MovementProgressTests
         inputs.TrainLabel = "Other train";
         await ExecuteAsync(inputs.SendMovementCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1);
-        string unrelatedId = inputs.Snapshot.Authorizations.Single().RequestId;
+        string unrelatedId = inputs.Snapshot.Authorizations.Single().Request!.RequestId;
         inputs.TargetBlock = "5";
         inputs.RequestedPath = "6, 7, 8";
         inputs.TrainLabel = "Train 101";
         await ExecuteAsync(inputs.SendMovementCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 2);
-        double originalLimit = inputs.Snapshot.Authorizations.Single(request => request.TargetBlockId == "5").SuggestedAuthorityMeters;
+        double originalLimit = inputs.Snapshot.Authorizations.Single(request => request.Request!.TargetBlockId == "5").Request!.SuggestedAuthorityMeters;
         double blockLength = inputs.Blocks.Single(block => block.BlockId == "5").LengthMeters;
         SetOccupancy(inputs, "5", OccupancyState.Clear);
         SetOccupancy(inputs, "6", OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Any(request => request.TargetBlockId == "6"));
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Any(request => request.Request!.TargetBlockId == "6"));
         Assert.HasCount(2, inputs.Snapshot.Authorizations);
-        Assert.IsTrue(inputs.Snapshot.Authorizations.Any(request => request.RequestId == unrelatedId));
-        var result = inputs.Snapshot.Authorizations.Single(request => request.TargetBlockId == "6");
-        Assert.AreEqual(originalLimit - blockLength, result.SuggestedAuthorityMeters, 0.00000001);
-        Assert.AreEqual(result.SuggestedAuthorityMeters, result.AuthorizedAuthorityMeters);
+        Assert.IsTrue(inputs.Snapshot.Authorizations.Any(request => request.Request!.RequestId == unrelatedId));
+        var result = inputs.Snapshot.Authorizations.Single(request => request.Request!.TargetBlockId == "6");
+        Assert.AreEqual(originalLimit - blockLength, result.Request!.SuggestedAuthorityMeters, 0.00000001);
+        Assert.AreEqual(result.Request!.SuggestedAuthorityMeters, result.AuthorizedAuthorityMeters);
         StringAssert.Contains(inputs.LastResult, "Block 6: Approved");
         SetOccupancy(inputs, "6", OccupancyState.Clear);
         SetOccupancy(inputs, "7", OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Any(request => request.TargetBlockId == "7"));
+        await UntilAsync(() => inputs.Snapshot.Authorizations.Any(request => request.Request!.TargetBlockId == "7"));
         SetOccupancy(inputs, "7", OccupancyState.Clear);
         SetOccupancy(inputs, "8", OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1);
-        Assert.AreEqual(unrelatedId, inputs.Snapshot.Authorizations.Single().RequestId);
+        Assert.AreEqual(unrelatedId, inputs.Snapshot.Authorizations.Single().Request!.RequestId);
         StringAssert.Contains(inputs.MovementProgress, "Arrived at final block 8");
     });
 }

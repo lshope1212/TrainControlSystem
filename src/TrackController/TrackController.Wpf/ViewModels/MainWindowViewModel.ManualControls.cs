@@ -1,3 +1,4 @@
+using TrainControl.Common.Communication;
 using TrackController.Contracts.Messages;
 using TrainControl.Contracts.Enums;
 
@@ -33,30 +34,16 @@ public sealed partial class MainWindowViewModel
 
     private async Task SendManualAsync()
     {
-        var message = new WaysideManualCommandMessage
+        object payload = ManualAction switch
         {
-            BlockId = ManualTarget
+            "Switch normal" => new { blockId = ManualTarget, switchPosition = SwitchPosition.Normal },
+            "Switch reverse" => new { blockId = ManualTarget, switchPosition = SwitchPosition.Reverse },
+            "Signal red" => new { blockId = ManualTarget, signal = SignalState.Red },
+            "Crossing closed" => new { blockId = ManualTarget, crossing = CrossingState.Closed },
+            "Crossing open" => new { blockId = ManualTarget, crossing = CrossingState.Open },
+            _ => throw new ArgumentException("Select a manual command.")
         };
-        switch (ManualAction)
-        {
-            case "Switch normal":
-                message.Switch = SwitchPosition.Normal;
-                break;
-            case "Switch reverse":
-                message.Switch = SwitchPosition.Reverse;
-                break;
-            case "Signal red":
-                message.Signal = SignalState.Red;
-                break;
-            case "Crossing closed":
-                message.Crossing = CrossingState.Closed;
-                break;
-            case "Crossing open":
-                message.Crossing = CrossingState.Open;
-                break;
-            default:
-                throw new ArgumentException("Select a manual command.");
-        }
+        var message = MessageSerializer.CreateEnvelope("ApplyManual", payload);
 
         await SendAsync(message);
     }

@@ -1,17 +1,17 @@
 using System.Collections.Concurrent;
 using TrackController.Contracts.Messages;
 using TrainControl.Common.Communication;
+using TrainControl.Contracts.Messages;
 
 namespace TrackController.TestUI.Wpf.Services;
 
 /// <summary>
 /// Fake peer modules, not a fake controller. This class has no Core reference: sends are real pipe
-/// messages and observations come exclusively from the controller's two published output streams.
+/// messages and observations come exclusively from the module output and diagnostic pipes.
 /// </summary>
 public sealed class WaysideTestConnection : IAsyncDisposable
 {
     private readonly CancellationTokenSource _stop = new();
-    private readonly WaysidePipeClient _sender;
     private readonly object _observations = new();
     private readonly ConcurrentQueue<MessageEnvelope> _recent = new();
     private Task[]? _listeners;
@@ -50,7 +50,6 @@ public sealed class WaysideTestConnection : IAsyncDisposable
     public WaysideTestConnection(string inputPipe, string ctcOutput, string trackModelOutput)
     {
         Endpoints = (inputPipe, ctcOutput, trackModelOutput);
-        _sender = new(inputPipe);
     }
 
     /// <summary>Starts fake CTC and Track Model listeners to capture actual controller outputs.</summary>
@@ -61,24 +60,33 @@ public sealed class WaysideTestConnection : IAsyncDisposable
             throw new InvalidOperationException("Output listeners already started.");
         }
 
-        _listeners = [NamedPipeTransport.ListenAsync(Endpoints.CtcOutput, envelope => CaptureAsync(envelope, true), ReportError, _stop.Token), NamedPipeTransport.ListenAsync(Endpoints.TrackModelOutput, envelope => CaptureAsync(envelope, false), ReportError, _stop.Token)];
+        _listeners =
+        [
+            NamedPipeTransport.ListenAsync(Endpoints.CtcOutput, envelope => CaptureAsync(envelope, true), ReportError, _stop.Token),
+            NamedPipeTransport.ListenAsync(Endpoints.TrackModelOutput, envelope => CaptureAsync(envelope, false), ReportError, _stop.Token),
+            NamedPipeTransport.ListenAsync(Endpoints.Input + ".Monitor", envelope => CaptureAsync(envelope, null), ReportError, _stop.Token)
+        ];
     }
 
     /// <summary>Sends an application message using the same serializer and named-pipe transport as live modules.</summary>
     public async Task SendAsync(object message, CancellationToken cancellationToken = default)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
-        await _sender.SendAsync(message, linked.Token);
+        if (message is IReadOnlyList<TrackModelBlockStateMessage> blocks)
+        {
+            message = MessageSerializer.CreateEnvelope("TrackModelBlockStates", new { blocks });
+        }
+        await NamedPipeTransport.SendAsync(Endpoints.Input, message, linked.Token);
         Interlocked.Increment(ref _sent);
     }
 
-    private Task CaptureAsync(MessageEnvelope envelope, bool ctc)
+    private Task CaptureAsync(MessageEnvelope envelope, bool? ctc)
     {
-        if (ctc)
+        if (ctc == true)
         {
             Interlocked.Increment(ref _ctcReceived);
         }
-        else
+        else if (ctc == false)
         {
             Interlocked.Increment(ref _trackModelReceived);
         }
@@ -89,7 +97,7 @@ public sealed class WaysideTestConnection : IAsyncDisposable
             _recent.TryDequeue(out _);
         }
 
-        if (!ctc && envelope.MessageType == nameof(WaysideSnapshotMessage))
+        if (ctc is null && envelope.MessageType == nameof(WaysideSnapshotMessage))
         {
             var snapshot = MessageSerializer.DeserializePayload<WaysideSnapshotMessage>(envelope);
             lock (_observations)
@@ -100,7 +108,7 @@ public sealed class WaysideTestConnection : IAsyncDisposable
                 }
             }
         }
-        else if (!ctc && envelope.MessageType == nameof(WaysideAcknowledgementMessage))
+        else if (ctc is null && envelope.MessageType == nameof(WaysideAcknowledgementMessage))
         {
             var result = MessageSerializer.DeserializePayload<WaysideAcknowledgementMessage>(envelope);
             AcknowledgementReceived?.Invoke(result);

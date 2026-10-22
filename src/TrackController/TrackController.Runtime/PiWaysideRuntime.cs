@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Messages;
 using System.Net.Sockets;
 using System.Net;
 using System.Text.Json;
@@ -8,7 +9,7 @@ using TrainControl.Common.Communication;
 
 namespace TrackController.Runtime;
 
-/// <summary>No local decision fallback. A broken or expired Pi connection produces stop/unknown outputs.</summary>
+/// <summary>PC-side client that sends inputs to the Pi and receives its results. A broken or expired connection produces stop/unknown outputs.</summary>
 public sealed class PiWaysideRuntime : IWaysideRuntime
 {
     private readonly string _host;
@@ -39,7 +40,7 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
         _configuration = WaysideConfiguration.ValidateAndCopy(configuration);
         _programName = programName;
         _programSource = programSource;
-        LatestSnapshot = UnavailableOutput.CreateStopSnapshot(new TrackControllerService(_configuration).GetSnapshot(), "Pi not connected. Start the Pi runtime and SSH tunnel.");
+        LatestSnapshot = new TrackControllerService(_configuration).GetSnapshot().CreateStopSnapshot("Pi not connected. Start the Pi runtime and SSH tunnel.");
     }
 
     /// <summary>Handles an application message through the selected runtime and returns its result.</summary>
@@ -55,38 +56,47 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
             timeout.CancelAfter(1500);
-            if (message.MessageType == nameof(WaysidePlcProgramMessage))
+            if (message.MessageType == "LoadPlc")
             {
                 // Preserve the requested replacement even if receipt is lost or compilation fails.
                 // Reconnection must never silently restore an older, permissive program.
-                var replacement = MessageSerializer.DeserializePayload<WaysidePlcProgramMessage>(message);
-                if (replacement.TerritoryId is not null && replacement.TerritoryId != _configuration.WaysideId)
+                string? territoryId = message.Payload.TryGetProperty("territoryId", out var targetId) ? targetId.GetString() : null;
+                if (territoryId is not null && territoryId != _configuration.WaysideId)
                 {
-                    return RuntimeMessages.CreateRejection(message.MessageType, "PLC target does not match this territory.");
+                    return new WaysideAcknowledgementMessage(false, "PLC target does not match this territory.", message.MessageType);
                 }
-                _programName = replacement.Name;
-                _programSource = replacement.Source;
+                var name = MessageSerializer.ReadValue<string>(message, "name");
+                var source = MessageSerializer.ReadValue<string>(message, "source");
+                _programName = name;
+                _programSource = source;
             }
 
             await ConnectAsync(timeout.Token);
-            if (message.MessageType == nameof(WaysideFeedbackMessage))
+            if (message.MessageType == "TrackModelBlockStates")
             {
-                var feedback = MessageSerializer.DeserializePayload<WaysideFeedbackMessage>(message);
-                foreach (var block in feedback.Blocks)
+                var feedback = MessageSerializer.ReadValue<List<TrackModelBlockStateMessage>>(message, "blocks");
+                foreach (var block in feedback)
                 {
                     block.ObservedAtUtc += _clockOffset;
                 }
 
-                message = RuntimeMessages.CreateEnvelope(feedback);
+                message = MessageSerializer.CreateEnvelope("TrackModelBlockStates", new { blocks = feedback });
+            }
+
+            if (message.MessageType == nameof(TrackModelBlockStateMessage))
+            {
+                var block = MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(message);
+                block.ObservedAtUtc += _clockOffset;
+                message = MessageSerializer.CreateEnvelope(nameof(TrackModelBlockStateMessage), block);
             }
 
             var sentAt = DateTimeOffset.UtcNow;
-            await _protocol!.WriteEnvelopeAsync(message, timeout.Token);
+            await _protocol!.WriteAsync(message, timeout.Token);
             var envelope = await _protocol.ReadAsync(timeout.Token);
             if (envelope.MessageType == nameof(WaysideSnapshotMessage))
             {
                 var snapshot = MessageSerializer.DeserializePayload<WaysideSnapshotMessage>(envelope);
-                if (snapshot.Blocks is null || snapshot.Authorizations is null || snapshot.Blocks.Any(blockStatus => blockStatus is null) || snapshot.Authorizations.Any(authorization => authorization is null) || snapshot.WaysideId != _configuration.WaysideId || !snapshot.Blocks.Select(blockStatus => blockStatus.BlockId).Order().SequenceEqual(WaysideConfiguration.GetOwnedIds(_configuration).Order()) || snapshot.NeighborObservations is null || snapshot.NeighborObservations.Any(neighbor => neighbor is null) || !snapshot.NeighborObservations.Select(neighbor => neighbor.BlockId).Order().SequenceEqual(WaysideConfiguration.GetNeighborIds(_configuration).Order()))
+                if (snapshot.Blocks is null || snapshot.Blocks.Any(blockStatus => blockStatus is null) || snapshot.WaysideId != _configuration.WaysideId || !snapshot.Blocks.Select(blockStatus => blockStatus.BlockId).Order().SequenceEqual(WaysideConfiguration.GetOwnedIds(_configuration).Order()) || snapshot.NeighborObservations is null || snapshot.NeighborObservations.Any(neighbor => neighbor is null) || !snapshot.NeighborObservations.Select(neighbor => neighbor.BlockId).Order().SequenceEqual(WaysideConfiguration.GetNeighborIds(_configuration).Order()))
                 {
                     throw new InvalidDataException("Pi returned a different territory.");
                 }
@@ -121,7 +131,7 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
             var result = MessageSerializer.DeserializePayload<WaysideAcknowledgementMessage>(envelope);
             return result;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or SocketException or JsonException or OperationCanceledException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or SocketException or JsonException or OperationCanceledException or ArgumentException or InvalidOperationException)
         {
             DropConnection();
             if (DateTimeOffset.UtcNow >= _retryAfter)
@@ -129,13 +139,13 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
                 _retryAfter = DateTimeOffset.UtcNow.AddSeconds(1);
             }
 
-            LatestSnapshot = UnavailableOutput.CreateStopSnapshot(LatestSnapshot, $"Pi unavailable: {ex.Message}");
+            LatestSnapshot = LatestSnapshot.CreateStopSnapshot($"Pi unavailable: {ex.Message}");
             if (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
 
-            return RuntimeMessages.CreateRejection(message.MessageType, LatestSnapshot.PlcStatus);
+            return new WaysideAcknowledgementMessage(false, LatestSnapshot.PlcStatus, message.MessageType);
         }
         finally
         {
@@ -146,7 +156,7 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
     /// <summary>Refreshes runtime outputs so timeouts apply even when no new input arrives.</summary>
     public async Task<WaysideSnapshotMessage> PollAsync(CancellationToken cancellationToken = default)
     {
-        await ReceiveAsync(RuntimeMessages.CreateEnvelope(new WaysideSnapshotRequest()), cancellationToken);
+        await ReceiveAsync(MessageSerializer.CreateEnvelope("GetSnapshot", new { }), cancellationToken);
         return LatestSnapshot;
     }
 

@@ -1,7 +1,7 @@
+using TrainControl.Contracts.Messages;
 using TrackController.Contracts.Messages;
 using TrackController.Core.Control;
 using TrackController.Core.Models;
-using TrackController.Core.Safety;
 using TrackController.Core.Services;
 using TrainControl.Contracts.Enums;
 
@@ -13,7 +13,6 @@ public sealed class WaysideSafetyTests
 {
     private static string GoodPlc => PiRuntimeTests.ProgramSource;
 
-    private const string LegacyPlc = "allow_route = route_safe and running\nswitch_normal = requested_normal\nsignal_clear = route_safe and running\ncrossing_close = crossing_required";
 
     private sealed class Clock : TimeProvider
     {
@@ -46,26 +45,20 @@ public sealed class WaysideSafetyTests
             }
 
             Feedback();
-            Service.SetSimulation(new()
-            {
-                IsPaused = false
-            });
+            Service.SetSimulation(false, 1);
         }
 
         /// <summary>Supplies fresh sample measurements, with optional changes for the current safety scenario.</summary>
-        public void Feedback(Action<List<WaysideBlockFeedback>>? change = null)
+        public void Feedback(Action<List<TrackModelBlockStateMessage>>? change = null)
         {
             Clock.Advance(0.01);
-            var rows = Service.GetConfiguration().Blocks.Select(blockDefinition => new WaysideBlockFeedback { BlockId = blockDefinition.BlockId, ObservedAtUtc = Clock.Now, Occupancy = blockDefinition.BlockId == "5" ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList();
+            var rows = Service.GetConfiguration().Blocks.Select(blockDefinition => new TrackModelBlockStateMessage { BlockId = blockDefinition.BlockId, ObservedAtUtc = Clock.Now, Occupancy = blockDefinition.BlockId == "5" ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList();
             change?.Invoke(rows);
-            Service.ApplyFeedback(new()
-            {
-                Blocks = rows
-            });
+            Service.ApplyFeedback(rows);
         }
 
         /// <summary>Creates a movement request with an explicit origin and connected sample route.</summary>
-        public WaysideMovementRequestMessage Request(string target = "5", params string[] path) => new()
+        public MovementSuggestionMessage Request(string target = "5", params string[] path) => new()
         {
             RequestId = Guid.NewGuid().ToString("N"),
             TrainId = "CTC label",
@@ -76,13 +69,13 @@ public sealed class WaysideSafetyTests
         };
 
         /// <summary>Submits a sample movement request and returns the resulting authorization.</summary>
-        public WaysideAuthorization Submit(WaysideMovementRequestMessage? request = null)
+        public WaysideBlockStatus Submit(MovementSuggestionMessage? request = null)
         {
             Service.SubmitMovement(request ?? Request());
             return Service.GetSnapshot().Authorizations.Last();
         }
 
-        public WaysideAuthorization Output => Service.GetSnapshot().Authorizations.Last();
+        public WaysideBlockStatus Output => Service.GetSnapshot().Authorizations.Last();
     }
 
     /// <summary>Verifies that startup has no authority red signals and protected crossing.</summary>
@@ -122,15 +115,12 @@ public sealed class WaysideSafetyTests
         var result = fixture.Submit(request);
         Assert.AreEqual(15d, result.AuthorizedSpeedMetersPerSecond);
         Assert.AreEqual(350d, result.AuthorizedAuthorityMeters);
-        var snapshot = fixture.Service.GetSnapshot();
-        Assert.IsTrue(AuthorizationGuard.IsSafe(result, snapshot.Blocks, fixture.Service.GetConfiguration()));
-
         fixture.Feedback(rows => rows.ForEach(row => row.Signal = SignalState.Yellow));
         Assert.AreEqual(5d, fixture.Output.AuthorizedSpeedMetersPerSecond);
         fixture.Feedback(rows => rows.ForEach(row => row.Signal = SignalState.Red));
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
         fixture.Feedback(rows => rows.ForEach(row => row.Signal = SignalState.SuperGreen));
-        fixture.Service.SetSimulation(new() { IsPaused = true });
+        fixture.Service.SetSimulation(true, 1);
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters, "Super Green cannot override pause.");
     }
 
@@ -138,7 +128,7 @@ public sealed class WaysideSafetyTests
     [TestMethod]
     public void SetSimulation_NoPlcProgram_RejectsResume()
     {
-        Assert.Throws<InvalidOperationException>(() => new TrackControllerService().SetSimulation(new() { IsPaused = false }));
+        Assert.Throws<InvalidOperationException>(() => new TrackControllerService().SetSimulation(false, 1));
     }
 
     /// <summary>Verifies that loading plc pauses and requires explicit resume.</summary>
@@ -150,10 +140,7 @@ public sealed class WaysideSafetyTests
         fixture.Service.LoadPlc("updated.plc", GoodPlc);
         Assert.IsTrue(fixture.Service.GetSnapshot().IsPaused);
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
-        fixture.Service.SetSimulation(new()
-        {
-            IsPaused = false
-        });
+        fixture.Service.SetSimulation(false, 1);
         Assert.AreEqual(350d, fixture.Output.AuthorizedAuthorityMeters);
     }
 
@@ -165,7 +152,7 @@ public sealed class WaysideSafetyTests
         fixture.Submit();
         Assert.Throws<ArgumentException>(() => fixture.Service.LoadPlc("broken", "allow_route = 42"));
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
-        Assert.Throws<InvalidOperationException>(() => fixture.Service.SetSimulation(new() { IsPaused = false }));
+        Assert.Throws<InvalidOperationException>(() => fixture.Service.SetSimulation(false, 1));
     }
 
     /// <summary>Verifies that plc can withhold an otherwise safe route.</summary>
@@ -174,10 +161,7 @@ public sealed class WaysideSafetyTests
     {
         var fixture = new Fixture(true);
         fixture.Service.LoadPlc("stop", GoodPlc.Replace("allow_route = movement_enabled", "allow_route = false"));
-        fixture.Service.SetSimulation(new()
-        {
-            IsPaused = false
-        });
+        fixture.Service.SetSimulation(false, 1);
         Assert.AreEqual(0d, fixture.Submit().AuthorizedAuthorityMeters);
     }
 
@@ -187,10 +171,7 @@ public sealed class WaysideSafetyTests
     {
         var fixture = new Fixture(true);
         fixture.Service.LoadPlc("permissive", GoodPlc.Replace("allow_route = movement_enabled", "allow_route = true"));
-        fixture.Service.SetSimulation(new()
-        {
-            IsPaused = false
-        });
+        fixture.Service.SetSimulation(false, 1);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "7").Occupancy = OccupancyState.Occupied);
         Assert.AreEqual(200d, fixture.Submit().AuthorizedAuthorityMeters);
     }
@@ -218,7 +199,7 @@ public sealed class WaysideSafetyTests
         request.SuggestedAuthorityMeters = 900;
         var result = fixture.Submit(request);
         Assert.AreEqual(400d, result.AuthorizedAuthorityMeters);
-        Assert.AreEqual(WaysideMovementRequestMessage.BlockEntryReference, result.AuthorityReference);
+        Assert.AreEqual(MovementSuggestionMessage.BlockEntryReference, result.Request!.AuthorityReference);
     }
 
     /// <summary>Verifies that unknown block withholds movement.</summary>
@@ -257,7 +238,7 @@ public sealed class WaysideSafetyTests
         fixture.Clock.Advance(10.1);
         fixture.Feedback();
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
-        StringAssert.Contains(fixture.Output.Reason, "expired");
+        StringAssert.Contains(fixture.Output.MovementReason, "expired");
     }
 
     /// <summary>Verifies that stale samples cannot refresh watchdog.</summary>
@@ -270,10 +251,7 @@ public sealed class WaysideSafetyTests
         fixture.Submit();
         var old = fixture.Clock.Now;
         fixture.Clock.Advance(5.2);
-        fixture.Service.ApplyFeedback(new()
-        {
-            Blocks = [new() { BlockId = "5", ObservedAtUtc = old, Occupancy = OccupancyState.Occupied }]
-        });
+        fixture.Service.ApplyFeedback([new() { BlockId = "5", ObservedAtUtc = old, Occupancy = OccupancyState.Occupied }]);
         Assert.IsFalse(fixture.Service.GetSnapshot().Blocks.Single(blockStatus => blockStatus.BlockId == "5").IsFresh);
     }
 
@@ -286,7 +264,7 @@ public sealed class WaysideSafetyTests
         var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "6").Switch = SwitchPosition.Reverse);
         Assert.AreEqual(0d, fixture.Submit().AuthorizedAuthorityMeters);
-        StringAssert.Contains(fixture.Output.Reason, "needs 7");
+        StringAssert.Contains(fixture.Output.MovementReason, "needs 7");
         fixture.Feedback();
         Assert.AreEqual(350d, fixture.Output.AuthorizedAuthorityMeters);
     }
@@ -345,10 +323,10 @@ public sealed class WaysideSafetyTests
     {
         var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = OccupancyState.Clear));
-        fixture.Service.SetSimulation(new() { IsPaused = true });
+        fixture.Service.SetSimulation(true, 1);
         var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
         StringAssert.Contains(exception.Message, "paused");
-        fixture.Service.SetSimulation(new() { IsPaused = false });
+        fixture.Service.SetSimulation(false, 1);
         Assert.AreEqual(SwitchPosition.Normal, fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "6").CommandedSwitch);
     }
 
@@ -360,7 +338,7 @@ public sealed class WaysideSafetyTests
         fixture.Feedback(rows => rows.ForEach(feedback => feedback.Occupancy = OccupancyState.Clear));
         fixture.Service.SetHardwareMode(true);
         fixture.Service.SetMaintenanceMode(true);
-        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(new() { BlockId = "6", Switch = SwitchPosition.Reverse }));
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(blockId: "6", switchPosition: SwitchPosition.Reverse));
         StringAssert.Contains(exception.Message, "valid PLC");
         Assert.AreEqual(SwitchPosition.Normal, fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "6").CommandedSwitch);
     }
@@ -417,9 +395,9 @@ public sealed class WaysideSafetyTests
         var fixture = new Fixture(hardware);
         fixture.Submit();
         fixture.Clock.Advance(5.1);
-        fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "7").IsFaulted = true);
+        fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "7").BrokenRail = true);
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
-        StringAssert.Contains(fixture.Output.Reason, "fault");
+        StringAssert.Contains(fixture.Output.MovementReason, "fault");
     }
 
     /// <summary>Verifies that conflicting requests both withhold authority.</summary>
@@ -470,15 +448,12 @@ public sealed class WaysideSafetyTests
     public void ApplyManual_UnprotectedOrNonMaintenanceMode_RejectsCommand(bool hardware)
     {
         var fixture = new Fixture(hardware);
-        Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(new() { BlockId = "4", Signal = SignalState.Red }));
+        Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(blockId: "4", signal: SignalState.Red));
         fixture.Service.SetMaintenanceMode(true);
-        fixture.Service.ApplyManual(new()
-        {
-            BlockId = "4",
-            Signal = SignalState.Red
-        });
-        Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(new() { BlockId = "6", Switch = SwitchPosition.Reverse }));
-        Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(new() { BlockId = "4", Signal = SignalState.Green }));
+        fixture.Service.ApplyManual(blockId: "4",
+            signal: SignalState.Red);
+        Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(blockId: "6", switchPosition: SwitchPosition.Reverse));
+        Assert.Throws<InvalidOperationException>(() => fixture.Service.ApplyManual(blockId: "4", signal: SignalState.Green));
     }
 
     /// <summary>Verifies that paused clock stops but watchdog still runs.</summary>
@@ -489,11 +464,7 @@ public sealed class WaysideSafetyTests
     {
         var fixture = new Fixture(hardware);
         fixture.Clock.Advance(2);
-        fixture.Service.SetSimulation(new()
-        {
-            IsPaused = true,
-            SpeedMultiplier = 10
-        });
+        fixture.Service.SetSimulation(true, 10);
         double elapsed = fixture.Service.GetSnapshot().SimulationSeconds;
         fixture.Clock.Advance(6);
         Assert.AreEqual(elapsed, fixture.Service.GetSnapshot().SimulationSeconds);
@@ -507,11 +478,7 @@ public sealed class WaysideSafetyTests
     public void SetSimulation_SpeedMultiplier_ScalesClock(bool hardware)
     {
         var fixture = new Fixture(hardware);
-        fixture.Service.SetSimulation(new()
-        {
-            IsPaused = false,
-            SpeedMultiplier = 10
-        });
+        fixture.Service.SetSimulation(false, 10);
         double before = fixture.Service.GetSnapshot().SimulationSeconds;
         fixture.Clock.Advance(2);
         Assert.AreEqual(20d, fixture.Service.GetSnapshot().SimulationSeconds - before, 0.0001);
@@ -563,7 +530,39 @@ public sealed class WaysideSafetyTests
         Assert.AreEqual(100d, fixture.Output.AuthorizedAuthorityMeters);
         request.PathBlockIds.RemoveAt(request.PathBlockIds.Count - 1);
         Assert.Throws<ArgumentException>(() => fixture.Service.SubmitMovement(request));
-        CollectionAssert.AreEqual(new[] { "6", "7", "8" }, fixture.Output.PathBlockIds.ToArray());
+        CollectionAssert.AreEqual(new[] { "6", "7", "8" }, fixture.Output.Request!.PathBlockIds.ToArray());
+    }
+
+    /// <summary>Canceling a pending request releases its route association without retaining a separate history.</summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_CanceledRequest_AllowsNewRouteWithSameId(bool hardware)
+    {
+        var fixture = new Fixture(hardware);
+        var request = fixture.Request();
+        fixture.Submit(request);
+        request.IsActive = false;
+        fixture.Service.SubmitMovement(request);
+        Assert.IsEmpty(fixture.Service.GetSnapshot().Authorizations);
+
+        fixture.Feedback(rows =>
+        {
+            rows.Single(row => row.BlockId == "5").Occupancy = OccupancyState.Clear;
+            rows.Single(row => row.BlockId == "6").Occupancy = OccupancyState.Occupied;
+        });
+        request.IsActive = true;
+        request.TargetBlockId = "6";
+        request.EntryBlockId = "5";
+        request.PathBlockIds = ["7", "8"];
+        request.SuggestedAuthorityMeters = 200;
+        var output = fixture.Submit(request);
+
+        Assert.AreEqual(request.RequestId, output.Request!.RequestId);
+        Assert.AreEqual("6", output.Request!.TargetBlockId);
+        CollectionAssert.AreEqual(new[] { "7", "8" }, output.Request!.PathBlockIds.ToArray());
+        Assert.AreEqual(200d, output.AuthorizedAuthorityMeters);
+        Assert.IsGreaterThan(0d, output.AuthorizedSpeedMetersPerSecond);
     }
 
     /// <summary>Verifies that configuration copies do not share topology protection or ownership lists.</summary>
@@ -706,7 +705,7 @@ public sealed class WaysideSafetyTests
         fixture.Submit(request);
         request.PathBlockIds.Clear();
         request.SuggestedSpeedMetersPerSecond = 999;
-        Assert.HasCount(3, fixture.Output.PathBlockIds);
+        Assert.HasCount(3, fixture.Output.Request!.PathBlockIds);
         Assert.AreEqual(12d, fixture.Output.AuthorizedSpeedMetersPerSecond);
     }
 
@@ -744,7 +743,7 @@ public sealed class WaysideSafetyTests
     public void ApplyFeedback_InvalidBatch_DoesNotPartiallyApply(bool hardware)
     {
         var fixture = new Fixture(hardware);
-        Assert.Throws<ArgumentException>(() => fixture.Service.ApplyFeedback(new() { Blocks = [new() { BlockId = "5", ObservedAtUtc = fixture.Clock.Now.AddMilliseconds(1), Occupancy = OccupancyState.Clear }, new() { BlockId = "foreign", ObservedAtUtc = fixture.Clock.Now }] }));
+        Assert.Throws<ArgumentException>(() => fixture.Service.ApplyFeedback([new() { BlockId = "5", ObservedAtUtc = fixture.Clock.Now.AddMilliseconds(1), Occupancy = OccupancyState.Clear }, new() { BlockId = "foreign", ObservedAtUtc = fixture.Clock.Now }]));
         Assert.AreEqual(OccupancyState.Occupied, fixture.Service.GetSnapshot().Blocks.Single(blockStatus => blockStatus.BlockId == "5").Occupancy);
     }
 
@@ -760,48 +759,51 @@ public sealed class WaysideSafetyTests
         Assert.Throws<ArgumentException>(() => new TrackControllerService(configuration));
     }
 
-    /// <summary>Verifies that independent guard rejects excessive or misdirected output.</summary>
+    /// <summary>Rejects an unsupported authority reference at the public request boundary.</summary>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void IsSafe_ExcessiveOrMisdirectedAuthority_RejectsOutput(bool hardware)
+    public void SubmitMovement_UnsupportedAuthorityReference_RejectsRequest(bool hardware)
     {
         var fixture = new Fixture(hardware);
-        var authorization = fixture.Submit();
-        var snapshot = fixture.Service.GetSnapshot();
-        Assert.IsFalse(AuthorizationGuard.IsSafe(authorization with
-        {
-            AuthorityReference = "TrainFront"
-        }, snapshot.Blocks, fixture.Service.GetConfiguration()));
-        Assert.IsFalse(AuthorizationGuard.IsSafe(authorization with
-        {
-            AuthorizedAuthorityMeters = 5000
-        }, snapshot.Blocks, fixture.Service.GetConfiguration()));
-        Assert.IsFalse(AuthorizationGuard.IsSafe(authorization with
-        {
-            PathBlockIds = new[] { "6", "10", "11" }
-        }, snapshot.Blocks, fixture.Service.GetConfiguration()));
+        var request = fixture.Request();
+        request.AuthorityReference = "TrainFront";
+        Assert.Throws<ArgumentException>(() => fixture.Service.SubmitMovement(request));
+        Assert.IsEmpty(fixture.Service.GetSnapshot().Authorizations);
     }
 
     /// <summary>Verifies that boolean parser honors precedence and rejects host code.</summary>
     [TestMethod]
     public void Compile_BooleanExpressions_RespectsPrecedenceAndRejectsHostCode()
     {
-        var program = BooleanPlcProgram.Compile(LegacyPlc.Replace("allow_route = route_safe and running", "allow_route = false or route_safe and not running"));
-        var result = program.Execute(new Dictionary<string, bool> { ["route_safe"] = true, ["switch_safe"] = true, ["requested_normal"] = true, ["crossing_required"] = false, ["running"] = false });
-        Assert.IsTrue(result["allow_route"]);
+        string source = System.Text.RegularExpressions.Regex.Replace(PiRuntimeTests.ProgramSource,
+            "^allow_route = [^\\r\\n]*", "allow_route = running or maintenance and not block_clear", System.Text.RegularExpressions.RegexOptions.Multiline);
+        var program = VitalPlcProgram.Compile(source);
+        var inputs = VitalPlcProgram.BooleanInputs.ToDictionary(name => name, _ => new[] { false });
+        foreach (string name in VitalPlcProgram.WordInputs)
+        {
+            inputs[name] = new bool[VitalPlcProgram.Width];
+        }
+        for (int combination = 0; combination < 8; combination++)
+        {
+            bool running = (combination & 1) != 0, maintenance = (combination & 2) != 0, clear = (combination & 4) != 0;
+            inputs["running"] = [running];
+            inputs["maintenance"] = [maintenance];
+            inputs["block_clear"] = [clear];
+            Assert.AreEqual(running || (maintenance && !clear), program.Execute(inputs)["allow_route"][0]);
+        }
         foreach (string bad in new[]
         {
-            "allow_route = System.IO.File.Delete(\"file\")",
-            "allow_route = 1",
-            "allow_route = missing",
-            LegacyPlc + "\nallow_route = true",
-            LegacyPlc.Replace("route_safe and running", new string ('!', 40) + "true")
+            "probe = System.IO.File.Delete(\"file\")\n" + source,
+            "probe = 1\n" + source,
+            "probe = missing\n" + source,
+            source + "\nallow_route = true",
+            "probe = " + string.Concat(Enumerable.Repeat("not ", 40)) + "true\n" + source
         }
 
         )
         {
-            Assert.Throws<ArgumentException>(() => BooleanPlcProgram.Compile(bad));
+            Assert.Throws<ArgumentException>(() => VitalPlcProgram.Compile(bad));
         }
     }
 

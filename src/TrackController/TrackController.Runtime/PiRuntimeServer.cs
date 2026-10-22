@@ -7,7 +7,7 @@ using TrainControl.Common.Communication;
 
 namespace TrackController.Runtime;
 
-/// <summary>One controller owner per connection. Disconnect/timeout ends that session; reconnect starts paused.</summary>
+/// <summary>Pi-side listener that passes PC inputs to the local controller logic and sends results back. Disconnect/timeout ends the session; reconnect starts paused.</summary>
 public sealed class PiRuntimeServer : IAsyncDisposable
 {
     private readonly TcpListener _listener;
@@ -76,7 +76,7 @@ public sealed class PiRuntimeServer : IAsyncDisposable
                     first.CancelAfter(3000);
                     if (!owns)
                     {
-                        await protocol.WriteAsync(RuntimeMessages.CreateRejection(nameof(PiSessionStart), "Pi is already assigned to another controller session. Disconnect it before switching live/test deployments."), first.Token);
+                        await protocol.WriteAsync(new WaysideAcknowledgementMessage(false, "Pi is already assigned to another controller session. Disconnect it before switching live/test deployments.", nameof(PiSessionStart)), first.Token);
                         return;
                     }
 
@@ -103,11 +103,11 @@ public sealed class PiRuntimeServer : IAsyncDisposable
                         object response;
                         if (input.MessageType is nameof(WaysideConfigurationMessage) or nameof(PiSessionStart))
                         {
-                            response = RuntimeMessages.CreateRejection(input.MessageType, "Territory ownership is fixed for this connection. Load a deployment to start a new session.");
+                            response = new WaysideAcknowledgementMessage(false, "Territory ownership is fixed for this connection. Load a deployment to start a new session.", input.MessageType);
                         }
-                        else if (input.MessageType == nameof(WaysideControllerModeMessage) && !MessageSerializer.DeserializePayload<WaysideControllerModeMessage>(input).IsHardwareMode)
+                        else if (input.MessageType == "SetControllerMode" && !MessageSerializer.ReadValue<bool>(input, "hardwareMode"))
                         {
-                            response = RuntimeMessages.CreateRejection(input.MessageType, "The Pi runs its assigned PLC program. Software-only mode is available in the standalone controller.");
+                            response = new WaysideAcknowledgementMessage(false, "The Pi runs its assigned PLC program. Software-only mode is available in the standalone controller.", input.MessageType);
                         }
                         else
                         {
@@ -130,7 +130,7 @@ public sealed class PiRuntimeServer : IAsyncDisposable
                     if (runtime is not null)
                     {
                         await runtime.DisposeAsync();
-                        SnapshotProduced?.Invoke(UnavailableOutput.CreateStopSnapshot(runtime.LatestSnapshot, "PC connection ended. Awaiting a new paused session."));
+                        SnapshotProduced?.Invoke(runtime.LatestSnapshot.CreateStopSnapshot("PC connection ended. Awaiting a new paused session."));
                     }
 
                     if (owns)

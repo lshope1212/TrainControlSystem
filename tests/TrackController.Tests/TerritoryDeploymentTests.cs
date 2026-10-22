@@ -1,3 +1,4 @@
+using TrainControl.Common.Communication;
 using System.Text.Json.Nodes;
 using System.Text.Json;
 using TrackController.Contracts.Messages;
@@ -89,7 +90,7 @@ public sealed class TerritoryDeploymentTests
         {
             var service = new TrackControllerService(territory.Configuration);
             service.LoadPlc(plan.ProgramName, plan.ProgramSource);
-            return new TerritoryRuntimeRouter.Entry(territory.Configuration, "Local", new LocalWaysideRuntime(service));
+            return (Configuration: territory.Configuration, Execution: "Local", Runtime: (IWaysideRuntime)new LocalWaysideRuntime(service), Name: (string?)null);
         }).ToArray();
         await using var router = new TerritoryRuntimeRouter("Shared", entries);
         var feedback = PiRuntimeTests.Clear(plan.Territories[0].Configuration, "4");
@@ -105,7 +106,7 @@ public sealed class TerritoryDeploymentTests
         west = await entries[0].Runtime.PollAsync();
         Assert.AreEqual(OccupancyState.Clear, west.NeighborObservations.Single().Occupancy);
         Assert.IsEmpty(west.Authorizations);
-        var unavailable = UnavailableOutput.CreateStopSnapshot(west, "Lost");
+        var unavailable = west.CreateStopSnapshot("Lost");
         Assert.IsFalse(unavailable.NeighborObservations.Single().IsFresh);
     }
 
@@ -130,7 +131,7 @@ public sealed class TerritoryDeploymentTests
         )
         {
             Assert.IsTrue((await PiRuntimeTests.Send(runtime, PiRuntimeTests.Clear(plan.Territories[0].Configuration))).IsAccepted);
-            Assert.IsTrue((await PiRuntimeTests.Send(runtime, new WaysideSimulationMessage { IsPaused = false })).IsAccepted);
+            Assert.IsTrue((await PiRuntimeTests.Send(runtime, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }))).IsAccepted);
             Assert.IsTrue((await PiRuntimeTests.Send(runtime, PiRuntimeTests.Movement())).IsAccepted);
             Assert.AreEqual(365.76, (await runtime.PollAsync()).Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
         }
@@ -190,7 +191,7 @@ public sealed class TerritoryDeploymentTests
         var config = plan.Territories[1].Configuration;
         await using var remote = new PiWaysideRuntime("127.0.0.1", server.Port, config, plan.ProgramName, plan.ProgramSource);
         var feedback = PiRuntimeTests.Clear(config, "3");
-        feedback.Blocks = feedback.Blocks.Where(feedback => int.Parse(feedback.BlockId) >= 3).ToList();
+        feedback = feedback.Where(feedback => int.Parse(feedback.BlockId) >= 3).ToList();
         Assert.IsTrue((await PiRuntimeTests.Send(remote, feedback)).IsAccepted);
         var snapshot = await remote.PollAsync();
         Assert.HasCount(9, snapshot.Blocks);
@@ -250,7 +251,7 @@ public sealed class TerritoryDeploymentTests
         {
             AutoFlush = true
         };
-        await writer.WriteLineAsync(TrainControl.Common.Communication.MessageSerializer.Serialize(new WaysideSnapshotRequest()));
+        await writer.WriteLineAsync(TrainControl.Common.Communication.MessageSerializer.Serialize(MessageSerializer.CreateEnvelope("GetSnapshot", new { })));
         await rejected.Task.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.IsNull(await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(3)));
         await using var remote = new PiWaysideRuntime("127.0.0.1", server.Port, plan.Territories[1].Configuration, plan.ProgramName, plan.ProgramSource);

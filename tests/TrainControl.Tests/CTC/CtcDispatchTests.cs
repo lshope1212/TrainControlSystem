@@ -60,6 +60,10 @@ public class CtcDispatchTests
         var request = (MovementRequestMessage)sender.SentMessages[1];
 
         Assert.AreEqual("000", suggestion.TrainId);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(suggestion.RequestId));
+        Assert.AreEqual("A1", suggestion.TargetBlockId);
+        Assert.IsNotEmpty(suggestion.PathBlockIds);
+        Assert.AreEqual(MovementSuggestionMessage.BlockEntryReference, suggestion.AuthorityReference);
         Assert.AreEqual(12.5, suggestion.SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(500.0, suggestion.SuggestedAuthorityMeters);
         Assert.AreEqual("000", request.TrainId);

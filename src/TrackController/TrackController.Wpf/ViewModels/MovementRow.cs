@@ -1,27 +1,25 @@
-using System.Globalization;
 using TrackController.Contracts.Messages;
-using TrainControl.Contracts.Enums;
 
 namespace TrackController.Wpf.ViewModels;
 
-/// <summary>Presents one authorization with display units and stale-output handling.</summary>
-public sealed record MovementRow(WaysideAuthorization Value, bool IsCurrent = true)
+/// <summary>Presents one authorization using the operator window's display units.</summary>
+public sealed record MovementRow(WaysideBlockStatus Value)
 {
-    public string Train => string.IsNullOrWhiteSpace(Value.TrainId) ? "—" : Value.TrainId;
+    public string Train => string.IsNullOrWhiteSpace(Value.Request!.TrainId) ? "—" : Value.Request!.TrainId;
 
-    public string Target => Value.TargetBlockId;
+    public string Target => Value.Request!.TargetBlockId;
 
-    public string Path => string.Join(" → ", Value.PathBlockIds);
+    public string Path => string.Join(" → ", Value.Request!.PathBlockIds);
 
-    public string SuggestedSpeed => DisplayUnits.FormatMph(Value.SuggestedSpeedMetersPerSecond);
+    public string SuggestedSpeed => DisplayUnits.FormatMph(Value.Request!.SuggestedSpeedMetersPerSecond);
 
-    public string RequestedAuthority => DisplayUnits.FormatFeet(Value.SuggestedAuthorityMeters);
+    public string RequestedAuthority => DisplayUnits.FormatFeet(Value.Request!.SuggestedAuthorityMeters);
 
-    public string AuthorizedSpeed => IsCurrent ? DisplayUnits.FormatMph(Value.AuthorizedSpeedMetersPerSecond) : "—";
+    public string AuthorizedSpeed => DisplayUnits.FormatMph(Value.AuthorizedSpeedMetersPerSecond);
 
-    public string AuthorizedAuthority => IsCurrent ? DisplayUnits.FormatFeet(Value.AuthorizedAuthorityMeters) : "—";
+    public string AuthorizedAuthority => DisplayUnits.FormatFeet(Value.AuthorizedAuthorityMeters);
 
-    public string Status => IsCurrent ? Value.Status : "Unavailable";
+    public string Status => Value.MovementStatus;
 
-    public string Reason => IsCurrent ? Value.Reason : "Controller output unavailable.";
+    public string Reason => Value.MovementReason;
 }

@@ -19,20 +19,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     private readonly WaysideTestConnection _testConnection;
     private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
-    private static readonly WaysideSnapshotMessage NoTestOutput = new("HW-TC01", "No line loaded", DateTimeOffset.MinValue, DateTimeOffset.MinValue, 0, true, 1, true, false, "Waiting for controller output", "No output received.", [], []);
+    private static readonly WaysideSnapshotMessage NoTestOutput = new("HW-TC01", "No line loaded", DateTimeOffset.MinValue, DateTimeOffset.MinValue, 0, true, 1, true, false, "Waiting for controller output", "No output received.", []);
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher;
     private DateTimeOffset _lastHeartbeat;
     private string _status = "Start TrackController.Wpf and configure its layout. This window simulates CTC and Track Model inputs.";
-    private string _selectedBlockId = "5";
     private WaysideSnapshotMessage _snapshot = null!;
     private IReadOnlyList<MovementRow> _movements = [];
     private IReadOnlyList<EquipmentRow> _equipment = [];
     private string[] _blockIds = [], _switchIds = [], _signalIds = [], _crossingIds = [];
     private bool _disposed;
     private bool _keepCurrent = true;
-    private WaysideFeedbackMessage? _appliedFeedback;
-    private WaysideMovementRequestMessage? _appliedRequest;
+    private List<TrackModelBlockStateMessage>? _appliedFeedback;
+    private MovementSuggestionMessage? _appliedRequest;
 
     /// <summary>Connects simulated peers to the same pipes used by the real modules.</summary>
     public MainWindowViewModel(string? inputPipe = null, string? ctcOutput = null, string? trackModelOutput = null)
@@ -142,18 +141,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     public string[] SignalIds => _signalIds;
 
     public string[] CrossingIds => _crossingIds;
-
-    public string SelectedBlockId
-    {
-        get => _selectedBlockId;
-        set
-        {
-            if (SetProperty(ref _selectedBlockId, value))
-            {
-
-            }
-        }
-    }
 
     public bool ShouldRepeatInputs
     {
@@ -266,7 +253,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
                 return "No current controller output. Check the pipe connection.";
             }
 
-            var movement = _appliedRequest is { } request ? Movements.SingleOrDefault(row => row.Value.RequestId == request.RequestId) : Movements.LastOrDefault();
+            var movement = _appliedRequest is { } request ? Movements.SingleOrDefault(row => row.Value.Request!.RequestId == request.RequestId) : Movements.LastOrDefault();
             return movement is not null ? $"Block {movement.Target}: {movement.Status} — {movement.AuthorizedSpeed} mph / route limit {movement.AuthorizedAuthority} ft\n{movement.Reason}" : _appliedRequest is not null ? "Waiting for the controller response to the updated movement request." : "No movement requests in controller output.";
         }
     }
@@ -324,17 +311,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             return;
         }
 
-        await SendAsync(new WaysideMovementRequestMessage { RequestId = request.RequestId, TargetBlockId = request.TargetBlockId, IsActive = false });
+        await SendAsync(new MovementSuggestionMessage { RequestId = request.RequestId, TargetBlockId = request.TargetBlockId, IsActive = false });
         SetAppliedRequest(null);
         MovementProgress = "Movement cancelled. Occupancy changes will not send another request until you select Send movement request.";
         Status = $"Cancellation sent for the last movement from block {request.TargetBlockId}. Its repeats have stopped. Other requests are unaffected.";
     }
 
-    private void SetAppliedRequest(WaysideMovementRequestMessage? request)
+    private void SetAppliedRequest(MovementSuggestionMessage? request)
     {
         _appliedRequest = request;
-        _movementOriginObserved = request is not null && _appliedFeedback?.Blocks.Any(block => block.BlockId == request.TargetBlockId && block.Occupancy == OccupancyState.Occupied) == true;
-        _nextBlockObservedClear = request is not null && _appliedFeedback?.Blocks.Any(block => block.BlockId == request.PathBlockIds.FirstOrDefault() && block.Occupancy == OccupancyState.Clear) == true;
+        _movementOriginObserved = request is not null && _appliedFeedback?.Any(block => block.BlockId == request.TargetBlockId && block.Occupancy == OccupancyState.Occupied) == true;
+        _nextBlockObservedClear = request is not null && _appliedFeedback?.Any(block => block.BlockId == request.PathBlockIds.FirstOrDefault() && block.Occupancy == OccupancyState.Clear) == true;
         if (request is null)
         {
             MovementProgress = "Send a movement request to start following its route.";
@@ -376,7 +363,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
                 {
                     if (_appliedFeedback is not null)
                     {
-                        await ApplyLatchedFeedbackAsync();
+                        foreach (var feedback in _appliedFeedback)
+                        {
+                            feedback.ObservedAtUtc = DateTimeOffset.UtcNow;
+                        }
+                        await SendAsync(_appliedFeedback, announce: false);
                     }
 
                     if (_appliedRequest is not null && !HasMovementOriginCleared)
@@ -413,15 +404,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         {
             Status = message switch
             {
-                WaysideFeedbackMessage => "Track feedback sent. Waiting for the controller response.",
-                WaysideMovementRequestMessage request => request.IsActive ? "Movement request sent. Check Controller response for the decision." : "Movement cancellation sent.",
-                WaysideSimulationMessage simulation => simulation.IsPaused ? "Pause requested." : "Resume requested. Check the simulation status above.",
+                IReadOnlyList<TrackModelBlockStateMessage> => "Track feedback sent. Waiting for the controller response.",
+                MovementSuggestionMessage request => request.IsActive ? "Movement request sent. Check Controller response for the decision." : "Movement cancellation sent.",
+                MessageEnvelope { MessageType: "SetSimulation" } simulation => MessageSerializer.ReadValue<bool>(simulation, "paused") ? "Pause requested." : "Resume requested. Check the simulation status above.",
                 SwitchPositionRequestMessage => "Switch request sent. Report the actual switch position separately.",
                 MaintenanceRequestMessage => "Block closure request sent. Check the block status for the result.",
-                WaysideManualCommandMessage => "Manual command sent. Equipment feedback must confirm the change.",
-                WaysideMaintenanceModeMessage => "Maintenance mode change sent.",
-                WaysideControllerModeMessage => "Controller logic change sent.",
-                WaysidePlcProgramMessage => "PLC program sent. Check Controller setup for its status before resuming.",
+                MessageEnvelope { MessageType: "ApplyManual" } => "Manual command sent. Equipment feedback must confirm the change.",
+                MessageEnvelope { MessageType: "SetMaintenanceMode" } => "Maintenance mode change sent.",
+                MessageEnvelope { MessageType: "SetControllerMode" } => "Controller logic change sent.",
+                MessageEnvelope { MessageType: "LoadPlc" } => "PLC program sent. Check Controller setup for its status before resuming.",
                 _ => "Input sent. Waiting for the controller response."
             };
         }

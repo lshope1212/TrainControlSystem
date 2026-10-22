@@ -8,7 +8,7 @@ The original **PLC program** option was only a local preview. To execute on hard
 
 The Pi executes the assigned `plc boolean_v1` source with the same scalar Boolean interpreter as Windows. The program evaluates the interlocks and calculates commanded speed and authority through explicit AND/OR/NOT equations in the PLC file. C# handles I/O, unit encoding/decoding, clocks, and an independent unsafe-output veto. It does not precompute the normal movement decision for the PLC.
 
-The [PLC language contract](../TrackController.Core/Control/README.md) explains the inputs, output bits, fixed-point representation and scan sequence. Select **PLC territory → Advanced → Replace selected PLC…** while paused to assign a program, then save applied choices to retain it. The source is uploaded when establishing each Pi session. Old permission-only PLC files are rejected. Rebuild/redeploy the Pi package for protocol version 6.
+The [PLC language contract](../TrackController.Core/Control/README.md) explains the inputs, output bits, fixed-point representation and scan sequence. Select **PLC territory → Advanced → Replace selected PLC…** while paused to assign a program, then save applied choices to retain it. The source is uploaded when establishing each Pi session. Old permission-only PLC files are rejected. Rebuild/redeploy the Pi package for protocol version 8.
 
 ## Recommended connection at school
 
@@ -91,7 +91,7 @@ Keep this terminal open too. It forwards `127.0.0.1:11405` on Windows to the Pi'
 8. To demonstrate local execution, use a clear preset, report block 1 occupied in the Blocks editor, send feedback, and submit a request from 1 over `2, 3` with a distinct train label. The PC evaluates it. One request must stay within its assigned territory.
 9. Disconnect the SSH tunnel. The Pi territory becomes unavailable and its last authorizations become zero. The LED monitor treats expired outputs as stopped. Reconnect: the Pi session starts paused, with no old requests or feedback. Send fresh feedback and explicitly resume. If the PC territory is still running, select **Pause**, then **Resume** to resume both together.
 
-Each Pi runtime permits one owner at a time. The external Test UI talks to the existing PC controller; it does not open a second Pi session. Use a separate runtime and tunnel port for each independent Pi territory. This deployment uses protocol version 6; update the Pi package alongside Windows when replacing an older version.
+Each Pi runtime permits one owner at a time. The external Test UI talks to the existing PC controller; it does not open a second Pi session. Use a separate runtime and tunnel port for each independent Pi territory. This deployment uses protocol version 8; update the Pi package alongside Windows when replacing an older version.
 
 Local testing without a Pi is also possible: run `TrackController.Pi` on Windows as a second application, then load the same deployment with no SSH tunnel. This verifies the network/runtime path, but it is not hardware validation.
 

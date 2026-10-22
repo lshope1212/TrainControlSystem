@@ -1,7 +1,9 @@
+using TrainControl.Contracts.Messages;
 using TrackController.Contracts.Messages;
 using TrackController.Core.Models;
 using TrackController.Core.Services;
 using TrackController.Runtime;
+using TrainControl.Common.Communication;
 using TrainControl.Contracts.Enums;
 
 namespace TrackController.Tests;
@@ -12,12 +14,9 @@ public sealed class PiRuntimeTests
 {
     internal static string ProgramSource => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "PiSamples", "wayside.plc"));
 
-    internal static WaysideFeedbackMessage Clear(WaysideConfigurationMessage configuration, string occupied = "5") => new()
-    {
-        Blocks = configuration.Blocks.Select(blockDefinition => new WaysideBlockFeedback { BlockId = blockDefinition.BlockId, ObservedAtUtc = DateTimeOffset.UtcNow, Occupancy = blockDefinition.BlockId == occupied ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList()
-    };
+    internal static List<TrackModelBlockStateMessage> Clear(WaysideConfigurationMessage configuration, string occupied = "5") => configuration.Blocks.Select(blockDefinition => new TrackModelBlockStateMessage { BlockId = blockDefinition.BlockId, ObservedAtUtc = DateTimeOffset.UtcNow, Occupancy = blockDefinition.BlockId == occupied ? OccupancyState.Occupied : OccupancyState.Clear, Signal = SignalState.Green, Switch = SwitchPosition.Normal, Crossing = CrossingState.Closed, IsReservedByCtc = false }).ToList();
 
-    internal static WaysideMovementRequestMessage Movement(string target = "5", params string[] path) => new()
+    internal static MovementSuggestionMessage Movement(string target = "5", params string[] path) => new()
     {
         RequestId = Guid.NewGuid().ToString("N"),
         TrainId = "Train 101",
@@ -29,7 +28,8 @@ public sealed class PiRuntimeTests
 
     internal static async Task<WaysideAcknowledgementMessage> Send(IWaysideRuntime runtime, object message)
     {
-        var result = await runtime.ReceiveAsync(RuntimeMessages.CreateEnvelope(message));
+        if (message is IReadOnlyList<TrackModelBlockStateMessage> blocks) message = MessageSerializer.CreateEnvelope("TrackModelBlockStates", new { blocks });
+        var result = await runtime.ReceiveAsync(MessageSerializer.Deserialize(MessageSerializer.Serialize(message)));
         return (WaysideAcknowledgementMessage)result;
     }
 
@@ -60,19 +60,20 @@ public sealed class PiRuntimeTests
         )
         {
             var feedback = Clear(config);
-            feedback.Blocks.ForEach(block => block.Signal = SignalState.SuperGreen);
-            Assert.IsTrue((await Send(runtime, feedback)).IsAccepted);
-            Assert.IsTrue((await Send(runtime, new WaysideSimulationMessage { IsPaused = false })).IsAccepted);
+            feedback.ForEach(block => block.Signal = SignalState.SuperGreen);
+            foreach (var block in feedback)
+                Assert.IsTrue((await Send(runtime, block)).IsAccepted);
+            Assert.IsTrue((await Send(runtime, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }))).IsAccepted);
             Assert.IsTrue((await Send(runtime, request)).IsAccepted);
         }
 
         var actual = await remote.PollAsync();
         var expected = await local.PollAsync();
         Assert.AreEqual(365.76, actual.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
-        Assert.AreEqual(WaysideMovementRequestMessage.BlockEntryReference, actual.Authorizations.Single().AuthorityReference);
+        Assert.AreEqual(MovementSuggestionMessage.BlockEntryReference, actual.Authorizations.Single().Request!.AuthorityReference);
         Assert.IsTrue(actual.Blocks.Where(block => block.HasSignal).All(block => block.ReportedSignal == SignalState.SuperGreen));
         Assert.AreEqual(expected.Authorizations.Single().AuthorizedSpeedMetersPerSecond, actual.Authorizations.Single().AuthorizedSpeedMetersPerSecond);
-        Assert.AreEqual(expected.Authorizations.Single().Status, actual.Authorizations.Single().Status);
+        Assert.AreEqual(expected.Authorizations.Single().MovementStatus, actual.Authorizations.Single().MovementStatus);
         Assert.IsTrue(actual.Blocks.All(blockStatus => blockStatus.IsFresh));
         Assert.IsTrue(actual.ValidUntilUtc > DateTimeOffset.UtcNow);
         Assert.IsTrue(actual.ValidUntilUtc <= DateTimeOffset.UtcNow.AddSeconds(1.5));
@@ -90,7 +91,7 @@ public sealed class PiRuntimeTests
         try
         {
             await Send(remote, Clear(config));
-            await Send(remote, new WaysideSimulationMessage { IsPaused = false });
+            await Send(remote, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }));
             await Send(remote, Movement());
             Assert.AreEqual(365.76, (await remote.PollAsync()).Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
             await server.DisposeAsync();
@@ -126,7 +127,7 @@ public sealed class PiRuntimeTests
         await first.PollAsync();
         var busy = await second.PollAsync();
         StringAssert.Contains(busy.PlcStatus, "already assigned");
-        Assert.IsFalse((await Send(first, new WaysideControllerModeMessage { IsHardwareMode = false })).IsAccepted);
+        Assert.IsFalse((await Send(first, MessageSerializer.CreateEnvelope("SetControllerMode", new { hardwareMode = false }))).IsAccepted);
         Assert.IsTrue((await first.PollAsync()).IsHardwareMode);
     }
 
@@ -140,28 +141,25 @@ public sealed class PiRuntimeTests
         var hardware = Section("HW", "4", "5", "6");
         var local = Local(software);
         var remote = new PiWaysideRuntime("127.0.0.1", server.Port, hardware, "wayside.plc", ProgramSource);
-        await using var router = new TerritoryRuntimeRouter("Both", [new(software, "Local", local), new(hardware, "Pi", remote)]);
-        var combined = new WaysideFeedbackMessage
-        {
-            Blocks = Clear(software, "1").Blocks.Concat(Clear(hardware, "4").Blocks).ToList()
-        };
+        await using var router = new TerritoryRuntimeRouter("Both", [(software, "Local", local, null), (hardware, "Pi", remote, null)]);
+        var combined = Clear(software, "1").Concat(Clear(hardware, "4")).ToList();
         Assert.IsTrue((await Send(router, combined)).IsAccepted);
         Assert.IsTrue((await router.PollAsync()).Blocks.All(blockStatus => blockStatus.IsFresh));
-        Assert.IsTrue((await Send(router, new WaysideSimulationMessage { IsPaused = false })).IsAccepted);
+        Assert.IsTrue((await Send(router, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }))).IsAccepted);
         Assert.IsTrue((await Send(router, Movement("1", "2", "3"))).IsAccepted);
         Assert.IsEmpty((await remote.PollAsync()).Authorizations, "The PC request must not be duplicated on the Pi.");
         Assert.IsTrue((await Send(router, Movement("4", "5", "6"))).IsAccepted);
         Assert.HasCount(1, (await local.PollAsync()).Authorizations);
         Assert.HasCount(1, (await remote.PollAsync()).Authorizations);
         Assert.IsFalse((await Send(router, Movement("3", "4"))).IsAccepted);
-        combined.Blocks[0].Occupancy = OccupancyState.Unknown;
-        combined.Blocks.Add(new()
+        combined[0].Occupancy = OccupancyState.Unknown;
+        combined.Add(new()
         {
             BlockId = "unowned"
         });
         Assert.IsFalse((await Send(router, combined)).IsAccepted);
         Assert.AreEqual(OccupancyState.Occupied, (await local.PollAsync()).Blocks[0].Occupancy, "Reject the entire invalid batch before forwarding any part.");
-        Assert.IsFalse((await Send(router, new WaysideControllerModeMessage { IsHardwareMode = false })).IsAccepted);
+        Assert.IsFalse((await Send(router, MessageSerializer.CreateEnvelope("SetControllerMode", new { hardwareMode = false }))).IsAccepted);
     }
 
     /// <summary>Verifies that shared program replacement pauses both targets and withholds movement.</summary>
@@ -172,9 +170,9 @@ public sealed class PiRuntimeTests
         server.Start();
         var software = Section("SW", "1", "2");
         var hardware = Section("HW", "4", "5");
-        await using var router = new TerritoryRuntimeRouter("Both", [new(software, "Local", Local(software)), new(hardware, "Pi", new PiWaysideRuntime("127.0.0.1", server.Port, hardware, "wayside.plc", ProgramSource))]);
+        await using var router = new TerritoryRuntimeRouter("Both", [(software, "Local", Local(software), null), (hardware, "Pi", new PiWaysideRuntime("127.0.0.1", server.Port, hardware, "wayside.plc", ProgramSource), null)]);
         await router.PollAsync();
-        var result = await Send(router, new WaysidePlcProgramMessage { Name = "deny.plc", Source = ProgramSource.Replace("allow_route = movement_enabled", "allow_route = false") });
+        var result = await Send(router, MessageSerializer.CreateEnvelope("LoadPlc", new { name = "deny.plc", source = ProgramSource.Replace("allow_route = movement_enabled", "allow_route = false") }));
         Assert.IsTrue(result.IsAccepted);
         var snapshot = await router.PollAsync();
         Assert.IsTrue(snapshot.IsPaused);
@@ -186,7 +184,7 @@ public sealed class PiRuntimeTests
     public void Load_DuplicateOwnersOrNonLoopbackHost_RejectsDeployment()
     {
         var config = Section("A", "1");
-        Assert.ThrowsExactly<ArgumentException>(() => new TerritoryRuntimeRouter("Bad", [new(config, "Local", Local(config)), new(config, "Local", Local(config))]));
+        Assert.ThrowsExactly<ArgumentException>(() => new TerritoryRuntimeRouter("Bad", [(config, "Local", Local(config), null), (config, "Local", Local(config), null)]));
         Assert.ThrowsExactly<ArgumentException>(() => new PiWaysideRuntime("192.168.50.2", 11405, config, "wayside.plc", ProgramSource));
     }
 
@@ -207,7 +205,7 @@ public sealed class PiRuntimeTests
         var config = WaysideConfiguration.CreateDemo();
         await using var remote = new PiWaysideRuntime("127.0.0.1", server.Port, config, "wayside.plc", ProgramSource);
         await Send(remote, Clear(config));
-        await Send(remote, new WaysideSimulationMessage { IsPaused = false });
+        await Send(remote, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }));
         await Send(remote, Movement());
         Assert.AreEqual(365.76, (await remote.PollAsync()).Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
         var lost = await stopped.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -228,7 +226,7 @@ public sealed class PiRuntimeTests
         try
         {
             await remote.PollAsync();
-            Assert.IsFalse((await Send(remote, new WaysidePlcProgramMessage { Name = "invalid.plc", Source = "allow_route = missing_variable" })).IsAccepted);
+            Assert.IsFalse((await Send(remote, MessageSerializer.CreateEnvelope("LoadPlc", new { name = "invalid.plc", source = "allow_route = missing_variable" }))).IsAccepted);
             await server.DisposeAsync();
             server = new PiRuntimeServer(port);
             server.Start();

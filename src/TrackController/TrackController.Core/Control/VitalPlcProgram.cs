@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace TrackController.Core.Control;
 
-/// <summary>Strict scalar Boolean PLC interpreter. Only explicit AND, OR and NOT equations are accepted.</summary>
+/// <summary>Compiles and executes Boolean PLC programs and converts their fixed-point numeric inputs and outputs.</summary>
 public sealed class VitalPlcProgram
 {
     public static readonly string[] BooleanInputs =
@@ -23,6 +23,9 @@ public sealed class VitalPlcProgram
     ];
     private static readonly string[] WordOutputs = ["route_distance", "route_remaining", "route_speed", "authorized_speed", "authorized_authority"];
     public const int MaximumSourceBytes = 262_144;
+    // Numeric PLC words use fixed point; bit zero is least significant.
+    public const int Width = 48;
+    public const double Scale = 1_000_000;
     private sealed record Port(string Name, int[] Slots);
     private readonly Port[] _inputs;
     private readonly Port[] _outputs;
@@ -50,7 +53,7 @@ public sealed class VitalPlcProgram
         {
             bool single = BooleanInputs.Contains(name);
             var slots = new List<int>();
-            for (int bit = 0; bit < (single ? 1 : PlcBits.Width); bit++)
+            for (int bit = 0; bit < (single ? 1 : Width); bit++)
             {
                 string input = single ? name : $"{name}_{bit:00}";
                 slots.Add(known.Count);
@@ -101,7 +104,7 @@ public sealed class VitalPlcProgram
         {
             bool single = BooleanOutputs.Contains(name);
             var slots = new List<int>();
-            for (int bit = 0; bit < (single ? 1 : PlcBits.Width); bit++)
+            for (int bit = 0; bit < (single ? 1 : Width); bit++)
             {
                 string output = single ? name : $"{name}_{bit:00}";
                 if (!known.TryGetValue(output, out int slot))
@@ -135,6 +138,41 @@ public sealed class VitalPlcProgram
             values[slot] = evaluate(values);
         }
         return _outputs.ToDictionary(port => port.Name, port => port.Slots.Select(slot => values[slot]).ToArray(), StringComparer.Ordinal);
+    }
+
+    /// <summary>Encodes a nonnegative external SI value, rounding downward at one-millionth resolution.</summary>
+    public static bool[] Encode(double value)
+    {
+        double scaled = value * Scale;
+        if (!double.IsFinite(value) || value < 0 || scaled > (1UL << Width) - 1)
+        {
+            throw new ArgumentException("PLC fixed-point input is outside its 48-bit range.");
+        }
+
+        ulong units = (ulong)Math.Floor(scaled);
+        if (units / Scale > value && units > 0)
+        {
+            units--;
+        }
+        return Enumerable.Range(0, Width).Select(bit => (units & (1UL << bit)) != 0).ToArray();
+    }
+
+    /// <summary>Decodes PLC output bits into the existing external SI contract.</summary>
+    public static double Decode(bool[] bits)
+    {
+        if (bits.Length != Width)
+        {
+            throw new ArgumentException("Expected a 48-bit PLC word.");
+        }
+        ulong units = 0;
+        for (int bit = 0; bit < Width; bit++)
+        {
+            if (bits[bit])
+            {
+                units |= 1UL << bit;
+            }
+        }
+        return units / Scale;
     }
 
     private sealed class Parser(string source, Dictionary<string, int> known, int line)

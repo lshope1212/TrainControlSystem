@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Messages;
 using TrackController.Contracts.Messages;
 using TrainControl.Contracts.Enums;
 
@@ -279,7 +280,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task SendMovementAsync()
     {
-        var request = new WaysideMovementRequestMessage
+        var request = new MovementSuggestionMessage
         {
             RequestId = Guid.NewGuid().ToString("N"),
             TrainId = TrainLabel,
@@ -291,16 +292,12 @@ public sealed partial class MainWindowViewModel
         };
         await SendAsync(request);
         SetAppliedRequest(request);
-        SelectedBlockId = TargetBlock;
         MovementProgress = $"Following the last sent route from block {request.TargetBlockId}. Send feedback as occupancy moves to its next block.";
     }
 
     private async Task ApplyFeedbackAsync()
     {
-        var message = new WaysideFeedbackMessage
-        {
-            Blocks = FeedbackRows.Select(row => new WaysideBlockFeedback { BlockId = row.BlockId, ObservedAtUtc = DateTimeOffset.UtcNow, Occupancy = row.Occupancy, IsFaulted = row.IsFaulted, IsReservedByCtc = row.IsReserved, Signal = row.BlockId == FeedbackSignal ? ReportedSignal : row.Signal, Switch = row.BlockId == FeedbackSwitch ? ReportedSwitch : row.Switch, Crossing = row.BlockId == FeedbackCrossing ? ReportedCrossing : row.Crossing }).ToList()
-        };
+        var message = FeedbackRows.Select(row => new TrackModelBlockStateMessage { BlockId = row.BlockId, ObservedAtUtc = DateTimeOffset.UtcNow, Occupancy = row.Occupancy, BrokenRail = row.IsFaulted, IsReservedByCtc = row.IsReserved, Signal = row.BlockId == FeedbackSignal ? ReportedSignal : row.Signal, Switch = row.BlockId == FeedbackSwitch ? ReportedSwitch : row.Switch, Crossing = row.BlockId == FeedbackCrossing ? ReportedCrossing : row.Crossing }).ToList();
         await SendAsync(message);
         _appliedFeedback = message;
         _hasSentFeedback = true;
@@ -309,16 +306,6 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(FeedbackDraftStatus));
         Status = ShouldRepeatInputs ? "Track feedback sent. Repeating the sent values every second." : "Track feedback sent once. It expires after the configured timeout (5 seconds by default).";
         await FollowMovementAsync(message);
-    }
-
-    private async Task ApplyLatchedFeedbackAsync()
-    {
-        foreach (var feedback in _appliedFeedback!.Blocks)
-        {
-            feedback.ObservedAtUtc = DateTimeOffset.UtcNow;
-        }
-
-        await SendAsync(_appliedFeedback, announce: false);
     }
 
     /// <summary>Points the drafts at the switch route of a newly reported layout.</summary>

@@ -91,16 +91,21 @@ public sealed class BlueLineUiTests
 
     /// <summary>Ensures every built-in line is bundled with a loadable setup.</summary>
     [TestMethod]
-    public void SampleLines_EachEntry_ReferencesLoadableDeployment()
+    public Task SetupChoices_EachBuiltInLine_LoadsThroughCommand() => RunAsync(async session =>
     {
-        Assert.IsTrue(OperatorModel.SampleLines.Any(line => line.Name.StartsWith("Green Line", StringComparison.Ordinal)));
-        Assert.IsTrue(OperatorModel.SampleLines.Any(line => line.Name.StartsWith("Blue Line", StringComparison.Ordinal)));
-        using var files = new DeploymentFiles();
-        foreach (var line in OperatorModel.SampleLines)
+        CollectionAssert.Contains(OperatorModel.SetupChoices.ToArray(), "Green Line");
+        CollectionAssert.Contains(OperatorModel.SetupChoices.ToArray(), "Blue Line");
+        Assert.AreEqual("Saved setup file…", OperatorModel.SetupChoices.Last());
+        foreach (string line in OperatorModel.SetupChoices.SkipLast(1))
         {
-            Assert.IsNotEmpty(files.Read(line.DeploymentFile).Territories, line.Name);
+            session.Controller.SelectedSetup = line;
+            await ExecuteAsync(session.Controller.LoadSetupCommand);
+            Assert.IsTrue(session.Controller.IsRoutedDeployment);
+            Assert.IsNotEmpty(session.Controller.ExecutionRows);
+            Assert.AreEqual(line, session.Controller.Snapshot.LineName);
+            Assert.IsTrue(session.Controller.Snapshot.IsPaused);
         }
-    }
+    });
 
     /// <summary>Ensures each known line gets its own header color and unknown lines stay neutral.</summary>
     [TestMethod]
@@ -153,7 +158,7 @@ public sealed class BlueLineUiTests
         await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == "6").ReportedSignal == SignalState.SuperGreen);
         await UntilAsync(() => controller.Equipment.Single(row => row.Equipment == "Signal 6").Feedback == "Super Green");
         Assert.IsGreaterThan(0, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters);
-        Assert.AreEqual("TargetBlockEntry", inputs.Snapshot.Authorizations.Single().AuthorityReference);
+        Assert.AreEqual("TargetBlockEntry", inputs.Snapshot.Authorizations.Single().Request!.AuthorityReference);
 
         inputs.Scenario = "Switch mismatch";
         await ExecuteAsync(inputs.LoadScenarioCommand);

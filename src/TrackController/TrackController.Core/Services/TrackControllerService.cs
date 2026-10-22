@@ -1,21 +1,19 @@
 using TrackController.Contracts.Messages;
 using TrackController.Core.Control;
-using TrackController.Core.Interfaces;
 using TrackController.Core.Models;
 using TrainControl.Contracts.Enums;
-using TrainControl.Contracts.Interfaces;
 using TrainControl.Contracts.Messages;
 
 namespace TrackController.Core.Services;
 
 /// <summary>Controller domain: no UI, transport, file access, or references to other modules.</summary>
-public sealed partial class TrackControllerService : ITrackControllerService, ITrackController
+public sealed partial class TrackControllerService
 {
     private sealed class Block(WaysideBlockDefinition definition)
     {
         public WaysideBlockDefinition Definition { get; } = definition;
 
-        public WaysideBlockFeedback? Feedback;
+        public TrackModelBlockStateMessage? Feedback;
         public DateTimeOffset Received;
         public string Maintenance = "Open";
         public SwitchPosition DesiredSwitch = SwitchPosition.Unknown;
@@ -26,21 +24,12 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
         public bool ManualCrossingClosed;
     }
 
-    private sealed record Request(WaysideMovementRequestMessage Value, DateTimeOffset Received);
-
-    private sealed record RequestOrigin(string TargetBlockId, string? EntryBlockId, string[] PathBlockIds)
-    {
-        /// <summary>Checks that a repeated request retains its target block, direction and ordered route.</summary>
-        public bool Matches(WaysideMovementRequestMessage request) => TargetBlockId == request.TargetBlockId && EntryBlockId == request.EntryBlockId && PathBlockIds.SequenceEqual(request.PathBlockIds);
-    }
-
     private readonly object _gate = new();
     private readonly TimeProvider _clock;
     private WaysideConfigurationMessage _configuration;
     private Dictionary<string, Block> _blocks = [];
     private HashSet<string> _owned = [], _neighbors = [];
-    private readonly Dictionary<string, Request> _requests = [];
-    private readonly Dictionary<string, RequestOrigin> _requestOrigins = [];
+    private readonly Dictionary<string, (MovementSuggestionMessage Value, DateTimeOffset Received)> _requests = [];
     private readonly HashSet<string> _retiredRequests = [];
     private VitalPlcProgram? _plc;
     private string _plcName = "No program loaded";
@@ -61,44 +50,6 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
         _lastPulse = _clock.GetUtcNow();
         InitializeBlocks();
         Reevaluate();
-    }
-
-    public ControllerState State
-    {
-        get
-        {
-            lock (_gate)
-            {
-                Reevaluate();
-                return new ControllerState
-                {
-                    WaysideId = _configuration.WaysideId,
-                    CommandedSignalState = _snapshot.Blocks.FirstOrDefault(blockStatus => blockStatus.HasSignal)?.CommandedSignal ?? SignalState.Red,
-                    CommandedSwitchPosition = _snapshot.Blocks.FirstOrDefault(blockStatus => blockStatus.HasSwitch)?.CommandedSwitch ?? SwitchPosition.Unknown,
-                    IsCrossingActive = _snapshot.Blocks.Any(blockStatus => blockStatus.HasCrossing && blockStatus.CommandedCrossing == CrossingState.Closed)
-                };
-            }
-        }
-    }
-
-    public ControllerConfiguration Configuration
-    {
-        get
-        {
-            lock (_gate)
-            {
-                var result = new ControllerConfiguration
-                {
-                    WaysideId = _configuration.WaysideId
-                };
-                foreach (string id in _owned)
-                {
-                    result.OwnedBlockIds.Add(id);
-                }
-
-                return result;
-            }
-        }
     }
 
     /// <summary>Returns a defensive copy so callers cannot alter the configured topology.</summary>
@@ -136,7 +87,6 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
             _plc = null;
             _plcName = "No program loaded";
             _plcStatus = "Layout changed. Load a PLC program and resume explicitly.";
-            _requestOrigins.Clear();
             _retiredRequests.Clear();
             InitializeBlocks();
             Reevaluate();
@@ -199,9 +149,9 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
     }
 
     /// <summary>Applies pause and simulation speed settings while preserving wall-clock feedback timeouts.</summary>
-    public void SetSimulation(WaysideSimulationMessage message)
+    public void SetSimulation(bool paused, double speedMultiplier = 1)
     {
-        if (!double.IsFinite(message.SpeedMultiplier) || message.SpeedMultiplier is < 1 or > 10)
+        if (!double.IsFinite(speedMultiplier) || speedMultiplier is < 1 or > 10)
         {
             throw new ArgumentException("Simulation speed must be 1–10×.");
         }
@@ -209,30 +159,30 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
         lock (_gate)
         {
             Reevaluate();
-            if (!message.IsPaused && _hardwareMode && _plc is null)
+            if (!paused && _hardwareMode && _plc is null)
             {
                 throw new InvalidOperationException("Load a valid PLC before resuming hardware mode.");
             }
 
-            _paused = message.IsPaused;
-            _multiplier = message.SpeedMultiplier;
+            _paused = paused;
+            _multiplier = speedMultiplier;
             Reevaluate();
         }
     }
 
     /// <summary>Validates the full measurement batch before applying any block updates.</summary>
-    public void ApplyFeedback(WaysideFeedbackMessage message)
+    public void ApplyFeedback(IReadOnlyList<TrackModelBlockStateMessage> blocks)
     {
-        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(blocks);
         lock (_gate)
         {
-            if (message.Blocks is null || message.Blocks.Count > _blocks.Count || message.Blocks.Any(feedback => feedback is null) || message.Blocks.Select(feedback => feedback.BlockId).Distinct().Count() != message.Blocks.Count)
+            if (blocks.Count > _blocks.Count || blocks.Any(feedback => feedback is null) || blocks.Select(feedback => feedback.BlockId).Distinct().Count() != blocks.Count)
             {
                 throw new ArgumentException("Feedback must contain distinct owned or observed blocks.");
             }
 
             var now = _clock.GetUtcNow();
-            foreach (var feedback in message.Blocks)
+            foreach (var feedback in blocks)
             {
                 if (!_owned.Contains(feedback.BlockId) && !_neighbors.Contains(feedback.BlockId))
                 {
@@ -245,7 +195,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
                 }
             }
 
-            foreach (var feedback in message.Blocks)
+            foreach (var feedback in blocks)
             {
                 var block = GetBlock(feedback.BlockId);
                 if (block.Feedback is not null && feedback.ObservedAtUtc <= block.Feedback.ObservedAtUtc)
@@ -253,18 +203,7 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
                     continue;
                 }
 
-                block.Feedback = new WaysideBlockFeedback
-                {
-                    BlockId = feedback.BlockId,
-                    ObservedAtUtc = feedback.ObservedAtUtc,
-                    Occupancy = feedback.Occupancy,
-                    Signal = feedback.Signal,
-                    Switch = feedback.Switch,
-                    Crossing = feedback.Crossing,
-                    IsFaulted = feedback.IsFaulted,
-                    IsReservedByCtc = feedback.IsReservedByCtc,
-                    ActualSpeedMetersPerSecond = feedback.ActualSpeedMetersPerSecond
-                };
+                block.Feedback = feedback with { };
                 block.Received = now;
                 if (feedback.Occupancy == OccupancyState.Clear && _requests.TryGetValue(feedback.BlockId, out var request))
                 {
@@ -287,33 +226,12 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
         lock (_gate)
         {
             _requests.Clear();
-            _requestOrigins.Clear();
             _retiredRequests.Clear();
             _paused = true;
             _maintenanceMode = false;
             _simulationSeconds = 0;
             InitializeBlocks();
             Reevaluate();
-        }
-    }
-
-    /// <summary>Maps an existing team Track State message into the controller feedback boundary.</summary>
-    public void ApplyTrackState(TrackStateMessage state) => ApplyFeedback(new WaysideFeedbackMessage { Blocks = [new WaysideBlockFeedback { BlockId = state.BlockId, ObservedAtUtc = _clock.GetUtcNow(), Occupancy = state.IsOccupied ? OccupancyState.Occupied : OccupancyState.Clear, Signal = state.Signal, Switch = state.Switch }] });
-
-    /// <summary>Returns measured state for the requested block using the existing shared contract.</summary>
-    public TrackStateMessage GetTrackState(string blockId)
-    {
-        lock (_gate)
-        {
-            Reevaluate();
-            var block = GetBlock(blockId);
-            return new TrackStateMessage
-            {
-                BlockId = blockId,
-                IsOccupied = block.Feedback?.Occupancy == OccupancyState.Occupied,
-                Signal = block.Feedback?.Signal ?? SignalState.Unknown,
-                Switch = block.Feedback?.Switch ?? SwitchPosition.Unknown
-            };
         }
     }
 
@@ -330,9 +248,9 @@ public sealed partial class TrackControllerService : ITrackControllerService, IT
 
     private bool IsFresh(Block block) => block.Feedback is not null && (_clock.GetUtcNow() - block.Received).TotalSeconds <= _configuration.FeedbackTimeoutSeconds && (_clock.GetUtcNow() - block.Feedback.ObservedAtUtc).TotalSeconds <= _configuration.FeedbackTimeoutSeconds;
 
-    private bool IsActive(Request request) => (_clock.GetUtcNow() - request.Received).TotalSeconds <= _configuration.RequestTimeoutSeconds;
+    private bool IsActive((MovementSuggestionMessage Value, DateTimeOffset Received) request) => (_clock.GetUtcNow() - request.Received).TotalSeconds <= _configuration.RequestTimeoutSeconds;
 
-    private static IEnumerable<string> GetRequestPath(Request request) => new[]
+    private static IEnumerable<string> GetRequestPath((MovementSuggestionMessage Value, DateTimeOffset Received) request) => new[]
         {
         request.Value.TargetBlockId
     }.Concat(request.Value.PathBlockIds);

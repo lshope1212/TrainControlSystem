@@ -16,7 +16,7 @@ public sealed class PlcOutputTests
         var controller = new TrackControllerService(WaysideConfiguration.CreateDemo());
         controller.LoadPlc("showcase.plc", source);
         controller.ApplyFeedback(PiRuntimeTests.Clear(controller.GetConfiguration(), occupied));
-        controller.SetSimulation(new WaysideSimulationMessage { IsPaused = false });
+        controller.SetSimulation(false, 1);
         return controller;
     }
 
@@ -32,7 +32,7 @@ public sealed class PlcOutputTests
         var authorization = controller.GetSnapshot().Authorizations.Single();
         Assert.AreEqual(0d, authorization.AuthorizedSpeedMetersPerSecond);
         Assert.AreEqual(0d, authorization.AuthorizedAuthorityMeters);
-        Assert.AreEqual("Withheld", authorization.Status);
+        Assert.AreEqual("Withheld", authorization.MovementStatus);
     }
 
     [TestMethod]

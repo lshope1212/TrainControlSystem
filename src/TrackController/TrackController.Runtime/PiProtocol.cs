@@ -1,12 +1,12 @@
 using System.Text;
-using TrackController.Contracts.Messages;
+using System.Text.Json;
 using TrainControl.Common.Communication;
 
 namespace TrackController.Runtime;
 /// <summary>Shared message envelopes over an ordered request/reply stream inside an SSH tunnel.</summary>
 internal sealed class PiProtocol : IDisposable
 {
-    public const int Version = 6;
+    public const int Version = 8;
     private const int MaxCharacters = 1_048_576;
     private readonly StreamReader _reader;
     private readonly StreamWriter _writer;
@@ -47,14 +47,10 @@ internal sealed class PiProtocol : IDisposable
         }
     }
 
-    /// <summary>Serializes one application message through the shared envelope format.</summary>
-    public Task WriteAsync(object message, CancellationToken cancellationToken) => WriteEnvelopeAsync(RuntimeMessages.CreateEnvelope(message), cancellationToken);
-
-    /// <summary>Writes and flushes one bounded envelope to the active Pi session.</summary>
-    public async Task WriteEnvelopeAsync(MessageEnvelope envelope, CancellationToken cancellationToken)
+    /// <summary>Writes a bounded application message, preserving any existing envelope.</summary>
+    public async Task WriteAsync(object message, CancellationToken cancellationToken)
     {
-        // Reuse the team's serializer for the payload and envelope; never nest an envelope as a payload.
-        string json = System.Text.Json.JsonSerializer.Serialize(envelope, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        string json = MessageSerializer.Serialize(message);
         if (json.Length > MaxCharacters)
         {
             throw new InvalidDataException("Pi message exceeds 1 MiB characters.");

@@ -15,7 +15,7 @@ public sealed class TrackControllerTestUiTests
         Assert.IsFalse(inputs.CancelMovementCommand.CanExecute(null));
         await ExecuteAsync(inputs.SendMovementCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1);
-        string firstRequest = inputs.Snapshot.Authorizations.Single().RequestId;
+        string firstRequest = inputs.Snapshot.Authorizations.Single().Request!.RequestId;
         inputs.TargetBlock = "12";
         inputs.RequestedPath = "";
         await ExecuteAsync(inputs.SendMovementCommand);
@@ -25,7 +25,7 @@ public sealed class TrackControllerTestUiTests
         await ExecuteAsync(inputs.CancelMovementCommand);
         await Task.Delay(1250);
         Assert.HasCount(1, inputs.Snapshot.Authorizations);
-        Assert.AreEqual(firstRequest, inputs.Snapshot.Authorizations.Single().RequestId);
+        Assert.AreEqual(firstRequest, inputs.Snapshot.Authorizations.Single().Request!.RequestId);
         Assert.IsFalse(inputs.CancelMovementCommand.CanExecute(null));
     });
 
@@ -121,7 +121,7 @@ public sealed class TrackControllerTestUiTests
         await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
         Assert.AreEqual(300, inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters, 0.000001);
         await UntilAsync(() => controller.Snapshot.Authorizations.Count == 1);
-        Assert.AreEqual(inputs.Snapshot.Authorizations.Single().RequestId, controller.Snapshot.Authorizations.Single().RequestId);
+        Assert.AreEqual(inputs.Snapshot.Authorizations.Single().Request!.RequestId, controller.Snapshot.Authorizations.Single().Request!.RequestId);
         inputs.Scenario = "Switch mismatch";
         await ExecuteAsync(inputs.LoadScenarioCommand);
         await Task.Delay(1250);

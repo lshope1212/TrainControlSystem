@@ -26,8 +26,6 @@ public static class MessageDisplayNameFormatter
         ["SystemTimeMessage"] = "System time",
         ["TicketSalesMessage"] = "Ticket sales",
         ["TrackLayoutMessage"] = "Track layout",
-        ["TrackStateMessage"] = "Track state",
-        ["TrainAuthorizationStatusMessage"] = "Train authorization status",
         ["TrainStateMessage"] = "Train state",
     };
 

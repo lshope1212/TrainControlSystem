@@ -1,3 +1,4 @@
+using Pipe = TrackController.Wpf.Services.WaysidePipeHost.Pipe;
 using System.Windows.Input;
 using System.Windows.Threading;
 using TrackController.Core.Services;
@@ -18,9 +19,9 @@ internal sealed class UiTestSession : IAsyncDisposable
 
     private UiTestSession()
     {
-        var endpoints = WaysideEndpoints.CreateIsolated();
+        var endpoints = WaysidePipeHost.CreatePipeNames(isolated: true);
         Controller = new OperatorModel(new TrackControllerService(), endpoints);
-        Inputs = new TestModel(endpoints.Input, endpoints.CtcOutput, endpoints.TrackModelOutput);
+        Inputs = new TestModel(endpoints[(int)Pipe.Input], endpoints[(int)Pipe.Ctc], endpoints[(int)Pipe.TrackModel]);
     }
 
     /// <summary>Executes an actual command from either application.</summary>
