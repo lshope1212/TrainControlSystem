@@ -41,7 +41,7 @@ public sealed class TrainRosterItemViewModel : ViewModelBase
     public void Update(TrainState s)
     {
         LineName = s.LineName;
-        PositionDisplay = $"{UnitConversion.MetersToFeetValue(s.FrontPositionMeters):0} ft";
+        PositionDisplay = $"{UnitConversion.MetersToFeet(s.FrontPositionMeters):0} ft";
         SpeedDisplay = $"{UnitConversion.MetersPerSecondToMilesPerHour(s.VelocityMetersPerSecond):0.0} mph";
 
         bool anyFailure = s.EngineFailed || s.BrakeFailed || s.SignalPickupFailed;

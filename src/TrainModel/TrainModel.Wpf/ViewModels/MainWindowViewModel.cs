@@ -545,9 +545,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     // ---------------- Unit helpers ----------------
 
     private static double Mph(double ms) => UnitConversion.MetersPerSecondToMilesPerHour(ms);
-    private static double Ft(double m) => UnitConversion.MetersToFeetValue(m);
-    private static double Hp(double w) => UnitConversion.WattsToHorsepowerValue(w);
-    private static double Lb(double kg) => UnitConversion.KilogramsToPoundsValue(kg);
+    private static double Ft(double m) => UnitConversion.MetersToFeet(m);
+    private static double Hp(double w) => UnitConversion.WattsToHorsepower(w);
+    private static double Lb(double kg) => UnitConversion.KilogramsToPounds(kg);
     private static double Cf(double c) => UnitConversion.CelsiusToFahrenheit(c);
     private static double MphS(double a) => UnitConversion.MetersPerSecondSquaredToMphPerSecond(a);
     private string Fmt(Func<TrainState, string> f) => Sel is { } s ? f(s) : "--";
