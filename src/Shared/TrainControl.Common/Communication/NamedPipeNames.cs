@@ -12,4 +12,10 @@ public static class NamedPipeNames
 
     /// <summary>Inbound endpoint of the Track Controller process.</summary>
     public const string TrackController = "TrainControl.TrackController";
+
+    /// <summary>Inbound endpoint of the Train Model process.</summary>
+    public const string TrainModel = "TrainControl.TrainModel";
+
+    /// <summary>Inbound endpoint of the Train Controller process.</summary>
+    public const string TrainController = "TrainControl.TrainController";
 }
