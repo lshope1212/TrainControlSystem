@@ -1,0 +1,305 @@
+<Window x:Class="TrainModel.TestUI.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding Title}"
+        Width="1200"
+        Height="820"
+        MinWidth="820"
+        MinHeight="520">
+
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="3*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.ColumnSpan="2" Margin="4,0,4,6">
+            <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold"/>
+            <TextBlock Text="External module simulator: runs beside TrainModel.Wpf, sends shared contract messages into the real Train Model and captures what the Train Model sends to its neighbours (Train Controller, Track Model)."
+                       Foreground="#6B7280" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- ============ LEFT: simulated inputs -> Train Model ============ -->
+        <GroupBox Grid.Row="1" Grid.Column="0" Header="Simulated Inputs to Train Model">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+
+                    <!-- Shared target-train selector: every panel below sends to this train -->
+                    <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1"
+                            CornerRadius="4" Padding="8" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Target Train:" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox Width="140" IsEditable="True"
+                                      ItemsSource="{Binding KnownTrainIds}"
+                                      Text="{Binding SelectedTrainId, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="All inputs below are sent to this train."
+                                       Foreground="#6B7280" FontSize="11"
+                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Train Controller -> Train Model -->
+                    <GroupBox Header="Train Controller -> Train Model">
+                        <StackPanel>
+                            <TextBlock Text="Train Command (TrainCommandMessage)" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="140"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Power (hp):" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox  Grid.Row="0" Grid.Column="1" Margin="0,0,0,6"
+                                          Text="{Binding Command.PowerHp, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Grid.Row="1" Text="Cabin Setpoint (°F):" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox  Grid.Row="1" Grid.Column="1" Margin="0,0,0,6"
+                                          Text="{Binding Command.CabinSetpointF, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+                            <WrapPanel Margin="0,2,0,0">
+                                <CheckBox Content="Service Brake" IsChecked="{Binding Command.ServiceBrake}" Margin="0,0,10,4"/>
+                                <CheckBox Content="Emergency Brake" IsChecked="{Binding Command.EmergencyBrake}" Margin="0,0,10,4"/>
+                                <CheckBox Content="Left Door" IsChecked="{Binding Command.LeftDoor}" Margin="0,0,10,4"/>
+                                <CheckBox Content="Right Door" IsChecked="{Binding Command.RightDoor}" Margin="0,0,10,4"/>
+                                <CheckBox Content="Lights" IsChecked="{Binding Command.Lights}" Margin="0,0,10,4"/>
+                            </WrapPanel>
+                            <TextBlock Text="Station Announcement:" Margin="0,6,0,2"/>
+                            <TextBox TextWrapping="Wrap" AcceptsReturn="True" MinHeight="44"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Text="{Binding Command.StationAnnouncement, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Content="Send Train Command" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                    Command="{Binding Command.SendCommand}"/>
+                            <TextBlock Text="{Binding Command.Result}" Style="{StaticResource ResultTextStyle}"/>
+
+                            <!-- Controller ruling on a pending passenger emergency-brake request -->
+                            <Border Background="#FFF7ED" BorderBrush="#FED7AA" BorderThickness="1"
+                                    CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Passenger Emergency Brake Request" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Approve to engage the brake; Deny to clear the request. The train engages the brake only on approval."
+                                               Foreground="#6B7280" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="Approve" Width="90" Margin="0,0,6,0"
+                                                Background="#DC2626" Foreground="White" FontWeight="SemiBold"
+                                                Command="{Binding Command.ApproveEmergencyBrakeCommand}"/>
+                                        <Button Content="Deny" Width="90"
+                                                Command="{Binding Command.DenyEmergencyBrakeCommand}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Command.ApprovalResult}" Style="{StaticResource ResultTextStyle}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- Track Model -> Train Model -->
+                    <GroupBox Header="Track Model -> Train Model">
+                        <StackPanel>
+                            <TextBlock Text="Track Circuit + Simulation Data" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="140"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Commanded Speed (mph):" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox  Grid.Row="0" Grid.Column="1" Margin="0,0,0,6"
+                                          Text="{Binding Track.CommandedSpeedMph, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Grid.Row="1" Text="Authority (ft):" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox  Grid.Row="1" Grid.Column="1" Margin="0,0,0,6"
+                                          Text="{Binding Track.AuthorityFt, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Grid.Row="2" Text="Grade (%):" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <TextBox  Grid.Row="2" Grid.Column="1" Margin="0,0,0,6"
+                                          Text="{Binding Track.GradePercent, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Grid.Row="3" Text="Passenger Demand:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox  Grid.Row="3" Grid.Column="1"
+                                          Text="{Binding Track.PassengerDemand, UpdateSourceTrigger=PropertyChanged}"/>
+                            </Grid>
+
+                            <!-- Beacon (station info delivered to the train at approach) -->
+                            <Border Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1"
+                                    CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Beacon Information (BeaconMessage)" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="Station Name:" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                        <TextBox  Grid.Row="0" Grid.Column="1" Margin="0,0,0,6"
+                                                  Text="{Binding Track.BeaconStation, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Grid.Row="1" Text="Distance to Stop (ft):" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                        <TextBox  Grid.Row="1" Grid.Column="1" Margin="0,0,0,6"
+                                                  Text="{Binding Track.BeaconDistanceFt, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Grid.Row="2" Text="Platform Side:" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                        <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,6"
+                                                  ItemsSource="{Binding Track.SideOptions}"
+                                                  SelectedItem="{Binding Track.BeaconSide, Mode=TwoWay}"/>
+                                        <TextBlock Grid.Row="3" Text="Announcement:" VerticalAlignment="Top" Margin="0,2,8,0"/>
+                                        <TextBox  Grid.Row="3" Grid.Column="1"
+                                                  TextWrapping="Wrap" AcceptsReturn="True" MinHeight="44"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  Text="{Binding Track.BeaconAnnouncement, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Button Content="Send Track Data + Beacon" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                    Command="{Binding Track.SendCommand}"/>
+                            <TextBlock Text="{Binding Track.Result}" Style="{StaticResource ResultTextStyle}"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- System -> Train Model -->
+                    <GroupBox Header="System -> Train Model">
+                        <StackPanel>
+                            <TextBlock Text="System Time (SystemTimeMessage)" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox Width="90" Margin="0,0,6,0" VerticalContentAlignment="Center"
+                                         Text="{Binding SystemTime.TimeText, UpdateSourceTrigger=PropertyChanged}"/>
+                                <Button Content="Send Time" Command="{Binding SystemTime.SendCommand}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding SystemTime.Result}" Style="{StaticResource ResultTextStyle}"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                </StackPanel>
+            </ScrollViewer>
+        </GroupBox>
+
+        <!-- ============ RIGHT: live Train Model outputs + capture log ============ -->
+        <GroupBox Grid.Row="1" Grid.Column="1" Header="Live Train Model Outputs">
+            <DockPanel>
+
+                <!-- Live output sections, by destination -->
+                <StackPanel DockPanel.Dock="Top">
+
+                    <!-- Outputs -> Track Model -->
+                    <GroupBox Header="Outputs → Track Model" Margin="0,0,0,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Position" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding LiveOutputs.TmPosition}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Text="Actual speed" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LiveOutputs.TmActualSpeed}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="2" Text="Passenger exchange" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LiveOutputs.TmPassengerExchange}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="3" Text="Last update" Foreground="#9CA3AF" FontSize="10" Margin="0,2"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LiveOutputs.TmLastUpdate}" Foreground="#9CA3AF" FontSize="10" Margin="0,2"/>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- Outputs -> Train Controller -->
+                    <GroupBox Header="Outputs → Train Controller" Margin="0,0,0,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Actual speed" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding LiveOutputs.TcActualSpeed}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Text="Commanded speed" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LiveOutputs.TcCommandedSpeed}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="2" Text="Commanded authority" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LiveOutputs.TcCommandedAuthority}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="3" Text="Track signal status" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LiveOutputs.TcTrackSignal}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="4" Text="Beacon information" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding LiveOutputs.TcBeacon}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,2"/>
+                            <TextBlock Grid.Row="5" Text="Passenger e-brake" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding LiveOutputs.TcPassengerEBrake}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="6" Text="Cabin temperature" Foreground="#374151" Margin="0,2"/>
+                            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding LiveOutputs.TcCabinTemp}" FontWeight="SemiBold" Margin="0,2"/>
+                            <TextBlock Grid.Row="7" Text="Last update" Foreground="#9CA3AF" FontSize="10" Margin="0,2"/>
+                            <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding LiveOutputs.TcLastUpdate}" Foreground="#9CA3AF" FontSize="10" Margin="0,2"/>
+                        </Grid>
+                    </GroupBox>
+
+                </StackPanel>
+
+                <!-- Raw capture log (fills remaining space) -->
+                <GroupBox Header="Capture Log (all outputs, newest first)">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="Clear Log" Command="{Binding Outputs.ClearCommand}"/>
+                            <TextBlock Text="{Binding Outputs.Messages.Count, StringFormat={}{0} captured}"
+                                       VerticalAlignment="Center" Foreground="#6B7280" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <DataGrid ItemsSource="{Binding Outputs.Messages}"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding SequenceNumber}" Width="40"/>
+                                <DataGridTextColumn Header="At" Binding="{Binding CapturedAt, StringFormat=HH:mm:ss.fff}" Width="90"/>
+                                <DataGridTextColumn Header="Message Type" Binding="{Binding MessageType}" Width="210"/>
+                                <DataGridTextColumn Header="Payload" Binding="{Binding Description}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </GroupBox>
+
+            </DockPanel>
+        </GroupBox>
+
+        <!-- ============ BOTTOM: communication status ============ -->
+        <GroupBox Grid.Row="2" Grid.ColumnSpan="2" Header="Communication Status">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="{Binding Communication.TrainModelPipeName, StringFormat=Train Model endpoint ({0}):}"
+                           FontWeight="SemiBold" Margin="0,0,8,4"/>
+                <TextBlock Grid.Column="1" Text="{Binding Communication.TrainModelEndpointStatus}"
+                           TextWrapping="Wrap" Margin="0,0,0,4"/>
+                <TextBlock Grid.Row="1" Text="Fake neighbour listeners:" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Communication.NeighbourListenerStatus}"
+                           TextWrapping="Wrap"/>
+            </Grid>
+        </GroupBox>
+
+    </Grid>
+</Window>

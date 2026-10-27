@@ -23,6 +23,9 @@ public static class UnitConversion
     /// <summary>Mechanical (imperial) horsepower: 550 ft·lbf/s = 745.699872 W.</summary>
     public const double WattsPerHorsepower = 745.699872;
 
+    /// <summary>Pounds per kilogram (for passenger/vehicle mass display).</summary>
+    public const double PoundsPerKilogram = 2.20462262185;
+
     public static double MetersPerSecondToMilesPerHour(double metersPerSecond) =>
         metersPerSecond / MetersPerMile * SecondsPerHour;
 
@@ -42,6 +45,14 @@ public static class UnitConversion
     public static double MetersToFeet(double meters) => meters / MetersPerFoot;
 
     public static double FeetToMeters(double feet) => feet * MetersPerFoot;
+
+    /// <summary>Acceleration m/s² → mph per second (the Train Model UI's accel unit).</summary>
+    public static double MetersPerSecondSquaredToMphPerSecond(double metersPerSecondSquared) =>
+        MetersPerSecondToMilesPerHour(metersPerSecondSquared);
+
+    /// <summary>Mass kilograms → pounds (for passenger/vehicle weight display).</summary>
+    public static double KilogramsToPounds(double kilograms) =>
+        kilograms * PoundsPerKilogram;
 
     public static double CelsiusToFahrenheit(double celsius) =>
         celsius * 9.0 / 5.0 + 32.0;
