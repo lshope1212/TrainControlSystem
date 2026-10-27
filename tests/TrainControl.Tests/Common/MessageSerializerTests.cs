@@ -116,6 +116,19 @@ public class MessageSerializerTests
     }
 
     [TestMethod]
+    public void RoundTrip_NamedOperation_PreservesEnvelopeAndReadableEnums()
+    {
+        var original = MessageSerializer.CreateEnvelope("ApplyManual", new { blockId = "G1", signal = SignalState.Red });
+        var envelope = MessageSerializer.Deserialize(MessageSerializer.Serialize(original));
+        Assert.AreEqual("ApplyManual", envelope.MessageType);
+        Assert.AreEqual("G1", MessageSerializer.ReadValue<string>(envelope, "blockId"));
+        Assert.AreEqual("Red", envelope.Payload.GetProperty("signal").GetString());
+        Assert.AreEqual(SignalState.Red, MessageSerializer.ReadValue<SignalState>(envelope, "signal"));
+        Assert.ThrowsExactly<JsonException>(() => MessageSerializer.ReadValue<bool>(envelope, "missing"));
+        Assert.ThrowsExactly<JsonException>(() => MessageSerializer.ReadValue<bool>(envelope, "signal"));
+    }
+
+    [TestMethod]
     [DataRow("not json")]
     [DataRow("{}")]
     [DataRow("{\"messageType\":\"BlockStatusMessage\"}")]

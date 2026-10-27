@@ -19,7 +19,7 @@ public partial class App : Application
         ICtcMessageSender sender = new NamedPipeCtcMessageSender();
         var receiver = new FakeTrackControllerReceiver(Dispatcher);
 
-        var viewModel = new MainWindowViewModel(sender, receiver);
+        var viewModel = new MainWindowViewModel(sender, receiver, _shutdown.Token);
         var window = new MainWindow(viewModel);
 
         // Runs until OnExit cancels it; the receive loop never throws for bad messages.
@@ -31,6 +31,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Stops the receive loop, the simulated clock's timer and any in-progress send.
         // Not disposed: the receive loop may still be observing the token as it unwinds.
         _shutdown.Cancel();
 

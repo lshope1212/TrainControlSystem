@@ -25,10 +25,20 @@ calls the matching `ICTCService` method.
 WPF types) so the UI can refresh when messages arrive from other modules.
 
 - `Models/` holds CTC's own state (`CtcSystemState`, `CtcLineState`, `CtcBlockState`,
-  `ScheduledTrain`, `ScheduleStop`, `DispatchQueueEntry`, `DispatchedTrainState`).
+  `ScheduledTrain`, `ScheduledRouteBlock`, `DispatchQueueEntry`, `DispatchedTrainState`).
   Contract messages are never stored as domain state.
 - `Services/CTCService` is the boundary between contracts and the domain model.
-- `Dispatching/` holds placeholders for future routing and authority algorithms.
+- `Dispatching/` holds the speed and authority rules used at dispatch:
+  `TrainPerformance` (vehicle max speed), `SpeedPlanner` (schedule feasibility and
+  initial suggested speed) and `AuthorityManager` (initial fixed-block authority).
+  `RouteManager` is still a placeholder.
+
+A scheduled train is an ordered list of route blocks. The dispatcher times only some of
+them (the time the train ENTERS the block); CTC routes the train between timed blocks
+through the connected untimed ones, and checks each timed span is reachable within the
+speed limits. When its departure time is reached CTC sends a `MovementSuggestionMessage`
+(initial suggested speed/authority) and then a `MovementRequestMessage` to the Track
+Controller; the train leaves the queue only after both sends succeed.
 
 All quantities are SI (meters, meters/second); the WPF layer converts to mph/feet.
 UI-only state such as the selected line or block belongs in the view model.
@@ -36,8 +46,12 @@ UI-only state such as the selected line or block belongs in the view model.
 ## Known I/O gaps
 
 1. **No train ID in block occupancy.** `BlockStatusMessage` reports only
-   clear/occupied/unknown, so CTC cannot authoritatively determine
-   `DispatchedTrainState.CurrentBlockId`. It is left empty rather than guessed.
+   clear/occupied/unknown, so CTC cannot tell which train moved into a block.
+   `DispatchedTrainState.LastKnownBlockId` therefore stays at the route start block
+   set at release; it waits for a train-position message after integration rather
+   than being guessed from occupancy.
+   For the same reason suggested speed and authority are calculated only once, at
+   dispatch, and are not recalculated as the train moves.
 2. **No maintenance acknowledgement.** There is no Track Controller -> CTC
    maintenance status. `CtcBlockState.RequestedMaintenanceState == Closed` means
    "CTC successfully issued a Close request", not "Track Controller closed the block".

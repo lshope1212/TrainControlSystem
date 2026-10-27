@@ -1,0 +1,21 @@
+{
+  "name": "Small station test",
+  "blocks": [
+    {
+      "id": "B1", "lineId": "Blue", "number": 1, "section": "Main",
+      "lengthMeters": 100, "elevationMeters": 220, "gradePercent": 1.5,
+      "hasSignal": true, "hasSwitch": true,
+      "connectedBlockIds": ["B2", "B3"], "normalNextBlockId": "B2", "reverseNextBlockId": "B3"
+    },
+    {
+      "id": "B2", "lineId": "Blue", "number": 2, "section": "Main",
+      "lengthMeters": 121.92, "hasSignal": true, "hasCrossing": true,
+      "stationName": "Station A", "initialWaitingPassengers": 24,
+      "connectedBlockIds": ["B1", "B3"]
+    },
+    {
+      "id": "B3", "lineId": "Blue", "number": 3, "section": "Main",
+      "lengthMeters": 150, "hasSignal": true, "connectedBlockIds": ["B1", "B2"]
+    }
+  ]
+}

@@ -1,9 +1,13 @@
 # TrainControl System
 
 `TrainControlSystem.sln` is the overall Visual Studio solution for the train
-control / simulation project. This repository currently contains an **architecture
-skeleton only** — every class is a placeholder. No physics, no hardware
-communication, no networking, and no database are implemented yet.
+control / simulation project. CTC and Track Model now have working domain state,
+WPF interfaces, and local named-pipe communication. Train Model, Train Controller,
+and Track Controller remain architecture placeholders; train physics and hardware
+communication are not implemented yet.
+
+For the independent Track Model dashboard and external-module Test UI, see
+[Track Model running and integration instructions](src/TrackModel/README.md).
 
 ## The launcher
 
@@ -42,7 +46,10 @@ What this means:
 - **Subsystem communication happens through shared contracts** sent over local
   Windows named pipes: one newline-delimited JSON envelope (`messageType` + `payload`)
   per connection. The envelope format, transport and endpoint names live in
-  `TrainControl.Common/Communication`. No networking, sockets, or message bus.
+  `TrainControl.Common/Communication`. No networking, sockets, or message bus between
+  Windows modules. The single exception is the Train Controller's link to its Raspberry
+  Pi Hardware controller, which uses TCP/IP over the local network (see
+  `src/TrainController/README.md`).
 - **Process launching and subsystem communication are two separate concerns.**
   Starting an executable says nothing about how the running programs will talk to
   each other. Do not let the launcher grow into a message broker.
@@ -153,7 +160,10 @@ TrainControlSystem
 │   └── TrackModel.Wpf
 │
 ├── TrainController
+│   ├── TrainController.Abstractions
 │   ├── TrainController.Core
+│   ├── TrainController.Integration
+│   ├── TrainController.Hardware.Pi   (runs on the Raspberry Pi)
 │   └── TrainController.Wpf
 │
 ├── TrackController
@@ -166,7 +176,8 @@ TrainControlSystem
 │   └── CTC.TestUI.Wpf   (development-only external-module simulator)
 │
 └── Tests
-    └── TrainControl.Tests
+    ├── TrainControl.Tests
+    └── TrainController.Wpf.Tests   (Windows-only view-model tests)
 ```
 
 Those are Visual Studio **solution folders**. On disk the projects live under
@@ -225,7 +236,9 @@ dotnet test  TrainControlSystem.sln
 
 Each WPF application follows the same minimal pattern:
 
-- `MainWindow.xaml` is the one and only application window.
+- `MainWindow.xaml` is the one and only application window. (Exception:
+  `TrainController.Wpf` has two peer windows, a Main UI and a Test UI — see
+  `src/TrainController/README.md`.)
 - `MainWindow` sets its `DataContext` to `MainWindowViewModel`; code-behind contains
   nothing else.
 - `ViewModels/ViewModelBase.cs` provides `INotifyPropertyChanged`.

@@ -20,4 +20,7 @@ public class BlockStatusMessage
     public SwitchPosition Switch { get; set; } = SwitchPosition.Unknown;
 
     public CrossingState Crossing { get; set; } = CrossingState.Unknown;
+
+    /// <summary>Whether the Track Controller actually has the block open or closed for maintenance.</summary>
+    public MaintenanceState Maintenance { get; set; } = MaintenanceState.Open;
 }

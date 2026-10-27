@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "Track Model standalone",
+    "Projects": [
+      {
+        "Path": "src\\TrackModel\\TrackModel.Wpf\\TrackModel.Wpf.csproj",
+        "Action": "Start",
+        "DebugTarget": "TrackModel.Wpf"
+      },
+      {
+        "Path": "src\\TrackModel\\TrackModel.TestUI.Wpf\\TrackModel.TestUI.Wpf.csproj",
+        "Action": "Start",
+        "DebugTarget": "TrackModel.TestUI.Wpf"
+      }
+    ]
+  }
+]

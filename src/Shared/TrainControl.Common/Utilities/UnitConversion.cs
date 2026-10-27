@@ -1,29 +1,74 @@
 namespace TrainControl.Common.Utilities;
 
 /// <summary>
-/// Metric (internal SI) to imperial (display) conversions, and a few helpers used
-/// at the UI boundary. The whole system computes in SI; these functions exist so
-/// UIs can DISPLAY imperial without leaking imperial into the domain or the wire.
+/// Generic unit conversion helpers shared by all subsystems.
 /// </summary>
+/// <remarks>
+/// Convention for the whole system: calculations and inter-module messages use SI
+/// (m, m/s, m/s², W, s, °C). Imperial units are a presentation concern only; convert
+/// at the UI boundary with these helpers instead of writing formulas in ViewModels.
+/// </remarks>
 public static class UnitConversion
 {
-    public const double MetersPerSecondToMph = 2.2369362920544;
-    public const double MetersToFeet = 3.28083989501312;
-    public const double KilogramsToPounds = 2.20462262185;
-    public const double WattsToHorsepower = 1.0 / 745.699871582;
+    public const double MetersPerMile = 1609.344;
+
+    public const double MetersPerFoot = 0.3048;
+
+    public const double SecondsPerHour = 3600.0;
+
+    public const double MetersPerKilometer = 1000.0;
+
+    public const double WattsPerKilowatt = 1000.0;
+
+    /// <summary>Mechanical (imperial) horsepower: 550 ft·lbf/s = 745.699872 W.</summary>
+    public const double WattsPerHorsepower = 745.699872;
+
+    /// <summary>Pounds per kilogram (for passenger/vehicle mass display).</summary>
+    public const double PoundsPerKilogram = 2.20462262185;
 
     public static double MetersPerSecondToMilesPerHour(double metersPerSecond) =>
-        metersPerSecond * MetersPerSecondToMph;
+        metersPerSecond / MetersPerMile * SecondsPerHour;
 
-    /// <summary>Acceleration m/s^2 -> mph per second (the UI's accel unit).</summary>
+    public static double MilesPerHourToMetersPerSecond(double milesPerHour) =>
+        milesPerHour * MetersPerMile / SecondsPerHour;
+
+    public static double KilometersPerHourToMetersPerSecond(double kilometersPerHour) =>
+        kilometersPerHour * MetersPerKilometer / SecondsPerHour;
+
+    public static double MetersPerSecondToKilometersPerHour(double metersPerSecond) =>
+        metersPerSecond / MetersPerKilometer * SecondsPerHour;
+
+    public static double KilometersPerHourToMilesPerHour(double kilometersPerHour) =>
+        MetersPerSecondToMilesPerHour(
+            KilometersPerHourToMetersPerSecond(kilometersPerHour));
+
+    public static double MetersToFeet(double meters) => meters / MetersPerFoot;
+
+    public static double FeetToMeters(double feet) => feet * MetersPerFoot;
+
+    /// <summary>Acceleration m/s² → mph per second (the Train Model UI's accel unit).</summary>
     public static double MetersPerSecondSquaredToMphPerSecond(double metersPerSecondSquared) =>
-        metersPerSecondSquared * MetersPerSecondToMph;
+        MetersPerSecondToMilesPerHour(metersPerSecondSquared);
 
-    public static double MetersToFeetValue(double meters) => meters * MetersToFeet;
+    /// <summary>Mass kilograms → pounds (for passenger/vehicle weight display).</summary>
+    public static double KilogramsToPounds(double kilograms) =>
+        kilograms * PoundsPerKilogram;
 
-    public static double KilogramsToPoundsValue(double kilograms) => kilograms * KilogramsToPounds;
+    public static double CelsiusToFahrenheit(double celsius) =>
+        celsius * 9.0 / 5.0 + 32.0;
 
-    public static double WattsToHorsepowerValue(double watts) => watts * WattsToHorsepower;
+    public static double FahrenheitToCelsius(double fahrenheit) =>
+        (fahrenheit - 32.0) * 5.0 / 9.0;
 
-    public static double CelsiusToFahrenheit(double celsius) => celsius * 9.0 / 5.0 + 32.0;
+    public static double WattsToKilowatts(double watts) =>
+        watts / WattsPerKilowatt;
+
+    public static double KilowattsToWatts(double kilowatts) =>
+        kilowatts * WattsPerKilowatt;
+
+    public static double WattsToHorsepower(double watts) =>
+        watts / WattsPerHorsepower;
+
+    public static double HorsepowerToWatts(double horsepower) =>
+        horsepower * WattsPerHorsepower;
 }

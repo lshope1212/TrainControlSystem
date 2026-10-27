@@ -22,14 +22,14 @@ public sealed class RecordedMessage
     /// <summary>Wall-clock receive time (not simulation time).</summary>
     public DateTime CapturedAt { get; }
 
-    /// <summary>Contract type name from the envelope, e.g. MaintenanceRequestMessage.</summary>
+    /// <summary>Readable message type, e.g. "Maintenance request" for a MaintenanceRequestMessage.</summary>
     public string MessageType { get; }
 
     /// <summary>Readable rendering of the payload, e.g. "BlockId = G12, RequestedState = Closed".</summary>
     public string Description { get; }
 
     public static RecordedMessage FromEnvelope(int sequenceNumber, MessageEnvelope envelope) =>
-        new RecordedMessage(sequenceNumber, envelope.MessageType, Describe(envelope.Payload));
+        new RecordedMessage(sequenceNumber, MessageDisplayNameFormatter.ToDisplayName(envelope.MessageType), Describe(envelope.Payload));
 
     public static RecordedMessage FromError(int sequenceNumber, string error) =>
         new RecordedMessage(sequenceNumber, "(receive error)", error);

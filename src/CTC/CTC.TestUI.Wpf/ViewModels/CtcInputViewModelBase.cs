@@ -1,4 +1,5 @@
 using CTC.TestUI.Wpf.Services;
+using TrainControl.Common.Communication;
 
 namespace CTC.TestUI.Wpf.ViewModels;
 
@@ -30,14 +31,14 @@ public abstract class CtcInputViewModelBase : ViewModelBase
     /// endpoint received the bytes; there is no acknowledgement protocol.
     /// </summary>
     /// <param name="detail">Optional suffix for the success text, e.g. " for Block G12".</param>
-    protected async Task SendToCtcAsync<TMessage>(TMessage message, string detail = "")
+    protected async Task SendToCtcAsync<TMessage>(TMessage message, string detail = "", CancellationToken cancellationToken = default)
         where TMessage : class
     {
-        var messageType = typeof(TMessage).Name;
+        var messageType = MessageDisplayNameFormatter.ToDisplayName(typeof(TMessage).Name);
 
         try
         {
-            await _sender.SendToCtcAsync(message);
+            await _sender.SendToCtcAsync(message, cancellationToken);
             Result = $"{messageType} sent to CTC{detail}.";
         }
         catch (Exception ex)

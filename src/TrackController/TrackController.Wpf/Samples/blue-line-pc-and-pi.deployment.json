@@ -1,0 +1,20 @@
+{
+  "name": "Blue Line PC + Pi demonstration",
+  "trackFile": "blue-line-track-map.json",
+  "territoriesFile": "blue-line-territories.json",
+  "plcFile": "wayside.plc",
+  "territories": [
+    {
+      "territoryId": "wayside-a",
+      "execution": "Local",
+      "host": "127.0.0.1",
+      "port": 11406
+    },
+    {
+      "territoryId": "wayside-b",
+      "execution": "Pi",
+      "host": "127.0.0.1",
+      "port": 11405
+    }
+  ]
+}

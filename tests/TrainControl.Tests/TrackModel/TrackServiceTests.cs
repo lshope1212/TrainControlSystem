@@ -1,0 +1,225 @@
+using TrackModel.Core.Services;
+using TrainControl.Contracts.Enums;
+using TrainControl.Contracts.Messages;
+
+namespace TrainControl.Tests.TrackModel;
+
+[TestClass]
+public class TrackServiceTests
+{
+    private static TrackService CreateService()
+    {
+        var service = new TrackService();
+        service.LoadLayout(SampleTrackLayout.Create());
+        return service;
+    }
+
+    [TestMethod]
+    public void TrainMove_ClearsPreviousBlockAndOccupiesDestination()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104" });
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "105", ActualSpeedMetersPerSecond = 10 });
+        Assert.IsFalse(service.FindBlock("104")!.IsOccupied);
+        Assert.AreEqual(string.Empty, service.FindBlock("104")!.TrainId);
+        Assert.AreEqual("01", service.FindBlock("105")!.TrainId);
+        Assert.AreEqual(10d, service.FindBlock("105")!.ActualSpeedMetersPerSecond);
+        Assert.AreEqual(10d, service.CreateTrainEnvironment("105").ActualSpeedMetersPerSecond);
+        Assert.AreEqual(0d, service.CreateTrainEnvironment("104").ActualSpeedMetersPerSecond);
+    }
+
+    [TestMethod]
+    public void Collision_RejectsMoveWithoutChangingExistingOccupancy()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104" });
+        service.ApplyTrainUpdate(new() { TrainId = "02", CurrentBlockId = "105" });
+        Assert.Throws<InvalidOperationException>(() => service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "105" }));
+        Assert.AreEqual("01", service.FindBlock("104")!.TrainId);
+        Assert.AreEqual("02", service.FindBlock("105")!.TrainId);
+    }
+
+    [TestMethod]
+    public void CircuitFailure_ReportsUnknownWithoutErasingPhysicalOccupancy()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104" });
+        service.ApplyFailures(new() { BlockId = "104", TrackCircuitFailure = true });
+        Assert.AreEqual(OccupancyState.Unknown, service.CreateBlockState("104").Occupancy);
+        Assert.IsTrue(service.FindBlock("104")!.IsOccupied);
+        service.ApplyFailures(new() { BlockId = "104" });
+        Assert.AreEqual(OccupancyState.Occupied, service.CreateBlockState("104").Occupancy);
+    }
+
+    [TestMethod]
+    public void PassengerExchange_RetryDoesNotDoubleCountPassengersOrTickets()
+    {
+        var service = CreateService();
+        var message = new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "104",
+            BoardingPassengers = 12, DisembarkingPassengers = 8, ExchangeId = "exchange-1" };
+        service.ApplyTrainUpdate(message);
+        service.ApplyTrainUpdate(message);
+        Assert.AreEqual(12, service.FindBlock("104")!.WaitingPassengers);
+        Assert.AreEqual(12, service.FindBlock("104")!.TicketsSold);
+        Assert.AreEqual(8, service.FindBlock("104")!.DisembarkingPassengers);
+        Assert.AreEqual(12, service.CreateTicketSales("Blue").TicketsPerHour);
+    }
+
+    [TestMethod]
+    public void PassengerExchange_TooManyBoardingRejectsWholeUpdate()
+    {
+        var service = CreateService();
+        Assert.Throws<ArgumentException>(() => service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104",
+            BoardingPassengers = 25, ExchangeId = "too-many" }));
+        Assert.IsFalse(service.FindBlock("104")!.IsOccupied);
+        Assert.AreEqual(24, service.FindBlock("104")!.WaitingPassengers);
+    }
+
+    [TestMethod]
+    public void OccupiedSwitch_RejectsThrowWithoutApplyingOtherCommands()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "103" });
+        Assert.Throws<InvalidOperationException>(() => service.ApplyCommand(new() { BlockId = "103",
+            Switch = SwitchPosition.Reverse, CommandedSpeedMetersPerSecond = 10 }));
+        Assert.AreEqual(SwitchPosition.Normal, service.FindBlock("103")!.Switch);
+        Assert.AreEqual(0d, service.FindBlock("103")!.CommandedSpeedMetersPerSecond);
+    }
+
+    [TestMethod]
+    public void SwitchCommand_ChangesReportedRoute()
+    {
+        var service = CreateService();
+        service.ApplyCommand(new() { BlockId = "103", Switch = SwitchPosition.Reverse });
+        Assert.AreEqual("121", service.CreateTrainEnvironment("103").NextBlockId);
+    }
+
+    [TestMethod]
+    public void InvalidLayout_PreservesLoadedTrack()
+    {
+        var service = CreateService();
+        var invalid = SampleTrackLayout.Create();
+        invalid.Blocks[0].ConnectedBlockIds.Add("missing");
+        Assert.Throws<ArgumentException>(() => service.LoadLayout(invalid));
+        Assert.HasCount(36, service.Layout.Blocks);
+        Assert.AreEqual(1, service.LayoutRevision);
+    }
+
+    [TestMethod]
+    public void NegativeSpeed_RejectsCommand()
+    {
+        var service = CreateService();
+        Assert.Throws<ArgumentException>(() => service.ApplyCommand(new() { BlockId = "104", CommandedSpeedMetersPerSecond = -1 }));
+        Assert.AreEqual(0d, service.CreateTrainEnvironment("104").CommandedSpeedMetersPerSecond);
+    }
+
+    [TestMethod]
+    public void Demo_ProducesExpectedInitialTrainAndFailureState()
+    {
+        var service = new TrackService();
+        SampleTrackLayout.LoadDemo(service);
+        Assert.AreEqual("01", service.FindBlock("104")!.TrainId);
+        Assert.AreEqual("02", service.FindBlock("116")!.TrainId);
+        Assert.IsTrue(service.CreateBlockState("119").TrackCircuitFailure);
+        Assert.AreEqual(new TimeSpan(9, 42, 18), service.SystemTime);
+    }
+
+    [TestMethod]
+    public void TicketThroughput_ExpiresAfterOneSimulationHourButPreservesStationTotals()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104", BoardingPassengers = 12, ExchangeId = "first" });
+        service.SetSystemTime(TimeSpan.FromMinutes(59));
+        Assert.AreEqual(12, service.CreateTicketSales("Blue").TicketsPerHour);
+        service.SetSystemTime(TimeSpan.FromHours(1));
+        Assert.AreEqual(0, service.CreateTicketSales("Blue").TicketsPerHour);
+        Assert.AreEqual(12, service.FindBlock("104")!.TicketsSold);
+    }
+
+    [TestMethod]
+    public void Maintenance_PreventsEnteringClosedBlock()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104" });
+        service.SetMaintenance("105", MaintenanceState.Closed);
+        Assert.Throws<InvalidOperationException>(() => service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "105" }));
+        Assert.AreEqual("01", service.FindBlock("104")!.TrainId);
+        Assert.IsFalse(service.FindBlock("105")!.IsOccupied);
+    }
+
+    [TestMethod]
+    public void RemovingTrain_ClearsOccupancyAndSpeed()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104", ActualSpeedMetersPerSecond = 10 });
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "" });
+        Assert.IsFalse(service.FindBlock("104")!.IsOccupied);
+        Assert.AreEqual(0d, service.FindBlock("104")!.ActualSpeedMetersPerSecond);
+    }
+
+    [TestMethod]
+    public void PowerFailure_ReportsUnknownSignal()
+    {
+        var service = CreateService();
+        service.ApplyCommand(new() { BlockId = "103", Signal = SignalState.Green });
+        Assert.AreEqual(SignalState.Green, service.CreateTrainEnvironment("103").Signal);
+        service.ApplyFailures(new() { BlockId = "103", PowerFailure = true });
+        Assert.AreEqual(SignalState.Unknown, service.CreateTrainEnvironment("103").Signal);
+        Assert.AreEqual(OccupancyState.Unknown, service.CreateBlockState("103").Occupancy);
+    }
+
+    [TestMethod]
+    public void BlockWithoutSignal_DoesNotAcquireOneFromACommand()
+    {
+        var service = CreateService();
+        service.ApplyCommand(new() { BlockId = "104", Signal = SignalState.Green, CommandedSpeedMetersPerSecond = 10 });
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104" });
+        var definition = service.CreateLayoutMessage().Lines.SelectMany(line => line.Blocks).Single(b => b.BlockId == "104");
+        Assert.IsFalse(definition.HasSignal);
+        Assert.AreEqual(SignalState.Unknown, service.CreateBlockState("104").Signal);
+        Assert.AreEqual(SignalState.Unknown, service.CreateTrainEnvironment("104").Signal);
+        Assert.AreEqual(10d, service.CreateTrainEnvironment("104").CommandedSpeedMetersPerSecond);
+        Assert.AreEqual(OccupancyState.Occupied, service.CreateBlockState("104").Occupancy);
+    }
+
+    [TestMethod]
+    public void PassengerExchange_MovingTrainRejectsAllChanges()
+    {
+        var service = CreateService();
+        service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "105", ActualSpeedMetersPerSecond = 5 });
+        Assert.Throws<ArgumentException>(() => service.ApplyTrainUpdate(new() { TrainId = "01", CurrentBlockId = "104",
+            ActualSpeedMetersPerSecond = 1, BoardingPassengers = 3, ExchangeId = "moving" }));
+        Assert.AreEqual("01", service.FindBlock("105")!.TrainId);
+        Assert.IsFalse(service.FindBlock("104")!.IsOccupied);
+        Assert.AreEqual(24, service.FindBlock("104")!.WaitingPassengers);
+    }
+
+    [TestMethod]
+    public void Temperature_HeaterFollowsFreezingThresholdAndPower()
+    {
+        var service = CreateService();
+        foreach (var (temperature, expected) in new[] { (1d, false), (0d, true), (-10d, true), (10d, false) })
+        {
+            service.ApplyTemperature(new() { BlockId = "104", TemperatureCelsius = temperature });
+            Assert.AreEqual(expected, service.CreateTrainEnvironment("104").HeaterOn);
+            Assert.AreEqual(temperature, service.CreateTrainEnvironment("104").TemperatureCelsius);
+        }
+        service.ApplyTemperature(new() { BlockId = "104", TemperatureCelsius = -5 });
+        service.ApplyFailures(new() { BlockId = "104", PowerFailure = true });
+        Assert.IsFalse(service.CreateTrainEnvironment("104").HeaterOn);
+        service.ApplyFailures(new() { BlockId = "104" });
+        Assert.IsTrue(service.CreateTrainEnvironment("104").HeaterOn);
+        service.FindBlock("104")!.HasHeater = false;
+        Assert.IsFalse(service.CreateTrainEnvironment("104").HeaterOn);
+        Assert.AreEqual(20d, service.FindBlock("105")!.TemperatureCelsius);
+    }
+
+    [TestMethod]
+    public void InvalidTemperature_PreservesPreviousTemperature()
+    {
+        var service = CreateService();
+        foreach (var temperature in new[] { -274d, double.NaN, double.PositiveInfinity })
+            Assert.Throws<ArgumentException>(() => service.ApplyTemperature(new() { BlockId = "104", TemperatureCelsius = temperature }));
+        Assert.AreEqual(20d, service.FindBlock("104")!.TemperatureCelsius);
+    }
+}

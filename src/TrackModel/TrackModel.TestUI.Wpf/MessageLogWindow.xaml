@@ -1,0 +1,20 @@
+<Window x:Class="TrackModel.TestUI.Wpf.MessageLogWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Track Model — Captured messages" Style="{StaticResource {x:Type Window}}"
+ Width="1360" Height="680" WindowStartupLocation="CenterOwner">
+ <DockPanel Margin="12">
+  <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+   <Button Content="Clear log" Command="{Binding ClearLogCommand}" Margin="0,0,12,0"/>
+
+  </StackPanel>
+  <DataGrid ItemsSource="{Binding Messages}">
+   <DataGrid.Columns>
+    <DataGridTextColumn Header="Received" Binding="{Binding Time}" Width="110"/>
+    <DataGridTextColumn Header="Destination" Binding="{Binding Destination}" Width="240"/>
+    <DataGridTextColumn Header="Message" Binding="{Binding MessageType}" Width="Auto" MinWidth="380"/>
+    <DataGridTextColumn Header="Payload" Binding="{Binding Payload}" Width="*"/>
+   </DataGrid.Columns>
+  </DataGrid>
+ </DockPanel>
+</Window>

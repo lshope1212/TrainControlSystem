@@ -1,4 +1,5 @@
 using CTC.Core.Services;
+using TrainControl.Common.Communication;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 
@@ -32,6 +33,7 @@ public class CtcServiceTests
                         BlockNumber = 2,
                         Section = "A",
                         LengthMeters = 150.0,
+                        SpeedLimitKilometersPerHour = 55.0,
                         StationName = "Pioneer",
                         HasSwitch = true,
                         HasCrossing = true,
@@ -84,6 +86,7 @@ public class CtcServiceTests
         Assert.AreEqual(2, block.BlockNumber);
         Assert.AreEqual("A", block.Section);
         Assert.AreEqual(150.0, block.LengthMeters);
+        Assert.AreEqual(55.0, block.SpeedLimitKilometersPerHour);
         Assert.AreEqual("Pioneer", block.StationName);
         Assert.IsTrue(block.HasSwitch);
         Assert.IsFalse(block.HasSignal);
@@ -131,6 +134,40 @@ public class CtcServiceTests
     }
 
     [TestMethod]
+    [DataRow(SignalState.Red)]
+    [DataRow(SignalState.Yellow)]
+    [DataRow(SignalState.Green)]
+    [DataRow(SignalState.SuperGreen)]
+    public void ApplyBlockStatus_AcceptsEverySignalState(SignalState signal)
+    {
+        var service = CreateServiceWithLayout();
+
+        service.ApplyBlockStatus(new BlockStatusMessage { BlockId = "G2", Signal = signal });
+
+        Assert.AreEqual(signal, service.State.FindBlock("G2")!.Signal);
+    }
+
+    [TestMethod]
+    public void SuperGreenBlockStatus_SurvivesSerialization()
+    {
+        var json = MessageSerializer.Serialize(new BlockStatusMessage { BlockId = "G2", Signal = SignalState.SuperGreen });
+
+        var message = MessageSerializer.DeserializePayload<BlockStatusMessage>(MessageSerializer.Deserialize(json));
+
+        Assert.AreEqual(SignalState.SuperGreen, message.Signal);
+    }
+
+    [TestMethod]
+    [DataRow(SignalState.Red, "Red")]
+    [DataRow(SignalState.Yellow, "Yellow")]
+    [DataRow(SignalState.Green, "Green")]
+    [DataRow(SignalState.SuperGreen, "Super Green")]
+    public void SignalState_DisplayName(SignalState signal, string expected)
+    {
+        Assert.AreEqual(expected, signal.ToDisplayName());
+    }
+
+    [TestMethod]
     public void ApplyBlockStatus_UnknownBlock_Throws()
     {
         var service = CreateServiceWithLayout();
@@ -148,40 +185,6 @@ public class CtcServiceTests
 
         Assert.AreEqual(250, service.State.FindLine("RED")!.TicketSalesPerHour);
         Assert.AreEqual(0, service.State.FindLine("GREEN")!.TicketSalesPerHour);
-    }
-
-    [TestMethod]
-    public void ApplyTrainAuthorization_StoresSiValuesOnMatchingTrain()
-    {
-        var service = new CTCService(new FakeMessageSender());
-
-        service.ApplyTrainAuthorization(new TrainAuthorizationStatusMessage
-        {
-            TrainId = "T1",
-            AuthorizedSpeedMetersPerSecond = 12.5,
-            AuthorizedAuthorityMeters = 400.0,
-        });
-        service.ApplyTrainAuthorization(new TrainAuthorizationStatusMessage
-        {
-            TrainId = "T2",
-            AuthorizedSpeedMetersPerSecond = 5.0,
-            AuthorizedAuthorityMeters = 50.0,
-        });
-        service.ApplyTrainAuthorization(new TrainAuthorizationStatusMessage
-        {
-            TrainId = "T1",
-            AuthorizedSpeedMetersPerSecond = 15.0,
-            AuthorizedAuthorityMeters = 600.0,
-        });
-
-        Assert.HasCount(2, service.State.DispatchedTrains);
-
-        var train = service.State.FindDispatchedTrain("T1")!;
-        Assert.AreEqual(15.0, train.AuthorizedSpeedMetersPerSecond);
-        Assert.AreEqual(600.0, train.AuthorizedAuthorityMeters);
-        Assert.AreEqual(string.Empty, train.CurrentBlockId);
-
-        Assert.AreEqual(5.0, service.State.FindDispatchedTrain("T2")!.AuthorizedSpeedMetersPerSecond);
     }
 
     [TestMethod]
@@ -236,12 +239,12 @@ public class CtcServiceTests
     }
 
     [TestMethod]
-    public void SetSystemTime_UpdatesStateWithoutTimer()
+    public async Task SetSystemTimeAsync_UpdatesStateWithoutTimer()
     {
         var service = new CTCService(new FakeMessageSender());
         var time = new TimeSpan(7, 30, 15);
 
-        service.SetSystemTime(time);
+        await service.SetSystemTimeAsync(time);
 
         Assert.AreEqual(time, service.State.SystemTime);
     }

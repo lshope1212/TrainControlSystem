@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Hardware Train Controller: an independent process that runs on the Raspberry Pi and
+    controls TRAIN-002/004/006/008/010. It is a TCP server; the Windows Hardware backend
+    connects to it as a client.
+
+    It MUST NOT reference TrainController.Core: the Hardware controller implements the
+    same requirements independently of the Software controller. It shares only the data
+    model (TrainController.Abstractions) and generic helpers (TrainControl.Common).
+    An architecture test enforces this.
+
+    Running locally / deploying to the Raspberry Pi: see README.md in this folder.
+    (Command-line options are not written here because XML comments cannot contain a double hyphen.)
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrainController.Abstractions\TrainController.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TrainController.Hardware.Pi</RootNamespace>
+  </PropertyGroup>
+
+</Project>

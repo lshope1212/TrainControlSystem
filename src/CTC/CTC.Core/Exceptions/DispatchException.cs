@@ -1,7 +1,8 @@
 namespace CTC.Core.Exceptions;
 
 /// <summary>
-/// Raised when a dispatch request cannot be honored. Placeholder — not thrown yet.
+/// Raised when a queued train cannot be released yet (e.g. its start block is occupied or
+/// closed). The message is dispatcher-readable; the train stays queued for retry.
 /// </summary>
 public class DispatchException : Exception
 {

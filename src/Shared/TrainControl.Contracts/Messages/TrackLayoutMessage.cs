@@ -6,5 +6,8 @@ namespace TrainControl.Contracts.Messages;
 /// </summary>
 public class TrackLayoutMessage
 {
+    /// <summary>Identifies the matching Track Model state/environment snapshot; empty for legacy senders.</summary>
+    public Guid SnapshotId { get; set; }
+
     public List<TrackLineDefinition> Lines { get; set; } = new List<TrackLineDefinition>();
 }

@@ -18,6 +18,7 @@ public class BlockStatusInputViewModel : CtcInputViewModelBase
     private SignalState _selectedSignal = SignalState.Unknown;
     private SwitchPosition _selectedSwitch = SwitchPosition.Unknown;
     private CrossingState _selectedCrossing = CrossingState.Unknown;
+    private MaintenanceState _selectedMaintenance = MaintenanceState.Open;
 
     public BlockStatusInputViewModel(ICtcMessageSender sender, CommunicationStatusViewModel communicationStatus)
         : base(sender, communicationStatus)
@@ -35,11 +36,15 @@ public class BlockStatusInputViewModel : CtcInputViewModelBase
     // Available enum values for the ComboBoxes
     public OccupancyState[] OccupancyOptions { get; } = Enum.GetValues<OccupancyState>();
 
-    public SignalState[] SignalOptions { get; } = Enum.GetValues<SignalState>();
+    // Paired with display text so SuperGreen shows as "Super Green".
+    public KeyValuePair<SignalState, string>[] SignalOptions { get; } =
+        Enum.GetValues<SignalState>().Select(signal => KeyValuePair.Create(signal, signal.ToDisplayName())).ToArray();
 
     public SwitchPosition[] SwitchOptions { get; } = Enum.GetValues<SwitchPosition>();
 
     public CrossingState[] CrossingOptions { get; } = Enum.GetValues<CrossingState>();
+
+    public MaintenanceState[] MaintenanceOptions { get; } = Enum.GetValues<MaintenanceState>();
 
     // Selected values from the ComboBoxes
     public OccupancyState SelectedOccupancy
@@ -66,6 +71,12 @@ public class BlockStatusInputViewModel : CtcInputViewModelBase
         set => SetProperty(ref _selectedCrossing, value);
     }
 
+    public MaintenanceState SelectedMaintenance
+    {
+        get => _selectedMaintenance;
+        set => SetProperty(ref _selectedMaintenance, value);
+    }
+
     public ICommand SendCommand { get; }
 
     private Task SendAsync()
@@ -78,6 +89,7 @@ public class BlockStatusInputViewModel : CtcInputViewModelBase
             Signal = SelectedSignal,
             Switch = SelectedSwitch,
             Crossing = SelectedCrossing,
+            Maintenance = SelectedMaintenance,
         };
 
         return SendToCtcAsync(message, $" for Block {message.BlockId}");

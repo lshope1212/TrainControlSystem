@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Train Controller internal data model shared by:
+      - TrainController.Core          (Software Train Controller control law)
+      - TrainController.Integration   (routing, state registry, backends, transports)
+      - TrainController.Hardware.Pi   (Hardware Train Controller on the Raspberry Pi)
+      - TrainController.Wpf           (Main UI / Test UI)
+    Data, fixed fleet assignment and validation only. NO control-law code belongs here,
+    so the Pi application can depend on it without reusing the Software controller.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
