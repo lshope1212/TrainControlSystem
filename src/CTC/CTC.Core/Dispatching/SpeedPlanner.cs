@@ -1,26 +1,77 @@
 using System.Globalization;
+using CTC.Core.Exceptions;
 using CTC.Core.Models;
 using TrainControl.Common.Utilities;
 
 namespace CTC.Core.Dispatching;
 
-/// <summary>Initial suggested speed for a train being released; see <see cref="SpeedPlanner.CalculateInitialSpeed"/>.</summary>
+/// <summary>
+/// Suggested speed toward a target block; see <see cref="SpeedPlanner.CalculateInitialSpeed"/>
+/// and <see cref="SpeedPlanner.CalculateSpeedToTarget"/>.
+/// </summary>
 /// <param name="SpeedMetersPerSecond">Suggested speed, never above the permitted maximum.</param>
-/// <param name="IsLate">The train is already past its scheduled time at the target block, so it was given the permitted maximum.</param>
-/// <param name="TargetBlockId">The next timed block on the route, which the speed is planned to reach on time.</param>
-public readonly record struct InitialSpeedSuggestion(double SpeedMetersPerSecond, bool IsLate, string TargetBlockId);
+/// <param name="IsLate">The target time has already passed, so the train was given the permitted maximum.</param>
+/// <param name="IsCapped">Reaching the target on time would need more than the permitted maximum, so the train was given the permitted maximum.</param>
+/// <param name="TargetBlockId">The block the speed is planned to reach on time.</param>
+/// <param name="TargetArrivalTime">Time of simulation day the train should enter <paramref name="TargetBlockId"/>.</param>
+/// <param name="RequiredSpeedMetersPerSecond">Speed that would reach the target exactly on time; infinite when <paramref name="IsLate"/>.</param>
+/// <param name="MaxPermittedSpeedMetersPerSecond">Highest speed permitted on the way to the target.</param>
+public readonly record struct SpeedSuggestion(
+    double SpeedMetersPerSecond,
+    bool IsLate,
+    bool IsCapped,
+    string TargetBlockId,
+    TimeSpan TargetArrivalTime,
+    double RequiredSpeedMetersPerSecond,
+    double MaxPermittedSpeedMetersPerSecond)
+{
+    /// <summary>
+    /// Dispatcher-readable reason the target time cannot be met (starting lower-case, so a
+    /// caller can prefix the train's name), or null when it can.
+    /// </summary>
+    public string? ArrivalWarning
+    {
+        get
+        {
+            if (IsLate)
+            {
+                return string.Format(
+                    CultureInfo.InvariantCulture,
+                    @"the requested arrival at {0} ({1:hh\:mm\:ss}) has already passed; suggested the maximum permitted speed ({2:F1} km/h).",
+                    TargetBlockId,
+                    TargetArrivalTime,
+                    UnitConversion.MetersPerSecondToKilometersPerHour(MaxPermittedSpeedMetersPerSecond));
+            }
+
+            if (IsCapped)
+            {
+                return string.Format(
+                    CultureInfo.InvariantCulture,
+                    @"the requested arrival at {0} ({1:hh\:mm\:ss}) cannot be met. Required: {2:F1} km/h. Maximum allowed: {3:F1} km/h. Suggested the maximum permitted speed.",
+                    TargetBlockId,
+                    TargetArrivalTime,
+                    UnitConversion.MetersPerSecondToKilometersPerHour(RequiredSpeedMetersPerSecond),
+                    UnitConversion.MetersPerSecondToKilometersPerHour(MaxPermittedSpeedMetersPerSecond));
+            }
+
+            return null;
+        }
+    }
+}
 
 /// <summary>
 /// Speed rules for scheduled routes: checks a schedule is physically achievable, and
-/// computes the initial suggested speed at dispatch. Calculations are in SI units; block
+/// computes the suggested speed at dispatch and when the dispatcher re-plans a released
+/// train. Calculations are in SI units; block
 /// speed limits arrive in km/h and are converted here.
 /// </summary>
 /// <remarks>
 /// A route is planned span by span, where a span runs from one timed block to the next and
 /// may pass through untimed (routed-through) blocks. No acceleration/deceleration is
 /// modeled: a train is assumed to cover a span at one constant speed, which therefore must
-/// respect the lowest speed limit in the span. The <c>route</c> arguments are the train's
-/// route blocks, aligned index-for-index with <see cref="ScheduledTrain.Route"/>.
+/// respect the lowest speed limit in the span. Where a <see cref="ScheduledTrain"/> is also
+/// passed, the <c>route</c> argument is the train's route blocks, aligned index-for-index
+/// with <see cref="ScheduledTrain.Route"/>.
 /// </remarks>
 public static class SpeedPlanner
 {
@@ -45,8 +96,9 @@ public static class SpeedPlanner
     /// <summary>
     /// Checks every span between consecutive timed blocks: covering the span's distance (the
     /// lengths of the blocks from the span's first block up to, not including, the block it
-    /// ends by entering) in the scheduled time must not need more than the permitted maximum.
-    /// An impossible schedule is rejected, never silently clamped.
+    /// ends by entering) in the time between DEPARTING the first block (its arrival plus its
+    /// dwell) and entering the last must not need more than the permitted maximum. A dwell that
+    /// leaves no travel time is rejected. An impossible schedule is rejected, never silently clamped.
     /// </summary>
     /// <returns>A dispatcher-readable reason the schedule is infeasible, or null when it is feasible.</returns>
     public static string? ValidateFeasibility(ScheduledTrain train, IReadOnlyList<CtcBlockState> route)
@@ -71,7 +123,16 @@ public static class SpeedPlanner
             var from = route[spanStart];
             var to = route[end];
             double distance = DistanceMeters(route, spanStart, end);
-            double travelSeconds = (train.Route[end].ArrivalTime!.Value - train.Route[spanStart].ArrivalTime!.Value).TotalSeconds;
+
+            // The train only starts the span once it has finished dwelling at its first block.
+            var departure = train.Route[spanStart].DepartureTime!.Value;
+            var arrival = train.Route[end].ArrivalTime!.Value;
+            double travelSeconds = AvailableTravelTime(departure, arrival).TotalSeconds;
+
+            if (train.Route[spanStart].DwellTime > TimeSpan.Zero && travelSeconds <= 0)
+            {
+                return DwellConflictMessage(train.TrainId, from.BlockId, train.Route[spanStart].DwellTime, departure, to.BlockId, arrival);
+            }
 
             if (distance <= 0)
             {
@@ -115,7 +176,7 @@ public static class SpeedPlanner
     /// If that time has already passed the train is late, and gets the permitted maximum
     /// rather than an infinite or negative speed.
     /// </summary>
-    public static InitialSpeedSuggestion CalculateInitialSpeed(ScheduledTrain train, IReadOnlyList<CtcBlockState> route, TimeSpan systemTime)
+    public static SpeedSuggestion CalculateInitialSpeed(ScheduledTrain train, IReadOnlyList<CtcBlockState> route, TimeSpan systemTime)
     {
         ArgumentNullException.ThrowIfNull(train);
         ArgumentNullException.ThrowIfNull(route);
@@ -127,17 +188,87 @@ public static class SpeedPlanner
             throw new InvalidOperationException($"{TrainIds.DisplayName(train.TrainId)} has no next timed block to plan a speed toward.");
         }
 
+        return PlanSpeed(route, target, train.Route[target].ArrivalTime!.Value, systemTime);
+    }
+
+    /// <summary>
+    /// Speed that gets an already-released train along <paramref name="route"/> (starting with
+    /// the block the train is in, ending with its target block) into the target at
+    /// <paramref name="targetArrivalTime"/>: <c>min(distance / (targetArrivalTime - systemTime), permittedMax)</c>.
+    /// When that time cannot be met (it has passed, or it would need more than the permitted
+    /// maximum) the train gets the permitted maximum and <see cref="SpeedSuggestion.ArrivalWarning"/>
+    /// says why. A track or vehicle limit is never exceeded.
+    /// </summary>
+    /// <exception cref="ArgumentException">The route has fewer than two blocks.</exception>
+    /// <exception cref="DispatchException">A block on the route has no speed limit.</exception>
+    public static SpeedSuggestion CalculateSpeedToTarget(IReadOnlyList<CtcBlockState> route, TimeSpan targetArrivalTime, TimeSpan systemTime)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+
+        if (route.Count < 2)
+        {
+            throw new ArgumentException("The route must run from the train's block to a different target block.", nameof(route));
+        }
+
+        // A missing limit would make the permitted maximum 0; refuse rather than suggest a stop.
+        if (route.FirstOrDefault(block => block.SpeedLimitKilometersPerHour <= 0) is { } unlimited)
+        {
+            throw new DispatchException($"No speed can be planned through {unlimited.BlockId}: the track layout gives it no speed limit.");
+        }
+
+        return PlanSpeed(route, route.Count - 1, targetArrivalTime, systemTime);
+    }
+
+    /// <summary>
+    /// Time the train has to travel from one stop to the next:
+    /// <c>nextArrival - previousDeparture</c>, where <c>previousDeparture = previousArrival + previousDwell</c>.
+    /// Zero or negative means the dwell (or the times) leave no time to travel.
+    /// </summary>
+    public static TimeSpan AvailableTravelTime(TimeSpan previousDeparture, TimeSpan nextArrival) => nextArrival - previousDeparture;
+
+    /// <summary>
+    /// Speed for a movement leg that cannot start before <paramref name="departureTime"/> (the
+    /// previous stop's arrival plus its dwell): the train has from
+    /// <c>max(departureTime, systemTime)</c> until <paramref name="targetArrivalTime"/> to cover
+    /// <paramref name="route"/>. Same rules and exceptions as <see cref="CalculateSpeedToTarget"/>.
+    /// </summary>
+    public static SpeedSuggestion CalculateLegSpeed(IReadOnlyList<CtcBlockState> route, TimeSpan departureTime, TimeSpan targetArrivalTime, TimeSpan systemTime) =>
+        CalculateSpeedToTarget(route, targetArrivalTime, departureTime > systemTime ? departureTime : systemTime);
+
+    /// <summary>
+    /// Dispatcher-readable explanation that a dwell leaves no time to reach the next stop,
+    /// e.g. the train would not leave A until 10:05:00 but must enter B at 10:04:00.
+    /// </summary>
+    public static string DwellConflictMessage(string trainId, string fromBlockId, TimeSpan dwellTime, TimeSpan departureTime, string toBlockId, TimeSpan arrivalTime) =>
+        string.Format(
+            CultureInfo.InvariantCulture,
+            @"{0} dwells {1:0} s at {2} and does not depart until {3:hh\:mm\:ss}, so it cannot enter {4} at {5:hh\:mm\:ss}. Shorten the dwell or make the arrival later.",
+            TrainIds.DisplayName(trainId),
+            dwellTime.TotalSeconds,
+            fromBlockId,
+            departureTime,
+            toBlockId,
+            arrivalTime);
+
+    /// <summary>
+    /// The speed rule shared by initial and updated suggestions: one constant speed from the
+    /// start of <c>route[0]</c> to the start of <c>route[target]</c>, capped at the permitted
+    /// maximum over those blocks; the permitted maximum when the target time has passed.
+    /// </summary>
+    private static SpeedSuggestion PlanSpeed(IReadOnlyList<CtcBlockState> route, int target, TimeSpan targetArrivalTime, TimeSpan systemTime)
+    {
         string targetBlockId = route[target].BlockId;
         double maxSpeed = GetMaxPermittedSpeedMetersPerSecond(Span(route, 0, target));
-        double remainingSeconds = (train.Route[target].ArrivalTime!.Value - systemTime).TotalSeconds;
+        double remainingSeconds = (targetArrivalTime - systemTime).TotalSeconds;
 
         if (remainingSeconds <= 0)
         {
-            return new InitialSpeedSuggestion(maxSpeed, IsLate: true, targetBlockId);
+            return new SpeedSuggestion(maxSpeed, IsLate: true, IsCapped: false, targetBlockId, targetArrivalTime, double.PositiveInfinity, maxSpeed);
         }
 
         double requiredSpeed = DistanceMeters(route, 0, target) / remainingSeconds;
-        return new InitialSpeedSuggestion(Math.Min(requiredSpeed, maxSpeed), IsLate: false, targetBlockId);
+        bool isCapped = requiredSpeed > maxSpeed + ToleranceMetersPerSecond;
+        return new SpeedSuggestion(Math.Min(requiredSpeed, maxSpeed), IsLate: false, isCapped, targetBlockId, targetArrivalTime, requiredSpeed, maxSpeed);
     }
 
     /// <summary>Blocks <paramref name="start"/> through <paramref name="end"/>, inclusive.</summary>

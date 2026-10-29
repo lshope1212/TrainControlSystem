@@ -27,6 +27,7 @@ public class MainWindowViewModel : ViewModelBase
         TrackLayoutInput = new TrackLayoutInputViewModel(sender, Communication);
         TicketSalesInput = new TicketSalesInputViewModel(sender, Communication);
         BlockStatusInput = new BlockStatusInputViewModel(sender, Communication);
+        OccupancySequenceSimulator = new OccupancySequenceSimulatorViewModel(sender, Communication);
         SystemTimeInput = new SystemTimeInputViewModel(sender, Communication, shutdownToken);
     }
 
@@ -40,6 +41,9 @@ public class MainWindowViewModel : ViewModelBase
     public SystemTimeInputViewModel SystemTimeInput { get; }
 
     public BlockStatusInputViewModel BlockStatusInput { get; }
+
+    /// <summary>TEST-ONLY: steps anonymous occupancy along a list of blocks.</summary>
+    public OccupancySequenceSimulatorViewModel OccupancySequenceSimulator { get; }
 
     // Other
     public CapturedOutputsViewModel Outputs { get; }

@@ -16,17 +16,19 @@ public static class ScheduleTemplateFactory
     /// <exception cref="InvalidOperationException">The train IDs would go past <see cref="TrainIds.MaxNumber"/>.</exception>
     public static ScheduleTemplate Create(CtcLineState line, int trainCount, int firstTrainNumber = 0)
     {
+        //Check if any of the arguments are null or out of range
         ArgumentNullException.ThrowIfNull(line);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(trainCount);
         ArgumentOutOfRangeException.ThrowIfNegative(firstTrainNumber);
 
+        //Check if there are any train IDs available 
         int available = TrainIds.MaxNumber + 1 - firstTrainNumber;
         if (trainCount > available)
         {
-            throw new InvalidOperationException(
-                $"Only {Math.Max(0, available)} more train ID(s) are available; train IDs end at {TrainIds.Format(TrainIds.MaxNumber)}.");
+            throw new InvalidOperationException($"Only {Math.Max(0, available)} more train ID(s) are available; train IDs end at {TrainIds.Format(TrainIds.MaxNumber)}.");
         }
 
+        //Generate the train IDs and format them using the utility class method
         var trainIds = Enumerable.Range(firstTrainNumber, trainCount).Select(TrainIds.Format);
         var startBlock = GetRouteStartBlock(line);
 
@@ -42,6 +44,7 @@ public static class ScheduleTemplateFactory
             SpeedLimitKilometersPerHour = block.SpeedLimitKilometersPerHour,
             ConnectedBlockIds = block.ConnectedBlockIds.ToList(),
             IsRouteStart = block == startBlock,
+            DefaultDwellTime = DwellTimePolicy.GetDefaultDwellTime(block),
         });
 
         return new ScheduleTemplate(line.LineId, trainIds, rows);

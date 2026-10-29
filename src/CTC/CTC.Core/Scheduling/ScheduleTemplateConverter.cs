@@ -100,7 +100,7 @@ public static class ScheduleTemplateConverter
 
         // Every nonblank cell is a timed waypoint. Blank cells are either blocks the train
         // passes through between waypoints (CTC fills those in below) or blocks it does not use.
-        var waypoints = new List<(ScheduleTemplateRow Row, TimeSpan Time)>();
+        var waypoints = new List<(ScheduleTemplateRow Row, TimeSpan Time, TimeSpan Dwell)>();
         foreach (var row in template.Rows)
         {
             string text = row.TrainTimes[column];
@@ -114,7 +114,13 @@ public static class ScheduleTemplateConverter
                 return $"{trainName} has an invalid time '{text.Trim()}' at {row.BlockId}. Use {TimeFormat}.";
             }
 
-            waypoints.Add((row, time));
+            string? dwellError = TryGetDwellTime(row, column, out var dwell);
+            if (dwellError is not null)
+            {
+                return $"{trainName} at {row.BlockId}: {dwellError}";
+            }
+
+            waypoints.Add((row, time, dwell));
         }
 
         var start = waypoints.Single(waypoint => waypoint.Row == startRow);
@@ -172,7 +178,9 @@ public static class ScheduleTemplateConverter
                 used.Add(blockId);
             }
 
-            route.Add(new ScheduledRouteBlock { BlockId = stop.Row.BlockId, ArrivalTime = stop.Time });
+            // Dwell does not change when the train enters the stop; it delays the next movement,
+            // which SpeedPlanner.ValidateFeasibility checks once the schedule is queued.
+            route.Add(new ScheduledRouteBlock { BlockId = stop.Row.BlockId, ArrivalTime = stop.Time, DwellTime = stop.Dwell });
             used.Add(stop.Row.BlockId);
         }
 
@@ -188,6 +196,36 @@ public static class ScheduleTemplateConverter
         }
 
         train = scheduledTrain;
+        return null;
+    }
+
+    /// <summary>
+    /// The dwell for one timed cell: blank means the block's default (45 s at a station,
+    /// otherwise 0 s; see <see cref="DwellTimePolicy"/>), so schedules without dwell times keep
+    /// working. The route start block never dwells. Returns an error message, or null.
+    /// </summary>
+    private static string? TryGetDwellTime(ScheduleTemplateRow row, int column, out TimeSpan dwell)
+    {
+        dwell = TimeSpan.Zero;
+        string text = row.TrainDwellTimes[column];
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            dwell = row.IsRouteStart ? TimeSpan.Zero : row.DefaultDwellTime;
+            return null;
+        }
+
+        string? error = DwellTimePolicy.TryParseSeconds(text, out dwell);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (row.IsRouteStart && dwell > TimeSpan.Zero)
+        {
+            return "the route start block has no dwell time; trains depart it at their departure time.";
+        }
+
         return null;
     }
 

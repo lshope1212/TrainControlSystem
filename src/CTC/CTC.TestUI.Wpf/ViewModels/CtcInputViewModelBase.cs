@@ -31,22 +31,27 @@ public abstract class CtcInputViewModelBase : ViewModelBase
     /// endpoint received the bytes; there is no acknowledgement protocol.
     /// </summary>
     /// <param name="detail">Optional suffix for the success text, e.g. " for Block G12".</param>
-    protected async Task SendToCtcAsync<TMessage>(TMessage message, string detail = "", CancellationToken cancellationToken = default)
+    /// <returns>True if the message was delivered.</returns>
+    protected async Task<bool> SendToCtcAsync<TMessage>(TMessage message, string detail = "", CancellationToken cancellationToken = default)
         where TMessage : class
     {
         var messageType = MessageDisplayNameFormatter.ToDisplayName(typeof(TMessage).Name);
+        bool sent;
 
         try
         {
             await _sender.SendToCtcAsync(message, cancellationToken);
             Result = $"{messageType} sent to CTC{detail}.";
+            sent = true;
         }
         catch (Exception ex)
         {
             // Runs from an async void command: report, never crash the TestUI.
             Result = $"Unable to send {messageType}: {ex.Message}";
+            sent = false;
         }
 
         _communicationStatus.ReportCtcSend(Result);
+        return sent;
     }
 }

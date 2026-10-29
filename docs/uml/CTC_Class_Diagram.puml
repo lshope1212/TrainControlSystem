@@ -1,0 +1,317 @@
+@startuml CTC_Class_Diagram
+' CTC Module Class Diagram - generated from the same model as CTC_Class_Diagram.mdj / CTC_Class_Diagram_Spec.md.
+' Async signatures omit the trailing 'cancellationToken : CancellationToken = default' parameter.
+title CTC Module Class Diagram
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 40
+skinparam ranksep 60
+hide empty members
+left to right direction
+
+package "CTC.Wpf.ViewModels" as vm {
+abstract class ViewModelBase {
+  +<<event>> PropertyChanged : PropertyChangedEventHandler
+  --
+  #OnPropertyChanged(propertyName : string?)
+  #SetProperty<T>(field : ref T, value : T, propertyName : string?) : bool
+}
+class MainWindowViewModel {
+  +SelectedLine : CtcLineState [0..1]
+  +Blocks : ObservableCollection<BlockViewModel>
+  +DispatchQueue : ObservableCollection<DispatchQueueEntryViewModel>
+  +DispatchedTrains : ObservableCollection<DispatchedTrainViewModel>
+  +IsMaintenanceMode : bool
+  +SystemTimeDisplay : string
+  +CloseSelectedBlockCommand : ICommand
+  +ReopenSelectedBlockCommand : ICommand
+  +ToggleSelectedBlockSwitchCommand : ICommand
+  +ApplyTrainPlanCommand : ICommand
+  --
+  +<<create>> MainWindowViewModel(ctc : ICTCService)
+  -OnCtcStateChanged(sender : object?, e : CtcStateChangedEventArgs)
+  -ApplyTrainPlanAsync() : Task
+  -CloseSelectedBlockAsync() : Task
+}
+class ScheduleBuilderViewModel {
+  +Line : CtcLineState [0..1]
+  +NumberOfTrainsText : string
+  +StatusMessage : string
+  +Rows : ObservableCollection<ScheduleTemplateRowViewModel>
+  +GenerateTemplateCommand : ICommand
+  +UploadScheduleCommand : ICommand
+  +QueueScheduleCommand : ICommand
+  +ClearTemplateCommand : ICommand
+  --
+  +<<create>> ScheduleBuilderViewModel(ctc : ICTCService)
+  -GenerateTemplate()
+  -UploadSchedule()
+  -QueueSchedule()
+}
+}
+
+package "CTC.Wpf.Services" as svcWpf {
+class CtcNamedPipeReceiver {
+  -_dispatcher : Dispatcher
+  +<<event>> StatusReported : EventHandler<string>
+  --
+  +<<create>> CtcNamedPipeReceiver(ctc : ICTCService, dispatcher : Dispatcher)
+  +RunAsync(cancellationToken : CancellationToken) : Task
+  -HandleAsync(envelope : MessageEnvelope) : Task
+}
+class NamedPipeMessageSender {
+  +SendAsync<TMessage>(message : TMessage) : Task
+}
+}
+
+package "CTC.Core.Interfaces" as coreIf {
+interface ICTCService {
+  +State : CtcSystemState {readOnly}
+  +<<event>> StateChanged : EventHandler<CtcStateChangedEventArgs>
+  --
+  +ApplyTrackLayout(message : TrackLayoutMessage)
+  +ApplyBlockStatus(message : BlockStatusMessage)
+  +ApplyTicketSales(message : TicketSalesMessage)
+  +SetSystemTimeAsync(systemTime : TimeSpan) : Task
+  +QueueSchedule(scheduledTrains : IEnumerable<ScheduledTrain>)
+  +CreateMaintenanceRequest(blockId : string, requestedState : MaintenanceState) : MaintenanceRequestMessage
+  +CreateSwitchPositionRequest(blockId : string, requestedPosition : SwitchPosition) : SwitchPositionRequestMessage
+  +CreateMovementRequest(trainId : string) : MovementRequestMessage
+  +CloseBlockAsync(blockId : string) : Task
+  +ReopenBlockAsync(blockId : string) : Task
+  +SetSwitchPositionAsync(blockId : string, requestedPosition : SwitchPosition) : Task
+  +UpdateDispatchedTrainPlanAsync(trainId : string, destinationBlockId : string, targetArrivalTime : TimeSpan) : Task<string?>
+  +UpdateMovementPlanStopAsync(trainId : string, stopIndex : int, destinationBlockId : string, arrivalTime : TimeSpan, dwellTime : TimeSpan) : Task<string?>
+}
+interface IMessageSender {
+  +SendAsync<TMessage>(message : TMessage) : Task
+}
+}
+
+package "CTC.Core.Services" as coreSvc {
+class CTCService {
+  -_movementsInFlight : HashSet<string>
+  --
+  +<<create>> CTCService(messageSender : IMessageSender)
+  +ApplyTrackLayout(message : TrackLayoutMessage)
+  +ApplyBlockStatus(message : BlockStatusMessage)
+  +ApplyTicketSales(message : TicketSalesMessage)
+  +SetSystemTimeAsync(systemTime : TimeSpan) : Task
+  +QueueSchedule(scheduledTrains : IEnumerable<ScheduledTrain>)
+  +CloseBlockAsync(blockId : string) : Task
+  +ReopenBlockAsync(blockId : string) : Task
+  +SetSwitchPositionAsync(blockId : string, requestedPosition : SwitchPosition) : Task
+  +UpdateMovementPlanStopAsync(trainId : string, stopIndex : int, destinationBlockId : string, arrivalTime : TimeSpan, dwellTime : TimeSpan) : Task<string?>
+  -DispatchTrainAsync(entry : DispatchQueueEntry) : Task<string?>
+  -AdvanceMovementPlansAsync() : Task
+  -StartNextMovementAsync(train : DispatchedTrainState) : Task<string>
+}
+}
+
+package "CTC.Core.Models" as models {
+class CtcSystemState {
+  +SystemTime : TimeSpan
+  --
+  +FindLine(lineId : string) : CtcLineState?
+  +FindBlock(blockId : string) : CtcBlockState?
+  +FindDispatchedTrain(trainId : string) : DispatchedTrainState?
+}
+class CtcLineState {
+  +LineId : string
+  +Name : string
+  +TicketSalesPerHour : int
+}
+class CtcBlockState {
+  +BlockId : string
+  +LengthMeters : double
+  +SpeedLimitKilometersPerHour : double
+  +StationName : string
+  +HasSwitch : bool
+  +ConnectedBlockIds : IList<string>
+  +Occupancy : OccupancyState
+  +Signal : SignalState
+  +Switch : SwitchPosition
+  +ConfirmedMaintenanceState : MaintenanceState
+  +RequestedMaintenanceState : MaintenanceState
+}
+class ScheduledTrain {
+  +TrainId : string
+  +LineId : string
+  +/StartBlockId : string
+  +/DepartureTime : TimeSpan
+}
+class ScheduledRouteBlock {
+  +BlockId : string
+  +ArrivalTime : TimeSpan [0..1]
+  +DwellTime : TimeSpan
+  +/IsTimed : bool
+  +/DepartureTime : TimeSpan [0..1]
+}
+class DispatchQueueEntry {
+  +TrainId : string
+  +LineId : string
+  +DepartureTime : TimeSpan
+  +QueueStatus : DispatchQueueStatus
+}
+class DispatchedTrainState {
+  +TrainId : string
+  +LineId : string
+  +SuggestedSpeedMetersPerSecond : double
+  +SuggestedAuthorityMeters : double
+  +CurrentBlockId : string
+  +ActiveRouteBlockIds : IList<string>
+  +ActiveRouteIndex : int
+  +CurrentBlockOccupancyObserved : bool
+  +ActualArrivalTime : TimeSpan [0..1]
+  +IsLegSuggestionPending : bool
+  +/CurrentStop : MovementPlanStop [0..1]
+  +/ReadyToDepartTime : TimeSpan [0..1]
+}
+class MovementPlanStop {
+  +BlockId : string
+  +ArrivalTime : TimeSpan
+  +DwellTime : TimeSpan
+  +/DepartureTime : TimeSpan
+  +RouteIndex : int
+  +PlannedSpeedMetersPerSecond : double
+  +TimingWarning : string [0..1]
+}
+enum TrainMovementPhase {
+  EnRoute
+  Arrived
+  Dwelling
+  Completed
+}
+}
+
+package "CTC.Core.Dispatching" as disp {
+class MovementPlanner <<static>> {
+  +{static} CreateStops(train : ScheduledTrain) : List<MovementPlanStop>
+  +{static} ValidateStopTiming(trainId : string, stops : IReadOnlyList<MovementPlanStop>) : string?
+  +{static} ResolveRoute(train : DispatchedTrainState, line : CtcLineState, start : int, end : int) : List<CtcBlockState>?
+  +{static} RecalculatePlannedSpeeds(train : DispatchedTrainState, line : CtcLineState, systemTime : TimeSpan) : IReadOnlyList<string>
+  +{static} ApplyTrainAdvanced(train : DispatchedTrainState, systemTime : TimeSpan) : bool
+  +{static} CompleteDwellIfDue(train : DispatchedTrainState, systemTime : TimeSpan) : bool
+}
+class SpeedPlanner <<static>> {
+  +{static} GetMaxPermittedSpeedMetersPerSecond(blocks : IEnumerable<CtcBlockState>) : double
+  +{static} ValidateFeasibility(train : ScheduledTrain, route : IReadOnlyList<CtcBlockState>) : string?
+  +{static} CalculateInitialSpeed(train : ScheduledTrain, route : IReadOnlyList<CtcBlockState>, systemTime : TimeSpan) : SpeedSuggestion
+  +{static} CalculateSpeedToTarget(route : IReadOnlyList<CtcBlockState>, targetArrivalTime : TimeSpan, systemTime : TimeSpan) : SpeedSuggestion
+  +{static} CalculateLegSpeed(route : IReadOnlyList<CtcBlockState>, departureTime : TimeSpan, targetArrivalTime : TimeSpan, systemTime : TimeSpan) : SpeedSuggestion
+}
+class AuthorityManager <<static>> {
+  +{static} IsUnsafe(block : CtcBlockState) : bool
+  +{static} CalculateInitialAuthorityMeters(route : IEnumerable<CtcBlockState>) : double
+  +{static} CalculateUpdatedAuthorityMeters(route : IEnumerable<CtcBlockState>) : double
+}
+class RouteManager <<static>> {
+  +{static} FindRoute(line : CtcLineState, startBlockId : string, destinationBlockId : string) : IReadOnlyList<CtcBlockState>?
+}
+}
+
+package "CTC.Core.Tracking" as track {
+class TrainLocationTracker <<static>> {
+  +{static} ApplyOccupancy(state : CtcSystemState, block : CtcBlockState, previousOccupancy : OccupancyState) : TrainLocationResult
+  +{static} NextBlockId(train : DispatchedTrainState) : string?
+}
+}
+
+package "CTC.Core.Scheduling" as sched {
+class DwellTimePolicy <<static>> {
+  +{static} StationDwellTime : TimeSpan = 45 s {readOnly}
+  +{static} NonStationDwellTime : TimeSpan = 0 s {readOnly}
+  --
+  +{static} GetDefaultDwellTime(block : CtcBlockState) : TimeSpan
+  +{static} GetDefaultDwellTime(line : CtcLineState, blockId : string?) : TimeSpan
+  +{static} Validate(dwellTime : TimeSpan) : string?
+  +{static} TryParseSeconds(text : string?, dwellTime : out TimeSpan) : string?
+  +{static} FormatSeconds(dwellTime : TimeSpan) : string
+}
+class ScheduleTemplate {
+  +LineId : string {readOnly}
+  +TrainIds : IReadOnlyList<string> {readOnly}
+  +Rows : IReadOnlyList<ScheduleTemplateRow> {readOnly}
+  --
+  +<<create>> ScheduleTemplate(lineId : string, trainIds : IEnumerable<string>, rows : IEnumerable<ScheduleTemplateRow>)
+}
+class ScheduleTemplateConverter <<static>> {
+  +{static} TimeFormat : string = "HH:mm:ss" {readOnly}
+  --
+  +{static} Convert(template : ScheduleTemplate) : ScheduleConversionResult
+  +{static} TryParseTime(text : string?, time : out TimeSpan) : bool
+}
+}
+
+package "TrainControl.Contracts.Messages" as contracts <<external>> {
+class TrackLayoutMessage {
+}
+class BlockStatusMessage {
+}
+class TicketSalesMessage {
+}
+class SystemTimeMessage {
+}
+class MovementSuggestionMessage {
+  +TrainId : string
+  +SuggestedSpeedMetersPerSecond : double
+  +SuggestedAuthorityMeters : double
+}
+class MovementRequestMessage {
+  +TrainId : string
+  +RequestType : MovementRequestType
+}
+class MaintenanceRequestMessage {
+}
+class SwitchPositionRequestMessage {
+}
+}
+
+CTCService ..|> ICTCService
+NamedPipeMessageSender ..|> IMessageSender
+MainWindowViewModel --|> ViewModelBase
+ScheduleBuilderViewModel --|> ViewModelBase
+CTCService --> "1" IMessageSender : -_messageSender
+CTCService "1" *--> "1" CtcSystemState : +State
+CtcSystemState "1" *--> "*" CtcLineState : +Lines {ordered}
+CtcLineState "1" *--> "*" CtcBlockState : +Blocks {ordered}
+CtcSystemState "1" o--> "*" ScheduledTrain : +ScheduledTrains
+CtcSystemState "1" *--> "*" DispatchQueueEntry : +DispatchQueue {ordered}
+CtcSystemState "1" *--> "*" DispatchedTrainState : +DispatchedTrains
+ScheduledTrain "1" *--> "*" ScheduledRouteBlock : +Route {ordered}
+DispatchedTrainState "1" *--> "*" MovementPlanStop : +Stops {ordered}
+DispatchedTrainState --> "1" TrainMovementPhase : +Phase
+MainWindowViewModel --> "1" ICTCService : -_ctc
+ScheduleBuilderViewModel --> "1" ICTCService : -_ctc
+MainWindowViewModel "1" *--> "1" ScheduleBuilderViewModel : +ScheduleBuilder
+ScheduleBuilderViewModel --> "0..1" ScheduleTemplate : -_template
+ScheduleBuilderViewModel ..> ScheduleTemplateConverter : <<use>>
+CtcNamedPipeReceiver --> "1" ICTCService : -_ctc
+CTCService ..> MovementPlanner : <<use>>
+CTCService ..> SpeedPlanner : <<use>>
+CTCService ..> AuthorityManager : <<use>>
+CTCService ..> RouteManager : <<use>>
+CTCService ..> TrainLocationTracker : <<use>>
+CTCService ..> DwellTimePolicy : <<use>>
+MovementPlanner ..> SpeedPlanner : <<use>>
+MovementPlanner ..> MovementPlanStop : <<create>>
+MovementPlanner ..> DispatchedTrainState : <<update>>
+SpeedPlanner ..> CtcBlockState
+AuthorityManager ..> CtcBlockState
+RouteManager ..> CtcLineState
+TrainLocationTracker ..> DispatchedTrainState : <<update>>
+TrainLocationTracker ..> CtcBlockState
+DwellTimePolicy ..> CtcBlockState
+ScheduleTemplateConverter ..> ScheduleTemplate
+ScheduleTemplateConverter ..> ScheduledTrain : <<create>>
+CtcNamedPipeReceiver ..> contracts : <<deserialize>>
+ICTCService ..> contracts : <<use>>
+CTCService ..> contracts : <<send>>
+
+note bottom of DispatchedTrainState
+  CurrentBlockId, ActiveRouteBlockIds and the BlockId of
+  MovementPlanStop / ScheduledRouteBlock are logical keys
+  into CtcBlockState.BlockId, not object references.
+end note
+@enduml

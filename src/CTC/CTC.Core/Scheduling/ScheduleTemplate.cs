@@ -33,6 +33,7 @@ public sealed class ScheduleTemplateRow
     public ScheduleTemplateRow(int trainCount)
     {
         TrainTimes = Enumerable.Repeat(string.Empty, trainCount).ToArray();
+        TrainDwellTimes = Enumerable.Repeat(string.Empty, trainCount).ToArray();
     }
 
     public string LineId { get; init; } = string.Empty;
@@ -68,4 +69,70 @@ public sealed class ScheduleTemplateRow
     /// either passes through (when the block lies between two timed blocks) or does not use it.
     /// </summary>
     public string[] TrainTimes { get; }
+
+    /// <summary>
+    /// Dwell time text per train column, in whole seconds: how long the train stays in this
+    /// block after entering it. Blank means the block's <see cref="DefaultDwellTime"/>. Only
+    /// meaningful where the train has a time; validated by <see cref="ScheduleTemplateConverter"/>.
+    /// </summary>
+    public string[] TrainDwellTimes { get; }
+
+    /// <summary>
+    /// Dwell a train gets here unless the dispatcher overrides it, from
+    /// <see cref="DwellTimePolicy"/> (45 s at a station, otherwise 0 s). Never applies to the
+    /// route start block, which has no dwell.
+    /// </summary>
+    public TimeSpan DefaultDwellTime { get; init; }
+
+    /// <summary>
+    /// Sets a train's time in this block the way the dispatcher selecting a destination does:
+    /// when the block BECOMES timed for that train (blank to a time), its dwell is reset to
+    /// <see cref="DefaultDwellTime"/>; when the time is cleared, so is the dwell. Editing an
+    /// existing time keeps the dwell, so a manually entered dwell is never overwritten.
+    /// </summary>
+    public void SetTrainTime(int column, string? text)
+    {
+        text ??= string.Empty;
+        bool wasTimed = !string.IsNullOrWhiteSpace(TrainTimes[column]);
+        bool isTimed = !string.IsNullOrWhiteSpace(text);
+        TrainTimes[column] = text;
+
+        if (!isTimed)
+        {
+            TrainDwellTimes[column] = string.Empty;
+        }
+        else if (!wasTimed)
+        {
+            TrainDwellTimes[column] = IsRouteStart ? string.Empty : DwellTimePolicy.FormatSeconds(DefaultDwellTime);
+        }
+    }
+
+    /// <summary>
+    /// Sets a train's dwell in this block from text in whole seconds; blank restores the default.
+    /// A negative or non-numeric value, or any dwell at the route start block, is rejected and
+    /// the previous value kept.
+    /// </summary>
+    /// <returns>A dispatcher-readable error, or null when the value was stored.</returns>
+    public string? TrySetTrainDwellTime(int column, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            TrainDwellTimes[column] = string.Empty;
+            return null;
+        }
+
+        string? error = DwellTimePolicy.TryParseSeconds(text, out var dwell);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (IsRouteStart && dwell > TimeSpan.Zero)
+        {
+            return $"{BlockId} is the route start block; trains depart it at their departure time, so it has no dwell time.";
+        }
+
+        TrainDwellTimes[column] = DwellTimePolicy.FormatSeconds(dwell);
+        return null;
+    }
 }
