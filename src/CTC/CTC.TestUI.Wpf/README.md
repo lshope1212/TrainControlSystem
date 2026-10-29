@@ -89,8 +89,13 @@ dotnet run --project src/CTC/CTC.TestUI.Wpf
 
 Quick check:
 
-1. TestUI: **Send Sample Layout**.
-2. CTC: pick `A4` in the *Selected Block* drop-down.
+1. TestUI: **Send Sample Layout**. This sends the whole course railway (Blue 15, Red 76 and
+   Green 150 blocks) from `SampleData/course-vf5-layout.json`, generated from the course
+   workbook *Track Layout & Vehicle Data vF5*. Blue keeps IDs `A1`..`C15`; Red and Green IDs
+   are line-qualified (`RED-C7`, `GREEN-W132`). The CTC *Current Line* selector then lists
+   all three lines.
+2. CTC: click block `A4` on the *Territory Overview* map (or pick it in the *Selected Block*
+   drop-down; the two stay in sync).
 3. TestUI: Block ID `A4`, Occupancy `Occupied`, Signal `Red` → **Send Block Status**.
    The CTC *Selected Block* panel updates immediately.
 4. CTC: **Close Block**. TestUI *Captured CTC Outputs* shows

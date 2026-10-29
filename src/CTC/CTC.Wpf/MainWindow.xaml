@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:behaviors="clr-namespace:CTC.Wpf.Behaviors"
+        xmlns:controls="clr-namespace:CTC.Wpf.Controls"
         mc:Ignorable="d"
         Title="CTC Office"
         Width="1600"
@@ -241,35 +242,36 @@
 
                             </StackPanel>
 
-                            <!-- Legend -->
+                            <!-- Legend: the territory map's visual language -->
                             <StackPanel Grid.Column="1"
                                         Orientation="Horizontal"
                                         HorizontalAlignment="Center"
-                                        VerticalAlignment="Center">
+                                        VerticalAlignment="Center"
+                                        TextElement.FontSize="11">
 
-                                <TextBlock Text="●"
-                                           Foreground="Green"
-                                           Margin="6,0,2,0"/>
-
+                                <Rectangle Width="14" Height="5" Fill="#368653" Margin="6,0,3,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Clear"/>
 
-                                <TextBlock Text="●"
-                                           Foreground="Red"
-                                           Margin="12,0,2,0"/>
-
+                                <Rectangle Width="14" Height="5" Fill="#C84036" Margin="10,0,3,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Occupied"/>
 
-                                <TextBlock Text="●"
-                                           Foreground="Orange"
-                                           Margin="12,0,2,0"/>
+                                <Rectangle Width="14" Height="5" Fill="#9BA8B8" Margin="10,0,3,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Unknown"/>
 
+                                <Rectangle Width="16" Height="9" Fill="#9BA8B8" Stroke="#D97706" StrokeThickness="2" Margin="10,0,3,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Maintenance"/>
 
-                                <TextBlock Text="◆"
-                                           Foreground="#2563EB"
-                                           Margin="12,0,2,0"/>
-
+                                <TextBlock Text="&#x25C6;" Foreground="#1D4ED8" Margin="10,0,3,0"/>
                                 <TextBlock Text="Switch"/>
+
+                                <TextBlock Text="&#x25CF;" Foreground="#368653" Margin="10,0,3,0"/>
+                                <TextBlock Text="Signal"/>
+
+                                <TextBlock Text="&#x2715;" Foreground="#7C3AED" Margin="10,0,3,0"/>
+                                <TextBlock Text="Crossing"/>
+
+                                <Rectangle Width="14" Height="3" Fill="#4B5563" Margin="10,0,3,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Station"/>
 
                             </StackPanel>
 
@@ -277,16 +279,23 @@
                             <StackPanel Grid.Column="2"
                                         Orientation="Horizontal">
 
+                                <!-- View-only commands handled by the map itself. -->
                                 <Button Content="Fit"
-                                        Command="{Binding FitTerritoryCommand}"/>
+                                        ToolTip="Fit the whole line in view"
+                                        Command="{x:Static controls:CtcTerritoryMap.FitCommand}"
+                                        CommandTarget="{Binding ElementName=TerritoryMap}"/>
 
                                 <Button Content="+"
                                         Width="34"
-                                        Command="{Binding ZoomInCommand}"/>
+                                        ToolTip="Zoom in (Ctrl+wheel)"
+                                        Command="{x:Static controls:CtcTerritoryMap.ZoomInCommand}"
+                                        CommandTarget="{Binding ElementName=TerritoryMap}"/>
 
                                 <Button Content="-"
                                         Width="34"
-                                        Command="{Binding ZoomOutCommand}"/>
+                                        ToolTip="Zoom out (Ctrl+wheel)"
+                                        Command="{x:Static controls:CtcTerritoryMap.ZoomOutCommand}"
+                                        CommandTarget="{Binding ElementName=TerritoryMap}"/>
 
                             </StackPanel>
 
@@ -301,34 +310,12 @@
                                   VerticalScrollBarVisibility="Auto"
                                   Background="#FAFAFA">
 
-                        <Canvas Width="{Binding TerritoryWidth}"
-                                Height="{Binding TerritoryHeight}"
-                                Background="White">
-
-                            <!--
-                                Replace this placeholder with the actual
-                                territory/track UserControl.
-
-                                Clicking a rendered block should set:
-                                    SelectedBlock
-
-                                Changing SelectedLine should load:
-                                    the line-specific track layout.
-                            -->
-
-                            <TextBlock Canvas.Left="30"
-                                       Canvas.Top="30"
-                                       Text="Track Layout / Territory Display"
-                                       Foreground="#9CA3AF"
-                                       FontSize="24"/>
-
-                            <TextBlock Canvas.Left="32"
-                                       Canvas.Top="72"
-                                       Text="Select a block to inspect occupancy, maintenance, switch, signal, and crossing status."
-                                       Foreground="#6B7280"
-                                       FontSize="12"/>
-
-                        </Canvas>
+                        <!-- Schematic of the selected line. Clicking a block sets SelectedBlock,
+                             the same selection the block selector and inspector use. -->
+                        <controls:CtcTerritoryMap x:Name="TerritoryMap"
+                                                  Blocks="{Binding SelectedLineBlocks}"
+                                                  SelectedBlock="{Binding SelectedBlock, Mode=TwoWay}"
+                                                  LineId="{Binding SelectedLine.LineId}"/>
 
                     </ScrollViewer>
 
@@ -356,7 +343,7 @@
                                        Style="{StaticResource FieldLabelStyle}"/>
 
                             <TextBlock Grid.Column="1"
-                                       Text="{Binding SelectedBlock.Number,
+                                       Text="{Binding SelectedBlock.DisplayName,
                                                       TargetNullValue=None}"
                                        FontWeight="SemiBold"
                                        Margin="6,0,0,0"/>
@@ -421,11 +408,10 @@
                                 <TextBlock Text="Selected Block"
                                            Style="{StaticResource SectionHeaderStyle}"/>
 
-                                <!-- Interim block picker until the territory display
-                                     renders clickable blocks. -->
-                                <ComboBox ItemsSource="{Binding Blocks}"
+                                <!-- Same selection as clicking a block on the territory map. -->
+                                <ComboBox ItemsSource="{Binding SelectedLineBlocks}"
                                           SelectedItem="{Binding SelectedBlock}"
-                                          DisplayMemberPath="BlockId"
+                                          DisplayMemberPath="DisplayName"
                                           Margin="0,0,0,8"/>
 
                                 <Grid>

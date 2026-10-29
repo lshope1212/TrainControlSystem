@@ -1,813 +1,729 @@
-I need you to update the UML documentation for the **CTC (Centralized Traffic Control / Dispatcher) module** of this TrainControlSystem project.
+You are working in this repository:
 
-The goal is to create a **new CTC Use Case Diagram and a corresponding set of Sequence Diagrams in StarUML** that accurately reflect the current implementation and the intended system design.
+https://github.com/lshope1212/TrainControlSystem
 
-## Repository / Branch
+Work from the latest `Luke_CTC` branch and inspect the existing implementation carefully before making changes.
 
-Repository:
+## Goal
 
-`https://github.com/lshope1212/TrainControlSystem`
+Implement the real **Graphical Territory Overview** for the CTC module.
 
-IMPORTANT:
+The CTC currently has a large placeholder area labeled `Territory Overview` in:
 
-Use the **`Luke_CTC` branch** as the authoritative source for the current CTC implementation.
+`src/CTC/CTC.Wpf/MainWindow.xaml`
 
-Do not base the diagrams on `master`, because the CTC implementation on `Luke_CTC` contains the newer scheduling, automatic dispatch, train tracking, active movement plan, dwell-time, CSV import, and TestUI/integration functionality.
+This needs to become an interactive schematic track map for the currently selected line.
 
-Before modifying anything:
+The dispatcher must be able to:
 
-1. Inspect the current repository structure.
-2. Locate the existing StarUML `.mdj` project/file(s).
-3. Locate the existing CTC use case and sequence diagrams.
-4. Inspect the current CTC implementation in:
-   - `src/CTC/CTC.Core`
-   - `src/CTC/CTC.Wpf`
-   - `src/CTC/CTC.TestUI.Wpf`
-5. Inspect the shared contracts/messages used by CTC.
-6. Preserve any existing class diagrams or unrelated UML diagrams.
-7. Replace or supersede only the outdated **CTC Use Case Diagram** and **CTC Sequence Diagrams**.
+- visually inspect the topology of the selected line;
+- visually inspect block occupancy and maintenance state;
+- see stations, switches, signals, and railway crossings;
+- see the current switch/signal/crossing state where applicable;
+- click a block on the map to make it `SelectedBlock`;
+- select the same block from the existing block dropdown;
+- have map selection and dropdown selection remain synchronized;
+- change between Blue, Red, and Green using the existing Current Line selector.
 
-Do NOT modify production C# code as part of this task.
+The existing dropdown must remain. The graphical territory map is an additional and preferably primary way to select blocks.
 
----
-
-# PART 1 — UML STYLE / LEVEL OF ABSTRACTION
-
-These diagrams are for a software engineering design review.
-
-The UML should be useful as **design documentation**, not as an exhaustive reproduction of every method call.
-
-Follow these principles:
-
-- The use case diagram should act as a high-level graphical table of contents of CTC functionality.
-- Use cases should represent meaningful actor goals, not individual UI buttons.
-- External modules may be UML actors because they interact with the CTC system boundary.
-- Sequence diagrams should show the important objects/services involved in accomplishing each use case.
-- Do not include every property getter, binding update, collection refresh, or trivial helper method.
-- Use actual class names from the repository when appropriate.
-- Avoid inventing classes that do not exist unless the participant represents an external system actor.
-- Keep diagrams readable.
-- Prefer approximately 4–7 meaningful lifelines per sequence diagram where possible.
-- Use activation bars where appropriate.
-- Use return messages only where they add useful information.
-- Use `alt`, `opt`, or `loop` interaction fragments only where they materially clarify behavior.
-- Do not turn sequence diagrams into algorithm flowcharts.
-
-The codebase should be the main authority for implementation behavior.
+Do **not** implement the final Track Model ↔ CTC communication as part of this task. We will do that separately afterward.
 
 ---
 
-# PART 2 — NEW CTC USE CASE DIAGRAM
+# Existing architecture to preserve
 
-Create a new use case diagram named something like:
+Inspect these files first:
 
-`CTC Use Case Diagram`
+- `src/CTC/CTC.Wpf/MainWindow.xaml`
+- `src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
+- `src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs`
+- `src/CTC/CTC.Core/Models/CtcBlockState.cs`
+- `src/CTC/CTC.Core/Models/CtcLineState.cs`
+- `src/CTC/CTC.Core/Services/CTCService.cs`
+- `src/CTC/CTC.TestUI.Wpf/SampleData/SampleTrackLayout.cs`
+- `src/CTC/CTC.TestUI.Wpf/ViewModels/TrackLayoutInputViewModel.cs`
 
-The system boundary should be clearly labeled:
+Also inspect this existing Track Controller control as a **rendering reference**:
 
-`CTC Module`
+`src/TrackController/TrackController.Wpf/Controls/TerritoryMap.cs`
 
-## Actors
+That control already demonstrates several concepts that should be useful here:
 
-Include the following actors OUTSIDE the CTC system boundary.
+- custom `FrameworkElement`;
+- `DrawingContext` rendering;
+- hit-testing blocks;
+- block status coloring;
+- switch labels;
+- signal indicators;
+- crossing labels;
+- selected-block highlighting.
 
-### Primary actor
+Do NOT make `CTC.Wpf` reference `TrackController.Wpf`.
 
-`Dispatcher`
+The CTC should get its own control using the same general rendering strategy. The modules must remain independent.
 
-This is the human operator of the CTC.
+Also do NOT add UI coordinates such as `MapX`, `MapY`, colors, or other presentation information to `TrainControl.Contracts`, `TrackLayoutMessage`, `TrackBlockDefinition`, or `CTC.Core`.
 
-### Secondary actors
-
-`Track Controller`
-
-This represents the external Track Controller / Wayside subsystem that:
-
-- provides block/wayside status,
-- receives movement requests/suggestions,
-- receives maintenance requests,
-- receives switch-position requests,
-- confirms wayside state through later status reports.
-
-`Track Model`
-
-This represents the external subsystem supplying information such as:
-
-- tickets sold per hour,
-- applicable track-related information that is communicated into CTC.
-
-`System Clock`
-
-This represents the external shared simulation time source.
-
-The CTC intentionally does not independently advance its own simulation clock. System time arriving from outside is what drives scheduled dispatch and dwell completion.
-
-Do NOT use `CTC.TestUI.Wpf` as a final-system actor.
-
-The TestUI is only a development stand-in for the real external modules.
+Map geometry is purely a presentation concern and belongs in `CTC.Wpf`.
 
 ---
 
-# USE CASES
+# Track data
 
-Instead of modeling every button as a separate use case, use these five high-level use cases.
+Use the supplied course workbook:
 
-## UC1 — Prepare Schedule
+`Track Layout & Vehicle Data vF5 (1).xlsx`
 
-Primary actor:
+The relevant sheets are:
 
-`Dispatcher`
+- `Blue Line` — 15 blocks
+- `Red Line` — 76 blocks
+- `Green Line` — 150 blocks
+- `Track Layout` — contains the schematic reference for the line/section topology
 
-This use case covers:
+Ignore the Vehicle Data worksheets for this task.
 
-- generating a schedule template,
-- entering train timing information,
-- setting/overriding dwell times,
-- uploading a CSV schedule,
-- clearing the editable schedule,
-- reviewing the schedule before queueing.
+The graphical map does NOT have to be geographically accurate or drawn to physical scale. It should look like a railway control schematic.
 
-Do NOT make Generate Template, Upload Schedule, and Clear Template three unrelated top-level sea-level use cases.
+However, it should accurately communicate:
 
-They are alternative actions/scenarios inside the larger dispatcher goal of preparing a schedule.
+- which blocks belong to which sections;
+- which blocks connect to one another;
+- where branches/switches exist;
+- where stations exist;
+- where railway crossings exist;
+- the overall recognizable topology of the selected line.
 
----
+The workbook's `Track Layout` graphic should be used as a visual reference for the Red/Green section topology. The Blue Line sheet also has its simple yard → A → B/C branch topology.
 
-## UC2 — Queue and Automatically Dispatch Trains
-
-Actors:
-
-- Dispatcher
-- System Clock
-- Track Controller
-
-This covers:
-
-- queueing a completed schedule,
-- validating scheduled trains,
-- ordering trains by departure time,
-- automatic time-triggered dispatch,
-- checking whether the start block is usable,
-- calculating suggested speed and authority,
-- sending the movement information externally,
-- moving a train from queued to dispatched state.
-
-Important:
-
-There is deliberately **no normal "Dispatch Train" button**.
-
-The system uses scheduled departures and the dispatch queue.
-
-The train is automatically eligible for release when:
-
-`DepartureTime <= SystemTime`
-
-The Track Controller is involved because dispatch causes movement information to be sent outside CTC.
+Do not merely place 150 Green Line blocks in one giant horizontal row.
 
 ---
 
-## UC3 — Monitor Territory and Train Operations
+# 1. Create a CTC-specific territory map control
 
-Actors:
+Create something along the lines of:
 
-- Dispatcher
-- Track Controller
-- Track Model
-- System Clock
+`src/CTC/CTC.Wpf/Controls/CtcTerritoryMap.cs`
 
-This covers the dispatcher observing:
+A custom `FrameworkElement` using `DrawingContext` is preferred because the Green Line has 150 blocks and this is exactly the kind of schematic that is efficient to render manually.
 
-- block occupancy,
-- maintenance state,
-- switch state,
-- signal state,
-- crossing state,
-- tickets sold/hour,
-- queued trains,
-- dispatched trains,
-- current/inferred train locations,
-- suggested speed,
-- suggested authority,
-- active movement plan,
-- target destination,
-- arrival time,
-- dwell state,
-- movement status.
+The control should accept, at minimum:
 
-The Track Controller provides block-status information.
+- the blocks for the currently selected line;
+- the currently selected block;
+- the selected line ID/name if needed by the layout provider.
 
-The Track Model provides ticket-sales information.
+Use dependency properties so it works naturally with WPF binding.
 
-The System Clock drives time-dependent state such as dwell completion.
+Conceptually:
 
----
+```csharp
+IEnumerable<BlockViewModel> Blocks
+BlockViewModel? SelectedBlock
+string? LineId
+```
 
-## UC4 — Manage Track Maintenance and Switches
+`SelectedBlock` should support TwoWay binding.
 
-Actors:
+When the dispatcher clicks a rendered block:
 
-- Dispatcher
-- Track Controller
+```text
+Map block clicked
+        ↓
+SelectedBlock changes
+        ↓
+existing block dropdown changes
+        ↓
+existing right-side Selected Block inspector changes
+```
 
-This covers:
+The reverse must also work:
 
-- enabling maintenance mode,
-- closing a block,
-- reopening a block,
-- changing the position of a switch,
-- receiving confirmation/status from the Track Controller.
+```text
+Dropdown selection changes
+        ↓
+SelectedBlock changes
+        ↓
+matching map block gets selected/highlighted
+```
 
-Maintenance Mode itself is a local CTC operator mode.
+Do not create a second independent selected-block state.
 
-Turning maintenance mode on does NOT directly change track state.
-
-Actual block/switch requests are sent to the Track Controller.
+`MainWindowViewModel.SelectedBlock` remains the authoritative selection.
 
 ---
 
-## UC5 — Update Active Movement Plan
+# 2. Extend BlockViewModel only with presentation information the map needs
 
-Actors:
+`BlockViewModel` already exposes occupancy, maintenance, switch, signal, crossing, speed limit, etc.
 
-- Dispatcher
-- Track Controller
+Add convenient read-only presentation properties where useful, such as:
 
-This covers changes to an already-dispatched train.
+```csharp
+Section
+StationName
+HasSignal
+HasCrossing
+LengthMeters
+ConnectedBlockIds
+DisplayName
+```
 
-The dispatcher can modify a selected stop's:
+For example:
 
-- destination block,
-- planned arrival time,
-- dwell time.
+```text
+DisplayName = A1
+DisplayName = H35
+```
 
-The CTC then recalculates whatever is affected, including:
+The graphical map should display the human-friendly section/block number rather than depending on the internal `BlockId` format.
 
-- route,
-- suggested speed,
-- suggested authority,
-- timing.
+Do not duplicate actual state in the ViewModel.
 
-Updated movement information is sent externally.
-
-This is one of the most important newer pieces of CTC functionality and should be clearly represented.
-
----
-
-# USE CASE ASSOCIATIONS
-
-At minimum, connect:
-
-### Dispatcher
-
-Dispatcher → Prepare Schedule  
-Dispatcher → Queue and Automatically Dispatch Trains  
-Dispatcher → Monitor Territory and Train Operations  
-Dispatcher → Manage Track Maintenance and Switches  
-Dispatcher → Update Active Movement Plan
-
-### Track Controller
-
-Track Controller ↔ Queue and Automatically Dispatch Trains  
-Track Controller ↔ Monitor Territory and Train Operations  
-Track Controller ↔ Manage Track Maintenance and Switches  
-Track Controller ↔ Update Active Movement Plan
-
-### Track Model
-
-Track Model ↔ Monitor Territory and Train Operations
-
-### System Clock
-
-System Clock ↔ Queue and Automatically Dispatch Trains  
-System Clock ↔ Monitor Territory and Train Operations
-
-Do not clutter the use case diagram with unnecessary `<<include>>` or `<<extend>>` relationships unless they genuinely improve the design.
-
-The five main use cases are the important part.
-
-Lay the diagram out cleanly:
-
-- Dispatcher on the left.
-- CTC system boundary in the center.
-- Secondary system actors on the right.
-- Use cases arranged vertically inside the system boundary.
-- Minimize crossing association lines.
+These properties should still read from the underlying `CtcBlockState`.
 
 ---
 
-# PART 3 — SEQUENCE DIAGRAMS
+# 3. Add a selected-line block collection
 
-Create a sequence diagram for each of the five major use cases.
+The map and the existing block dropdown should show only blocks belonging to `SelectedLine`.
 
-Name them consistently, for example:
+Right now `MainWindowViewModel.Blocks` contains every block across every line.
 
-- `SD - Prepare Schedule`
-- `SD - Queue and Automatically Dispatch Trains`
-- `SD - Monitor Territory and Train Operations`
-- `SD - Manage Track Maintenance and Switches`
-- `SD - Update Active Movement Plan`
+Preserve that collection if other code depends on it, but add something like:
 
-Each diagram should represent the **main success scenario**, while important alternative/failure paths can be shown with small `alt` or `opt` fragments.
+```csharp
+ObservableCollection<BlockViewModel> SelectedLineBlocks
+```
 
-Do not attempt to show every possible exception.
+or an equivalent filtered collection.
+
+When `SelectedLine` changes:
+
+1. rebuild/filter the visible line blocks;
+2. redraw the map;
+3. update the block dropdown;
+4. if `SelectedBlock` does not belong to the new line, clear it;
+5. keep Schedule Builder / dispatch filtering behavior exactly as it currently works.
+
+Bind both the territory map and block dropdown to this selected-line collection.
+
+`OccupiedBlockCount` shown underneath the territory display should preferably represent the selected line, because the displayed map represents the selected line.
 
 ---
 
-# SEQUENCE DIAGRAM 1 — PREPARE SCHEDULE
+# 4. Create a presentation-only layout engine
 
-Inspect the implementation first, especially:
+Do NOT put hundreds of X/Y coordinates into `CtcBlockState` or the shared track contract.
 
-- `ScheduleBuilderViewModel`
-- scheduling classes in `CTC.Core`
-- `ScheduleTemplateFactory`
-- `ScheduleTemplateConverter`
-- `ScheduleCsvImporter`
-- `ICTCService`
+Create a WPF-side layout component, for example:
+
+```text
+CTC.Wpf/Layout/TerritoryLayoutEngine.cs
+CTC.Wpf/Layout/TerritoryLayoutProvider.cs
+CTC.Wpf/Layout/TerritoryBlockPlacement.cs
+```
+
+Exact names are flexible.
+
+The layout engine should generate schematic coordinates for each block based on:
+
+- selected line;
+- section;
+- block number/order;
+- actual `ConnectedBlockIds`.
+
+## Desired approach
+
+Use the workbook's section-level track diagram as the reference.
+
+Define presentation-only section paths for:
+
+- Blue A/B/C
+- Red A–T
+- Green A–Z
+
+Then distribute the blocks belonging to each section along that section's path in block-number order.
+
+A section path may simply be represented as a line/polyline with normalized points.
+
+For example, Blue should visually resemble:
+
+```text
+YARD -- A1 -- A2 -- A3 -- A4 -- A5
+                                /   \
+                               /     \
+                          B6-B7-...-B10
+                               \
+                                C11-C12-...-C15
+```
+
+Do not necessarily render Yard as a real selectable `CtcBlockState`; a visual-only Yard terminal label is fine.
+
+For Red and Green, recreate the recognizable section-level loops/branches shown in the workbook's `Track Layout` diagram, and distribute the individual blocks along those paths.
+
+This gives us an accurate course-layout schematic without contaminating the shared domain objects with UI coordinates.
+
+## Important
+
+Actual block-to-block connection lines must ultimately use:
+
+```csharp
+ConnectedBlockIds
+```
+
+from the loaded layout.
+
+Do not infer runtime topology solely from adjacent block numbers.
+
+The section geometry determines **where to draw things**.
+
+`ConnectedBlockIds` determines **what is actually connected**.
+
+Deduplicate undirected connections so an A↔B relationship is drawn once.
+
+If an unknown/future line or section is loaded for which no custom section geometry exists, provide a reasonable generic fallback layout instead of crashing.
+
+---
+
+# 5. Visual design of each block
+
+The map must communicate live CTC state clearly without becoming unreadable.
+
+Use the current CTC visual language: clean, technical, light gray/white background, compact railway-control schematic.
+
+## Occupancy
+
+Use the main block body fill:
+
+- Clear / unoccupied = green
+- Occupied = red
+- Unknown = gray
+
+Use subdued colors similar to the Track Controller map rather than excessively bright colors.
+
+## Maintenance
+
+If a block is confirmed closed for maintenance:
+
+- orange outline around the block;
+- optionally an `M` badge.
+
+A pending requested maintenance state may optionally use a dashed orange outline if this can be done cleanly.
+
+Do not confuse a CTC request with Track Controller confirmed state.
+
+## Selection
+
+Selected block:
+
+- strong blue outline outside the normal block rectangle;
+- must remain obvious regardless of occupancy fill.
+
+## Switches
+
+Blocks containing switches must be visually obvious.
+
+Use a compact switch/turnout symbol or badge and display its current reported position:
+
+```text
+SW N
+SW R
+SW ?
+```
+
+where `?` means Unknown.
+
+The connecting track geometry should make the branch visually understandable.
+
+## Signals
+
+If `HasSignal`:
+
+draw a small signal indicator beside the block.
+
+Colors:
+
+- Red = red
+- Yellow = yellow/gold
+- Green = green
+- Super Green = brighter distinct green
+- Unknown = gray
+
+The map should communicate the signal state with both color and, at usable zoom levels, a short text or tooltip so it is not color-only.
+
+## Railway crossings
+
+If `HasCrossing`:
+
+show a crossing symbol/badge and its state:
+
+```text
+XING OPEN
+XING CLOSED
+XING ?
+```
+
+A compact version is fine on the map as long as the full value is available through hover/selection.
+
+## Stations
+
+If `StationName` is not empty:
+
+display the station name near the appropriate block.
+
+Stations should visually stand out from ordinary blocks but must not obscure status indicators.
+
+## Block labels
+
+Every block should at least display its human-readable section + block number:
+
+```text
+A1
+C7
+H35
+W132
+```
+
+---
+
+# 6. Hover information
+
+Add a useful tooltip/hover view for each map block.
+
+At minimum include:
+
+```text
+Block
+Section
+Length
+Speed Limit
+Occupancy
+Maintenance
+Station, if any
+Switch state, if any
+Signal state, if any
+Crossing state, if any
+```
+
+This will be especially useful when the Red or Green Line is zoomed out and individual labels are compact.
+
+---
+
+# 7. Live updates
+
+This is critical.
+
+The map must update when the existing CTC state changes.
+
+Example:
+
+```text
+BlockStatusMessage arrives
+        ↓
+CTCService.ApplyBlockStatus(...)
+        ↓
+CtcBlockState changes
+        ↓
+BlockViewModel.Refresh()
+        ↓
+graphical block redraws automatically
+```
+
+Do not require the dispatcher to switch lines, reselect a block, or reload the layout to see a new occupancy/signal/switch/crossing status.
+
+Because `Blocks` itself may not be replaced for every status update, ensure the custom map invalidates itself when contained `BlockViewModel` items raise `PropertyChanged`.
+
+Manage subscriptions properly when the block collection changes so there are no stale subscriptions or memory leaks.
+
+---
+
+# 8. Zoom / Fit behavior
+
+The XAML already contains:
+
+- Fit
+- +
+- -
+
+buttons in the Territory Overview toolbar.
+
+Make them functional.
+
+Since these are purely view operations, they do not need to be domain commands in `MainWindowViewModel`.
+
+A good solution is for `CtcTerritoryMap` to expose routed commands or equivalent view-level behavior for:
+
+```text
+Fit
+Zoom In
+Zoom Out
+```
+
+Suggested bounds:
+
+```text
+minimum zoom ≈ 0.4
+maximum zoom ≈ 3.0
+```
+
+Use the existing `ScrollViewer` so zooming into the Red/Green lines allows panning with the scrollbars.
+
+"Fit" should fit the complete selected-line schematic into the available territory viewport as reasonably as possible.
+
+When changing lines, return to a sensible fit view.
+
+Do not add business logic to `MainWindow.xaml.cs`; tiny purely visual behavior is acceptable if necessary, but prefer keeping it in the control.
+
+---
+
+# 9. Replace the placeholder territory Canvas
+
+In `MainWindow.xaml`, remove the current placeholder text:
+
+```text
+Track Layout / Territory Display
+Select a block to inspect occupancy...
+```
+
+and insert the real `CtcTerritoryMap`.
+
+Keep the overall Territory Overview card, toolbar, footer, and right-side inspector.
+
+Expand the legend so it clearly communicates the map's visual language.
+
+Suggested legend:
+
+```text
+● Clear
+● Occupied
+● Unknown
+□ Maintenance
+◆ Switch
+● Signal
+× Crossing
+```
+
+Do not make the legend excessively large.
+
+---
+
+# 10. Expand the CTC TestUI sample track layout to all three lines
+
+The existing:
+
+`CTC.TestUI.Wpf/SampleData/SampleTrackLayout.cs`
+
+currently sends only the small Blue Line.
+
+Update the TestUI's **Send Sample Layout** functionality so one `TrackLayoutMessage` contains all three course lines:
+
+```text
+Blue Line   = 15 blocks
+Red Line    = 76 blocks
+Green Line  = 150 blocks
+
+Total       = 241 blocks
+```
+
+The CTC's existing `ApplyTrackLayout()` already accepts multiple `TrackLineDefinition` objects, so do not create separate CTC services or separate messages per line.
+
+The existing button should still conceptually mean:
+
+```text
+Simulate Track Model sending the complete loaded railway layout to CTC
+```
+
+After clicking it, the CTC Current Line dropdown should contain:
+
+```text
+Blue Line
+Red Line
+Green Line
+```
+
+and switching the selected line should immediately change the graphical territory map.
+
+## Workbook data
+
+Use the supplied workbook as the authoritative source for:
+
+- block number;
+- section;
+- length;
+- grade if needed;
+- speed limit;
+- station name;
+- station presence;
+- switch presence;
+- signal/light presence;
+- railway crossing presence;
+- topology.
+
+Do not manually invent infrastructure that is not present in the workbook.
+
+Important examples include:
+
+- Blue Block 3 crossing
+- Blue Block 5 switch
+- Blue Blocks 6 and 11 signal/light locations
+- Blue stations at Blocks 10 and 15
+- Red and Green switches/yard connections from their Infrastructure column
+- Red/Green crossings
+- all Red/Green station locations
+- the section topology shown in the workbook Track Layout diagram
+
+Do not assume every consecutive block number connects directly; verify branch/loop topology against the workbook.
+
+## Runtime dependency
+
+Do NOT make the real CTC application read Excel.
+
+Prefer using the workbook during development to generate a checked-in TestUI fixture, for example:
+
+```text
+CTC.TestUI.Wpf/SampleData/course-vf5-layout.json
+```
+
+`SampleTrackLayout.Create()` can deserialize that fixture into a `TrackLayoutMessage`.
+
+Using `System.Text.Json` is sufficient; do not add a third-party JSON package.
+
+The workbook should remain development/reference data, not a runtime dependency of CTC.
+
+---
+
+# 11. TestUI block IDs
+
+Remember that CTC currently finds block statuses by `BlockId`, so block IDs contained in the three-line TestUI fixture must not collide across lines.
+
+Do not perform a large real-system BlockId redesign in this task.
+
+To minimize disruption:
+
+- preserve the existing Blue sample IDs if existing schedules/tests depend on them;
+- use line-qualified internal IDs for newly added Red and Green fixture blocks if necessary, e.g. `RED-C7`, `GREEN-W132`;
+- keep the graphical display human-friendly by showing `C7`, `W132`, etc. using Section + BlockNumber.
+
+All `ConnectedBlockIds` in the generated fixture must use the corresponding internal IDs consistently.
+
+This is TestUI fixture plumbing only. We will reconcile the final Track Model identifier convention during the communication-integration phase.
+
+---
+
+# 12. Do not break existing functionality
+
+Do not redesign or remove:
+
+- Current Line selector
+- Selected Block inspector
+- existing block dropdown
+- Maintenance Mode
+- Close/Reopen Block
+- Toggle Switch
+- Schedule Builder
+- dispatch queue
+- dispatched trains
+- active movement plans
+- ticket sales/hour
+- named-pipe communication
 - `CTCService`
+- TestUI communication architecture
 
-Use actual names found in the repository.
+Clicking a block on the territory map should simply feed the existing `SelectedBlock` workflow.
 
-Suggested lifelines:
-
-`dispatcher : Dispatcher`
-
-`scheduleVM : ScheduleBuilderViewModel`
-
-`: ScheduleTemplateFactory`
-
-`: ScheduleTemplateConverter`
-
-`ctc : CTCService`
-
-You may include `ScheduleCsvImporter` in an `alt` fragment for uploaded schedules if doing so remains readable.
-
-## Main success flow
-
-Represent something conceptually similar to:
-
-1. Dispatcher selects a line / number of trains.
-2. Dispatcher requests a schedule template.
-3. `ScheduleBuilderViewModel` requests creation of the template.
-4. `ScheduleTemplateFactory` creates the template based on the current line and train count.
-5. Template is returned/displayed.
-6. Dispatcher enters scheduled arrival times and dwell values.
-7. Dispatcher requests Queue Schedule.
-8. `ScheduleBuilderViewModel` asks `ScheduleTemplateConverter` to convert/validate the editable template.
-9. Valid scheduled trains are returned.
-10. `ScheduleBuilderViewModel` sends the scheduled trains to `CTCService`.
-11. `CTCService` stores/adds them to the scheduling and dispatch queue state.
-
-Add an `alt` fragment if useful:
-
-### `[Upload existing CSV]`
-
-Dispatcher → ScheduleBuilderViewModel  
-ScheduleBuilderViewModel → ScheduleCsvImporter  
-ScheduleCsvImporter → ScheduleBuilderViewModel: populated template
-
-Make clear that uploading DOES NOT automatically queue the schedule.
-
-The dispatcher still reviews it and chooses Queue Schedule.
-
-A station stop should receive the current default dwell policy of 45 seconds, while a non-station destination defaults to 0 seconds unless overridden.
+That is one of the main design goals of this task.
 
 ---
 
-# SEQUENCE DIAGRAM 2 — QUEUE AND AUTOMATICALLY DISPATCH TRAINS
+# 13. Tests
 
-Inspect:
+Add/update appropriate tests.
 
-- `CTCService`
-- `SetSystemTimeAsync`
-- dispatch queue models
-- `DispatchTrainAsync`
-- `RouteManager`
-- `SpeedPlanner`
-- `AuthorityManager`
-- `IMessageSender`
-- `NamedPipeMessageSender`
-- relevant shared movement messages.
+At minimum verify:
 
-Suggested lifelines:
+### Layout/test fixture
 
-`systemClock : System Clock`
+- sample message contains exactly 3 lines;
+- Blue has 15 blocks;
+- Red has 76 blocks;
+- Green has 150 blocks;
+- total = 241;
+- every `ConnectedBlockId` resolves to an existing block in the same line;
+- there are no duplicate internal BlockIds across the entire fixture;
+- stations/switches/crossings from the workbook are represented.
 
-`ctc : CTCService`
+### ViewModel behavior
 
-`: RouteManager`
+- changing `SelectedLine` updates `SelectedLineBlocks`;
+- selecting a block from the current line sets `SelectedBlock`;
+- switching to another line clears an incompatible selected block;
+- occupancy count reflects the visible/current line if we adopt that interpretation;
+- existing schedule/dispatch behavior still works.
 
-`: SpeedPlanner`
+### Layout engine
 
-`: AuthorityManager`
+Keep the coordinate computation separate enough from WPF rendering that basic layout behavior can be unit-tested.
 
-`trackController : Track Controller`
+Verify:
 
-If this becomes too wide, RouteManager/SpeedPlanner/AuthorityManager may be represented as one or two important domain collaborators rather than every helper.
+- all blocks receive placements;
+- layout bounds are positive;
+- no placement returns NaN/infinity;
+- all supported sections for Blue/Red/Green can be laid out;
+- unknown line/section falls back gracefully.
 
-## Main success flow
-
-Show:
-
-1. System Clock sends current simulation time.
-2. `CTCService.SetSystemTimeAsync(...)` updates system time.
-3. CTC determines which queued trains satisfy:
-
-   `DepartureTime <= SystemTime`
-
-4. CTC processes the due train.
-5. CTC resolves/checks its route.
-6. CTC calculates suggested speed.
-7. CTC calculates authority.
-8. CTC creates/sends movement suggestion/request information.
-9. Track Controller receives movement information.
-10. Only after successful communication does CTC move the train from queued state to dispatched state.
-11. CTC initializes the train's active movement plan.
-
-Use an `alt` fragment for the most important exception:
-
-### `[start block occupied or closed]`
-
-- calculated initial authority is not usable / zero,
-- train is NOT dispatched,
-- train remains queued,
-- dispatcher-facing status records the reason.
-
-Use another small alternative if useful:
-
-### `[message send fails]`
-
-- train remains queued,
-- dispatch is retried on a later system-time update.
-
-Do NOT show a manual Dispatch Train button because that is not the design.
+Do not try to pixel-test the WPF rendering.
 
 ---
 
-# SEQUENCE DIAGRAM 3 — MONITOR TERRITORY AND TRAIN OPERATIONS
+# 14. Build and verify
 
-This sequence diagram should focus on the most meaningful dynamic monitoring flow rather than simply showing UI getters.
+After implementation:
 
-The best main scenario is:
-
-**Track Controller reports a block occupancy/status change and CTC updates both territory state and a dispatched train's inferred location.**
-
-Inspect:
-
-- `CtcNamedPipeReceiver`
-- `CTCService.ApplyBlockStatus`
-- `TrainLocationTracker`
-- `MovementPlanner`
-- `CtcSystemState`
-- `MainWindowViewModel`
-- `DispatchedTrainViewModel`
-- `BlockViewModel`
-
-Suggested lifelines:
-
-`trackController : Track Controller`
-
-`receiver : CtcNamedPipeReceiver`
-
-`ctc : CTCService`
-
-`: TrainLocationTracker`
-
-`: MovementPlanner`
-
-`mainVM : MainWindowViewModel`
-
-`dispatcher : Dispatcher`
-
-You may omit one participant if necessary for readability.
-
-## Main flow
-
-1. Track Controller sends `BlockStatusMessage`.
-2. `CtcNamedPipeReceiver` receives/deserializes/routes the message.
-3. Receiver calls `CTCService.ApplyBlockStatus(...)`.
-4. CTC updates the matching block's:
-   - occupancy,
-   - signal,
-   - switch,
-   - crossing,
-   - confirmed maintenance state.
-5. CTC invokes `TrainLocationTracker` using the new occupancy transition.
-6. Tracker determines whether a dispatched train can be advanced to the newly occupied block.
-7. If a train moved, CTC updates the dispatched train's inferred current block.
-8. `MovementPlanner` determines whether the train has reached a scheduled stop and therefore entered Arrived/Dwelling state.
-9. CTC raises/causes state updates.
-10. `MainWindowViewModel` refreshes the block/train presentation.
-11. Dispatcher observes the new status.
-
-Use an `alt` fragment:
-
-### `[occupancy unambiguously matches one train]`
-
-Update that train location.
-
-### `[occupancy could match multiple trains]`
-
-Do not move any train.
-
-Record/report the ambiguity.
-
-Also optionally include a small `opt` note or secondary message showing:
-
-Track Model → CTC: `TicketSalesMessage`
-
-CTC → MainWindowViewModel: line ticket rate updated
-
-Do not make ticket sales the main sequence.
+1. Build the entire solution.
+2. Run the existing automated tests.
+3. Fix regressions caused by this change.
+4. Run CTC and CTC.TestUI together.
+5. Click `Send Sample Layout`.
+6. Verify Blue, Red, and Green appear in the Current Line selector.
+7. Verify each map renders.
+8. Click multiple blocks on each map and verify the dropdown/right inspector follows.
+9. Select blocks from the dropdown and verify the map follows.
+10. Use TestUI `BlockStatusMessage`s to change occupancy/signal/switch/crossing/maintenance and verify the map updates live.
+11. Verify Fit / Zoom In / Zoom Out.
+12. Verify the 150-block Green Line remains responsive.
 
 ---
 
-# SEQUENCE DIAGRAM 4 — MANAGE TRACK MAINTENANCE AND SWITCHES
-
-Focus the main scenario on **Close Block** because it demonstrates the architecture clearly.
-
-Inspect:
-
-- `MainWindowViewModel`
-- `CTCService.CloseBlockAsync`
-- `CTCService.ReopenBlockAsync`
-- `CTCService.SetSwitchPositionAsync`
-- `IMessageSender`
-- `NamedPipeMessageSender`
-- `CtcNamedPipeReceiver`
-- relevant request/status messages.
-
-Suggested lifelines:
-
-`dispatcher : Dispatcher`
-
-`mainVM : MainWindowViewModel`
-
-`ctc : CTCService`
-
-`sender : NamedPipeMessageSender`
-
-`trackController : Track Controller`
-
-`receiver : CtcNamedPipeReceiver`
-
-The diagram may show the return/status path from Track Controller through the receiver back into CTC.
-
-## Main success flow — Close Block
-
-1. Dispatcher enables Maintenance Mode.
-2. Dispatcher selects an open block.
-3. Dispatcher requests Close Block.
-4. `MainWindowViewModel` invokes CTC service.
-5. `CTCService` records the requested state and builds the maintenance request.
-6. `NamedPipeMessageSender` sends the request.
-7. Track Controller processes the request.
-8. Later, Track Controller sends a `BlockStatusMessage` containing the confirmed maintenance state.
-9. `CtcNamedPipeReceiver` receives the status.
-10. `CTCService.ApplyBlockStatus(...)` updates the confirmed maintenance state.
-11. `MainWindowViewModel` refreshes.
-12. Dispatcher sees that the block is now closed.
-
-Important design distinction:
-
-CTC's **requested maintenance state** and the **confirmed Track Controller state** are different.
-
-The display should not pretend the Track Controller has acted until confirmation is received.
-
-Add alternatives if readable:
-
-### `[Reopen Block]`
-
-Same basic flow with the requested maintenance state changed to Open.
-
-### `[Change Switch Position]`
-
-Dispatcher requests alternate switch position → CTC sends request → Track Controller later reports confirmed switch position.
-
-### `[Track Controller unavailable]`
-
-Sender reports failure → UI displays failure → confirmed state remains unchanged.
-
----
-
-# SEQUENCE DIAGRAM 5 — UPDATE ACTIVE MOVEMENT PLAN
-
-This should be one of the more detailed diagrams because this is an important CTC behavior.
-
-Inspect:
-
-- `MainWindowViewModel.ApplyTrainPlanCommand`
-- `CTCService.UpdateMovementPlanStopAsync`
-- `MovementPlanner`
-- `RouteManager`
-- `SpeedPlanner`
-- `AuthorityManager`
-- `NamedPipeMessageSender`
-- relevant movement suggestion messages
-- `DispatchedTrainState`
-- `MovementPlanStopViewModel`
-
-Suggested lifelines:
-
-`dispatcher : Dispatcher`
-
-`mainVM : MainWindowViewModel`
-
-`ctc : CTCService`
-
-`: RouteManager`
-
-`: SpeedPlanner`
-
-`: AuthorityManager`
-
-`trackController : Track Controller`
-
-Again, reduce helper lifelines if the diagram becomes too wide.
-
-## Main success scenario
-
-1. Dispatcher selects a dispatched train.
-2. Dispatcher selects a stop in its active movement plan.
-3. CTC UI loads the current:
-   - destination,
-   - arrival time,
-   - dwell time.
-4. Dispatcher changes one or more values.
-5. Dispatcher applies the update.
-6. `MainWindowViewModel` validates basic user-entered formatting.
-7. `MainWindowViewModel` calls `CTCService.UpdateMovementPlanStopAsync(...)`.
-8. CTC validates the requested destination/timing/dwell.
-9. RouteManager resolves/recalculates the required route.
-10. SpeedPlanner recalculates planned/suggested speed.
-11. AuthorityManager recalculates authority if applicable.
-12. CTC builds the updated movement suggestion.
-13. Updated movement information is sent to Track Controller.
-14. Only after a successful send does CTC commit the updated active movement plan.
-15. CTC raises the appropriate state change.
-16. `MainWindowViewModel` refreshes the dispatched train.
-17. Dispatcher sees the revised active movement plan.
-
-Use an `alt` fragment with meaningful cases:
-
-### `[arrival time only changed]`
-
-Route remains the same.
-
-Recalculate timing/speed.
-
-### `[destination changed]`
-
-Recalculate route.
-
-Use the new destination's default dwell:
-- station = 45 seconds,
-- non-station = 0 seconds,
-
-unless the dispatcher overrides it.
-
-Recalculate speed and authority.
-
-### `[invalid route / timing / dwell]`
-
-Reject the update.
-
-Keep the previous valid active movement plan.
-
-### `[movement suggestion cannot be sent]`
-
-Keep the previous active movement plan.
-
-Report failure to the dispatcher.
-
----
-
-# PART 4 — DWELL / MOVEMENT BEHAVIOR
-
-Where relevant in the automatic dispatch or monitoring diagrams, correctly represent the current dwell logic.
-
-A dispatched train can conceptually move through:
-
-`En Route → Arrived → Dwelling → En Route`
-
-or eventually:
-
-`→ Completed`
-
-When a train reaches a scheduled destination with dwell time:
-
-1. its arrival is detected,
-2. dwell begins,
-3. it remains dwelling until the external system time reaches the ready-to-depart time,
-4. CTC calculates/sends the suggestion for the next movement,
-5. train continues toward the next planned stop.
-
-Do not imply that CTC recalculates speed and authority every time the train simply moves from one ordinary block to another.
-
-The current implementation recalculates/sends movement suggestions at meaningful movement-plan transitions such as:
-
-- initial dispatch,
-- dispatcher re-planning,
-- starting the next movement after a planned stop/dwell.
-
----
-
-# PART 5 — STARUML ORGANIZATION
-
-Organize the model cleanly.
-
-Preferred hierarchy:
-
-`CTC`
-
-- `Use Cases`
-  - `CTC Use Case Diagram`
-- `Sequence Diagrams`
-  - `SD - Prepare Schedule`
-  - `SD - Queue and Automatically Dispatch Trains`
-  - `SD - Monitor Territory and Train Operations`
-  - `SD - Manage Track Maintenance and Switches`
-  - `SD - Update Active Movement Plan`
-
-Keep existing class diagrams elsewhere in the CTC model.
-
-If the existing `.mdj` file has a different but reasonable package structure, integrate into that instead of unnecessarily restructuring the entire project.
-
----
-
-# PART 6 — STARUML PRESENTATION QUALITY
-
-Make the diagrams presentation-ready.
-
-## Use Case Diagram
-
-- System boundary clearly visible.
-- Actor names readable.
-- No overlapping ovals.
-- No crossing labels.
-- Association lines as clean as possible.
-- Primary actor on left.
-- Secondary actors on right.
-- Use cases centered inside boundary.
-
-## Sequence Diagrams
-
-- Time flows clearly top to bottom.
-- Lifelines ordered logically left to right.
-- Actor generally on left.
-- External subsystem generally on right.
-- Internal CTC objects/services in the middle.
-- Use meaningful message names.
-- Prefer actual method names when they help connect the design to the code.
-- Avoid enormous fully-qualified namespaces.
-- Activation bars should be consistent.
-- Dashed return arrows only where useful.
-- `alt` fragment guards should be written clearly, for example:
-
-`[schedule valid]`
-
-`[start block unavailable]`
-
-`[train location unambiguous]`
-
-`[destination changed]`
-
-`[send succeeds]`
-
-Do not include meaningless implementation details just to make the diagram longer.
-
----
-
-# PART 7 — VERIFY AGAINST CURRENT CODE
-
-Before finishing, perform a final verification pass.
-
-For each diagram:
-
-1. Verify the important classes/methods/messages actually exist.
-2. Verify that arrows do not imply behavior that the code does not perform.
-3. Verify system actors are outside the CTC boundary.
-4. Verify CTC.TestUI is not represented as part of the production architecture.
-5. Verify automatic dispatch is time-driven, not button-driven.
-6. Verify station dwell defaults to 45 seconds and normal blocks default to 0 seconds.
-7. Verify dispatched train plans can be modified after release.
-8. Verify changing a destination causes route/speed/authority reevaluation as implemented.
-9. Verify train location is inferred from block occupancy rather than directly supplied with a TrainId in each block-status message.
-10. Verify maintenance/switch state displayed by CTC comes from Track Controller confirmation rather than assuming a request succeeded.
-
----
-
-# PART 8 — DELIVERABLES
-
-When complete:
-
-1. Save the updated StarUML `.mdj` file.
-2. Do NOT modify C# implementation files.
-3. Report:
-   - which StarUML file was modified,
-   - which diagrams were added/replaced,
-   - the important source classes used to derive each sequence diagram,
-   - any place where the current implementation differed from the intended design above.
-4. If an existing diagram was replaced, preserve it temporarily under an `Archive` package rather than silently deleting potentially useful work, unless it is clearly duplicated.
-5. Make sure the `.mdj` remains valid JSON and opens normally in StarUML.
-
-The final result should provide a concise but accurate UML representation of the **current CTC design**, suitable for our Work Package 2 architecture/design review.
+# Acceptance criteria
+
+The task is complete when I can launch the current CTC and TestUI and do the following:
+
+```text
+Send Sample Layout
+        ↓
+CTC receives Blue + Red + Green
+        ↓
+Select Green Line
+        ↓
+see graphical Green Line territory
+        ↓
+click a block
+        ↓
+right-side Selected Block panel shows that block
+        ↓
+send new BlockStatusMessage from TestUI
+        ↓
+that same block changes visually on the map
+```
+
+I must also be able to switch to Red or Blue and receive the same behavior.
+
+The graphical territory overview should look like an actual railway control schematic, not a generic grid of buttons.
+
+Keep the implementation maintainable and MVVM-friendly, reuse existing CTC state rather than creating duplicate state, and keep all visual-layout information inside `CTC.Wpf`.
+
+Before editing, inspect the referenced files and summarize the implementation approach you intend to use. Then make the changes, build/test them, and give me a concise summary of files added/modified and any assumptions you had to make about the workbook topology.
