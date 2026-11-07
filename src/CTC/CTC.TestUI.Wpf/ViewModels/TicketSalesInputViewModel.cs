@@ -27,6 +27,8 @@ public class TicketSalesInputViewModel : CtcInputViewModelBase
     public IReadOnlyList<LineOption> LineOptions { get; } =
     [
         new LineOption("BLUE", "Blue Line"),
+        new LineOption("RED", "Red Line"),
+        new LineOption("GREEN", "Green Line"),
     ];
 
     public LineOption SelectedLine

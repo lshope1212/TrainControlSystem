@@ -1,0 +1,4127 @@
+{
+  "lines": [
+    {
+      "lineId": "BLUE",
+      "name": "Blue Line",
+      "blocks": [
+        {
+          "blockId": "A1",
+          "blockNumber": 1,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "A2"
+          ]
+        },
+        {
+          "blockId": "A2",
+          "blockNumber": 2,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "A1",
+            "A3"
+          ]
+        },
+        {
+          "blockId": "A3",
+          "blockNumber": 3,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": true,
+          "connectedBlockIds": [
+            "A2",
+            "A4"
+          ]
+        },
+        {
+          "blockId": "A4",
+          "blockNumber": 4,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "A3",
+            "A5"
+          ]
+        },
+        {
+          "blockId": "A5",
+          "blockNumber": 5,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "A4",
+            "B6",
+            "C11"
+          ]
+        },
+        {
+          "blockId": "B6",
+          "blockNumber": 6,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": true,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "A5",
+            "B7"
+          ]
+        },
+        {
+          "blockId": "B7",
+          "blockNumber": 7,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "B6",
+            "B8"
+          ]
+        },
+        {
+          "blockId": "B8",
+          "blockNumber": 8,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "B7",
+            "B9"
+          ]
+        },
+        {
+          "blockId": "B9",
+          "blockNumber": 9,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "B8",
+            "B10"
+          ]
+        },
+        {
+          "blockId": "B10",
+          "blockNumber": 10,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "Station B",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "B9"
+          ]
+        },
+        {
+          "blockId": "C11",
+          "blockNumber": 11,
+          "section": "C",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": true,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "A5",
+            "C12"
+          ]
+        },
+        {
+          "blockId": "C12",
+          "blockNumber": 12,
+          "section": "C",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "C11",
+            "C13"
+          ]
+        },
+        {
+          "blockId": "C13",
+          "blockNumber": 13,
+          "section": "C",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "C12",
+            "C14"
+          ]
+        },
+        {
+          "blockId": "C14",
+          "blockNumber": 14,
+          "section": "C",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "C13",
+            "C15"
+          ]
+        },
+        {
+          "blockId": "C15",
+          "blockNumber": 15,
+          "section": "C",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 50.0,
+          "stationName": "Station C",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "C14"
+          ]
+        }
+      ]
+    },
+    {
+      "lineId": "RED",
+      "name": "Red Line",
+      "blocks": [
+        {
+          "blockId": "RED-A1",
+          "blockNumber": 1,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.5,
+          "elevationMeters": 0.25,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-A2",
+            "RED-F16"
+          ]
+        },
+        {
+          "blockId": "RED-A2",
+          "blockNumber": 2,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 1.0,
+          "elevationMeters": 0.75,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-A1",
+            "RED-A3"
+          ]
+        },
+        {
+          "blockId": "RED-A3",
+          "blockNumber": 3,
+          "section": "A",
+          "lengthMeters": 50.0,
+          "gradePercent": 1.5,
+          "elevationMeters": 1.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-A2",
+            "RED-B4"
+          ]
+        },
+        {
+          "blockId": "RED-B4",
+          "blockNumber": 4,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 2.0,
+          "elevationMeters": 2.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-A3",
+            "RED-B5"
+          ]
+        },
+        {
+          "blockId": "RED-B5",
+          "blockNumber": 5,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 1.5,
+          "elevationMeters": 3.25,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-B4",
+            "RED-B6"
+          ]
+        },
+        {
+          "blockId": "RED-B6",
+          "blockNumber": 6,
+          "section": "B",
+          "lengthMeters": 50.0,
+          "gradePercent": 1.0,
+          "elevationMeters": 3.75,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-B5",
+            "RED-C7"
+          ]
+        },
+        {
+          "blockId": "RED-C7",
+          "blockNumber": 7,
+          "section": "C",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.5,
+          "elevationMeters": 4.125,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "Shadyside",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-B6",
+            "RED-C8"
+          ]
+        },
+        {
+          "blockId": "RED-C8",
+          "blockNumber": 8,
+          "section": "C",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 4.125,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-C7",
+            "RED-C9"
+          ]
+        },
+        {
+          "blockId": "RED-C9",
+          "blockNumber": 9,
+          "section": "C",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 4.125,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-C8",
+            "RED-D10"
+          ]
+        },
+        {
+          "blockId": "RED-D10",
+          "blockNumber": 10,
+          "section": "D",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 4.125,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-C9",
+            "RED-D11"
+          ]
+        },
+        {
+          "blockId": "RED-D11",
+          "blockNumber": 11,
+          "section": "D",
+          "lengthMeters": 75.0,
+          "gradePercent": -0.5,
+          "elevationMeters": 3.75,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": true,
+          "connectedBlockIds": [
+            "RED-D10",
+            "RED-D12"
+          ]
+        },
+        {
+          "blockId": "RED-D12",
+          "blockNumber": 12,
+          "section": "D",
+          "lengthMeters": 75.0,
+          "gradePercent": -1.0,
+          "elevationMeters": 3.0,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-D11",
+            "RED-E13"
+          ]
+        },
+        {
+          "blockId": "RED-E13",
+          "blockNumber": 13,
+          "section": "E",
+          "lengthMeters": 70.0,
+          "gradePercent": -2.0,
+          "elevationMeters": 1.6,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-D12",
+            "RED-E14"
+          ]
+        },
+        {
+          "blockId": "RED-E14",
+          "blockNumber": 14,
+          "section": "E",
+          "lengthMeters": 60.0,
+          "gradePercent": -1.25,
+          "elevationMeters": 0.8500000000000001,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-E13",
+            "RED-E15"
+          ]
+        },
+        {
+          "blockId": "RED-E15",
+          "blockNumber": 15,
+          "section": "E",
+          "lengthMeters": 60.0,
+          "gradePercent": -1.0,
+          "elevationMeters": 0.2500000000000001,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-E14",
+            "RED-F16"
+          ]
+        },
+        {
+          "blockId": "RED-F16",
+          "blockNumber": 16,
+          "section": "F",
+          "lengthMeters": 50.0,
+          "gradePercent": -0.5,
+          "elevationMeters": 0.0,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "Herron Ave",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-A1",
+            "RED-E15",
+            "RED-F17"
+          ]
+        },
+        {
+          "blockId": "RED-F17",
+          "blockNumber": 17,
+          "section": "F",
+          "lengthMeters": 200.0,
+          "gradePercent": -0.5,
+          "elevationMeters": -1.0,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-F16",
+            "RED-F18"
+          ]
+        },
+        {
+          "blockId": "RED-F18",
+          "blockNumber": 18,
+          "section": "F",
+          "lengthMeters": 400.0,
+          "gradePercent": -0.06025,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-F17",
+            "RED-F19"
+          ]
+        },
+        {
+          "blockId": "RED-F19",
+          "blockNumber": 19,
+          "section": "F",
+          "lengthMeters": 400.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-F18",
+            "RED-F20"
+          ]
+        },
+        {
+          "blockId": "RED-F20",
+          "blockNumber": 20,
+          "section": "F",
+          "lengthMeters": 200.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-F19",
+            "RED-G21"
+          ]
+        },
+        {
+          "blockId": "RED-G21",
+          "blockNumber": 21,
+          "section": "G",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "Swissville",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-F20",
+            "RED-G22"
+          ]
+        },
+        {
+          "blockId": "RED-G22",
+          "blockNumber": 22,
+          "section": "G",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-G21",
+            "RED-G23"
+          ]
+        },
+        {
+          "blockId": "RED-G23",
+          "blockNumber": 23,
+          "section": "G",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-G22",
+            "RED-H24"
+          ]
+        },
+        {
+          "blockId": "RED-H24",
+          "blockNumber": 24,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-G23",
+            "RED-H25"
+          ]
+        },
+        {
+          "blockId": "RED-H25",
+          "blockNumber": 25,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "Penn Station",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H24",
+            "RED-H26"
+          ]
+        },
+        {
+          "blockId": "RED-H26",
+          "blockNumber": 26,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H25",
+            "RED-H27"
+          ]
+        },
+        {
+          "blockId": "RED-H27",
+          "blockNumber": 27,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H26",
+            "RED-H28",
+            "RED-T76"
+          ]
+        },
+        {
+          "blockId": "RED-H28",
+          "blockNumber": 28,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H27",
+            "RED-H29"
+          ]
+        },
+        {
+          "blockId": "RED-H29",
+          "blockNumber": 29,
+          "section": "H",
+          "lengthMeters": 60.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H28",
+            "RED-H30"
+          ]
+        },
+        {
+          "blockId": "RED-H30",
+          "blockNumber": 30,
+          "section": "H",
+          "lengthMeters": 60.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H29",
+            "RED-H31"
+          ]
+        },
+        {
+          "blockId": "RED-H31",
+          "blockNumber": 31,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H30",
+            "RED-H32"
+          ]
+        },
+        {
+          "blockId": "RED-H32",
+          "blockNumber": 32,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H31",
+            "RED-H33"
+          ]
+        },
+        {
+          "blockId": "RED-H33",
+          "blockNumber": 33,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H32",
+            "RED-H34",
+            "RED-R72"
+          ]
+        },
+        {
+          "blockId": "RED-H34",
+          "blockNumber": 34,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H33",
+            "RED-H35"
+          ]
+        },
+        {
+          "blockId": "RED-H35",
+          "blockNumber": 35,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "Steel Plaza",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H34",
+            "RED-H36"
+          ]
+        },
+        {
+          "blockId": "RED-H36",
+          "blockNumber": 36,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H35",
+            "RED-H37"
+          ]
+        },
+        {
+          "blockId": "RED-H37",
+          "blockNumber": 37,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H36",
+            "RED-H38"
+          ]
+        },
+        {
+          "blockId": "RED-H38",
+          "blockNumber": 38,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H37",
+            "RED-H39",
+            "RED-Q71"
+          ]
+        },
+        {
+          "blockId": "RED-H39",
+          "blockNumber": 39,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H38",
+            "RED-H40"
+          ]
+        },
+        {
+          "blockId": "RED-H40",
+          "blockNumber": 40,
+          "section": "H",
+          "lengthMeters": 60.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H39",
+            "RED-H41"
+          ]
+        },
+        {
+          "blockId": "RED-H41",
+          "blockNumber": 41,
+          "section": "H",
+          "lengthMeters": 60.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H40",
+            "RED-H42"
+          ]
+        },
+        {
+          "blockId": "RED-H42",
+          "blockNumber": 42,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H41",
+            "RED-H43"
+          ]
+        },
+        {
+          "blockId": "RED-H43",
+          "blockNumber": 43,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H42",
+            "RED-H44"
+          ]
+        },
+        {
+          "blockId": "RED-H44",
+          "blockNumber": 44,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H43",
+            "RED-H45",
+            "RED-O67"
+          ]
+        },
+        {
+          "blockId": "RED-H45",
+          "blockNumber": 45,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "First Ave",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H44",
+            "RED-I46"
+          ]
+        },
+        {
+          "blockId": "RED-I46",
+          "blockNumber": 46,
+          "section": "I",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H45",
+            "RED-I47"
+          ]
+        },
+        {
+          "blockId": "RED-I47",
+          "blockNumber": 47,
+          "section": "I",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": true,
+          "connectedBlockIds": [
+            "RED-I46",
+            "RED-I48"
+          ]
+        },
+        {
+          "blockId": "RED-I48",
+          "blockNumber": 48,
+          "section": "I",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "Station Square",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-I47",
+            "RED-J49"
+          ]
+        },
+        {
+          "blockId": "RED-J49",
+          "blockNumber": 49,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 60.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-I48",
+            "RED-J50"
+          ]
+        },
+        {
+          "blockId": "RED-J50",
+          "blockNumber": 50,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 60.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-J49",
+            "RED-J51"
+          ]
+        },
+        {
+          "blockId": "RED-J51",
+          "blockNumber": 51,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-J50",
+            "RED-J52"
+          ]
+        },
+        {
+          "blockId": "RED-J52",
+          "blockNumber": 52,
+          "section": "J",
+          "lengthMeters": 43.2,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-J51",
+            "RED-J53",
+            "RED-N66"
+          ]
+        },
+        {
+          "blockId": "RED-J53",
+          "blockNumber": 53,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-J52",
+            "RED-J54"
+          ]
+        },
+        {
+          "blockId": "RED-J54",
+          "blockNumber": 54,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-J53",
+            "RED-K55"
+          ]
+        },
+        {
+          "blockId": "RED-K55",
+          "blockNumber": 55,
+          "section": "K",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.5,
+          "elevationMeters": -0.8660000000000001,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-J54",
+            "RED-K56"
+          ]
+        },
+        {
+          "blockId": "RED-K56",
+          "blockNumber": 56,
+          "section": "K",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.5,
+          "elevationMeters": -0.4910000000000001,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-K55",
+            "RED-K57"
+          ]
+        },
+        {
+          "blockId": "RED-K57",
+          "blockNumber": 57,
+          "section": "K",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.5,
+          "elevationMeters": -0.1160000000000001,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-K56",
+            "RED-L58"
+          ]
+        },
+        {
+          "blockId": "RED-L58",
+          "blockNumber": 58,
+          "section": "L",
+          "lengthMeters": 75.0,
+          "gradePercent": 1.0,
+          "elevationMeters": 0.6339999999999999,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-K57",
+            "RED-L59"
+          ]
+        },
+        {
+          "blockId": "RED-L59",
+          "blockNumber": 59,
+          "section": "L",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.5,
+          "elevationMeters": 1.009,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-L58",
+            "RED-L60"
+          ]
+        },
+        {
+          "blockId": "RED-L60",
+          "blockNumber": 60,
+          "section": "L",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 1.009,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "South Hills Junction",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-L59",
+            "RED-M61"
+          ]
+        },
+        {
+          "blockId": "RED-M61",
+          "blockNumber": 61,
+          "section": "M",
+          "lengthMeters": 75.0,
+          "gradePercent": -0.5,
+          "elevationMeters": 0.6339999999999999,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-L60",
+            "RED-M62"
+          ]
+        },
+        {
+          "blockId": "RED-M62",
+          "blockNumber": 62,
+          "section": "M",
+          "lengthMeters": 75.0,
+          "gradePercent": -1.0,
+          "elevationMeters": -0.1160000000000001,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-M61",
+            "RED-M63"
+          ]
+        },
+        {
+          "blockId": "RED-M63",
+          "blockNumber": 63,
+          "section": "M",
+          "lengthMeters": 75.0,
+          "gradePercent": -1.0,
+          "elevationMeters": -0.8660000000000001,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-M62",
+            "RED-N64"
+          ]
+        },
+        {
+          "blockId": "RED-N64",
+          "blockNumber": 64,
+          "section": "N",
+          "lengthMeters": 75.0,
+          "gradePercent": -0.5,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-M63",
+            "RED-N65"
+          ]
+        },
+        {
+          "blockId": "RED-N65",
+          "blockNumber": 65,
+          "section": "N",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-N64",
+            "RED-N66"
+          ]
+        },
+        {
+          "blockId": "RED-N66",
+          "blockNumber": 66,
+          "section": "N",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-J52",
+            "RED-N65"
+          ]
+        },
+        {
+          "blockId": "RED-O67",
+          "blockNumber": 67,
+          "section": "O",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H44",
+            "RED-P68"
+          ]
+        },
+        {
+          "blockId": "RED-P68",
+          "blockNumber": 68,
+          "section": "P",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-O67",
+            "RED-P69"
+          ]
+        },
+        {
+          "blockId": "RED-P69",
+          "blockNumber": 69,
+          "section": "P",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-P68",
+            "RED-P70"
+          ]
+        },
+        {
+          "blockId": "RED-P70",
+          "blockNumber": 70,
+          "section": "P",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-P69",
+            "RED-Q71"
+          ]
+        },
+        {
+          "blockId": "RED-Q71",
+          "blockNumber": 71,
+          "section": "Q",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H38",
+            "RED-P70"
+          ]
+        },
+        {
+          "blockId": "RED-R72",
+          "blockNumber": 72,
+          "section": "R",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H33",
+            "RED-S73"
+          ]
+        },
+        {
+          "blockId": "RED-S73",
+          "blockNumber": 73,
+          "section": "S",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-R72",
+            "RED-S74"
+          ]
+        },
+        {
+          "blockId": "RED-S74",
+          "blockNumber": 74,
+          "section": "S",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-S73",
+            "RED-S75"
+          ]
+        },
+        {
+          "blockId": "RED-S75",
+          "blockNumber": 75,
+          "section": "S",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-S74",
+            "RED-T76"
+          ]
+        },
+        {
+          "blockId": "RED-T76",
+          "blockNumber": 76,
+          "section": "T",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -1.241,
+          "speedLimitKilometersPerHour": 55.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "RED-H27",
+            "RED-S75"
+          ]
+        }
+      ]
+    },
+    {
+      "lineId": "GREEN",
+      "name": "Green Line",
+      "blocks": [
+        {
+          "blockId": "GREEN-A1",
+          "blockNumber": 1,
+          "section": "A",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.5,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-A2",
+            "GREEN-D13"
+          ]
+        },
+        {
+          "blockId": "GREEN-A2",
+          "blockNumber": 2,
+          "section": "A",
+          "lengthMeters": 100.0,
+          "gradePercent": 1.0,
+          "elevationMeters": 1.5,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "Pioneer",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-A1",
+            "GREEN-A3"
+          ]
+        },
+        {
+          "blockId": "GREEN-A3",
+          "blockNumber": 3,
+          "section": "A",
+          "lengthMeters": 100.0,
+          "gradePercent": 1.5,
+          "elevationMeters": 3.0,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-A2",
+            "GREEN-B4"
+          ]
+        },
+        {
+          "blockId": "GREEN-B4",
+          "blockNumber": 4,
+          "section": "B",
+          "lengthMeters": 100.0,
+          "gradePercent": 2.0,
+          "elevationMeters": 5.0,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-A3",
+            "GREEN-B5"
+          ]
+        },
+        {
+          "blockId": "GREEN-B5",
+          "blockNumber": 5,
+          "section": "B",
+          "lengthMeters": 100.0,
+          "gradePercent": 3.0,
+          "elevationMeters": 8.0,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-B4",
+            "GREEN-B6"
+          ]
+        },
+        {
+          "blockId": "GREEN-B6",
+          "blockNumber": 6,
+          "section": "B",
+          "lengthMeters": 100.0,
+          "gradePercent": 4.0,
+          "elevationMeters": 12.0,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-B5",
+            "GREEN-C7"
+          ]
+        },
+        {
+          "blockId": "GREEN-C7",
+          "blockNumber": 7,
+          "section": "C",
+          "lengthMeters": 100.0,
+          "gradePercent": 5.0,
+          "elevationMeters": 17.0,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-B6",
+            "GREEN-C8"
+          ]
+        },
+        {
+          "blockId": "GREEN-C8",
+          "blockNumber": 8,
+          "section": "C",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 17.0,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-C7",
+            "GREEN-C9"
+          ]
+        },
+        {
+          "blockId": "GREEN-C9",
+          "blockNumber": 9,
+          "section": "C",
+          "lengthMeters": 100.0,
+          "gradePercent": -5.0,
+          "elevationMeters": 12.0,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "Edgebrook",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-C8",
+            "GREEN-C10"
+          ]
+        },
+        {
+          "blockId": "GREEN-C10",
+          "blockNumber": 10,
+          "section": "C",
+          "lengthMeters": 100.0,
+          "gradePercent": -4.5,
+          "elevationMeters": 7.5,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-C9",
+            "GREEN-C11"
+          ]
+        },
+        {
+          "blockId": "GREEN-C11",
+          "blockNumber": 11,
+          "section": "C",
+          "lengthMeters": 100.0,
+          "gradePercent": -4.0,
+          "elevationMeters": 3.5,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-C10",
+            "GREEN-C12"
+          ]
+        },
+        {
+          "blockId": "GREEN-C12",
+          "blockNumber": 12,
+          "section": "C",
+          "lengthMeters": 100.0,
+          "gradePercent": -3.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 45.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-C11",
+            "GREEN-D13"
+          ]
+        },
+        {
+          "blockId": "GREEN-D13",
+          "blockNumber": 13,
+          "section": "D",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-A1",
+            "GREEN-C12",
+            "GREEN-D14"
+          ]
+        },
+        {
+          "blockId": "GREEN-D14",
+          "blockNumber": 14,
+          "section": "D",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-D13",
+            "GREEN-D15"
+          ]
+        },
+        {
+          "blockId": "GREEN-D15",
+          "blockNumber": 15,
+          "section": "D",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-D14",
+            "GREEN-D16"
+          ]
+        },
+        {
+          "blockId": "GREEN-D16",
+          "blockNumber": 16,
+          "section": "D",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "Station",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-D15",
+            "GREEN-E17"
+          ]
+        },
+        {
+          "blockId": "GREEN-E17",
+          "blockNumber": 17,
+          "section": "E",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 60.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-D16",
+            "GREEN-E18"
+          ]
+        },
+        {
+          "blockId": "GREEN-E18",
+          "blockNumber": 18,
+          "section": "E",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 60.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-E17",
+            "GREEN-E19"
+          ]
+        },
+        {
+          "blockId": "GREEN-E19",
+          "blockNumber": 19,
+          "section": "E",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 60.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": true,
+          "connectedBlockIds": [
+            "GREEN-E18",
+            "GREEN-E20"
+          ]
+        },
+        {
+          "blockId": "GREEN-E20",
+          "blockNumber": 20,
+          "section": "E",
+          "lengthMeters": 150.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 60.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-E19",
+            "GREEN-F21"
+          ]
+        },
+        {
+          "blockId": "GREEN-F21",
+          "blockNumber": 21,
+          "section": "F",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-E20",
+            "GREEN-F22"
+          ]
+        },
+        {
+          "blockId": "GREEN-F22",
+          "blockNumber": 22,
+          "section": "F",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "Whited",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F21",
+            "GREEN-F23"
+          ]
+        },
+        {
+          "blockId": "GREEN-F23",
+          "blockNumber": 23,
+          "section": "F",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F22",
+            "GREEN-F24"
+          ]
+        },
+        {
+          "blockId": "GREEN-F24",
+          "blockNumber": 24,
+          "section": "F",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F23",
+            "GREEN-F25"
+          ]
+        },
+        {
+          "blockId": "GREEN-F25",
+          "blockNumber": 25,
+          "section": "F",
+          "lengthMeters": 200.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F24",
+            "GREEN-F26"
+          ]
+        },
+        {
+          "blockId": "GREEN-F26",
+          "blockNumber": 26,
+          "section": "F",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F25",
+            "GREEN-F27"
+          ]
+        },
+        {
+          "blockId": "GREEN-F27",
+          "blockNumber": 27,
+          "section": "F",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F26",
+            "GREEN-F28"
+          ]
+        },
+        {
+          "blockId": "GREEN-F28",
+          "blockNumber": 28,
+          "section": "F",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F27",
+            "GREEN-G29",
+            "GREEN-Z150"
+          ]
+        },
+        {
+          "blockId": "GREEN-G29",
+          "blockNumber": 29,
+          "section": "G",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F28",
+            "GREEN-G30"
+          ]
+        },
+        {
+          "blockId": "GREEN-G30",
+          "blockNumber": 30,
+          "section": "G",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-G29",
+            "GREEN-G31"
+          ]
+        },
+        {
+          "blockId": "GREEN-G31",
+          "blockNumber": 31,
+          "section": "G",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "South Bank",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-G30",
+            "GREEN-G32"
+          ]
+        },
+        {
+          "blockId": "GREEN-G32",
+          "blockNumber": 32,
+          "section": "G",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-G31",
+            "GREEN-H33"
+          ]
+        },
+        {
+          "blockId": "GREEN-H33",
+          "blockNumber": 33,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-G32",
+            "GREEN-H34"
+          ]
+        },
+        {
+          "blockId": "GREEN-H34",
+          "blockNumber": 34,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-H33",
+            "GREEN-H35"
+          ]
+        },
+        {
+          "blockId": "GREEN-H35",
+          "blockNumber": 35,
+          "section": "H",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-H34",
+            "GREEN-I36"
+          ]
+        },
+        {
+          "blockId": "GREEN-I36",
+          "blockNumber": 36,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-H35",
+            "GREEN-I37"
+          ]
+        },
+        {
+          "blockId": "GREEN-I37",
+          "blockNumber": 37,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I36",
+            "GREEN-I38"
+          ]
+        },
+        {
+          "blockId": "GREEN-I38",
+          "blockNumber": 38,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I37",
+            "GREEN-I39"
+          ]
+        },
+        {
+          "blockId": "GREEN-I39",
+          "blockNumber": 39,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "Central",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I38",
+            "GREEN-I40"
+          ]
+        },
+        {
+          "blockId": "GREEN-I40",
+          "blockNumber": 40,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I39",
+            "GREEN-I41"
+          ]
+        },
+        {
+          "blockId": "GREEN-I41",
+          "blockNumber": 41,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I40",
+            "GREEN-I42"
+          ]
+        },
+        {
+          "blockId": "GREEN-I42",
+          "blockNumber": 42,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I41",
+            "GREEN-I43"
+          ]
+        },
+        {
+          "blockId": "GREEN-I43",
+          "blockNumber": 43,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I42",
+            "GREEN-I44"
+          ]
+        },
+        {
+          "blockId": "GREEN-I44",
+          "blockNumber": 44,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I43",
+            "GREEN-I45"
+          ]
+        },
+        {
+          "blockId": "GREEN-I45",
+          "blockNumber": 45,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I44",
+            "GREEN-I46"
+          ]
+        },
+        {
+          "blockId": "GREEN-I46",
+          "blockNumber": 46,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I45",
+            "GREEN-I47"
+          ]
+        },
+        {
+          "blockId": "GREEN-I47",
+          "blockNumber": 47,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I46",
+            "GREEN-I48"
+          ]
+        },
+        {
+          "blockId": "GREEN-I48",
+          "blockNumber": 48,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "Inglewood",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I47",
+            "GREEN-I49"
+          ]
+        },
+        {
+          "blockId": "GREEN-I49",
+          "blockNumber": 49,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I48",
+            "GREEN-I50"
+          ]
+        },
+        {
+          "blockId": "GREEN-I50",
+          "blockNumber": 50,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I49",
+            "GREEN-I51"
+          ]
+        },
+        {
+          "blockId": "GREEN-I51",
+          "blockNumber": 51,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I50",
+            "GREEN-I52"
+          ]
+        },
+        {
+          "blockId": "GREEN-I52",
+          "blockNumber": 52,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I51",
+            "GREEN-I53"
+          ]
+        },
+        {
+          "blockId": "GREEN-I53",
+          "blockNumber": 53,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I52",
+            "GREEN-I54"
+          ]
+        },
+        {
+          "blockId": "GREEN-I54",
+          "blockNumber": 54,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I53",
+            "GREEN-I55"
+          ]
+        },
+        {
+          "blockId": "GREEN-I55",
+          "blockNumber": 55,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I54",
+            "GREEN-I56"
+          ]
+        },
+        {
+          "blockId": "GREEN-I56",
+          "blockNumber": 56,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I55",
+            "GREEN-I57"
+          ]
+        },
+        {
+          "blockId": "GREEN-I57",
+          "blockNumber": 57,
+          "section": "I",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "Overbrook",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I56",
+            "GREEN-J58"
+          ]
+        },
+        {
+          "blockId": "GREEN-J58",
+          "blockNumber": 58,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-I57",
+            "GREEN-J59"
+          ]
+        },
+        {
+          "blockId": "GREEN-J59",
+          "blockNumber": 59,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-J58",
+            "GREEN-J60"
+          ]
+        },
+        {
+          "blockId": "GREEN-J60",
+          "blockNumber": 60,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-J59",
+            "GREEN-J61"
+          ]
+        },
+        {
+          "blockId": "GREEN-J61",
+          "blockNumber": 61,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-J60",
+            "GREEN-J62"
+          ]
+        },
+        {
+          "blockId": "GREEN-J62",
+          "blockNumber": 62,
+          "section": "J",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-J61",
+            "GREEN-K63"
+          ]
+        },
+        {
+          "blockId": "GREEN-K63",
+          "blockNumber": 63,
+          "section": "K",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-J62",
+            "GREEN-K64"
+          ]
+        },
+        {
+          "blockId": "GREEN-K64",
+          "blockNumber": 64,
+          "section": "K",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-K63",
+            "GREEN-K65"
+          ]
+        },
+        {
+          "blockId": "GREEN-K65",
+          "blockNumber": 65,
+          "section": "K",
+          "lengthMeters": 200.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "Glenbury",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-K64",
+            "GREEN-K66"
+          ]
+        },
+        {
+          "blockId": "GREEN-K66",
+          "blockNumber": 66,
+          "section": "K",
+          "lengthMeters": 200.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-K65",
+            "GREEN-K67"
+          ]
+        },
+        {
+          "blockId": "GREEN-K67",
+          "blockNumber": 67,
+          "section": "K",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-K66",
+            "GREEN-K68"
+          ]
+        },
+        {
+          "blockId": "GREEN-K68",
+          "blockNumber": 68,
+          "section": "K",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-K67",
+            "GREEN-L69"
+          ]
+        },
+        {
+          "blockId": "GREEN-L69",
+          "blockNumber": 69,
+          "section": "L",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-K68",
+            "GREEN-L70"
+          ]
+        },
+        {
+          "blockId": "GREEN-L70",
+          "blockNumber": 70,
+          "section": "L",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-L69",
+            "GREEN-L71"
+          ]
+        },
+        {
+          "blockId": "GREEN-L71",
+          "blockNumber": 71,
+          "section": "L",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-L70",
+            "GREEN-L72"
+          ]
+        },
+        {
+          "blockId": "GREEN-L72",
+          "blockNumber": 72,
+          "section": "L",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-L71",
+            "GREEN-L73"
+          ]
+        },
+        {
+          "blockId": "GREEN-L73",
+          "blockNumber": 73,
+          "section": "L",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "Dormont",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-L72",
+            "GREEN-M74"
+          ]
+        },
+        {
+          "blockId": "GREEN-M74",
+          "blockNumber": 74,
+          "section": "M",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-L73",
+            "GREEN-M75"
+          ]
+        },
+        {
+          "blockId": "GREEN-M75",
+          "blockNumber": 75,
+          "section": "M",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-M74",
+            "GREEN-M76"
+          ]
+        },
+        {
+          "blockId": "GREEN-M76",
+          "blockNumber": 76,
+          "section": "M",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 40.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-M75",
+            "GREEN-N77"
+          ]
+        },
+        {
+          "blockId": "GREEN-N77",
+          "blockNumber": 77,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "Mt Lebanon",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-M76",
+            "GREEN-N78",
+            "GREEN-R101"
+          ]
+        },
+        {
+          "blockId": "GREEN-N78",
+          "blockNumber": 78,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N77",
+            "GREEN-N79"
+          ]
+        },
+        {
+          "blockId": "GREEN-N79",
+          "blockNumber": 79,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N78",
+            "GREEN-N80"
+          ]
+        },
+        {
+          "blockId": "GREEN-N80",
+          "blockNumber": 80,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N79",
+            "GREEN-N81"
+          ]
+        },
+        {
+          "blockId": "GREEN-N81",
+          "blockNumber": 81,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N80",
+            "GREEN-N82"
+          ]
+        },
+        {
+          "blockId": "GREEN-N82",
+          "blockNumber": 82,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N81",
+            "GREEN-N83"
+          ]
+        },
+        {
+          "blockId": "GREEN-N83",
+          "blockNumber": 83,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N82",
+            "GREEN-N84"
+          ]
+        },
+        {
+          "blockId": "GREEN-N84",
+          "blockNumber": 84,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N83",
+            "GREEN-N85"
+          ]
+        },
+        {
+          "blockId": "GREEN-N85",
+          "blockNumber": 85,
+          "section": "N",
+          "lengthMeters": 300.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 70.0,
+          "stationName": "",
+          "hasSwitch": true,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N84",
+            "GREEN-O86",
+            "GREEN-Q100"
+          ]
+        },
+        {
+          "blockId": "GREEN-O86",
+          "blockNumber": 86,
+          "section": "O",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N85",
+            "GREEN-O87"
+          ]
+        },
+        {
+          "blockId": "GREEN-O87",
+          "blockNumber": 87,
+          "section": "O",
+          "lengthMeters": 86.6,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-O86",
+            "GREEN-O88"
+          ]
+        },
+        {
+          "blockId": "GREEN-O88",
+          "blockNumber": 88,
+          "section": "O",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "Poplar",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-O87",
+            "GREEN-P89"
+          ]
+        },
+        {
+          "blockId": "GREEN-P89",
+          "blockNumber": 89,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": -0.5,
+          "elevationMeters": 0.125,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-O88",
+            "GREEN-P90"
+          ]
+        },
+        {
+          "blockId": "GREEN-P90",
+          "blockNumber": 90,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": -1.0,
+          "elevationMeters": -0.625,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P89",
+            "GREEN-P91"
+          ]
+        },
+        {
+          "blockId": "GREEN-P91",
+          "blockNumber": 91,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": -2.0,
+          "elevationMeters": -2.125,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P90",
+            "GREEN-P92"
+          ]
+        },
+        {
+          "blockId": "GREEN-P92",
+          "blockNumber": 92,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": -2.125,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P91",
+            "GREEN-P93"
+          ]
+        },
+        {
+          "blockId": "GREEN-P93",
+          "blockNumber": 93,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": 2.0,
+          "elevationMeters": -0.625,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P92",
+            "GREEN-P94"
+          ]
+        },
+        {
+          "blockId": "GREEN-P94",
+          "blockNumber": 94,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": 1.0,
+          "elevationMeters": 0.125,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P93",
+            "GREEN-P95"
+          ]
+        },
+        {
+          "blockId": "GREEN-P95",
+          "blockNumber": 95,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.5,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P94",
+            "GREEN-P96"
+          ]
+        },
+        {
+          "blockId": "GREEN-P96",
+          "blockNumber": 96,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "Castle Shannon",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P95",
+            "GREEN-P97"
+          ]
+        },
+        {
+          "blockId": "GREEN-P97",
+          "blockNumber": 97,
+          "section": "P",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P96",
+            "GREEN-Q98"
+          ]
+        },
+        {
+          "blockId": "GREEN-Q98",
+          "blockNumber": 98,
+          "section": "Q",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-P97",
+            "GREEN-Q99"
+          ]
+        },
+        {
+          "blockId": "GREEN-Q99",
+          "blockNumber": 99,
+          "section": "Q",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-Q98",
+            "GREEN-Q100"
+          ]
+        },
+        {
+          "blockId": "GREEN-Q100",
+          "blockNumber": 100,
+          "section": "Q",
+          "lengthMeters": 75.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 25.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N85",
+            "GREEN-Q99"
+          ]
+        },
+        {
+          "blockId": "GREEN-R101",
+          "blockNumber": 101,
+          "section": "R",
+          "lengthMeters": 35.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 26.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-N77",
+            "GREEN-S102"
+          ]
+        },
+        {
+          "blockId": "GREEN-S102",
+          "blockNumber": 102,
+          "section": "S",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-R101",
+            "GREEN-S103"
+          ]
+        },
+        {
+          "blockId": "GREEN-S103",
+          "blockNumber": 103,
+          "section": "S",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-S102",
+            "GREEN-S104"
+          ]
+        },
+        {
+          "blockId": "GREEN-S104",
+          "blockNumber": 104,
+          "section": "S",
+          "lengthMeters": 80.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-S103",
+            "GREEN-T105"
+          ]
+        },
+        {
+          "blockId": "GREEN-T105",
+          "blockNumber": 105,
+          "section": "T",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "Dormont",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-S104",
+            "GREEN-T106"
+          ]
+        },
+        {
+          "blockId": "GREEN-T106",
+          "blockNumber": 106,
+          "section": "T",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-T105",
+            "GREEN-T107"
+          ]
+        },
+        {
+          "blockId": "GREEN-T107",
+          "blockNumber": 107,
+          "section": "T",
+          "lengthMeters": 90.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-T106",
+            "GREEN-T108"
+          ]
+        },
+        {
+          "blockId": "GREEN-T108",
+          "blockNumber": 108,
+          "section": "T",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": true,
+          "connectedBlockIds": [
+            "GREEN-T107",
+            "GREEN-T109"
+          ]
+        },
+        {
+          "blockId": "GREEN-T109",
+          "blockNumber": 109,
+          "section": "T",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 28.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-T108",
+            "GREEN-U110"
+          ]
+        },
+        {
+          "blockId": "GREEN-U110",
+          "blockNumber": 110,
+          "section": "U",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-T109",
+            "GREEN-U111"
+          ]
+        },
+        {
+          "blockId": "GREEN-U111",
+          "blockNumber": 111,
+          "section": "U",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-U110",
+            "GREEN-U112"
+          ]
+        },
+        {
+          "blockId": "GREEN-U112",
+          "blockNumber": 112,
+          "section": "U",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-U111",
+            "GREEN-U113"
+          ]
+        },
+        {
+          "blockId": "GREEN-U113",
+          "blockNumber": 113,
+          "section": "U",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-U112",
+            "GREEN-U114"
+          ]
+        },
+        {
+          "blockId": "GREEN-U114",
+          "blockNumber": 114,
+          "section": "U",
+          "lengthMeters": 162.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "Glenbury",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-U113",
+            "GREEN-U115"
+          ]
+        },
+        {
+          "blockId": "GREEN-U115",
+          "blockNumber": 115,
+          "section": "U",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-U114",
+            "GREEN-U116"
+          ]
+        },
+        {
+          "blockId": "GREEN-U116",
+          "blockNumber": 116,
+          "section": "U",
+          "lengthMeters": 100.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 30.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-U115",
+            "GREEN-V117"
+          ]
+        },
+        {
+          "blockId": "GREEN-V117",
+          "blockNumber": 117,
+          "section": "V",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 15.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-U116",
+            "GREEN-V118"
+          ]
+        },
+        {
+          "blockId": "GREEN-V118",
+          "blockNumber": 118,
+          "section": "V",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 15.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-V117",
+            "GREEN-V119"
+          ]
+        },
+        {
+          "blockId": "GREEN-V119",
+          "blockNumber": 119,
+          "section": "V",
+          "lengthMeters": 40.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 15.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-V118",
+            "GREEN-V120"
+          ]
+        },
+        {
+          "blockId": "GREEN-V120",
+          "blockNumber": 120,
+          "section": "V",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 15.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-V119",
+            "GREEN-V121"
+          ]
+        },
+        {
+          "blockId": "GREEN-V121",
+          "blockNumber": 121,
+          "section": "V",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 15.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-V120",
+            "GREEN-W122"
+          ]
+        },
+        {
+          "blockId": "GREEN-W122",
+          "blockNumber": 122,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-V121",
+            "GREEN-W123"
+          ]
+        },
+        {
+          "blockId": "GREEN-W123",
+          "blockNumber": 123,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "Overbrook",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W122",
+            "GREEN-W124"
+          ]
+        },
+        {
+          "blockId": "GREEN-W124",
+          "blockNumber": 124,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W123",
+            "GREEN-W125"
+          ]
+        },
+        {
+          "blockId": "GREEN-W125",
+          "blockNumber": 125,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W124",
+            "GREEN-W126"
+          ]
+        },
+        {
+          "blockId": "GREEN-W126",
+          "blockNumber": 126,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W125",
+            "GREEN-W127"
+          ]
+        },
+        {
+          "blockId": "GREEN-W127",
+          "blockNumber": 127,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W126",
+            "GREEN-W128"
+          ]
+        },
+        {
+          "blockId": "GREEN-W128",
+          "blockNumber": 128,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W127",
+            "GREEN-W129"
+          ]
+        },
+        {
+          "blockId": "GREEN-W129",
+          "blockNumber": 129,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W128",
+            "GREEN-W130"
+          ]
+        },
+        {
+          "blockId": "GREEN-W130",
+          "blockNumber": 130,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W129",
+            "GREEN-W131"
+          ]
+        },
+        {
+          "blockId": "GREEN-W131",
+          "blockNumber": 131,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W130",
+            "GREEN-W132"
+          ]
+        },
+        {
+          "blockId": "GREEN-W132",
+          "blockNumber": 132,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "Inglewood",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W131",
+            "GREEN-W133"
+          ]
+        },
+        {
+          "blockId": "GREEN-W133",
+          "blockNumber": 133,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W132",
+            "GREEN-W134"
+          ]
+        },
+        {
+          "blockId": "GREEN-W134",
+          "blockNumber": 134,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W133",
+            "GREEN-W135"
+          ]
+        },
+        {
+          "blockId": "GREEN-W135",
+          "blockNumber": 135,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W134",
+            "GREEN-W136"
+          ]
+        },
+        {
+          "blockId": "GREEN-W136",
+          "blockNumber": 136,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W135",
+            "GREEN-W137"
+          ]
+        },
+        {
+          "blockId": "GREEN-W137",
+          "blockNumber": 137,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W136",
+            "GREEN-W138"
+          ]
+        },
+        {
+          "blockId": "GREEN-W138",
+          "blockNumber": 138,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W137",
+            "GREEN-W139"
+          ]
+        },
+        {
+          "blockId": "GREEN-W139",
+          "blockNumber": 139,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W138",
+            "GREEN-W140"
+          ]
+        },
+        {
+          "blockId": "GREEN-W140",
+          "blockNumber": 140,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W139",
+            "GREEN-W141"
+          ]
+        },
+        {
+          "blockId": "GREEN-W141",
+          "blockNumber": 141,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "Central",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W140",
+            "GREEN-W142"
+          ]
+        },
+        {
+          "blockId": "GREEN-W142",
+          "blockNumber": 142,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W141",
+            "GREEN-W143"
+          ]
+        },
+        {
+          "blockId": "GREEN-W143",
+          "blockNumber": 143,
+          "section": "W",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W142",
+            "GREEN-X144"
+          ]
+        },
+        {
+          "blockId": "GREEN-X144",
+          "blockNumber": 144,
+          "section": "X",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-W143",
+            "GREEN-X145"
+          ]
+        },
+        {
+          "blockId": "GREEN-X145",
+          "blockNumber": 145,
+          "section": "X",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-X144",
+            "GREEN-X146"
+          ]
+        },
+        {
+          "blockId": "GREEN-X146",
+          "blockNumber": 146,
+          "section": "X",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-X145",
+            "GREEN-Y147"
+          ]
+        },
+        {
+          "blockId": "GREEN-Y147",
+          "blockNumber": 147,
+          "section": "Y",
+          "lengthMeters": 50.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-X146",
+            "GREEN-Y148"
+          ]
+        },
+        {
+          "blockId": "GREEN-Y148",
+          "blockNumber": 148,
+          "section": "Y",
+          "lengthMeters": 184.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-Y147",
+            "GREEN-Y149"
+          ]
+        },
+        {
+          "blockId": "GREEN-Y149",
+          "blockNumber": 149,
+          "section": "Y",
+          "lengthMeters": 40.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-Y148",
+            "GREEN-Z150"
+          ]
+        },
+        {
+          "blockId": "GREEN-Z150",
+          "blockNumber": 150,
+          "section": "Z",
+          "lengthMeters": 35.0,
+          "gradePercent": 0.0,
+          "elevationMeters": 0.5,
+          "speedLimitKilometersPerHour": 20.0,
+          "stationName": "",
+          "hasSwitch": false,
+          "hasSignal": false,
+          "hasCrossing": false,
+          "connectedBlockIds": [
+            "GREEN-F28",
+            "GREEN-Y149"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,11 @@
     <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Blue/Red/Green layout generated from the course workbook; loaded by SampleTrackLayout. -->
+    <EmbeddedResource Include="SampleData\course-vf5-layout.json" LogicalName="CTC.TestUI.Wpf.SampleData.course-vf5-layout.json" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

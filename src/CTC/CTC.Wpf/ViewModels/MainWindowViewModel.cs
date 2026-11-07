@@ -48,8 +48,7 @@ public class MainWindowViewModel : ViewModelBase
 
         ScheduleBuilder = new ScheduleBuilderViewModel(_ctc);
 
-        RebuildLines();
-        RebuildBlocks();
+        RebuildTerritory();
         RebuildDispatchQueue();
         RebuildDispatchedTrains();
         _ctc.StateChanged += OnCtcStateChanged;
@@ -186,9 +185,16 @@ public class MainWindowViewModel : ViewModelBase
     /// <summary>Every block in the current layout, across all lines.</summary>
     public ObservableCollection<BlockViewModel> Blocks { get; } = new ObservableCollection<BlockViewModel>();
 
+    /// <summary>
+    /// Blocks of <see cref="SelectedLine"/> only (the same adapters as in <see cref="Blocks"/>);
+    /// shown by the territory map and the block selector.
+    /// </summary>
+    public ObservableCollection<BlockViewModel> SelectedLineBlocks { get; } = new ObservableCollection<BlockViewModel>();
+
     public ObservableCollection<CtcLineState> AvailableLines { get; } = new ObservableCollection<CtcLineState>();
 
-    public int OccupiedBlockCount => Blocks.Count(block => block.IsOccupied);
+    /// <summary>Occupied blocks on the selected line, i.e. on the displayed territory.</summary>
+    public int OccupiedBlockCount => SelectedLineBlocks.Count(block => block.IsOccupied);
 
     /// <summary>Wall-clock time CTC state last changed.</summary>
     public string LastTerritoryUpdate
@@ -198,8 +204,8 @@ public class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Block chosen by the dispatcher. Set from the block selector until the territory
-    /// display renders CTC blocks.
+    /// Block chosen by the dispatcher, from the territory map or the block selector. Always a
+    /// block of <see cref="SelectedLine"/> (or null).
     /// </summary>
     public BlockViewModel? SelectedBlock
     {
@@ -235,7 +241,7 @@ public class MainWindowViewModel : ViewModelBase
         {
             if (SetProperty(ref _selectedLine, value))
             {
-                // Later this can rebuild/filter the territory display for only the selected line. TODO
+                RebuildSelectedLineBlocks();
                 ScheduleBuilder.Line = value;
                 RebuildDestinationBlocks();
                 RebuildDispatchQueue();
@@ -486,8 +492,7 @@ public class MainWindowViewModel : ViewModelBase
         {
             case CtcStateChangeKind.TrackLayout:
                 // The old CtcBlockState objects were discarded, so the adapters must be rebuilt.
-                RebuildLines();
-                RebuildBlocks();
+                RebuildTerritory();
                 MarkTerritoryUpdated();
                 break;
 
@@ -570,18 +575,51 @@ public class MainWindowViewModel : ViewModelBase
 
     private void MarkTerritoryUpdated() => LastTerritoryUpdate = DateTime.Now.ToString("HH:mm:ss");
 
-    private void RebuildBlocks()
+    /// <summary>Rebuilds lines and block adapters after a new layout, keeping the selections it still has.</summary>
+    private void RebuildTerritory()
     {
+        // Captured first: clearing the block list makes the bound selector clear SelectedBlock.
         var selectedBlockId = SelectedBlock?.BlockId;
 
+        RebuildBlocks();
+        RebuildLines();
+
+        // SelectedLine may not have changed (e.g. still no lines), so filter explicitly.
+        RebuildSelectedLineBlocks();
+        SelectedBlock = SelectedLineBlocks.FirstOrDefault(block => block.BlockId == selectedBlockId);
+    }
+
+    private void RebuildBlocks()
+    {
         Blocks.Clear();
-        foreach (var block in _ctc.State.Lines.SelectMany(line => line.Blocks))
+        foreach (var line in _ctc.State.Lines)
         {
-            Blocks.Add(new BlockViewModel(block));
+            foreach (var block in line.Blocks)
+            {
+                Blocks.Add(new BlockViewModel(block, line.LineId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows only the selected line's blocks; a selected block of another line is cleared.
+    /// </summary>
+    private void RebuildSelectedLineBlocks()
+    {
+        var lineId = SelectedLine?.LineId;
+
+        SelectedLineBlocks.Clear();
+        foreach (var block in Blocks.Where(block => lineId is not null && block.LineId == lineId))
+        {
+            SelectedLineBlocks.Add(block);
         }
 
-        // Keep the dispatcher's selection when the new layout still has that block.
-        SelectedBlock = Blocks.FirstOrDefault(block => block.BlockId == selectedBlockId);
+        if (SelectedBlock is not null && !SelectedLineBlocks.Contains(SelectedBlock))
+        {
+            SelectedBlock = null;
+        }
+
+        OnPropertyChanged(nameof(OccupiedBlockCount));
     }
 
     private void RebuildDispatchQueue()
