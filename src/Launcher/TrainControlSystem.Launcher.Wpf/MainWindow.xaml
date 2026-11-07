@@ -1,7 +1,7 @@
 <Window x:Class="TrainControlSystem.Launcher.Wpf.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Train Control System" Height="520" Width="620">
+        Title="Train Control System" Height="600" Width="620">
     <StackPanel Margin="24">
         <TextBlock Text="{Binding Title}" FontSize="24" FontWeight="Bold" />
         <TextBlock Margin="0,4,0,20" TextWrapping="Wrap" Foreground="Gray"
@@ -35,8 +35,10 @@
 
         <Separator Margin="0,20,0,16" />
 
-        <!-- Simulation (placeholders) -->
-        <TextBlock Text="Simulation" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <!-- Shared simulation clock: hosted by this process, controlled ONLY from the CTC Office -->
+        <TextBlock Text="Simulation Clock" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" Foreground="Gray"
+                   Text="The one authoritative clock for every module runs inside this launcher. It starts paused; run, pause, speed and time are controlled from the CTC Office." />
 
         <Grid>
             <Grid.ColumnDefinitions>
@@ -46,20 +48,24 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <TextBlock Grid.Row="0" Grid.Column="0" Text="System Time:" Margin="0,0,0,6" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SystemTime}" Margin="0,0,0,6" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SystemTimeDisplay}" FontWeight="SemiBold" Margin="0,0,0,6" />
 
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Simulation Speed:" Margin="0,0,0,6" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,0,0,6"
-                       Text="{Binding SimulationSpeed, StringFormat={}{0:0.0}x}" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SimulationSpeedDisplay}" Margin="0,0,0,6" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Status:" Margin="0,0,0,6" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ClockStatusDisplay}" Margin="0,0,0,6" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Delivered to:" Margin="0,0,0,6" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ClockDelivery}" TextWrapping="Wrap" Margin="0,0,0,6" />
         </Grid>
 
-        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-            <Button Content="Pause" Width="100" Padding="8,4" Margin="0,0,12,0" Command="{Binding PauseCommand}" />
-            <Button Content="Resume" Width="100" Padding="8,4" Command="{Binding ResumeCommand}" />
-        </StackPanel>
+        <TextBlock Text="{Binding ClockNotice}" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Gray" />
 
         <TextBlock Text="{Binding StatusMessage}" Margin="0,20,0,0" TextWrapping="Wrap" Foreground="Gray" />
     </StackPanel>

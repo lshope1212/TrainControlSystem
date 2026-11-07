@@ -23,6 +23,7 @@ public static class MessageDisplayNameFormatter
         ["MovementSuggestionMessage"] = "Movement suggestion",
         ["SpeedCommandMessage"] = "Speed command",
         ["SwitchPositionRequestMessage"] = "Switch position request",
+        ["SimulationTimeControlMessage"] = "Simulation clock control",
         ["SystemTimeMessage"] = "System time",
         ["TicketSalesMessage"] = "Ticket sales",
         ["TrackLayoutMessage"] = "Track layout",

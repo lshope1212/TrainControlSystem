@@ -8,11 +8,13 @@ using TrainControl.Contracts.Messages;
 namespace CTC.TestUI.Wpf.ViewModels;
 
 /// <summary>
-/// Simulates the shared system clock: a 1x time-of-day clock that sends each new time to
-/// the running CTC as a <see cref="SystemTimeMessage"/>. CTC has no clock of its own; during
-/// isolated development this view model is the source of truth for simulation time.
+/// TEST CLOCK SOURCE ONLY. Stands in for the shared simulation clock during isolated CTC
+/// testing: a 1x time-of-day clock that sends each new time to the running CTC as a
+/// <see cref="SystemTimeMessage"/> (1x; paused whenever this clock is not running).
 /// </summary>
 /// <remarks>
+/// In the integrated system time comes from the one shared clock hosted by the Launcher, which
+/// the real CTC controls; do not run this alongside the Launcher, or CTC would receive two clocks.
 /// Single day only: the clock pauses at 23:59:59 rather than rolling over.
 /// If a send is still in progress when the clock ticks (e.g. CTC is busy or not running),
 /// that tick's send is skipped and the newest time is sent once the earlier send finishes,
@@ -165,7 +167,13 @@ public class SystemTimeInputViewModel : CtcInputViewModelBase
             do
             {
                 sent = _currentTime;
-                await SendToCtcAsync(new SystemTimeMessage { SystemTime = sent }, $" ({sent.ToString(TimeFormat)})", _shutdownToken);
+                var message = new SystemTimeMessage
+                {
+                    SystemTime = sent,
+                    SpeedMultiplier = 1.0,
+                    IsPaused = !IsRunning,
+                };
+                await SendToCtcAsync(message, $" ({sent.ToString(TimeFormat)})", _shutdownToken);
             }
             while (sent != _currentTime && !_shutdownToken.IsCancellationRequested);
         }

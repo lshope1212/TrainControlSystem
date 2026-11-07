@@ -5,6 +5,7 @@ using TrainController.Abstractions.Inputs;
 using TrainController.Abstractions.Outputs;
 using TrainController.Abstractions.Validation;
 using TrainController.Integration.Mapping;
+using PlatformSide = TrainControl.Contracts.Enums.PlatformSide;
 
 namespace TrainControl.Tests.TrainController;
 

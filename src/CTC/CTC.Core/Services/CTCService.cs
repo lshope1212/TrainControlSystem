@@ -153,8 +153,9 @@ public class CTCService : ICTCService
     /// <remarks>
     /// <para>
     /// CTC deliberately has no clock of its own: every module must agree on one simulation
-    /// time, so the time is owned by the external system clock (the TestUI during isolated
-    /// development) and arrives here as SystemTimeMessages. CTC never interpolates between them.
+    /// time, so the time is owned by the shared simulation clock (hosted by the Launcher; the
+    /// TestUI during isolated development) and arrives here as SystemTimeMessages, about every
+    /// 100 ms. CTC controls that clock from its UI, but never interpolates or advances time itself.
     /// </para>
     /// <para>
     /// A train is due when <c>DepartureTime &lt;= SystemTime</c>, not <c>==</c>: messages can

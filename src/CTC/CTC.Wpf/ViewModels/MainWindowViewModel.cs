@@ -4,6 +4,7 @@ using CTC.Core.Interfaces;
 using CTC.Core.Models;
 using CTC.Core.Scheduling;
 using CTC.Wpf.Commands;
+using CTC.Wpf.Services;
 using TrainControl.Contracts.Enums;
 
 namespace CTC.Wpf.ViewModels;
@@ -35,8 +36,14 @@ public class MainWindowViewModel : ViewModelBase
     private bool _isLoadingEditedPlan;
 
     public MainWindowViewModel(ICTCService ctc)
+        : this(ctc, new SimulationClockViewModel(new NamedPipeSimulationClockControlSender()))
+    {
+    }
+
+    public MainWindowViewModel(ICTCService ctc, SimulationClockViewModel clock)
     {
         _ctc = ctc ?? throw new ArgumentNullException(nameof(ctc));
+        Clock = clock ?? throw new ArgumentNullException(nameof(clock));
 
         ToggleMaintenanceModeCommand = new RelayCommand(_ => IsMaintenanceMode = !IsMaintenanceMode);
         CloseSelectedBlockCommand = new AsyncRelayCommand(_ => CloseSelectedBlockAsync(), _ => CanCloseSelectedBlock());
@@ -53,6 +60,12 @@ public class MainWindowViewModel : ViewModelBase
         RebuildDispatchedTrains();
         _ctc.StateChanged += OnCtcStateChanged;
     }
+
+    /// <summary>
+    /// Simulation clock controls. CTC is the only module that may control the shared clock;
+    /// the clock state shown is always the authoritative state the clock reported.
+    /// </summary>
+    public SimulationClockViewModel Clock { get; }
 
     /// <summary>Schedule Builder tab, scoped to <see cref="SelectedLine"/>.</summary>
     public ScheduleBuilderViewModel ScheduleBuilder { get; }
@@ -180,6 +193,7 @@ public class MainWindowViewModel : ViewModelBase
 
     public string Title => "CTC Office";
 
+    /// <summary>The authoritative simulation time CTC last received and acted on.</summary>
     public string SystemTimeDisplay => _ctc.State.SystemTime.ToString(@"hh\:mm\:ss");
 
     /// <summary>Every block in the current layout, across all lines.</summary>

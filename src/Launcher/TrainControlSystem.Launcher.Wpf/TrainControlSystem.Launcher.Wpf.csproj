@@ -1,4 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared projects only: the Launcher hosts the shared simulation clock and talks to modules
+    through TrainControl.Contracts over TrainControl.Common's named pipes. It still holds no
+    reference to any subsystem project.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
+  </ItemGroup>
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>

@@ -103,8 +103,12 @@ UI-only state such as the selected line or block belongs in the view model.
    It is set only after the send succeeds.
 3. **Switch terminology.** Requirements use both Left/Right and Normal/Reverse. The
    shared `SwitchPosition` enum stays Normal/Reverse until the teams decide.
-4. **System time.** Time is meant to come from a shared simulation clock that is
-   not implemented yet. CTC only exposes `SetSystemTime` and has no timer of its own.
+4. **System time.** Time comes from the shared simulation clock hosted by the
+   Launcher (root README, *Simulation timing*). CTC.Core only exposes
+   `SetSystemTimeAsync` and has no timer of its own. The CTC window's clock controls
+   (in CTC.Wpf, not here) send `SimulationTimeControlMessage` requests to that clock,
+   and its authoritative `SystemTimeMessage` comes back through the receiver. Only
+   `SystemTime` reaches CTC.Core; speed and paused state are display concerns.
 5. **Movement request vs. switch request.** The documented "movement request" could
    overlap with switch requests. Here `MovementRequestMessage` means releasing a
    train; switch changes use `SwitchPositionRequestMessage`.

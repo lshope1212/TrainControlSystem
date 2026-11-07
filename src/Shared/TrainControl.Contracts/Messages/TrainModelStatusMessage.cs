@@ -60,7 +60,9 @@ public class TrainModelStatusMessage
     /// <summary>Distance from the beacon to the next station, at the moment the beacon was read.</summary>
     public double DistanceToNextStationMeters { get; set; }
 
-    public PlatformSide PlatformSide { get; set; } = PlatformSide.None;
+    // Fully qualified: BeaconMessage.cs also declares a PlatformSide (without Both) in this
+    // namespace, which would otherwise take precedence over the shared Enums type.
+    public Enums.PlatformSide PlatformSide { get; set; } = Enums.PlatformSide.None;
 
     public bool PassengerEmergencyBrakeRequested { get; set; }
 
