@@ -21,6 +21,7 @@ public static class MessageDisplayNameFormatter
         ["MaintenanceRequestMessage"] = "Maintenance request",
         ["MovementRequestMessage"] = "Movement request",
         ["MovementSuggestionMessage"] = "Movement suggestion",
+        ["RequestAcknowledgementMessage"] = "Track Controller acknowledgement",
         ["SpeedCommandMessage"] = "Speed command",
         ["SwitchPositionRequestMessage"] = "Switch position request",
         ["SimulationTimeControlMessage"] = "Simulation clock control",
