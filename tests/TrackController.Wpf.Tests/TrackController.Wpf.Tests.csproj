@@ -5,6 +5,8 @@
     <PackageReference Include="MSTest" Version="4.0.2" />
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
     <ProjectReference Include="../../src/TrackController/TrackController.Wpf/TrackController.Wpf.csproj" />
+    <!-- Publication tests apply the wayside output to the unmodified production Track Model service. -->
+    <ProjectReference Include="../../src/TrackModel/TrackModel.Core/TrackModel.Core.csproj" />
     <None Include="../../src/TrackController/TrackController.Wpf/Samples/**/*" Link="PiSamples/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../TrackController.Tests/DeploymentFiles.cs" Link="DeploymentFiles.cs" />
   </ItemGroup>
