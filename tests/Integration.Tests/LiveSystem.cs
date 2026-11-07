@@ -1,0 +1,239 @@
+using System.Collections.Concurrent;
+using System.Text.Json.Nodes;
+using CTC.Core.Interfaces;
+using CTC.Core.Services;
+using CTC.Wpf.Services;
+using TrackController.Contracts.Messages;
+using TrackController.Runtime;
+using TrackController.Wpf.Services;
+using TrackModel.Core.Services;
+using TrackModel.Wpf.Services;
+using TrainControl.Common.Communication;
+
+namespace TrainControl.Integration.Tests;
+
+/// <summary>
+/// The real Track Model, Track Controller and CTC communication components wired together over
+/// isolated named pipes, each "process" on its own thread. Nothing here fakes a module: every
+/// message crosses a real pipe through the production receivers and publishers.
+/// </summary>
+internal sealed class LiveSystem : IAsyncDisposable
+{
+    private readonly string _prefix = $"TrainControl.IntegrationTest.{Guid.NewGuid():N}";
+    private readonly List<string> _temporaryFolders = [];
+
+    private DispatcherThread? _trackModelThread;
+    private CancellationTokenSource? _trackModelStop;
+    private Task? _trackModelRun;
+
+    private DispatcherThread? _ctcThread;
+    private CancellationTokenSource? _ctcStop;
+    private Task[] _ctcRun = [];
+
+    public string TrackModelPipe => _prefix + ".TrackModel";
+
+    public string TrackControllerPipe => _prefix + ".TrackController";
+
+    public string CtcPipe => _prefix + ".CTC";
+
+    public TrackService? Track { get; private set; }
+
+    public WaysidePipeHost? Wayside { get; private set; }
+
+    public CTCService? Ctc { get; private set; }
+
+    /// <summary>Everything CTC actually delivered to the Track Controller, in order.</summary>
+    public RecordingSender? CtcSent { get; private set; }
+
+    /// <summary>Inbound and link status lines CTC reported (what its UI would show).</summary>
+    public ConcurrentQueue<string> CtcStatuses { get; } = new();
+
+    public static string SamplesFolder => Path.Combine(AppContext.BaseDirectory, "WaysideSamples");
+
+    /// <summary>Starts the Track Controller with a deployment (single-territory Blue Line by default). It starts paused, as in production.</summary>
+    public Task StartTrackControllerAsync(string? deploymentPath = null)
+    {
+        var plan = WaysideDeployment.Read(deploymentPath ?? Path.Combine(SamplesFolder, "blue-line-all-pc.deployment.json"));
+        Wayside = new WaysidePipeHost(plan.CreateRuntime(), [TrackControllerPipe, CtcPipe, TrackModelPipe, TrackControllerPipe + ".Monitor"]);
+        Wayside.Start();
+        return Task.CompletedTask;
+    }
+
+    public async Task ResumeTrackControllerAsync() =>
+        await NamedPipeTransport.SendAsync(TrackControllerPipe, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }));
+
+    public async Task StopTrackControllerAsync()
+    {
+        if (Wayside is not null)
+        {
+            await Wayside.DisposeAsync();
+            Wayside = null;
+        }
+    }
+
+    /// <summary>Starts the Track Model exactly as TrackModel.Wpf's App does: the bundled Blue Line demonstration.</summary>
+    public async Task StartTrackModelAsync()
+    {
+        _trackModelThread = new DispatcherThread("Track Model UI");
+        _trackModelStop = new CancellationTokenSource();
+        var endpoints = new TrackModelEndpoints(TrackModelPipe, TrackControllerPipe, _prefix + ".TrainModel", CtcPipe, _prefix + ".TrackModel.TestUI");
+        Track = await _trackModelThread.GetAsync(() =>
+        {
+            var track = new TrackService();
+            BlueLineTrackLayout.LoadDemonstration(track);
+            return track;
+        });
+        var connection = await _trackModelThread.GetAsync(() => new TrackModelConnection(Track, _trackModelThread.Dispatcher, endpoints));
+        var stop = _trackModelStop.Token;
+        _trackModelRun = _trackModelThread.StartAsync(() => connection.RunAsync(stop));
+    }
+
+    /// <summary>Stops the Track Model process: its receiver and publisher go away, as when the app closes.</summary>
+    public async Task StopTrackModelAsync()
+    {
+        if (_trackModelStop is null)
+        {
+            return;
+        }
+
+        await _trackModelStop.CancelAsync();
+        await AwaitQuietly(_trackModelRun);
+        _trackModelThread!.Dispose();
+        _trackModelStop.Dispose();
+        _trackModelStop = null;
+        _trackModelThread = null;
+    }
+
+    /// <summary>Reads Track Model state on its own thread.</summary>
+    public Task<T> OnTrackModel<T>(Func<TrackService, T> read) => _trackModelThread!.GetAsync(() => read(Track!));
+
+    /// <summary>Starts CTC exactly as CTC.Wpf's App does (receiver plus link supervisor), minus the window.</summary>
+    public async Task StartCtcAsync(TimeSpan? requestRenewalInterval = null)
+    {
+        _ctcThread = new DispatcherThread("CTC UI");
+        _ctcStop = new CancellationTokenSource();
+        CtcSent = new RecordingSender(new NamedPipeMessageSender(TrackControllerPipe, connectTimeoutMilliseconds: 1000));
+        Ctc = await _ctcThread.GetAsync(() => new CTCService(CtcSent, null, requestRenewalInterval));
+        var receiver = new CtcNamedPipeReceiver(Ctc, _ctcThread.Dispatcher, CtcPipe);
+        var links = new CtcLinkSupervisor(Ctc, _ctcThread.Dispatcher, TrackModelPipe);
+        receiver.StatusReported += (_, status) => CtcStatuses.Enqueue(status);
+        links.StatusReported += (_, status) => CtcStatuses.Enqueue(status);
+        var stop = _ctcStop.Token;
+        _ctcRun = [_ctcThread.StartAsync(() => receiver.RunAsync(stop)), _ctcThread.StartAsync(() => links.RunAsync(stop))];
+    }
+
+    public async Task StopCtcAsync()
+    {
+        if (_ctcStop is null)
+        {
+            return;
+        }
+
+        await _ctcStop.CancelAsync();
+        foreach (var task in _ctcRun)
+        {
+            await AwaitQuietly(task);
+        }
+
+        _ctcThread!.Dispose();
+        _ctcStop.Dispose();
+        _ctcStop = null;
+        _ctcThread = null;
+    }
+
+    /// <summary>Reads or acts on CTC state on CTC's own thread.</summary>
+    public Task<T> OnCtc<T>(Func<CTCService, T> read) => _ctcThread!.GetAsync(() => read(Ctc!));
+
+    public Task OnCtcAsync(Func<CTCService, Task> action) => _ctcThread!.StartAsync(() => action(Ctc!));
+
+    /// <summary>An external input to the production Track Model (e.g. what the Train Model will send).</summary>
+    public Task SendToTrackModelAsync(object message) => NamedPipeTransport.SendAsync(TrackModelPipe, message);
+
+    /// <summary>A message to CTC's inbound pipe, e.g. the shared clock's SystemTimeMessage.</summary>
+    public Task SendToCtcAsync(object message) => NamedPipeTransport.SendAsync(CtcPipe, message);
+
+    public WaysideBlockStatus WaysideBlock(string blockId) => Wayside!.LatestSnapshot.Blocks.Single(block => block.BlockId == blockId);
+
+    /// <summary>A private copy of the deployment samples the test may edit.</summary>
+    public string CopySamples(Action<string>? edit = null)
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "train-integration-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        foreach (string file in Directory.GetFiles(SamplesFolder))
+        {
+            File.Copy(file, Path.Combine(folder, Path.GetFileName(file)));
+        }
+
+        _temporaryFolders.Add(folder);
+        edit?.Invoke(folder);
+        return folder;
+    }
+
+    public static void EditJson(string path, Action<JsonObject> edit)
+    {
+        var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        edit(json);
+        File.WriteAllText(path, json.ToJsonString());
+    }
+
+    /// <summary>Polls <paramref name="condition"/> until it holds; fails with <paramref name="because"/> after <paramref name="timeout"/>.</summary>
+    public static async Task UntilAsync(Func<Task<bool>> condition, string because, TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(12));
+        while (!await condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                Assert.Fail($"Timed out: {because}");
+            }
+
+            await Task.Delay(50);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopCtcAsync();
+        await StopTrackModelAsync();
+        await StopTrackControllerAsync();
+        foreach (string folder in _temporaryFolders)
+        {
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    private static async Task AwaitQuietly(Task? task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>The production CTC sender, recording what it actually delivered.</summary>
+    internal sealed class RecordingSender(IMessageSender inner) : IMessageSender
+    {
+        public ConcurrentQueue<object> Delivered { get; } = new();
+
+        public async Task SendAsync<TMessage>(TMessage message, CancellationToken cancellationToken = default)
+            where TMessage : class
+        {
+            await inner.SendAsync(message, cancellationToken);
+            Delivered.Enqueue(message);
+        }
+    }
+}

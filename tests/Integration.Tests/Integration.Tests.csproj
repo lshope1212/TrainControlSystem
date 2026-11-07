@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Cross-module integration tests. They run the PRODUCTION communication components of the
+    Track Model (TrackModelConnection + TrackService), the Track Controller (WaysidePipeHost + the
+    Blue Line deployment runtime) and CTC (CtcNamedPipeReceiver + CTCService + CtcLinkSupervisor)
+    against each other over real named pipes, using isolated pipe names so they never collide with
+    running applications. Windows-only: the components marshal onto WPF dispatchers.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TrackModel\TrackModel.Wpf\TrackModel.Wpf.csproj" />
+    <ProjectReference Include="..\..\src\TrackController\TrackController.Wpf\TrackController.Wpf.csproj" />
+    <ProjectReference Include="..\..\src\CTC\CTC.Wpf\CTC.Wpf.csproj" />
+    <ProjectReference Include="..\..\src\CTC\CTC.TestUI.Wpf\CTC.TestUI.Wpf.csproj" />
+    <None Include="..\..\src\TrackController\TrackController.Wpf\Samples\**\*" Link="WaysideSamples\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
