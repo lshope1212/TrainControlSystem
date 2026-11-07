@@ -1,6 +1,7 @@
 using TrackModel.Core.Interfaces;
 using TrackModel.Core.Models;
 using TrackModel.Core.Persistence;
+using TrainControl.Common.Utilities;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 namespace TrackModel.Core.Services;
@@ -168,6 +169,8 @@ public class TrackService : ITrackService
                 HasCrossing = b.HasCrossing, ConnectedBlockIds = [.. b.ConnectedBlockIds],
                 ElevationMeters = b.ElevationMeters, GradePercent = b.GradePercent,
                 SpeedLimitMetersPerSecond = b.SpeedLimitMetersPerSecond, TravelDirection = b.TravelDirection,
+                // CTC plans speeds from the contract's km/h field; both describe the same civil limit.
+                SpeedLimitKilometersPerHour = UnitConversion.MetersPerSecondToKilometersPerHour(b.SpeedLimitMetersPerSecond),
                 HasHeater = b.HasHeater, Beacon = b.Beacon, BeaconTargetBlockId = b.BeaconTargetBlockId,
                 NormalNextBlockId = b.NormalNextBlockId, ReverseNextBlockId = b.ReverseNextBlockId
             }).ToList()

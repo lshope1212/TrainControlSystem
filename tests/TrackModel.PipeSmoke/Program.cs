@@ -77,7 +77,7 @@ try
     await Send(new SystemTimeMessage{SystemTime=new TimeSpan(10,0,0)});
     await Check("private clock setup updates, hourly tickets expire, cumulative tickets remain",()=>Get<SystemTimeMessage>("time")?.SystemTime==new TimeSpan(10,0,0)&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(SystemTimeMessage))&&Get<TicketSalesMessage>("tickets")?.TicketsPerHour==0&&Env("10")?.TicketsSold==3);
     await Task.Delay(1000); // Observe the otherwise idle forbidden destination after all mutations.
-    await Check("CTC received ticket sales only throughout the run",()=>received.Any(m=>m.Pipe==NamedPipeNames.Ctc)&&received.Where(m=>m.Pipe==NamedPipeNames.Ctc).All(m=>m.Type==nameof(TicketSalesMessage)));
+    await Check("CTC received only its layout and ticket sales throughout the run",()=>received.Any(m=>m.Pipe==NamedPipeNames.Ctc&&m.Type==nameof(TrackLayoutMessage))&&received.Where(m=>m.Pipe==NamedPipeNames.Ctc).All(m=>m.Type is nameof(TicketSalesMessage) or nameof(TrackLayoutMessage)));
     await Check("Train Controller received no messages throughout the run",()=>!received.Any(m=>m.Pipe==NamedPipeNames.TrainController));
     Console.WriteLine($"COMPLETE: {checks} real-process output checks passed, with accepted/rejected acknowledgements for every input.");
 }

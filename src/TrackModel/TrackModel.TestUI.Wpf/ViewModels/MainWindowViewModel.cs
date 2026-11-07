@@ -231,7 +231,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             switch (envelope.MessageType)
             {
-                case nameof(TrackLayoutMessage):
+                // The dashboard also publishes its layout to CTC; only the private setup copy drives these inputs.
+                case nameof(TrackLayoutMessage) when destination != "CTC":
                     var layout = MessageSerializer.DeserializePayload<TrackLayoutMessage>(envelope);
                     if (Status is "Disconnected" or "Track Model offline") Status = "Connected — snapshot received";
                     var selection = BlockId;

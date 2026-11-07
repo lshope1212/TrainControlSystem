@@ -10,6 +10,6 @@ This optional console check owns the three neighboring receiver endpoints plus t
 dotnet run --project tests/TrackModel.PipeSmoke
 ```
 
-The run checks 16 groups: private layout setup, clean initial profile, beacons, commanded speed/authority/switch, three Train Model track-signal values, crossing, demand, passenger exchange/occupancy/tickets, idempotent retry, all failures, rejected negative command, private clock setup/hourly accounting, ticket-only CTC messages and zero Train Controller messages. Every input also requires an accepted or rejected acknowledgement as expected. Failure produces a nonzero exit code.
+The run checks 16 groups: private layout setup, clean initial profile, beacons, commanded speed/authority/switch, three Train Model track-signal values, crossing, demand, passenger exchange/occupancy/tickets, idempotent retry, all failures, rejected negative command, private clock setup/hourly accounting, CTC messages limited to the layout and ticket sales and zero Train Controller messages. Every input also requires an accepted or rejected acknowledgement as expected. Failure produces a nonzero exit code.
 
 The check changes simulation state. After it exits, click **Restore Blue Line**, reopen TestUI and refresh. Receivers are released on exit. This test proves standalone message delivery, not the teammates' unfinished module implementations.
