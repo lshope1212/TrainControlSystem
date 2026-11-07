@@ -113,16 +113,25 @@ Quick check:
 4. CTC: **Close Block**. TestUI *Captured CTC Outputs* shows
    `MaintenanceRequestMessage` with `BlockId = A4, RequestedState = Closed`.
 
+CTC treats a block it has no status for as Unknown, which is unsafe, so before dispatching
+send `Clear` statuses for the train's start block and the blocks ahead (a TestUI status
+has no report time, so it is held until replaced and never goes stale).
+
 Dispatch check: queue a schedule in the CTC Schedule Builder, then advance the TestUI
-system time past its departure. *Captured CTC Outputs* shows a
-`MovementSuggestionMessage` (CTC's suggested speed/authority) followed by a
-`MovementRequestMessage` for the train. Speed and authority are calculated by CTC;
-the TestUI no longer enters them.
+system time past its departure. CTC releases the train (*Dispatched Trains*, Release
+`Awaiting placement at A1`) and sends nothing yet: no module receives a release request.
+Then send `A1 Occupied` (or **Start (Occupy First Block)** below). CTC detects the train
+and *Captured CTC Outputs* shows its first `MovementSuggestionMessage`: request ID, target
+`A1`, the path ahead and the authority measured from A1's entry. Speed and authority are
+calculated by CTC; the TestUI no longer enters them. No `MovementRequestMessage` is sent.
 
 Re-plan check: in the CTC *Dispatched Trains* tab, select the train, change its
 Destination and/or Arrival Time and click **Apply Changes**. *Captured CTC Outputs*
-shows one more `MovementSuggestionMessage` for the same TrainId with the recalculated
-speed/authority, and no second `MovementRequestMessage`.
+shows a cancellation of the old request (`active: false`, same request ID) followed by a
+new `MovementSuggestionMessage` with a new request ID and the recalculated speed/authority.
+Each **Next Occupancy Step** likewise cancels the old request and issues one for the
+train's new block. The TestUI is not a Track Controller, so the *Track Controller* column
+stays "Sent; awaiting acknowledgement".
 
 Train-tracking check (*Occupancy Sequence Simulator*, TEST-ONLY): it sends only anonymous
 `BlockStatusMessage`s through the same pipe, never a train ID, so CTC must infer which

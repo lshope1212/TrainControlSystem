@@ -30,23 +30,59 @@ WPF types) so the UI can refresh when messages arrive from other modules.
 - `Services/CTCService` is the boundary between contracts and the domain model.
 - `Dispatching/` holds the routing, speed and authority rules:
   `TrainPerformance` (vehicle max speed), `SpeedPlanner` (schedule feasibility and
-  suggested speed), `AuthorityManager` (fixed-block authority) and `RouteManager`
-  (shortest path by block count over connected blocks, used when re-planning).
+  suggested speed), `AuthorityManager` (fixed-block authority), `RouteManager`
+  (shortest path by block count over connected blocks, used when re-planning),
+  `MovementRequestPlanner` (the request a train should hold now) and
+  `MovementRequestCoordinator` (the only code that sends, renews or cancels movement
+  requests).
+- `Services/TrackLayoutReconciler` applies a received layout line by line.
 
 A scheduled train is an ordered list of route blocks. The dispatcher times only some of
 them (the time the train ENTERS the block); CTC routes the train between timed blocks
 through the connected untimed ones, and checks each timed span is reachable within the
-speed limits. When its departure time is reached CTC sends a `MovementSuggestionMessage`
-(initial suggested speed/authority) and then a `MovementRequestMessage` to the Track
-Controller; the train leaves the queue only after both sends succeed.
+speed limits.
+
+**Release.** When its departure time is reached and its start block is reported Clear and
+open, the train is released: it leaves the queue for `DispatchedTrains` with
+`ReleaseStatus = AwaitingPlacement`. Nothing is sent then. The release intent
+(`MovementRequestMessage`) has no receiver yet (placing a train in service is the Train
+Model's job, and the Track Controller rejects that message), so CTC never claims a
+physical release. When the start block reports occupied, CTC attributes it to the train
+(`DetectedOnTrack`, inferred) and issues its first movement request.
+
+**Movement requests** (`MovementRequestCoordinator`). Every request is a complete
+`MovementSuggestionMessage`: request ID, train, target block = the train's current block,
+entry block = the block it came from, the route blocks ahead that the authority covers,
+the suggested speed and a fixed authority measured from the target block's entry. When
+the train enters its next block, the old request is cancelled (`active: false`, same ID)
+and a new one with a new ID re-expresses the SAME authority end from the new block; the
+original allowance is never restarted. The authority end is set only when a movement
+starts (release, departure from a stop, a dispatcher re-plan); a block ahead becoming
+occupied, Unknown, stale or closed shortens the request (new ID), and clearing restores
+it only up to that end. Still-valid requests are renewed on wall time (same ID, same
+limits, every 3 s) so the Track Controller's 10 s watchdog keeps them alive; renewals
+never add distance, and stop when CTC stops. The Track Controller's answers are kept
+apart: transport delivery, `RequestAcknowledgementMessage` (accepted for evaluation or
+rejected, correlated by request ID; stale answers are ignored) and the actual
+authorization it reports on the target block's `BlockStatusMessage.Movement`.
 
 After release the dispatcher can change a train's destination and/or arrival time
 (`UpdateDispatchedTrainPlanAsync`). CTC routes it from its inferred `CurrentBlockId` to
 the new destination, recalculates speed and authority (the train's own block being
-occupied does not stop its authority), and sends only a new `MovementSuggestionMessage`,
-never another `MovementRequestMessage`. The train's state, including its active route,
-changes only after that send succeeds. An arrival time that cannot be met gives the
-maximum permitted speed and a warning; a limit is never exceeded.
+occupied does not stop its authority), and, for a train on the track, replaces its
+movement request. The train's state, including its active route, changes only after that
+send succeeds. An arrival time that cannot be met gives the maximum permitted speed and a
+warning; a limit is never exceeded.
+
+**Conservative safety.** A block not reported Clear (Occupied, Unknown, never reported,
+or a live status not refreshed for 3 s) is unsafe for authority, as is a block closed or
+requested closed. The Track Controller remains the final authority.
+
+**Track layout.** `ApplyTrackLayout` reconciles per line: an equivalent repeated layout
+changes nothing (status, schedules, queue and train tracking survive); attribute changes
+apply in place; a topology change rebuilds the line only when it has no released trains,
+and is otherwise refused for that line. Block IDs are used verbatim and must be unique
+across all lines (see `docs/integration/LIVE_INTEGRATION_GUIDE.md`).
 
 ### Dwell times
 
@@ -63,8 +99,9 @@ After release, `DispatchedTrainState.Stops` is the Active Movement Plan
 (`Dispatching/MovementPlanner`). `UpdateMovementPlanStopAsync` edits any remaining stop's
 destination, arrival or dwell; a dwell change only recalculates the planned timing. At
 run time a train entering its current stop becomes `Dwelling` (or `Arrived` with no dwell);
-on the SystemTime update at which its dwell has elapsed CTC sends the suggestion for the
-next movement and the train is `EnRoute` again, or `Completed` at its final stop.
+on the SystemTime update at which its dwell has elapsed CTC issues the movement request for
+the next movement and the train is `EnRoute` again, or `Completed` at its final stop (its
+request is then cancelled).
 
 ### Train location: sequential occupancy
 
@@ -95,12 +132,16 @@ UI-only state such as the selected line or block belongs in the view model.
 1. **No train ID in block occupancy (by design).** `BlockStatusMessage` reports only
    clear/occupied/unknown. CTC infers each train's current block from sequential
    occupancy along its active route (see above); no train-position message is expected.
-   Suggested speed and authority are still calculated only at dispatch and when the
-   dispatcher changes the plan, not automatically as the train moves.
-2. **No maintenance acknowledgement.** There is no Track Controller -> CTC
-   maintenance status. `CtcBlockState.RequestedMaintenanceState == Closed` means
-   "CTC successfully issued a Close request", not "Track Controller closed the block".
-   It is set only after the send succeeds.
+   The suggested speed and the authority END are calculated only when a movement starts
+   (release, departure from a stop, dispatcher re-plan); moving block to block only
+   re-expresses that end from the new block.
+2. **Maintenance acknowledgement vs. confirmation.** `CtcBlockState.RequestedMaintenanceState == Closed`
+   means "CTC successfully issued a Close request". The Track Controller's
+   `RequestAcknowledgementMessage` says whether it accepted the request (a rejected request
+   is withdrawn); only `BlockStatusMessage.Maintenance` confirms the block's actual state.
+6. **Physical release.** No module confirms placing a train in service yet. A released
+   train stays `AwaitingPlacement` until its start block reports occupied; see the
+   integration guide for the outstanding Train Model work.
 3. **Switch terminology.** Requirements use both Left/Right and Normal/Reverse. The
    shared `SwitchPosition` enum stays Normal/Reverse until the teams decide.
 4. **System time.** Time comes from the shared simulation clock hosted by the

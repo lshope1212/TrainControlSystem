@@ -16,17 +16,24 @@ namespace CTC.Wpf.Services;
 /// behavior stays in CTC.Core. It does not know or care whether the sender is a real
 /// module or CTC.TestUI.Wpf. A <see cref="SystemTimeMessage"/> (the shared clock's state,
 /// about ten per second) is also surfaced through <see cref="SystemTimeReceived"/> for the
-/// clock display, and is not reported as a status unless it fails.
+/// clock display, and is not reported as a status unless it fails; the same goes for the live
+/// wayside's periodic block statuses. After each block status CTC brings its movement requests
+/// in line with the (possibly new) train locations before the next message is read, so inbound
+/// messages are still applied strictly one after another.
 /// </remarks>
 public sealed class CtcNamedPipeReceiver
 {
     private readonly ICTCService _ctc;
     private readonly Dispatcher _dispatcher;
 
-    public CtcNamedPipeReceiver(ICTCService ctc, Dispatcher dispatcher)
+    private readonly string _pipeName;
+
+    /// <param name="pipeName">Inbound pipe; <see cref="NamedPipeNames.Ctc"/> unless a test isolates it.</param>
+    public CtcNamedPipeReceiver(ICTCService ctc, Dispatcher dispatcher, string? pipeName = null)
     {
         _ctc = ctc ?? throw new ArgumentNullException(nameof(ctc));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _pipeName = string.IsNullOrWhiteSpace(pipeName) ? NamedPipeNames.Ctc : pipeName;
     }
 
     /// <summary>
@@ -43,7 +50,7 @@ public sealed class CtcNamedPipeReceiver
     /// <summary>Receives until <paramref name="cancellationToken"/> is cancelled.</summary>
     public Task RunAsync(CancellationToken cancellationToken) =>
         NamedPipeTransport.ListenAsync(
-            NamedPipeNames.Ctc,
+            _pipeName,
             envelope => HandleAsync(envelope, cancellationToken),
             ReportError,
             cancellationToken);
@@ -53,8 +60,13 @@ public sealed class CtcNamedPipeReceiver
         // Deserialize on the background thread; only the service call runs on the UI thread.
         Func<ICTCService, Task>? apply = envelope.MessageType switch
         {
-            nameof(BlockStatusMessage) => Route<BlockStatusMessage>(envelope, (ctc, m) => ctc.ApplyBlockStatus(m)),
-            nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => ctc.ApplyTrackLayout(m)),
+            nameof(BlockStatusMessage) => RouteAsync<BlockStatusMessage>(envelope, async (ctc, m) =>
+            {
+                ctc.ApplyBlockStatus(m);
+                await ctc.SynchronizeMovementRequestsAsync(cancellationToken);
+            }),
+            nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => _layoutSummary = ctc.ApplyTrackLayout(m).Summary),
+            nameof(RequestAcknowledgementMessage) => Route<RequestAcknowledgementMessage>(envelope, (ctc, m) => ctc.ApplyRequestAcknowledgement(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
             nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ApplySystemTimeAsync(ctc, m, cancellationToken)),
             _ => null,
@@ -78,13 +90,16 @@ public sealed class CtcNamedPipeReceiver
             {
                 await apply(_ctc);
 
-                // Clock state arrives continuously; reporting each one would hide every other status.
-                if (envelope.MessageType == nameof(SystemTimeMessage))
+                // Clock state and live wayside statuses arrive continuously; reporting each one
+                // would hide every other status.
+                if (envelope.MessageType == nameof(SystemTimeMessage) || IsLiveBlockStatus(envelope))
                 {
                     return;
                 }
 
-                status = $"Received {displayName}.";
+                status = envelope.MessageType == nameof(TrackLayoutMessage) && _layoutSummary is { } summary
+                    ? $"Received {displayName}. {summary}"
+                    : $"Received {displayName}.";
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -99,6 +114,14 @@ public sealed class CtcNamedPipeReceiver
             Report(status);
         }).Task.Unwrap();
     }
+
+    // Only touched on the UI thread, between applying a layout and reporting it.
+    private string? _layoutSummary;
+
+    private static bool IsLiveBlockStatus(MessageEnvelope envelope) =>
+        envelope.MessageType == nameof(BlockStatusMessage)
+        && envelope.Payload.TryGetProperty("reportedAtUtc", out var reportedAt)
+        && reportedAt.ValueKind == System.Text.Json.JsonValueKind.String;
 
     private Task ApplySystemTimeAsync(ICTCService ctc, SystemTimeMessage message, CancellationToken cancellationToken)
     {

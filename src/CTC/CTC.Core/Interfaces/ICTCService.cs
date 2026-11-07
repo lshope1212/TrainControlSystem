@@ -20,7 +20,15 @@ public interface ICTCService
 
     // Inbound: map shared contracts into CTC state.
 
-    void ApplyTrackLayout(TrackLayoutMessage message);
+    /// <summary>
+    /// Brings CTC's territory in line with the Track Model's layout, line by line: an equivalent
+    /// repeated layout changes nothing (live status, schedules, queue and train tracking survive),
+    /// attribute changes are applied in place, and an incompatible topology change is applied only
+    /// to a line with no released trains (otherwise that line keeps its topology and the refusal is
+    /// reported). Block IDs are used verbatim and must be unique across all lines.
+    /// </summary>
+    /// <exception cref="ArgumentException">Blank or duplicate line/block IDs; nothing changed.</exception>
+    TrackLayoutSyncResult ApplyTrackLayout(TrackLayoutMessage message);
 
     /// <summary>
     /// Records an anonymous block status report. When a block becomes occupied that is the next
@@ -28,14 +36,40 @@ public interface ICTCService
     /// forward (raising <see cref="CtcStateChangeKind.TrainLocationUpdated"/>); the report itself
     /// never identifies a train.
     /// </summary>
+    /// <remarks>
+    /// A live report (with <see cref="BlockStatusMessage.ReportedAtUtc"/>) older than the one
+    /// already applied is ignored, and its movement decision is applied only to the request it names.
+    /// </remarks>
     void ApplyBlockStatus(BlockStatusMessage message);
+
+    /// <summary>
+    /// Records the Track Controller's answer (accepted for evaluation or rejected) to a CTC
+    /// movement, maintenance or switch request. Stale or repeated answers are ignored.
+    /// </summary>
+    void ApplyRequestAcknowledgement(RequestAcknowledgementMessage message);
+
+    /// <summary>
+    /// Treats every live block status not refreshed within the freshness window as Unknown (and
+    /// unsafe for authority). Call periodically on wall time. Returns how many blocks went stale.
+    /// </summary>
+    int RefreshBlockStatusFreshness();
+
+    /// <summary>
+    /// Brings every released train's movement request at the Track Controller in line with its plan
+    /// and tracked location: issues, replaces (cancelling the old request first) or cancels requests,
+    /// and renews still-valid ones on wall time so the Track Controller's request watchdog keeps them
+    /// alive. Renewal never changes a request's limits. Failures are reported, not thrown.
+    /// </summary>
+    Task SynchronizeMovementRequestsAsync(CancellationToken cancellationToken = default);
 
     void ApplyTicketSales(TicketSalesMessage message);
 
     /// <summary>
     /// Records the time reported by the external system clock, then releases every queued
-    /// train whose departure time has been reached (sending a MovementSuggestion with its
-    /// initial suggested speed/authority, then a MovementRequest, for each).
+    /// train whose departure time has been reached and whose start block is safe: the train leaves
+    /// the queue awaiting placement (no module confirms physical release yet) and its first
+    /// movement request is issued once its start block reports occupied. Also starts the next
+    /// movement of trains whose dwell ended.
     /// Dispatch failures are reported through <see cref="StateChanged"/>, not thrown.
     /// </summary>
     Task SetSystemTimeAsync(TimeSpan systemTime, CancellationToken cancellationToken = default);
@@ -82,8 +116,8 @@ public interface ICTCService
     /// <summary>
     /// Changes an already-dispatched train's destination and/or arrival time: CTC routes it
     /// from its current (occupancy-inferred) block to <paramref name="destinationBlockId"/>, recalculates its
-    /// suggested speed and authority, and sends only a new MovementSuggestion (never another
-    /// MovementRequest). The train's state changes only if the send succeeded.
+    /// suggested speed and authority, and (for a train on the track) replaces its movement request.
+    /// The train's state changes only if any needed send succeeded.
     /// </summary>
     /// <returns>A dispatcher-readable warning (e.g. the arrival time cannot be met), or null.</returns>
     /// <exception cref="Exceptions.DispatchException">The plan cannot be applied (dispatcher-readable reason); nothing was sent.</exception>
@@ -94,7 +128,7 @@ public interface ICTCService
     /// Changes one stop (<paramref name="stopIndex"/> 0 = current stop) of an already-dispatched
     /// train's Active Movement Plan: its destination, arrival time and dwell time. CTC validates
     /// the timing (each stop entered after the previous stop's arrival + dwell), recalculates the
-    /// dependent suggested speeds, and sends a new MovementSuggestion only when the movement under
+    /// dependent suggested speeds, and replaces the movement request only when the movement under
     /// way or the route changed. A dwell change alone never changes the route or authority.
     /// </summary>
     /// <returns>A dispatcher-readable warning (e.g. an arrival time cannot be met), or null.</returns>

@@ -979,7 +979,7 @@
                         </Grid.ColumnDefinitions>
 
                         <TextBlock Grid.ColumnSpan="3"
-                                   Text="Trains already released from the queue. Current Block is inferred from sequential track occupancy along the train's active route. Suggested Speed and Suggested Authority are the latest values CTC sent to the Track Controller, toward the Destination at the Arrival Time. Select a train, then a stop of its movement plan, to change its destination, arrival time or dwell time; CTC re-routes from the Current Block if the destination changes, recalculates the timing, and sends a new movement suggestion when the movement under way changes. A stop's departure is its arrival plus its dwell, so a longer dwell leaves less time for the next movement."
+                                   Text="Trains already released from the queue. No module confirms a physical release yet, so a released train is Awaiting Placement until its start block reports occupied; only then does CTC send it movement requests. Current Block is inferred from sequential track occupancy along the train's active route. Suggested Speed and Suggested Authority are the latest values CTC requested, toward the Destination at the Arrival Time; Track Controller shows what the wayside actually did with that request (accepted, rejected, authorized or withheld). Select a train, then a stop of its movement plan, to change its destination, arrival time or dwell time; CTC re-routes from the Current Block if the destination changes, recalculates the timing, and sends a new movement suggestion when the movement under way changes. A stop's departure is its arrival plus its dwell, so a longer dwell leaves less time for the next movement."
                                    Foreground="#6B7280"
                                    FontSize="11"
                                    TextWrapping="Wrap"
@@ -1018,6 +1018,14 @@
                                 <DataGridTextColumn Header="Status"
                                                     Binding="{Binding MovementStatus}"
                                                     Width="150"/>
+
+                                <DataGridTextColumn Header="Release"
+                                                    Binding="{Binding ReleaseStatus}"
+                                                    Width="150"/>
+
+                                <DataGridTextColumn Header="Track Controller"
+                                                    Binding="{Binding WaysideStatus}"
+                                                    Width="220"/>
 
                                 <DataGridTextColumn Header="Suggested Speed"
                                                     Binding="{Binding SuggestedSpeed,

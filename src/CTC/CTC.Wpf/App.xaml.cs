@@ -32,8 +32,14 @@ public partial class App : Application
         receiver.StatusReported += (_, status) => viewModel.InboundStatus = status;
         receiver.SystemTimeReceived += (_, state) => clock.ApplyClockState(state);
 
-        // Runs until OnExit cancels it; the receive loop never throws for bad messages.
+        // Fetches the production layout if Track Model started first, expires stale wayside
+        // statuses and renews movement requests, on wall time.
+        var links = new CtcLinkSupervisor(ctcService, Dispatcher);
+        links.StatusReported += (_, status) => viewModel.InboundStatus = status;
+
+        // Both run until OnExit cancels them; neither loop throws for bad messages or offline peers.
         _ = receiver.RunAsync(_shutdown.Token);
+        _ = links.RunAsync(_shutdown.Token);
 
         MainWindow = window;
         window.Show();

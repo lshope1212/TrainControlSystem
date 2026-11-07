@@ -24,6 +24,7 @@ public class CtcTrainLocationTests
         var sender = new FakeMessageSender();
         var service = new CTCService(sender);
         service.ApplyTrackLayout(layout ?? BlueLine.CreateLayout());
+        BlueLine.ReportAllClear(service);
 
         service.QueueSchedule(trains.Length > 0 ? trains : [BlueLine.Train("000", At(12, 0, 0))]);
         await service.SetSystemTimeAsync(At(12, 0, 0));

@@ -1,6 +1,7 @@
 using CTC.Core.Interfaces;
 using CTC.Core.Models;
 using CTC.Core.Services;
+using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 
 namespace TrainControl.Tests.CTC;
@@ -58,7 +59,35 @@ internal static class BlueLine
     {
         var service = new CTCService(sender ?? new FakeMessageSender());
         service.ApplyTrackLayout(CreateLayout(speedLimitKph));
+        ReportAllClear(service);
         return service;
+    }
+
+    /// <summary>
+    /// Reports every block Clear and open, as a live wayside does before any train runs. CTC treats a
+    /// block it has no report for as Unknown, which is unsafe for authority, so tests that expect a
+    /// train to be released start from this.
+    /// </summary>
+    public static void ReportAllClear(CTCService service)
+    {
+        foreach (var block in service.State.Lines.SelectMany(line => line.Blocks).ToList())
+        {
+            Report(service, block.BlockId, OccupancyState.Clear);
+        }
+    }
+
+    /// <summary>Reports one block's occupancy (open, no equipment states), as the Track Controller would.</summary>
+    public static void Report(CTCService service, string blockId, OccupancyState occupancy) =>
+        service.ApplyBlockStatus(new BlockStatusMessage { BlockId = blockId, Occupancy = occupancy });
+
+    /// <summary>
+    /// The released train appears in its start block (what the Train Model integration will do):
+    /// the block reports occupied and CTC issues the train's first complete movement request.
+    /// </summary>
+    public static async Task PlaceTrainAsync(CTCService service, string blockId)
+    {
+        Report(service, blockId, OccupancyState.Occupied);
+        await service.SynchronizeMovementRequestsAsync();
     }
 
     /// <summary>

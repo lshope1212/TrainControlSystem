@@ -9,10 +9,16 @@ namespace CTC.Core.Dispatching;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Calculated when a train is released (<see cref="CalculateInitialAuthorityMeters"/>) and
-/// when the dispatcher re-plans a released train (<see cref="CalculateUpdatedAuthorityMeters"/>).
-/// It is not recalculated automatically as the train moves: CTC issues a new suggestion only
-/// at release and when the dispatcher changes the plan.
+/// Calculated when a movement starts: at release (<see cref="CalculateInitialAuthorityMeters"/>),
+/// when a train departs a stop, and when the dispatcher re-plans a released train
+/// (<see cref="CalculateUpdatedAuthorityMeters"/>). That fixes where the movement's authority
+/// ends. It is never extended as the train moves; each movement request re-expresses the same end
+/// from the train's current block, covering less if a block ahead has since become unsafe (see
+/// <see cref="MovementRequestPlanner"/>).
+/// </para>
+/// <para>
+/// Conservative by design: CTC never suggests movement into a block whose occupancy it does not
+/// positively know to be clear. The Track Controller remains the final authority.
 /// </para>
 /// <para>
 /// Deliberately out of scope: braking curves, moving-block/MBO logic, switch-conflict and
@@ -22,9 +28,9 @@ namespace CTC.Core.Dispatching;
 public static class AuthorityManager
 {
     /// <summary>
-    /// A block a train must not enter: it is occupied, the Track Controller reports it closed
-    /// for maintenance, or CTC has requested it be closed. Unknown occupancy is not treated
-    /// as occupied.
+    /// A block a train must not enter: it is not reported Clear (occupied, or occupancy Unknown,
+    /// e.g. no report yet, a track-circuit failure, or a stale wayside status), the Track
+    /// Controller reports it closed for maintenance, or CTC has requested it be closed.
     /// </summary>
     /// <remarks>
     /// Both pending maintenance transitions are unsafe: a close CTC requested that the Track
@@ -64,6 +70,17 @@ public static class AuthorityManager
     public static double CalculateUpdatedAuthorityMeters(IEnumerable<CtcBlockState> route) =>
         CalculateAuthorityMeters(route, trainOccupiesStartBlock: true);
 
+    /// <summary>
+    /// How many leading blocks of <paramref name="route"/> the authority covers, with the same rules
+    /// as the authority calculations (the start block's occupancy is ignored when the train occupies it).
+    /// </summary>
+    public static int CountAuthorizedBlocks(IEnumerable<CtcBlockState> route, bool trainOccupiesStartBlock)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+
+        return route.TakeWhile((block, index) => !IsUnsafe(block, ignoreOccupancy: trainOccupiesStartBlock && index == 0)).Count();
+    }
+
     private static double CalculateAuthorityMeters(IEnumerable<CtcBlockState> route, bool trainOccupiesStartBlock)
     {
         ArgumentNullException.ThrowIfNull(route);
@@ -77,7 +94,7 @@ public static class AuthorityManager
     {
         ArgumentNullException.ThrowIfNull(block);
 
-        return (!ignoreOccupancy && block.Occupancy == OccupancyState.Occupied)
+        return (!ignoreOccupancy && (block.Occupancy != OccupancyState.Clear || block.IsStatusStale))
             || block.ConfirmedMaintenanceState == MaintenanceState.Closed
             || block.RequestedMaintenanceState == MaintenanceState.Closed;
     }

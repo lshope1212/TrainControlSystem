@@ -1,4 +1,5 @@
 using System.Globalization;
+using TrainControl.Common.Identity;
 
 namespace CTC.Core.Models;
 
@@ -11,14 +12,12 @@ public static class TrainIds
     /// <summary>Highest number a three-digit train ID can hold.</summary>
     public const int MaxNumber = 999;
 
-    /// <summary>Formats a zero-based train number as its ID, e.g. 0 -> "000", 10 -> "010".</summary>
-    public static string Format(int number)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(number);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(number, MaxNumber);
-
-        return number.ToString("D3", CultureInfo.InvariantCulture);
-    }
+    /// <summary>
+    /// Formats a zero-based train number as its ID, e.g. 0 -> "000", 10 -> "010". This is the
+    /// system-wide canonical train ID (<see cref="TrainIdConvention"/>), used verbatim in every
+    /// message about the train.
+    /// </summary>
+    public static string Format(int number) => TrainIdConvention.Format(number);
 
     /// <summary>Dispatcher-facing label for a train ID, e.g. "000" -> "Train 000".</summary>
     public static string DisplayName(string trainId) => $"Train {trainId}";

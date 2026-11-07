@@ -75,7 +75,7 @@ public class CtcSharedClockTests
         Assert.AreEqual(7.0, message.SpeedMultiplier);
         Assert.IsFalse(message.IsPaused);
         Assert.AreEqual("000", ctc.State.DispatchedTrains.Single().TrainId);
-        Assert.HasCount(1, sender.SentMessages.OfType<MovementRequestMessage>());
+        Assert.IsEmpty(sender.SentMessages, "Releasing sends nothing until the train is placed on the track.");
     }
 
     [TestMethod]
@@ -105,6 +105,7 @@ public class CtcSharedClockTests
         layout.Lines[0].Blocks.Single(block => block.BlockId == "A3").StationName = "Station A3";
         var ctc = new CTCService(sender);
         ctc.ApplyTrackLayout(layout);
+        BlueLine.ReportAllClear(ctc);
         ctc.QueueSchedule([DwellSchedule()]);
 
         var clock = RunningClock(10.0);
@@ -153,7 +154,7 @@ public class CtcSharedClockTests
         Assert.AreEqual(At(11, 0, 0), ctc.State.SystemTime);
         Assert.AreEqual("000", ctc.State.DispatchedTrains.Single().TrainId);
         Assert.AreEqual("001", ctc.State.DispatchQueue.Single().TrainId);
-        Assert.HasCount(1, sender.SentMessages.OfType<MovementRequestMessage>());
+        Assert.IsEmpty(sender.SentMessages, "Releasing sends nothing until the train is placed on the track.");
     }
 
     /// <summary>Train 000: A1 at 12:00:00, station A3 at 12:01:00 (45 s dwell), A5 at 12:05:00, B10 at 12:10:00.</summary>

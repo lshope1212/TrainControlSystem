@@ -60,4 +60,36 @@ public class CtcBlockState
     /// While the two differ, a request is awaiting Track Controller confirmation.
     /// </summary>
     public MaintenanceState RequestedMaintenanceState { get; set; } = MaintenanceState.Open;
+
+    /// <summary>
+    /// ID of CTC's latest maintenance request for this block that the Track Controller has not
+    /// acknowledged yet; empty when none is outstanding. Acknowledgements for any other ID are stale.
+    /// </summary>
+    public string PendingMaintenanceRequestId { get; set; } = string.Empty;
+
+    /// <summary>ID of CTC's latest unacknowledged switch request for this block; empty when none.</summary>
+    public string PendingSwitchRequestId { get; set; } = string.Empty;
+
+    // Freshness and ordering of the live wayside status.
+
+    /// <summary>
+    /// Wayside evaluation time of the status currently applied, when its sender reports
+    /// periodically (<c>BlockStatusMessage.ReportedAtUtc</c>). A later message with an older time
+    /// is a late duplicate and is ignored. Null for a status from a non-periodic sender (e.g. the
+    /// CTC TestUI).
+    /// </summary>
+    public DateTimeOffset? StatusReportedAtUtc { get; set; }
+
+    /// <summary>
+    /// Wall-clock time CTC received the current periodic (live) status; null when the status is not
+    /// live. A live status that is not refreshed in time becomes stale.
+    /// </summary>
+    public DateTimeOffset? LiveStatusReceivedAtUtc { get; set; }
+
+    /// <summary>
+    /// True when live wayside reports for this block stopped arriving: CTC no longer knows its
+    /// state, so occupancy and equipment read Unknown (and the block is unsafe for authority)
+    /// until a new report arrives. Maintenance keeps its last confirmed value.
+    /// </summary>
+    public bool IsStatusStale { get; set; }
 }

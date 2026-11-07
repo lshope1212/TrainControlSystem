@@ -18,25 +18,58 @@ namespace CTC.Core.Services;
 /// authority rules live in <see cref="SpeedPlanner"/> and <see cref="AuthorityManager"/>,
 /// routing in <see cref="RouteManager"/>, train location inference in
 /// <see cref="TrainLocationTracker"/>, movement-plan timing (stops, dwell) in
-/// <see cref="MovementPlanner"/>. Suggestions are calculated at dispatch, when the
-/// dispatcher re-plans a released train (see <see cref="UpdateMovementPlanStopAsync"/>), and
-/// when a train finishes dwelling at a stop and starts its next movement; never just
-/// because a train moved from one block to the next.
+/// <see cref="MovementPlanner"/>, and the movement requests held at the Track Controller in
+/// <see cref="MovementRequestCoordinator"/>.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Responsibilities are split deliberately. CTC decides WHEN a train is released and proposes its
+/// route, speed and authority. The Track Controller validates every movement against occupancy,
+/// equipment, maintenance and territory and is the final authority; CTC reports its acknowledgement
+/// and actual authorization separately from transport delivery. Placing a train in service is the
+/// Train Model / Track Model integration's job: until that exists, a released train is
+/// <see cref="TrainReleaseStatus.AwaitingPlacement"/> and CTC never claims it was physically released.
+/// </para>
+/// <para>
+/// A movement's speed and fixed authority end are decided when the movement starts: at release,
+/// when a train departs a stop, and when the dispatcher re-plans a released train. Moving from
+/// block to block re-expresses the same authority end from the new block (with a new request ID)
+/// but never extends it.
+/// </para>
+/// <para>
 /// Async methods resume on the caller's synchronization context, so when called from the
 /// UI thread every state change also happens on the UI thread.
+/// </para>
 /// </remarks>
 public class CTCService : ICTCService
 {
-    private readonly IMessageSender _messageSender;
+    /// <summary>
+    /// Wall time after which a live wayside status that was not refreshed is treated as stale
+    /// (Unknown). The Track Controller reports every block about twice a second.
+    /// </summary>
+    public static readonly TimeSpan BlockStatusStaleAfter = TimeSpan.FromSeconds(3);
 
-    // Trains whose next-movement suggestion is being sent right now (see AdvanceMovementPlansAsync).
+    private readonly IMessageSender _messageSender;
+    private readonly TimeProvider _clock;
+    private readonly MovementRequestCoordinator _movements;
+
+    // Trains whose next movement is being started right now (see AdvanceMovementPlansAsync).
     private readonly HashSet<string> _movementsInFlight = new HashSet<string>();
 
     public CTCService(IMessageSender messageSender)
+        : this(messageSender, null)
+    {
+    }
+
+    /// <param name="clock">Wall clock for status freshness and request renewal; the system clock by default.</param>
+    /// <param name="requestRenewalInterval">Wall time between movement request renewals; see <see cref="MovementRequestCoordinator.DefaultRenewalInterval"/>.</param>
+    public CTCService(IMessageSender messageSender, TimeProvider? clock, TimeSpan? requestRenewalInterval = null)
     {
         _messageSender = messageSender ?? throw new ArgumentNullException(nameof(messageSender));
+        _clock = clock ?? TimeProvider.System;
+        _movements = new MovementRequestCoordinator(messageSender, _clock, requestRenewalInterval);
+        _movements.RequestChanged += (train, message) =>
+            OnStateChanged(CtcStateChangeKind.MovementRequestUpdated, train.MovementRequest?.Plan.TargetBlockId ?? train.CurrentBlockId, train.TrainId, message);
     }
 
     public CtcSystemState State { get; } = new CtcSystemState();
@@ -44,49 +77,36 @@ public class CTCService : ICTCService
     public event EventHandler<CtcStateChangedEventArgs>? StateChanged;
 
     /// <summary>
-    /// Replaces CTC's territory with the lines and blocks in the layout.
+    /// Brings CTC's territory in line with the layout, line by line (see
+    /// <see cref="TrackLayoutReconciler"/>): an equivalent repeated layout changes nothing, and an
+    /// incompatible change to a line with released trains is refused for that line.
     /// </summary>
-    public void ApplyTrackLayout(TrackLayoutMessage message)
+    /// <exception cref="ArgumentException">
+    /// A line or block ID is blank or duplicated (block IDs must be unique across all lines); nothing changed.
+    /// </exception>
+    public TrackLayoutSyncResult ApplyTrackLayout(TrackLayoutMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        State.Lines.Clear();
+        var result = TrackLayoutReconciler.Apply(State, message);
 
-        foreach (var lineDefinition in message.Lines)
+        if (result.Changed)
         {
-            var line = new CtcLineState
-            {
-                LineId = lineDefinition.LineId,
-                Name = lineDefinition.Name,
-            };
-
-            foreach (var blockDefinition in lineDefinition.Blocks)
-            {
-                var block = new CtcBlockState
-                {
-                    BlockId = blockDefinition.BlockId,
-                    BlockNumber = blockDefinition.BlockNumber,
-                    Section = blockDefinition.Section,
-                    LengthMeters = blockDefinition.LengthMeters,
-                    SpeedLimitKilometersPerHour = blockDefinition.SpeedLimitKilometersPerHour,
-                    StationName = blockDefinition.StationName,
-                    HasSwitch = blockDefinition.HasSwitch,
-                    HasSignal = blockDefinition.HasSignal,
-                    HasCrossing = blockDefinition.HasCrossing,
-                };
-
-                foreach (var connectedBlockId in blockDefinition.ConnectedBlockIds)
-                {
-                    block.ConnectedBlockIds.Add(connectedBlockId);
-                }
-
-                line.Blocks.Add(block);
-            }
-
-            State.Lines.Add(line);
+            OnStateChanged(CtcStateChangeKind.TrackLayout, message: result.Summary);
         }
 
-        OnStateChanged(CtcStateChangeKind.TrackLayout);
+        if (result.DroppedScheduledTrainIds.Count > 0)
+        {
+            OnStateChanged(CtcStateChangeKind.Schedule, message: result.Summary);
+            OnStateChanged(CtcStateChangeKind.DispatchQueue);
+        }
+
+        if (result.RejectedChanges.Count > 0)
+        {
+            OnStateChanged(CtcStateChangeKind.TrackLayoutRejected, message: string.Join(" ", result.RejectedChanges));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -94,14 +114,33 @@ public class CTCService : ICTCService
     /// <see cref="TrainLocationTracker"/> infer whether a dispatched train moved into it.
     /// The report never identifies a train; occupancy that no single train explains stays anonymous.
     /// </summary>
+    /// <remarks>
+    /// A live report (one with <see cref="BlockStatusMessage.ReportedAtUtc"/>) older than the one
+    /// already applied for the block is a late duplicate and is ignored entirely. Repeated identical
+    /// reports change nothing and raise no event. A report's movement decision is applied to the
+    /// request it names; decisions for any other request ID are ignored.
+    /// </remarks>
     public void ApplyBlockStatus(BlockStatusMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
 
         CtcBlockState block = GetBlock(message.BlockId);
 
+        bool isLive = message.ReportedAtUtc is not null;
+        if (isLive && block.StatusReportedAtUtc is { } applied && message.ReportedAtUtc < applied)
+        {
+            return;
+        }
+
         // Captured first: only a change INTO Occupied can move a train, never a repeated snapshot.
         OccupancyState previousOccupancy = block.Occupancy;
+        bool changed = block.IsStatusStale
+            || block.Occupancy != message.Occupancy
+            || block.Signal != message.Signal
+            || block.Switch != message.Switch
+            || block.Crossing != message.Crossing
+            || block.ConfirmedMaintenanceState != message.Maintenance;
+
         block.Occupancy = message.Occupancy;
         block.Signal = message.Signal;
         block.Switch = message.Switch;
@@ -111,10 +150,25 @@ public class CTCService : ICTCService
         // and is never overwritten by a wayside report.
         block.ConfirmedMaintenanceState = message.Maintenance;
 
-        OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
+        block.StatusReportedAtUtc = message.ReportedAtUtc;
+        block.LiveStatusReceivedAtUtc = isLive ? _clock.GetUtcNow() : null;
+        block.IsStatusStale = false;
+
+        if (changed)
+        {
+            OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
+        }
 
         var location = TrainLocationTracker.ApplyOccupancy(State, block, previousOccupancy);
-        if (location.AdvancedTrain is { } advanced)
+        if (location.DetectedTrain is { } detected)
+        {
+            OnStateChanged(
+                CtcStateChangeKind.TrainDetectedOnTrack,
+                block.BlockId,
+                detected.TrainId,
+                $"{TrainIds.DisplayName(detected.TrainId)} detected at its start block {block.BlockId} (inferred from occupancy; no module confirms the physical release yet). Its movement requests start now.");
+        }
+        else if (location.AdvancedTrain is { } advanced)
         {
             OnStateChanged(CtcStateChangeKind.TrainLocationUpdated, block.BlockId, advanced.TrainId);
 
@@ -132,7 +186,109 @@ public class CTCService : ICTCService
                 block.BlockId,
                 message: $"Block {block.BlockId} became occupied, but it could be {trainNames}; no train location was changed.");
         }
+
+        if (_movements.ApplyAuthorization(State, block.BlockId, message.Movement, isLive) is { } authorized)
+        {
+            OnStateChanged(CtcStateChangeKind.MovementRequestUpdated, block.BlockId, authorized.TrainId, MovementRequestCoordinator.Describe(authorized));
+        }
     }
+
+    /// <summary>
+    /// Records the Track Controller's answer to a CTC request. Answers to requests CTC no longer
+    /// waits on (stale, repeated, or with no request ID) are ignored.
+    /// </summary>
+    public void ApplyRequestAcknowledgement(RequestAcknowledgementMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        switch (message.RequestType)
+        {
+            case nameof(MovementSuggestionMessage):
+                if (_movements.ApplyAcknowledgement(State, message) is { } train)
+                {
+                    OnStateChanged(CtcStateChangeKind.MovementRequestUpdated, message.BlockId, train.TrainId, MovementRequestCoordinator.Describe(train));
+                }
+
+                break;
+
+            case nameof(MaintenanceRequestMessage):
+                if (FindPendingBlock(message, block => block.PendingMaintenanceRequestId) is { } maintenanceBlock)
+                {
+                    maintenanceBlock.PendingMaintenanceRequestId = string.Empty;
+                    string requested = maintenanceBlock.RequestedMaintenanceState == MaintenanceState.Closed ? "close" : "reopen";
+                    if (message.Outcome == RequestAcknowledgementOutcome.Rejected)
+                    {
+                        // The request is dead: stop showing it as pending so the dispatcher can act again.
+                        maintenanceBlock.RequestedMaintenanceState = maintenanceBlock.ConfirmedMaintenanceState;
+                        OnStateChanged(CtcStateChangeKind.MaintenanceRequest, maintenanceBlock.BlockId);
+                        OnStateChanged(CtcStateChangeKind.RequestAcknowledged, maintenanceBlock.BlockId, message: $"Track Controller rejected the request to {requested} Block {maintenanceBlock.BlockId}: {message.Detail}");
+                    }
+                    else
+                    {
+                        OnStateChanged(CtcStateChangeKind.RequestAcknowledged, maintenanceBlock.BlockId, message: $"Track Controller accepted the request to {requested} Block {maintenanceBlock.BlockId} ({message.Detail}). The block's state changes when the Track Controller confirms it.");
+                    }
+                }
+
+                break;
+
+            case nameof(SwitchPositionRequestMessage):
+                if (FindPendingBlock(message, block => block.PendingSwitchRequestId) is { } switchBlock)
+                {
+                    switchBlock.PendingSwitchRequestId = string.Empty;
+                    OnStateChanged(
+                        CtcStateChangeKind.RequestAcknowledged,
+                        switchBlock.BlockId,
+                        message: message.Outcome == RequestAcknowledgementOutcome.Rejected
+                            ? $"Track Controller rejected the switch request for Block {switchBlock.BlockId}: {message.Detail}"
+                            : $"Track Controller accepted the switch request for Block {switchBlock.BlockId} ({message.Detail}). The displayed position changes only when the switch reports it.");
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Marks every block whose live status was not refreshed within <see cref="BlockStatusStaleAfter"/>
+    /// as stale: occupancy and equipment become Unknown (so the block is unsafe for authority) until
+    /// a new report arrives. A status from a non-periodic sender never goes stale. Returns how many
+    /// blocks went stale now.
+    /// </summary>
+    public int RefreshBlockStatusFreshness()
+    {
+        var now = _clock.GetUtcNow();
+        var stale = new List<CtcBlockState>();
+        foreach (var block in State.Lines.SelectMany(line => line.Blocks))
+        {
+            if (!block.IsStatusStale && block.LiveStatusReceivedAtUtc is { } received && now - received > BlockStatusStaleAfter)
+            {
+                block.IsStatusStale = true;
+                block.Occupancy = OccupancyState.Unknown;
+                block.Signal = SignalState.Unknown;
+                block.Switch = SwitchPosition.Unknown;
+                block.Crossing = CrossingState.Unknown;
+                stale.Add(block);
+                OnStateChanged(CtcStateChangeKind.BlockStatus, block.BlockId);
+            }
+        }
+
+        if (stale.Count > 0)
+        {
+            string blocks = stale.Count <= 5 ? string.Join(", ", stale.Select(block => block.BlockId)) : $"{stale.Count} blocks";
+            OnStateChanged(
+                CtcStateChangeKind.BlockStatusStale,
+                message: $"No Track Controller report for {blocks} in {BlockStatusStaleAfter.TotalSeconds:0} s; their status is Unknown until reports resume.");
+        }
+
+        return stale.Count;
+    }
+
+    /// <summary>
+    /// Brings every dispatched train's movement request at the Track Controller in line with its
+    /// plan and current location, and renews still-valid requests that are due (see
+    /// <see cref="MovementRequestCoordinator"/>). Failures are reported and retried, never thrown.
+    /// </summary>
+    public Task SynchronizeMovementRequestsAsync(CancellationToken cancellationToken = default) =>
+        _movements.SynchronizeAsync(State, cancellationToken);
 
     public void ApplyTicketSales(TicketSalesMessage message)
     {
@@ -163,9 +319,10 @@ public class CTCService : ICTCService
     /// still leave. A jump forward therefore releases every train it passed, in departure order.
     /// </para>
     /// <para>
-    /// Each due train is attempted independently: if one send fails, that train stays queued
-    /// (and is retried on the next time update) while the remaining due trains are still attempted.
-    /// Moving the time backwards never un-dispatches a train; pending trains simply wait.
+    /// Each due train is attempted independently: if one cannot be released (its start block is
+    /// not safe), it stays queued and is retried on the next time update while the remaining due
+    /// trains are still attempted. Moving the time backwards never un-dispatches a train; pending
+    /// trains simply wait.
     /// </para>
     /// </remarks>
     public async Task SetSystemTimeAsync(TimeSpan systemTime, CancellationToken cancellationToken = default)
@@ -174,7 +331,7 @@ public class CTCService : ICTCService
         OnStateChanged(CtcStateChangeKind.SystemTime);
 
         // Claim every due entry up front so a dispatch pass started while this one is
-        // awaiting a send (another time update, re-entrant on the UI thread) cannot send them again.
+        // awaiting a send (another time update, re-entrant on the UI thread) cannot release them again.
         var dueEntries = State.DispatchQueue
             .Where(entry => entry.QueueStatus == DispatchQueueStatus.Queued && entry.DepartureTime <= systemTime)
             .OrderBy(entry => entry.DepartureTime)
@@ -187,26 +344,17 @@ public class CTCService : ICTCService
 
         foreach (var entry in dueEntries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                string? warning = await DispatchTrainAsync(entry, cancellationToken);
+                string? warning = ReleaseTrain(entry);
                 OnStateChanged(CtcStateChangeKind.TrainDispatched, trainId: entry.TrainId, message: warning);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Not dispatched: put the train back so the next time update retries it.
+                // Not released: put the train back so the next time update retries it.
                 entry.QueueStatus = DispatchQueueStatus.Queued;
                 OnStateChanged(CtcStateChangeKind.DispatchFailed, trainId: entry.TrainId, message: ex.Message);
-            }
-            catch (OperationCanceledException)
-            {
-                // Shutting down: release every claim that has not completed, then stop.
-                foreach (var pending in dueEntries.Where(pending => pending.QueueStatus == DispatchQueueStatus.Dispatching))
-                {
-                    pending.QueueStatus = DispatchQueueStatus.Queued;
-                }
-
-                throw;
             }
         }
 
@@ -215,10 +363,10 @@ public class CTCService : ICTCService
 
     /// <summary>
     /// The time-driven half of the <c>Arrived → Dwelling → EnRoute</c> cycle: ends every dwell
-    /// whose time has come and starts each ready train's next movement by sending its
-    /// MovementSuggestion (speed planned from the stop's departure to the next stop's arrival;
-    /// authority along the unchanged active route). A failed send leaves the train ready and is
-    /// retried on the next SystemTime update; other trains are still processed.
+    /// whose time has come and starts each ready train's next movement by issuing its new movement
+    /// request (speed planned from the stop's departure to the next stop's arrival; authority along
+    /// the unchanged active route). A failed send leaves the train ready and is retried on the next
+    /// SystemTime update; other trains are still processed.
     /// </summary>
     private async Task AdvanceMovementPlansAsync(CancellationToken cancellationToken)
     {
@@ -251,7 +399,7 @@ public class CTCService : ICTCService
                 OnStateChanged(
                     CtcStateChangeKind.TrainMovementSuggestionFailed,
                     trainId: train.TrainId,
-                    message: $"{TrainIds.DisplayName(train.TrainId)} is ready to proceed to {NextTargetBlockId(train)}, but its movement suggestion could not be sent: {ex.Message}");
+                    message: $"{TrainIds.DisplayName(train.TrainId)} is ready to proceed to {NextTargetBlockId(train)}, but its movement request could not be sent: {ex.Message}");
             }
             finally
             {
@@ -261,9 +409,11 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
-    /// Sends the MovementSuggestion for the train's next movement and, only once it was sent,
-    /// advances the plan: a train <see cref="TrainMovementPhase.Arrived"/> at a stop departs it
-    /// toward the next stop; a train already en route without a sent suggestion gets one.
+    /// Starts the train's next movement: issues its new movement request (replacing the previous
+    /// one) and, only once that was sent, advances the plan: a train
+    /// <see cref="TrainMovementPhase.Arrived"/> at a stop departs it toward the next stop; a train
+    /// already en route without a planned leg gets one. This is where a movement's authority end is
+    /// recalculated, along the remaining route from the train's current block.
     /// </summary>
     /// <returns>Dispatcher-readable description of the change, including any timing warning.</returns>
     private async Task<string> StartNextMovementAsync(DispatchedTrainState train, CancellationToken cancellationToken)
@@ -284,17 +434,16 @@ public class CTCService : ICTCService
         // the time left to reach the next stop, it never moves that stop's arrival.
         var departure = departing ? MovementPlanner.DepartureTimeAfter(train, 0) : State.SystemTime;
         var speed = SpeedPlanner.CalculateLegSpeed(route, departure, target.ArrivalTime, State.SystemTime);
-        double authority = AuthorityManager.CalculateUpdatedAuthorityMeters(remainingRoute);
+        int authorizedBlocks = AuthorityManager.CountAuthorizedBlocks(remainingRoute, trainOccupiesStartBlock: true);
+        int authorityLimit = train.ActiveRouteIndex + authorizedBlocks - 1;
+        double authority = remainingRoute.Take(authorizedBlocks).Sum(block => block.LengthMeters);
 
-        var suggestion = new MovementSuggestionMessage
-        {
-            TrainId = train.TrainId,
-            SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond,
-            SuggestedAuthorityMeters = authority,
-        };
+        var request = MovementRequestPlanner.IsEligible(train, TrainMovementPhase.EnRoute)
+            ? MovementRequestPlanner.Plan(line, train.TrainId, train.ActiveRouteBlockIds.ToList(), train.ActiveRouteIndex, authorityLimit, train.PreviousBlockId, speed.SpeedMetersPerSecond)
+            : null;
 
-        // As everywhere else, the plan changes only after the suggestion was actually sent.
-        await _messageSender.SendAsync(suggestion, cancellationToken);
+        // As everywhere else, the plan changes only after the request was actually sent.
+        await _movements.ReplaceAsync(train, request, cancellationToken);
 
         string fromBlockId = train.CurrentBlockId;
         if (departing)
@@ -305,15 +454,17 @@ public class CTCService : ICTCService
         }
 
         train.IsLegSuggestionPending = false;
-        train.SuggestedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
-        train.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
-        target.PlannedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
+        train.SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond;
+        train.SuggestedAuthorityMeters = authority;
+        train.AuthorityLimitRouteIndex = authorityLimit;
+        target.PlannedSpeedMetersPerSecond = speed.SpeedMetersPerSecond;
         target.TimingWarning = speed.ArrivalWarning;
         MovementPlanner.RecalculatePlannedSpeeds(train, line, State.SystemTime);
 
+        string sent = request is null ? "no safe authority, so no movement request was issued" : "movement request sent";
         string message = departing
-            ? $"{trainName} departed {fromBlockId} toward {target.BlockId} (movement suggestion sent)."
-            : $"{trainName} is travelling to {target.BlockId} (movement suggestion sent).";
+            ? $"{trainName} departed {fromBlockId} toward {target.BlockId} ({sent})."
+            : $"{trainName} is travelling to {target.BlockId} ({sent}).";
         return speed.ArrivalWarning is { } warning ? $"{message} Warning: for {trainName}, {warning}" : message;
     }
 
@@ -341,14 +492,21 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
-    /// Releases <paramref name="entry"/>'s train: calculates its initial suggested speed and
-    /// authority, sends the MovementSuggestion and then the MovementRequest to the Track
-    /// Controller, and only then moves the train from the dispatch queue to the dispatched trains.
+    /// Releases <paramref name="entry"/>'s train: calculates its initial suggested speed and the
+    /// fixed end of its first movement's authority, and moves it from the dispatch queue to the
+    /// dispatched trains, awaiting placement.
     /// </summary>
+    /// <remarks>
+    /// Nothing is sent. The release intent (<see cref="MovementRequestMessage"/>) has no receiver
+    /// yet: placing a train in service is the Train Model's job, and the Track Controller rejects
+    /// that message because a train label alone identifies no block. CTC therefore records the train
+    /// as <see cref="TrainReleaseStatus.AwaitingPlacement"/>, and issues its first complete movement
+    /// request only when the start block reports occupied (the Track Controller authorizes movement
+    /// only for a train it sees in the request's target block).
+    /// </remarks>
     /// <returns>A dispatcher-readable warning (e.g. the train is late), or null.</returns>
-    /// <exception cref="DispatchException">The start block is unsafe; nothing was sent or changed.</exception>
-    /// <exception cref="MessageSendException">A message could not be delivered; nothing changed.</exception>
-    private async Task<string?> DispatchTrainAsync(DispatchQueueEntry entry, CancellationToken cancellationToken)
+    /// <exception cref="DispatchException">The start block is not safe; nothing changed.</exception>
+    private string? ReleaseTrain(DispatchQueueEntry entry)
     {
         var scheduledTrain = State.ScheduledTrains.FirstOrDefault(train => train.TrainId == entry.TrainId && train.LineId == entry.LineId)
             ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} is queued but no longer scheduled.");
@@ -358,34 +516,17 @@ public class CTCService : ICTCService
         var route = ResolveRoute(scheduledTrain, line)
             ?? throw new InvalidOperationException($"{TrainIds.DisplayName(entry.TrainId)} uses a block that is no longer in the track layout.");
 
-        // Releasing a train with zero authority would leave it stranded, because CTC does not
-        // recalculate authority automatically. Hold it in the queue instead; it is retried next tick.
-        double authority = AuthorityManager.CalculateInitialAuthorityMeters(route);
-        if (authority <= 0)
+        // Releasing a train with zero authority would leave it stranded. Hold it in the queue
+        // instead; it is retried next tick. Unknown occupancy is as unsafe as occupied.
+        int authorizedBlocks = AuthorityManager.CountAuthorizedBlocks(route, trainOccupiesStartBlock: false);
+        if (authorizedBlocks == 0)
         {
-            throw new DispatchException($"its start block {route[0].BlockId} is occupied or closed for maintenance.");
+            throw new DispatchException($"its start block {route[0].BlockId} is occupied, has unknown occupancy, or is closed for maintenance.");
         }
 
+        double authority = route.Take(authorizedBlocks).Sum(block => block.LengthMeters);
         var speed = SpeedPlanner.CalculateInitialSpeed(scheduledTrain, route, State.SystemTime);
 
-        var suggestion = new MovementSuggestionMessage
-        {
-            RequestId = Guid.NewGuid().ToString("N"),
-            TrainId = scheduledTrain.TrainId,
-            TargetBlockId = route[0].BlockId,
-            PathBlockIds = route.Skip(1).Select(block => block.BlockId).ToList(),
-            SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond,
-            SuggestedAuthorityMeters = authority,
-        };
-        var request = CreateMovementRequest(scheduledTrain.TrainId);
-
-        // Suggestion first, so the Track Controller has movement data before the release.
-        // If the release then fails, the train stays queued and the retry sends both again.
-        await _messageSender.SendAsync(suggestion, cancellationToken);
-        await _messageSender.SendAsync(request, cancellationToken);
-
-        // Only now, after both sends succeeded, does the train leave the queue. Removing it first
-        // would make CTC believe a train was released when the request never reached the wayside.
         State.DispatchQueue.Remove(entry);
 
         var dispatched = State.FindDispatchedTrain(scheduledTrain.TrainId);
@@ -396,13 +537,15 @@ public class CTCService : ICTCService
         }
 
         dispatched.LineId = scheduledTrain.LineId;
-        dispatched.SuggestedSpeedMetersPerSecond = suggestion.SuggestedSpeedMetersPerSecond;
-        dispatched.SuggestedAuthorityMeters = suggestion.SuggestedAuthorityMeters;
+        dispatched.SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond;
+        dispatched.SuggestedAuthorityMeters = authority;
+        dispatched.AuthorityLimitRouteIndex = authorizedBlocks - 1;
 
         // CTC knows where the train enters because it released it there. From now on the
         // location follows sequential occupancy along the active route (TrainLocationTracker).
         // TODO: real route/yard logic will replace the temporary route-start rule.
         dispatched.CurrentBlockId = scheduledTrain.StartBlockId;
+        dispatched.PreviousBlockId = string.Empty;
         dispatched.ActiveRouteIndex = 0;
         dispatched.CurrentBlockOccupancyObserved = false;
         ReplaceActiveRoute(dispatched, scheduledTrain.Route.Select(routeBlock => routeBlock.BlockId));
@@ -468,7 +611,7 @@ public class CTCService : ICTCService
     /// <summary>
     /// Changes one stop of a released train's Active Movement Plan (its destination block,
     /// arrival time and dwell time) and recalculates everything that depends on it. Only a new
-    /// MovementSuggestion is ever sent, never another MovementRequest.
+    /// movement request is ever sent, never a release request.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -485,12 +628,13 @@ public class CTCService : ICTCService
     /// not entered after the train departs the previous one is rejected.
     /// </para>
     /// <para>
-    /// A MovementSuggestion is sent only when the movement under way changes (stop 0's
-    /// destination or arrival while en route: speed recalculated from now) or the route changes (authority recalculated along
-    /// the new route by <see cref="AuthorityManager"/>). Other edits, e.g. a dwell change, only
-    /// update the planned timing; that speed is sent when the train starts that movement.
-    /// The train's state changes only after a needed send succeeded; the original schedule is
-    /// never changed.
+    /// The movement under way is re-planned only when it changes (stop 0's destination or arrival
+    /// while en route: speed recalculated from now) or the route changes (authority end recalculated
+    /// along the new route by <see cref="AuthorityManager"/>). For a train already on the track this
+    /// replaces its movement request (the old one is cancelled first, the new one has a new request
+    /// ID); a train still awaiting placement just keeps the new plan for its first request. Other
+    /// edits, e.g. a dwell change, only update the planned timing. The train's state changes only
+    /// after a needed send succeeded; the original schedule is never changed.
     /// </para>
     /// </remarks>
     /// <returns>A dispatcher-readable warning (e.g. an arrival time cannot be met), or null.</returns>
@@ -501,7 +645,7 @@ public class CTCService : ICTCService
     /// block on the route has no speed limit, the dwell is negative, or the times are impossible.
     /// Nothing was sent or changed.
     /// </exception>
-    /// <exception cref="Exceptions.MessageSendException">The suggestion could not be delivered; nothing changed.</exception>
+    /// <exception cref="Exceptions.MessageSendException">The request could not be delivered; nothing changed.</exception>
     public async Task<string?> UpdateMovementPlanStopAsync(
         string trainId,
         int stopIndex,
@@ -617,7 +761,7 @@ public class CTCService : ICTCService
         // The movement under way ends at stop 0, so only its destination or arrival affects it;
         // its dwell only affects the movement after it.
         bool currentMovementChanged = stopIndex == 0 && phase == TrainMovementPhase.EnRoute && arrivalChanged;
-        bool sendNeeded = currentMovementChanged || destinationChanged;
+        bool movementReplanned = currentMovementChanged || destinationChanged;
 
         SpeedSuggestion? speed = null;
         if (currentMovementChanged)
@@ -625,27 +769,25 @@ public class CTCService : ICTCService
             speed = SpeedPlanner.CalculateSpeedToTarget(routeBlocks.Take(stops[0].RouteIndex + 1).ToList(), stops[0].ArrivalTime, State.SystemTime);
         }
 
-        // Authority follows the route; it is recalculated (along the unchanged or new route) only
-        // when a suggestion has to be sent anyway. The train occupies its own current block.
-        double authority = sendNeeded ? AuthorityManager.CalculateUpdatedAuthorityMeters(routeBlocks) : train.SuggestedAuthorityMeters;
+        // Authority follows the route; its end is recalculated (along the unchanged or new route) only
+        // when the movement is re-planned anyway. The train occupies its own current block.
+        int authorizedBlocks = movementReplanned ? AuthorityManager.CountAuthorizedBlocks(routeBlocks, trainOccupiesStartBlock: true) : 0;
+        int authorityLimit = movementReplanned ? authorizedBlocks - 1 : train.AuthorityLimitRouteIndex - offset;
+        double authority = movementReplanned ? routeBlocks.Take(authorizedBlocks).Sum(block => block.LengthMeters) : train.SuggestedAuthorityMeters;
         double suggestedSpeed = speed?.SpeedMetersPerSecond ?? train.SuggestedSpeedMetersPerSecond;
 
-        if (sendNeeded)
+        if (movementReplanned && MovementRequestPlanner.IsEligible(train, phase))
         {
-            var suggestion = new MovementSuggestionMessage
-            {
-                TrainId = train.TrainId,
-                SuggestedSpeedMetersPerSecond = suggestedSpeed,
-                SuggestedAuthorityMeters = authority,
-            };
+            var request = MovementRequestPlanner.Plan(line, train.TrainId, routeIds, 0, authorityLimit, train.PreviousBlockId, suggestedSpeed);
 
             // If sending throws, the exception propagates and the train's plan is deliberately
-            // left untouched: CTC must not claim a suggestion it never issued.
-            await _messageSender.SendAsync(suggestion, cancellationToken);
+            // left untouched: CTC must not claim a movement it never requested.
+            await _movements.ReplaceAsync(train, request, cancellationToken);
         }
 
         train.SuggestedSpeedMetersPerSecond = suggestedSpeed;
         train.SuggestedAuthorityMeters = authority;
+        train.AuthorityLimitRouteIndex = authorityLimit;
 
         // From now on occupancy is interpreted along this route. It starts at the current block,
         // so the train stays where it is; whether that block has been seen occupied is unchanged.
@@ -676,7 +818,7 @@ public class CTCService : ICTCService
         // Later movements: a changed arrival or dwell shifts the time available to the next stop.
         warnings.AddRange(MovementPlanner.RecalculatePlannedSpeeds(train, line, State.SystemTime));
 
-        if (sendNeeded && authority <= 0)
+        if (movementReplanned && authority <= 0)
         {
             warnings.Add($"{trainName}'s current block {train.CurrentBlockId} is closed for maintenance, so its suggested authority is 0.");
         }
@@ -754,8 +896,8 @@ public class CTCService : ICTCService
         }
 
         // Rebuild only the pending part of the queue. Already-dispatched trains (recorded in
-        // DispatchedTrains) are never queued again, and entries whose MovementRequest is being
-        // sent right now are kept as they are so they cannot be sent twice.
+        // DispatchedTrains) are never queued again, and entries being released right now are
+        // kept as they are so they cannot be released twice.
         var inFlight = State.DispatchQueue.Where(entry => entry.QueueStatus == DispatchQueueStatus.Dispatching).ToList();
         var pending = State.ScheduledTrains
             .Where(train => State.FindDispatchedTrain(train.TrainId) is null)
@@ -779,9 +921,10 @@ public class CTCService : ICTCService
     }
 
     /// <summary>
-    /// Builds a maintenance request for a known block. Does not change CTC state; the
-    /// requested state is recorded only once a request has actually been sent
-    /// (see <see cref="CloseBlockAsync"/> and <see cref="ReopenBlockAsync"/>).
+    /// Builds a maintenance request for a known block, with a new request ID that the Track
+    /// Controller's acknowledgement will carry. Does not change CTC state; the requested state is
+    /// recorded only once a request has actually been sent (see <see cref="CloseBlockAsync"/> and
+    /// <see cref="ReopenBlockAsync"/>).
     /// </summary>
     public MaintenanceRequestMessage CreateMaintenanceRequest(string blockId, MaintenanceState requestedState)
     {
@@ -789,6 +932,7 @@ public class CTCService : ICTCService
 
         return new MaintenanceRequestMessage
         {
+            RequestId = NewRequestId(),
             BlockId = blockId,
             RequestedState = requestedState,
         };
@@ -809,14 +953,16 @@ public class CTCService : ICTCService
 
         return new SwitchPositionRequestMessage
         {
+            RequestId = NewRequestId(),
             BlockId = blockId,
             RequestedPosition = requestedPosition,
         };
     }
 
     /// <summary>
-    /// Builds a request to release a train for movement. Switch changes are requested
-    /// separately via <see cref="CreateSwitchPositionRequest"/>.
+    /// Builds a release intent for a train. Not sent: no module receives it yet (see
+    /// <see cref="MovementRequestMessage"/>); kept so the future Train Model integration can use it.
+    /// Switch changes are requested separately via <see cref="CreateSwitchPositionRequest"/>.
     /// </summary>
     public MovementRequestMessage CreateMovementRequest(string trainId)
     {
@@ -847,6 +993,7 @@ public class CTCService : ICTCService
         // request". It does NOT mean the Track Controller confirmed the block is closed;
         // ConfirmedMaintenanceState changes only when a BlockStatusMessage reports it.
         block.RequestedMaintenanceState = MaintenanceState.Closed;
+        block.PendingMaintenanceRequestId = request.RequestId;
 
         OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
     }
@@ -867,6 +1014,7 @@ public class CTCService : ICTCService
         // The block stays confirmed Closed (and unsafe for authority) until the Track
         // Controller reports it Open via ApplyBlockStatus.
         block.RequestedMaintenanceState = MaintenanceState.Open;
+        block.PendingMaintenanceRequestId = request.RequestId;
 
         OnStateChanged(CtcStateChangeKind.MaintenanceRequest, block.BlockId);
     }
@@ -884,6 +1032,22 @@ public class CTCService : ICTCService
         // wayside-reported position, which changes only through ApplyBlockStatus once the
         // Track Controller has actually moved the switch.
         await _messageSender.SendAsync(request, cancellationToken);
+
+        GetBlock(blockId).PendingSwitchRequestId = request.RequestId;
+    }
+
+    private static string NewRequestId() => Guid.NewGuid().ToString("N");
+
+    /// <summary>The block whose outstanding request this acknowledgement answers; null when stale.</summary>
+    private CtcBlockState? FindPendingBlock(RequestAcknowledgementMessage message, Func<CtcBlockState, string> pendingRequestId)
+    {
+        if (string.IsNullOrEmpty(message.RequestId) || string.IsNullOrEmpty(message.BlockId))
+        {
+            return null;
+        }
+
+        var block = State.FindBlock(message.BlockId);
+        return block is not null && pendingRequestId(block) == message.RequestId ? block : null;
     }
 
     private static void ReplaceActiveRoute(DispatchedTrainState train, IEnumerable<string> blockIds)

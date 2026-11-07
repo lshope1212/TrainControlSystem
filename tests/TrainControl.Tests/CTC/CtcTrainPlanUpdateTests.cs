@@ -20,14 +20,16 @@ public class CtcTrainPlanUpdateTests
     private static TimeSpan At(int hours, int minutes, int seconds) => new TimeSpan(hours, minutes, seconds);
 
     /// <summary>
-    /// Train 000 on branch B, released at 12:00:00 from A1. Its next timed block is A3 at
-    /// 12:10:00 (100 m ahead), so that is its initial movement target.
+    /// Train 000 on branch B, released at 12:00:00 from A1 and then placed there (A1 reports
+    /// occupied), so it holds its first movement request. Its next timed block is A3 at 12:10:00
+    /// (100 m ahead), so that is its initial movement target.
     /// </summary>
     private static async Task<(CTCService Service, FakeMessageSender Sender)> DispatchTrainAsync(TrackLayoutMessage? layout = null)
     {
         var sender = new FakeMessageSender();
         var service = new CTCService(sender);
         service.ApplyTrackLayout(layout ?? BlueLine.CreateLayout());
+        BlueLine.ReportAllClear(service);
 
         var train = new ScheduledTrain { TrainId = "000", LineId = BlueLine.LineId };
         foreach (var blockId in BlueLine.BranchB)
@@ -47,13 +49,19 @@ public class CtcTrainPlanUpdateTests
 
         service.QueueSchedule([train]);
         await service.SetSystemTimeAsync(At(12, 0, 0));
+        await BlueLine.PlaceTrainAsync(service, "A1");
 
         Assert.HasCount(1, service.State.DispatchedTrains, "Setup: the train should have been dispatched.");
+        Assert.HasCount(1, sender.SentMessages, "Setup: the placed train should hold its first movement request.");
         return (service, sender);
     }
 
+    /// <summary>Active movement requests sent, oldest first (cancellations excluded).</summary>
     private static List<MovementSuggestionMessage> Suggestions(FakeMessageSender sender) =>
-        sender.SentMessages.OfType<MovementSuggestionMessage>().ToList();
+        sender.SentMessages.OfType<MovementSuggestionMessage>().Where(suggestion => suggestion.IsActive).ToList();
+
+    private static List<MovementSuggestionMessage> Cancellations(FakeMessageSender sender) =>
+        sender.SentMessages.OfType<MovementSuggestionMessage>().Where(suggestion => !suggestion.IsActive).ToList();
 
     private static List<MovementRequestMessage> Requests(FakeMessageSender sender) =>
         sender.SentMessages.OfType<MovementRequestMessage>().ToList();
@@ -80,7 +88,7 @@ public class CtcTrainPlanUpdateTests
         var suggestion = Suggestions(sender).Single();
         Assert.AreEqual(100.0 / 600.0, suggestion.SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(500.0, suggestion.SuggestedAuthorityMeters);
-        Assert.HasCount(1, Requests(sender));
+        Assert.IsEmpty(Requests(sender), "No release request is ever sent.");
     }
 
     // ---- Arrival-time change ----
@@ -95,10 +103,15 @@ public class CtcTrainPlanUpdateTests
 
         Assert.IsNull(warning);
 
-        // Exactly one new message, a suggestion; no second release.
+        // The old request is cancelled first, then exactly one new request replaces it.
         Assert.HasCount(3, sender.SentMessages);
+        var cancelled = (MovementSuggestionMessage)sender.SentMessages[1];
         var suggestion = (MovementSuggestionMessage)sender.SentMessages[2];
-        Assert.HasCount(1, Requests(sender));
+        Assert.IsFalse(cancelled.IsActive);
+        Assert.AreEqual(((MovementSuggestionMessage)sender.SentMessages[0]).RequestId, cancelled.RequestId);
+        Assert.AreNotEqual(cancelled.RequestId, suggestion.RequestId, "A changed plan gets a new request ID.");
+        Assert.AreEqual("A1", suggestion.TargetBlockId);
+        Assert.IsEmpty(Requests(sender), "No release request is ever sent.");
 
         // 100 m (A1, A2) in 900 s. Only the time changed, so the route (and the later stop
         // B10) is kept and the authority still covers the whole remaining A1..B10 route.
@@ -129,7 +142,7 @@ public class CtcTrainPlanUpdateTests
         Assert.AreEqual(100.0 / 480.0, fasterSpeed, 1e-9);
         Assert.IsGreaterThan(slowerSpeed, fasterSpeed);
         Assert.IsLessThanOrEqualTo(MaxBlueSpeed, fasterSpeed);
-        Assert.HasCount(1, Requests(sender));
+        Assert.IsEmpty(Requests(sender), "No release request is ever sent.");
     }
 
     [TestMethod]
@@ -209,7 +222,7 @@ public class CtcTrainPlanUpdateTests
         var suggestion = Suggestions(sender)[^1];
         Assert.AreEqual(350.0 / 600.0, suggestion.SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(400.0, suggestion.SuggestedAuthorityMeters);
-        Assert.HasCount(1, Requests(sender));
+        Assert.IsEmpty(Requests(sender), "No release request is ever sent.");
 
         var train = service.State.DispatchedTrains.Single();
         Assert.AreEqual("C13", train.TargetBlockId);
@@ -291,7 +304,12 @@ public class CtcTrainPlanUpdateTests
 
         string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "A5", At(12, 10, 0));
 
-        Assert.AreEqual(0.0, Suggestions(sender)[^1].SuggestedAuthorityMeters);
+        // No safe authority at all: the old request is cancelled and none replaces it.
+        Assert.IsFalse(((MovementSuggestionMessage)sender.SentMessages[^1]).IsActive);
+        Assert.HasCount(1, Suggestions(sender));
+        var train = service.State.DispatchedTrains.Single();
+        Assert.IsNull(train.MovementRequest);
+        Assert.AreEqual(0.0, train.SuggestedAuthorityMeters);
         Assert.IsNotNull(warning);
         Assert.Contains("closed for maintenance", warning);
     }
@@ -321,7 +339,7 @@ public class CtcTrainPlanUpdateTests
             () => service.UpdateDispatchedTrainPlanAsync("000", "D16", At(12, 10, 0)));
 
         Assert.AreEqual("No route on Blue Line connects Train 000's current block A1 to D16.", ex.Message);
-        Assert.HasCount(2, sender.SentMessages);
+        Assert.HasCount(1, sender.SentMessages);
         Assert.IsEmpty(events);
         AssertPlanUnchanged(service.State.DispatchedTrains.Single());
     }
@@ -338,7 +356,9 @@ public class CtcTrainPlanUpdateTests
             () => service.UpdateDispatchedTrainPlanAsync("000", "C13", At(12, 20, 0)));
 
         Assert.IsEmpty(events);
-        AssertPlanUnchanged(service.State.DispatchedTrains.Single());
+        var train = service.State.DispatchedTrains.Single();
+        AssertPlanUnchanged(train);
+        Assert.AreEqual("A1", train.MovementRequest!.Plan.TargetBlockId, "The old request is kept until its cancellation can be sent.");
     }
 
     [TestMethod]
@@ -350,7 +370,7 @@ public class CtcTrainPlanUpdateTests
             () => service.UpdateDispatchedTrainPlanAsync("007", "A3", At(12, 10, 0)));
 
         Assert.AreEqual("Train 007 has not been dispatched.", ex.Message);
-        Assert.HasCount(2, sender.SentMessages);
+        Assert.HasCount(1, sender.SentMessages);
     }
 
     [TestMethod]
@@ -376,7 +396,7 @@ public class CtcTrainPlanUpdateTests
             () => service.UpdateDispatchedTrainPlanAsync("000", "Z99", At(12, 10, 0)));
 
         Assert.AreEqual("Block Z99 is not on Blue Line.", ex.Message);
-        Assert.HasCount(2, sender.SentMessages);
+        Assert.HasCount(1, sender.SentMessages);
         AssertPlanUnchanged(service.State.DispatchedTrains.Single());
     }
 
@@ -388,7 +408,7 @@ public class CtcTrainPlanUpdateTests
         await Assert.ThrowsExactlyAsync<DispatchException>(
             () => service.UpdateDispatchedTrainPlanAsync("000", "A1", At(12, 10, 0)));
 
-        Assert.HasCount(2, sender.SentMessages);
+        Assert.HasCount(1, sender.SentMessages);
         AssertPlanUnchanged(service.State.DispatchedTrains.Single());
     }
 
@@ -402,7 +422,7 @@ public class CtcTrainPlanUpdateTests
             () => service.UpdateDispatchedTrainPlanAsync("000", "A5", At(12, 10, 0)));
 
         Assert.Contains("A4", ex.Message);
-        Assert.HasCount(2, sender.SentMessages);
+        Assert.HasCount(1, sender.SentMessages);
         AssertPlanUnchanged(service.State.DispatchedTrains.Single());
     }
 
@@ -485,7 +505,7 @@ public class CtcTrainPlanUpdateTests
     // ---- AuthorityManager / SpeedPlanner building blocks ----
 
     private static List<CtcBlockState> Blocks(int count) =>
-        Enumerable.Range(1, count).Select(n => new CtcBlockState { BlockId = $"B{n}", LengthMeters = 50, SpeedLimitKilometersPerHour = 50 }).ToList();
+        Enumerable.Range(1, count).Select(n => new CtcBlockState { BlockId = $"B{n}", LengthMeters = 50, SpeedLimitKilometersPerHour = 50, Occupancy = OccupancyState.Clear }).ToList();
 
     [TestMethod]
     public void UpdatedAuthority_OwnBlockOccupied_IgnoresOnlyThatBlock()
