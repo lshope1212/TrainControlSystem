@@ -9,6 +9,11 @@ communication are not implemented yet.
 For the independent Track Model dashboard and external-module Test UI, see
 [Track Model running and integration instructions](src/TrackModel/README.md).
 
+For the live Track Model → Track Controller → CTC integration (shared block and train
+identifiers, layout synchronization, live block status, movement requests and
+acknowledgements, a step-by-step demonstration and the outstanding blockers), see the
+[live integration guide](docs/integration/LIVE_INTEGRATION_GUIDE.md).
+
 ## The launcher
 
 `TrainControlSystem.Launcher.Wpf` is the **entry point for the overall system**.
