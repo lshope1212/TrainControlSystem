@@ -1,729 +1,852 @@
-You are working in this repository:
+You are working in the TrainControlSystem repository:
 
 https://github.com/lshope1212/TrainControlSystem
 
-Work from the latest `Luke_CTC` branch and inspect the existing implementation carefully before making changes.
+Please inspect the current repository before making changes. The most complete/current CTC implementation is on the `Luke_CTC` branch, so use that implementation as the basis for the CTC timing work unless the same changes have already been merged elsewhere.
 
-## Goal
+The purpose of this task is to finalize the simulation timing architecture for full system integration.
 
-Implement the real **Graphical Territory Overview** for the CTC module.
+# Overall requirement
 
-The CTC currently has a large placeholder area labeled `Territory Overview` in:
+The system must have ONE authoritative simulation clock.
 
-`src/CTC/CTC.Wpf/MainWindow.xaml`
+The CTC must be the ONLY operational module that is allowed to control simulation time.
 
-This needs to become an interactive schematic track map for the currently selected line.
+However, the clock mechanism itself does NOT need to live exclusively inside the CTC. In fact, the preferred architecture is:
 
-The dispatcher must be able to:
+CTC controls the simulation clock.
 
-- visually inspect the topology of the selected line;
-- visually inspect block occupancy and maintenance state;
-- see stations, switches, signals, and railway crossings;
-- see the current switch/signal/crossing state where applicable;
-- click a block on the map to make it `SelectedBlock`;
-- select the same block from the existing block dropdown;
-- have map selection and dropdown selection remain synchronized;
-- change between Blue, Red, and Green using the existing Current Line selector.
+A shared simulation clock service owns and advances authoritative simulation time.
 
-The existing dropdown must remain. The graphical territory map is an additional and preferably primary way to select blocks.
+All modules that need time receive the same authoritative simulation time.
 
-Do **not** implement the final Track Model ↔ CTC communication as part of this task. We will do that separately afterward.
+Modules other than CTC must NOT independently pause, resume, reset, set, or change the speed of simulation time.
 
----
+TestUI projects may continue to manually inject timing information for isolated testing, but this must clearly remain test-only functionality.
 
-# Existing architecture to preserve
+The goal is to end up conceptually with:
 
-Inspect these files first:
+CTC
+  |
+  | clock control
+  v
+Shared Simulation Clock
+  |
+  | authoritative time updates
+  +----> CTC
+  +----> Train Model
+  +----> Train Controller
+  +----> Track Model
+  +----> Track Controller
+  +----> MBO
+        as needed
 
-- `src/CTC/CTC.Wpf/MainWindow.xaml`
-- `src/CTC/CTC.Wpf/ViewModels/MainWindowViewModel.cs`
-- `src/CTC/CTC.Wpf/ViewModels/BlockViewModel.cs`
-- `src/CTC/CTC.Core/Models/CtcBlockState.cs`
-- `src/CTC/CTC.Core/Models/CtcLineState.cs`
-- `src/CTC/CTC.Core/Services/CTCService.cs`
-- `src/CTC/CTC.TestUI.Wpf/SampleData/SampleTrackLayout.cs`
-- `src/CTC/CTC.TestUI.Wpf/ViewModels/TrackLayoutInputViewModel.cs`
+Do NOT unnecessarily couple the clock implementation to CTC.Core business logic.
 
-Also inspect this existing Track Controller control as a **rendering reference**:
+# Important existing behavior to preserve
 
-`src/TrackController/TrackController.Wpf/Controls/TerritoryMap.cs`
+Before changing anything, inspect the current timing implementations.
 
-That control already demonstrates several concepts that should be useful here:
+There are already useful pieces that should be preserved.
 
-- custom `FrameworkElement`;
-- `DrawingContext` rendering;
-- hit-testing blocks;
-- block status coloring;
-- switch labels;
-- signal indicators;
-- crossing labels;
-- selected-block highlighting.
+## CTC
 
-Do NOT make `CTC.Wpf` reference `TrackController.Wpf`.
+The CTC currently consumes:
 
-The CTC should get its own control using the same general rendering strategy. The modules must remain independent.
+`SystemTimeMessage`
 
-Also do NOT add UI coordinates such as `MapX`, `MapY`, colors, or other presentation information to `TrainControl.Contracts`, `TrackLayoutMessage`, `TrackBlockDefinition`, or `CTC.Core`.
+and ultimately calls:
 
-Map geometry is purely a presentation concern and belongs in `CTC.Wpf`.
+`CTCService.SetSystemTimeAsync(TimeSpan systemTime, ...)`
 
----
+The CTC intentionally does not interpolate time itself.
 
-# Track data
+That method currently uses simulation time to:
 
-Use the supplied course workbook:
+- update CTC system time
+- release queued trains when `DepartureTime <= SystemTime`
+- finish dwell periods
+- begin subsequent movement-plan legs
+- recalculate movement timing/suggested speeds where appropriate
 
-`Track Layout & Vehicle Data vF5 (1).xlsx`
+This timing-driven CTC behavior should remain intact.
 
-The relevant sheets are:
+Do NOT reintroduce independent CTC timers into CTC.Core for dispatch/dwell logic.
 
-- `Blue Line` — 15 blocks
-- `Red Line` — 76 blocks
-- `Green Line` — 150 blocks
-- `Track Layout` — contains the schematic reference for the line/section topology
+The CTC should continue reacting to authoritative clock updates.
 
-Ignore the Vehicle Data worksheets for this task.
+## Train Model
 
-The graphical map does NOT have to be geographically accurate or drawn to physical scale. It should look like a railway control schematic.
+The Train Model currently has a useful fixed-step simulation design in:
 
-However, it should accurately communicate:
+`TrainModel.Core/Simulation/SimulationClock.cs`
 
-- which blocks belong to which sections;
-- which blocks connect to one another;
-- where branches/switches exist;
-- where stations exist;
-- where railway crossings exist;
-- the overall recognizable topology of the selected line.
+The important design concept is:
 
-The workbook's `Track Layout` graphic should be used as a visual reference for the Red/Green section topology. The Blue Line sheet also has its simple yard → A → B/C branch topology.
+- physics timestep stays fixed, currently approximately `0.1 s`
+- playback speed is independent of the physics timestep
+- accelerated simulation should run MORE fixed-duration physics steps rather than increasing `dt`
 
-Do not merely place 150 Green Line blocks in one giant horizontal row.
+Preserve this fixed-step physics approach.
 
----
+For example, if 0.5 simulated seconds have elapsed, the Train Model should ideally perform five 0.1-second physics steps rather than one 0.5-second physics step.
 
-# 1. Create a CTC-specific territory map control
+Do NOT change the Train Model to use a large variable timestep simply because simulation speed increases.
 
-Create something along the lines of:
+# Current problem
 
-`src/CTC/CTC.Wpf/Controls/CtcTerritoryMap.cs`
+At present there are effectively two independent clocks.
 
-A custom `FrameworkElement` using `DrawingContext` is preferred because the Green Line has 150 blocks and this is exactly the kind of schematic that is efficient to render manually.
+The CTC TestUI currently acts as a clock source and sends `SystemTimeMessage` to CTC.
 
-The control should accept, at minimum:
+Meanwhile, the real Train Model owns its own `SimulationClock`, including:
 
-- the blocks for the currently selected line;
-- the currently selected block;
-- the selected line ID/name if needed by the layout provider.
+- pause/resume
+- speed multiplier
+- elapsed time
+- local timing progression
 
-Use dependency properties so it works naturally with WPF binding.
+The Train Model's real named-pipe receiver currently does not properly participate in the shared `SystemTimeMessage` architecture.
 
-Conceptually:
+This means the CTC and Train Model can disagree about time and playback speed.
+
+This must be corrected.
+
+# Desired architecture
+
+Implement the following logical separation:
+
+## 1. Clock authority
+
+Only CTC may REQUEST changes to simulation time.
+
+CTC should be allowed to control:
+
+- Run / Resume
+- Pause
+- Simulation speed multiplier
+- Simulation time / starting time where appropriate
+- Reset if reset remains part of the timing UX
+
+No other real operational module may issue these commands.
+
+## 2. Clock mechanism
+
+Create a shared/system-level simulation clock service.
+
+Preferred location:
+
+`TrainControl.Common/Timing`
+
+or another appropriate Shared location after inspecting the architecture.
+
+The lifetime may be hosted by the Launcher if that best fits the current application-launch architecture.
+
+Do not put the full central clock implementation into `CTC.Core`.
+
+Conceptually introduce something like:
+
+`SimulationClockService`
+
+and, where useful, interfaces such as:
+
+`ISimulationClockController`
+
+and/or
+
+`ISimulationClockSource`
+
+The exact naming is flexible if a cleaner convention already exists in the repository.
+
+The important architectural rule is:
+
+CTC gets clock CONTROL capabilities.
+
+Other modules only get clock STATE / TIME information.
+
+## 3. Authoritative time broadcast
+
+The clock should produce authoritative system-time updates that interested modules can consume.
+
+The existing `SystemTimeMessage` should remain the shared clock-state contract unless there is a compelling compatibility reason to introduce a replacement.
+
+Extend it so it carries sufficient timing state.
+
+At minimum it should contain:
 
 ```csharp
-IEnumerable<BlockViewModel> Blocks
-BlockViewModel? SelectedBlock
-string? LineId
+public TimeSpan SystemTime { get; set; }
+public double SpeedMultiplier { get; set; }
+public bool IsPaused { get; set; }
 ```
 
-`SelectedBlock` should support TwoWay binding.
-
-When the dispatcher clicks a rendered block:
-
-```text
-Map block clicked
-        ↓
-SelectedBlock changes
-        ↓
-existing block dropdown changes
-        ↓
-existing right-side Selected Block inspector changes
-```
-
-The reverse must also work:
-
-```text
-Dropdown selection changes
-        ↓
-SelectedBlock changes
-        ↓
-matching map block gets selected/highlighted
-```
-
-Do not create a second independent selected-block state.
-
-`MainWindowViewModel.SelectedBlock` remains the authoritative selection.
-
----
-
-# 2. Extend BlockViewModel only with presentation information the map needs
-
-`BlockViewModel` already exposes occupancy, maintenance, switch, signal, crossing, speed limit, etc.
-
-Add convenient read-only presentation properties where useful, such as:
-
-```csharp
-Section
-StationName
-HasSignal
-HasCrossing
-LengthMeters
-ConnectedBlockIds
-DisplayName
-```
+You may add a monotonically increasing tick/sequence identifier if it meaningfully improves robustness, but do not add unnecessary complexity.
 
 For example:
 
-```text
-DisplayName = A1
-DisplayName = H35
+```csharp
+public long Sequence { get; set; }
 ```
 
-The graphical map should display the human-friendly section/block number rather than depending on the internal `BlockId` format.
+would be acceptable but optional.
 
-Do not duplicate actual state in the ViewModel.
+Update comments/documentation so `SystemTimeMessage` clearly represents authoritative simulation-clock state distributed system-wide.
 
-These properties should still read from the underlying `CtcBlockState`.
+# Clock-control contract
 
----
+Introduce a separate logical contract for requesting clock changes.
 
-# 3. Add a selected-line block collection
-
-The map and the existing block dropdown should show only blocks belonging to `SelectedLine`.
-
-Right now `MainWindowViewModel.Blocks` contains every block across every line.
-
-Preserve that collection if other code depends on it, but add something like:
+Something along the lines of:
 
 ```csharp
-ObservableCollection<BlockViewModel> SelectedLineBlocks
+public class SimulationTimeControlMessage
+{
+    public SimulationClockCommand Command { get; set; }
+    public double? SpeedMultiplier { get; set; }
+    public TimeSpan? SystemTime { get; set; }
+}
 ```
 
-or an equivalent filtered collection.
+or another clean design.
 
-When `SelectedLine` changes:
+Possible commands include:
 
-1. rebuild/filter the visible line blocks;
-2. redraw the map;
-3. update the block dropdown;
-4. if `SelectedBlock` does not belong to the new line, clear it;
-5. keep Schedule Builder / dispatch filtering behavior exactly as it currently works.
+- Run
+- Pause
+- SetSpeed
+- SetTime
+- Reset
 
-Bind both the territory map and block dropdown to this selected-line collection.
+You do NOT have to use this exact class shape if a cleaner strongly typed implementation fits the codebase better.
 
-`OccupiedBlockCount` shown underneath the territory display should preferably represent the selected line, because the displayed map represents the selected line.
+The important distinction is:
 
----
+`SimulationTimeControlMessage`
+CTC -> central clock
 
-# 4. Create a presentation-only layout engine
+`SystemTimeMessage`
+central clock -> modules
 
-Do NOT put hundreds of X/Y coordinates into `CtcBlockState` or the shared track contract.
+Do not overload `SystemTimeMessage` as both a control command and a clock-state notification.
 
-Create a WPF-side layout component, for example:
+# CTC changes
 
-```text
-CTC.Wpf/Layout/TerritoryLayoutEngine.cs
-CTC.Wpf/Layout/TerritoryLayoutProvider.cs
-CTC.Wpf/Layout/TerritoryBlockPlacement.cs
-```
+Add real timing controls to the actual CTC WPF application, not just CTC.TestUI.
 
-Exact names are flexible.
+The CTC interface should allow the dispatcher to control simulation timing.
 
-The layout engine should generate schematic coordinates for each block based on:
+At minimum provide:
 
-- selected line;
-- section;
-- block number/order;
-- actual `ConnectedBlockIds`.
+- current simulation time display
+- Run / Resume
+- Pause
+- simulation-speed selection/control
+- current simulation-speed display
 
-## Desired approach
+If practical and consistent with the current design, also retain:
 
-Use the workbook's section-level track diagram as the reference.
+- Set Time
+- Reset
 
-Define presentation-only section paths for:
+The exact UI layout should fit naturally into the existing CTC window.
 
-- Blue A/B/C
-- Red A–T
-- Green A–Z
+Do not redesign the entire CTC UI.
 
-Then distribute the blocks belonging to each section along that section's path in block-number order.
+Use the existing MVVM pattern.
 
-A section path may simply be represented as a line/polyline with normalized points.
+The real CTC should SEND clock-control requests rather than simply changing its own local state.
 
-For example, Blue should visually resemble:
+For example:
 
-```text
-YARD -- A1 -- A2 -- A3 -- A4 -- A5
-                                /   \
-                               /     \
-                          B6-B7-...-B10
-                               \
-                                C11-C12-...-C15
-```
+CTC user clicks `5x`
 
-Do not necessarily render Yard as a real selectable `CtcBlockState`; a visual-only Yard terminal label is fine.
+CTC sends/request:
+`SetSpeed(5)`
 
-For Red and Green, recreate the recognizable section-level loops/branches shown in the workbook's `Track Layout` diagram, and distribute the individual blocks along those paths.
+Shared clock changes to 5x.
 
-This gives us an accurate course-layout schematic without contaminating the shared domain objects with UI coordinates.
+Shared clock then publishes authoritative clock state.
 
-## Important
+CTC receives the resulting `SystemTimeMessage`.
 
-Actual block-to-block connection lines must ultimately use:
+CTC updates its displayed time/state from that authoritative message.
+
+This avoids CTC pretending that a request succeeded before the shared clock actually changes.
+
+# CTC service behavior
+
+Preserve the existing:
+
+`CTCService.SetSystemTimeAsync(...)`
+
+behavior.
+
+Update the method signature only if needed to make the richer time message available.
+
+A reasonable design would be either:
 
 ```csharp
-ConnectedBlockIds
+SetSystemTimeAsync(TimeSpan systemTime, ...)
 ```
 
-from the loaded layout.
+with playback state handled separately in the CTC UI/state,
 
-Do not infer runtime topology solely from adjacent block numbers.
+or:
 
-The section geometry determines **where to draw things**.
-
-`ConnectedBlockIds` determines **what is actually connected**.
-
-Deduplicate undirected connections so an A↔B relationship is drawn once.
-
-If an unknown/future line or section is loaded for which no custom section geometry exists, provide a reasonable generic fallback layout instead of crashing.
-
----
-
-# 5. Visual design of each block
-
-The map must communicate live CTC state clearly without becoming unreadable.
-
-Use the current CTC visual language: clean, technical, light gray/white background, compact railway-control schematic.
-
-## Occupancy
-
-Use the main block body fill:
-
-- Clear / unoccupied = green
-- Occupied = red
-- Unknown = gray
-
-Use subdued colors similar to the Track Controller map rather than excessively bright colors.
-
-## Maintenance
-
-If a block is confirmed closed for maintenance:
-
-- orange outline around the block;
-- optionally an `M` badge.
-
-A pending requested maintenance state may optionally use a dashed orange outline if this can be done cleanly.
-
-Do not confuse a CTC request with Track Controller confirmed state.
-
-## Selection
-
-Selected block:
-
-- strong blue outline outside the normal block rectangle;
-- must remain obvious regardless of occupancy fill.
-
-## Switches
-
-Blocks containing switches must be visually obvious.
-
-Use a compact switch/turnout symbol or badge and display its current reported position:
-
-```text
-SW N
-SW R
-SW ?
+```csharp
+ApplySystemTimeAsync(SystemTimeMessage message, ...)
 ```
 
-where `?` means Unknown.
+if that produces a cleaner implementation.
 
-The connecting track geometry should make the branch visually understandable.
+Do not break the existing dispatch, dwell, movement-plan, or speed-planning logic.
 
-## Signals
+The CTC should still use authoritative `SystemTime` for:
 
-If `HasSignal`:
+- scheduled train release
+- dwell completion
+- movement-plan timing
+- lateness/timing calculations
 
-draw a small signal indicator beside the block.
+# CTC TestUI
 
-Colors:
+Do not remove the CTC TestUI's ability to simulate timing inputs if it remains useful for isolated testing.
 
-- Red = red
-- Yellow = yellow/gold
-- Green = green
-- Super Green = brighter distinct green
-- Unknown = gray
+However:
 
-The map should communicate the signal state with both color and, at usable zoom levels, a short text or tooltip so it is not color-only.
+- clearly document it as a TEST clock source
+- do not treat it as the final integrated system clock
+- update it to construct the revised `SystemTimeMessage`
+- make sensible default values for `SpeedMultiplier` and `IsPaused`
 
-## Railway crossings
+For example:
 
-If `HasCrossing`:
-
-show a crossing symbol/badge and its state:
-
-```text
-XING OPEN
-XING CLOSED
-XING ?
+```csharp
+SystemTime = ...
+SpeedMultiplier = 1.0
+IsPaused = false
 ```
 
-A compact version is fine on the map as long as the full value is available through hover/selection.
+when simulating a normal running clock.
 
-## Stations
+# Train Model changes
 
-If `StationName` is not empty:
+This is a major part of the task.
 
-display the station name near the appropriate block.
+The real Train Model must no longer independently own simulation speed as an operator-controlled concept.
 
-Stations should visually stand out from ordinary blocks but must not obscure status indicators.
+Its current physics system should remain fixed-step.
 
-## Block labels
+Refactor the Train Model so its progression follows authoritative simulation time.
 
-Every block should at least display its human-readable section + block number:
+The preferred conceptual behavior is:
 
-```text
-A1
-C7
-H35
-W132
-```
+Receive new authoritative system time.
 
----
+Compare:
 
-# 6. Hover information
+`newSystemTime - previousSystemTime`
 
-Add a useful tooltip/hover view for each map block.
+Determine how much simulated time elapsed.
 
-At minimum include:
-
-```text
-Block
-Section
-Length
-Speed Limit
-Occupancy
-Maintenance
-Station, if any
-Switch state, if any
-Signal state, if any
-Crossing state, if any
-```
-
-This will be especially useful when the Red or Green Line is zoomed out and individual labels are compact.
-
----
-
-# 7. Live updates
-
-This is critical.
-
-The map must update when the existing CTC state changes.
+Run the appropriate number of fixed physics steps.
 
 Example:
 
-```text
-BlockStatusMessage arrives
-        ↓
-CTCService.ApplyBlockStatus(...)
-        ↓
-CtcBlockState changes
-        ↓
-BlockViewModel.Refresh()
-        ↓
-graphical block redraws automatically
+Previous system time:
+`12:00:00.0`
+
+New system time:
+`12:00:00.5`
+
+Elapsed simulated time:
+`0.5 seconds`
+
+Physics timestep:
+`0.1 seconds`
+
+Train Model executes:
+
+5 x `Step(0.1 seconds)`
+
+The fixed timestep should remain stable even at accelerated simulation speeds.
+
+Handle fractional remainder safely if incoming simulated-time deltas do not divide perfectly by `dt`.
+
+For example, maintain a simulation-time accumulator.
+
+Do not accumulate error unnecessarily.
+
+# Train Model pause behavior
+
+If the authoritative clock is paused, simulation time should not advance.
+
+The Train Model therefore should perform no physics progression while paused.
+
+It should not need its own independent pause timer.
+
+# Train Model speed behavior
+
+The Train Model should not determine speed itself in integrated operation.
+
+The authoritative clock advances simulated time faster at higher playback multipliers.
+
+The Train Model simply processes whatever amount of SIMULATED time has elapsed.
+
+For example, if the central clock runs at 5x and sends enough updates that 0.5 simulated seconds elapsed since the prior message, Train Model performs five 0.1-second steps.
+
+The Train Model does not need to know "run physics 5x faster" independently if system-time deltas already encode that progression.
+
+It may still display:
+
+- system time
+- current speed multiplier
+- paused/running state
+
+from the received `SystemTimeMessage`.
+
+# Remove independent timing authority from Train Model WPF
+
+The real Train Model currently has controls such as:
+
+- Play/Pause
+- SpeedMultiplier
+
+These violate the final architecture.
+
+For the real integrated Train Model WPF application:
+
+either remove these controls or make them read-only displays.
+
+Preferred result:
+
+System Time: 12:15:42
+Simulation Speed: 5x
+Status: Running
+
+Do not allow Train Model to alter those values.
+
+If standalone/manual clock controls are useful, move or preserve them only in:
+
+`TrainModel.TestUI.Wpf`
+
+TestUI may retain manual timing controls for isolated testing.
+
+# Train Model receiver
+
+Update:
+
+`TrainModelNamedPipeReceiver`
+
+so the real Train Model recognizes `SystemTimeMessage`.
+
+Route it into an appropriate method on the Train Model ViewModel/service.
+
+Do not put large physics/timing logic directly in the named-pipe receiver.
+
+The receiver should remain a thin:
+
+envelope -> deserialize -> application/service method
+
+adapter.
+
+# Initial synchronization
+
+Handle the first received `SystemTimeMessage` safely.
+
+The first clock message should establish a baseline and should NOT cause the Train Model to suddenly simulate from `00:00:00` to the current clock time.
+
+For example:
+
+first message:
+`12:00:00`
+
+should set:
+
+`lastSystemTime = 12:00:00`
+
+without simulating twelve hours.
+
+Only subsequent deltas should advance physics.
+
+# Time moving backward
+
+Handle backward clock movement explicitly.
+
+For normal simulation, time should generally move forward.
+
+If a TestUI or reset operation causes time to move backward:
+
+- do not run negative physics
+- reset/rebaseline the Train Model's timing accumulator appropriately
+- do not attempt to reverse physical simulation
+
+Similarly, preserve the current CTC behavior where moving time backward does not "un-dispatch" trains.
+
+Document this behavior.
+
+# Central clock update frequency
+
+The current CTC TestUI updates once per second.
+
+For final integration, use a substantially finer central timing interval.
+
+A target around 100 ms is appropriate unless the repository architecture strongly suggests another interval.
+
+Example behavior:
+
+At 1x:
+every 100 ms real time -> approximately +0.1 simulated seconds
+
+At 5x:
+every 100 ms real time -> approximately +0.5 simulated seconds
+
+At 10x:
+every 100 ms real time -> approximately +1.0 simulated second
+
+Do NOT increase the Train Model physics timestep when running faster.
+
+Avoid relying on the WPF timer interval itself as exact simulation time.
+
+Prefer using actual elapsed wall-clock duration, such as `Stopwatch`, then multiply that by playback speed to calculate how much simulated time should advance.
+
+This prevents drift when the UI thread is briefly delayed.
+
+# Allowed simulation speeds
+
+Inspect the current Train Model implementation and UI.
+
+It currently supports approximately:
+
+1x through 10x.
+
+Preserve that range unless another project requirement says otherwise.
+
+Provide a sensible speed selector in the CTC.
+
+Possible options:
+
+1x
+2x
+5x
+10x
+
+or another convenient set within the supported range.
+
+If the current UI already uses a slider, it is also acceptable to support the full 1-10 range.
+
+# Clock state
+
+The central clock should own at minimum:
+
+```csharp
+TimeSpan SystemTime
+double SpeedMultiplier
+bool IsPaused
 ```
 
-Do not require the dispatcher to switch lines, reselect a block, or reload the layout to see a new occupancy/signal/switch/crossing status.
+If useful:
 
-Because `Blocks` itself may not be replaced for every status update, ensure the custom map invalidates itself when contained `BlockViewModel` items raise `PropertyChanged`.
-
-Manage subscriptions properly when the block collection changes so there are no stale subscriptions or memory leaks.
-
----
-
-# 8. Zoom / Fit behavior
-
-The XAML already contains:
-
-- Fit
-- +
-- -
-
-buttons in the Territory Overview toolbar.
-
-Make them functional.
-
-Since these are purely view operations, they do not need to be domain commands in `MainWindowViewModel`.
-
-A good solution is for `CtcTerritoryMap` to expose routed commands or equivalent view-level behavior for:
-
-```text
-Fit
-Zoom In
-Zoom Out
+```csharp
+TimeSpan StartTime
 ```
 
-Suggested bounds:
+or reset baseline state may also be retained.
 
-```text
-minimum zoom ≈ 0.4
-maximum zoom ≈ 3.0
+Keep system time bounded sensibly.
+
+If the simulation remains a one-day simulation, preserve the current behavior of not incorrectly rolling indefinitely past the supported day.
+
+If you change this behavior, document the reason.
+
+# Shared timing abstraction
+
+There is already:
+
+`TrainControl.Common/Timing/ITickSource.cs`
+
+Inspect whether this abstraction is useful for the new design.
+
+Reuse or evolve it where appropriate rather than duplicating timing abstractions.
+
+Do not force it into the solution if its semantics do not match the final architecture.
+
+# Launcher integration
+
+Inspect the current Launcher.
+
+If Launcher is the natural owner of process/system startup, use it to host or initialize the shared central simulation clock.
+
+The final design should avoid accidentally creating one clock per module.
+
+There must logically be ONE authoritative clock.
+
+If the current architecture launches modules as separate processes and therefore cannot simply inject a single in-memory singleton across modules, implement the central clock as one process/service that communicates through the existing named-pipe contract infrastructure.
+
+Do not incorrectly assume a DI singleton is system-wide across separate processes.
+
+This point is important.
+
+# Inter-process distribution
+
+The modules appear to use named-pipe endpoints defined in:
+
+`TrainControl.Common.Communication.NamedPipeNames`
+
+Inspect the current named-pipe architecture and extend it cleanly.
+
+The central clock should distribute `SystemTimeMessage` to interested operational modules.
+
+At minimum, complete real integration for:
+
+- CTC
+- Train Model
+
+because these two currently demonstrate the timing dependency most clearly.
+
+For the other modules:
+
+- inspect whether they already have timing hooks
+- add support where straightforward and useful
+- otherwise establish/document the contract so those teams can subscribe cleanly
+
+Do not create unnecessary unfinished behavior in every module just to say they receive the message.
+
+Prefer a clean, documented integration path.
+
+# Important transport consideration
+
+The current transport appears oriented around named destinations such as individual module pipes.
+
+Do not create a fake "broadcast" abstraction if the transport does not support real broadcasting.
+
+It is acceptable for the central clock publisher to send the same `SystemTimeMessage` individually to:
+
+- CTC pipe
+- Train Model pipe
+- other subscribed module pipes
+
+Conceptually this is still a clock broadcast.
+
+Keep this implementation simple and explicit.
+
+# Failure isolation
+
+A clock update failing to reach one module should not freeze the entire simulation clock.
+
+For example, if Train Model is not running:
+
+- log/report the failed Train Model send
+- continue advancing system time
+- continue sending updates to CTC and other active modules
+
+Do not make one disconnected module block the global timing loop.
+
+Likewise, avoid overlapping clock publishes if a previous publish is still stalled.
+
+Use cancellation tokens appropriately on application shutdown.
+
+# Message ordering
+
+Clock messages should be applied sequentially inside each module.
+
+Avoid concurrently processing multiple time messages in a module if doing so could reorder simulated-time progression.
+
+The CTC currently serializes inbound named-pipe handling onto its UI thread.
+
+Preserve safe ordering.
+
+For the Train Model, ensure time messages cannot cause overlapping physics advancement.
+
+# CTC timing controls and feedback
+
+Add suitable state to the CTC ViewModel such as:
+
+```csharp
+SystemTimeDisplay
+SimulationSpeedDisplay
+IsSimulationPaused
 ```
 
-Use the existing `ScrollViewer` so zooming into the Red/Green lines allows panning with the scrollbars.
+and commands similar to:
 
-"Fit" should fit the complete selected-line schematic into the available territory viewport as reasonably as possible.
-
-When changing lines, return to a sensible fit view.
-
-Do not add business logic to `MainWindow.xaml.cs`; tiny purely visual behavior is acceptable if necessary, but prefer keeping it in the control.
-
----
-
-# 9. Replace the placeholder territory Canvas
-
-In `MainWindow.xaml`, remove the current placeholder text:
-
-```text
-Track Layout / Territory Display
-Select a block to inspect occupancy...
+```csharp
+PauseSimulationCommand
+ResumeSimulationCommand
+SetSimulationSpeedCommand
+SetSimulationTimeCommand
+ResetSimulationTimeCommand
 ```
 
-and insert the real `CtcTerritoryMap`.
+Exact naming can match project conventions.
 
-Keep the overall Territory Overview card, toolbar, footer, and right-side inspector.
+The CTC UI should clearly show the actual authoritative clock state received from the clock, not just the most recently requested state.
 
-Expand the legend so it clearly communicates the map's visual language.
+# Integrated startup behavior
 
-Suggested legend:
+Choose a clear startup state.
 
-```text
-● Clear
-● Occupied
-● Unknown
-□ Maintenance
-◆ Switch
-● Signal
-× Crossing
-```
-
-Do not make the legend excessively large.
-
----
-
-# 10. Expand the CTC TestUI sample track layout to all three lines
-
-The existing:
-
-`CTC.TestUI.Wpf/SampleData/SampleTrackLayout.cs`
-
-currently sends only the small Blue Line.
-
-Update the TestUI's **Send Sample Layout** functionality so one `TrackLayoutMessage` contains all three course lines:
+A reasonable default would be:
 
 ```text
-Blue Line   = 15 blocks
-Red Line    = 76 blocks
-Green Line  = 150 blocks
-
-Total       = 241 blocks
+System Time: 12:00:00
+Speed: 1x
+Paused: true
 ```
 
-The CTC's existing `ApplyTrackLayout()` already accepts multiple `TrackLineDefinition` objects, so do not create separate CTC services or separate messages per line.
+or preserve another existing agreed default if the project already uses one consistently.
 
-The existing button should still conceptually mean:
+Prefer starting paused if that avoids trains moving before the operator has loaded track/schedule state.
+
+Document the chosen behavior.
+
+# Tests
+
+Add/update unit tests for the timing behavior.
+
+At minimum test:
+
+## Central clock
+
+- starts in expected state
+- advances at 1x
+- advances faster at higher multipliers
+- pause prevents simulated-time advancement
+- resume continues advancement
+- invalid speed multipliers are rejected or clamped according to chosen API
+- set time updates authoritative time
+- reset works correctly
+
+Avoid wall-clock-flaky tests.
+
+Prefer injecting or abstracting elapsed real time so tests can deterministically advance the clock.
+
+## CTC
+
+Preserve/add tests showing:
+
+- train dispatches when `DepartureTime <= SystemTime`
+- skipped clock values do not miss scheduled dispatch
+- dwell completes when authoritative time reaches the correct value
+- moving time backward does not un-dispatch an already-dispatched train
+- richer `SystemTimeMessage` does not break existing scheduling behavior
+
+## Train Model
+
+Add tests showing:
+
+- first time message establishes baseline without advancing physics
+- 0.5 simulated seconds causes five 0.1-second fixed steps
+- a larger accelerated-time delta still uses fixed 0.1-second steps
+- pause/no time delta causes no physics movement
+- backward time rebases without negative stepping
+- fractional remainder is preserved correctly across updates
+
+# Documentation
+
+Update comments and relevant README files so the timing architecture is explicit.
+
+Document:
+
+1. CTC is the sole simulation-time authority from the user's perspective.
+2. Shared clock is the single source of truth.
+3. CTC sends clock CONTROL requests.
+4. Shared clock sends `SystemTimeMessage`.
+5. Real modules may consume time but do not change it.
+6. TestUIs may manually simulate time for isolated module testing.
+7. Train Model always retains fixed physics timestep regardless of simulation speed.
+
+Include a concise ASCII diagram similar to:
 
 ```text
-Simulate Track Model sending the complete loaded railway layout to CTC
+                   clock control
+CTC --------------------------------->
+                    Shared Clock
+                         |
+                         | SystemTimeMessage
+            +------------+------------+
+            |            |            |
+            v            v            v
+           CTC      Train Model    Other Modules
 ```
 
-After clicking it, the CTC Current Line dropdown should contain:
+# Do not break unrelated functionality
 
-```text
-Blue Line
-Red Line
-Green Line
-```
+Be careful not to regress:
 
-and switching the selected line should immediately change the graphical territory map.
+CTC:
+- schedule building
+- queued dispatch
+- movement suggestions
+- authority
+- dwell behavior
+- active movement plan editing
+- occupancy/location tracking
+- maintenance/switch controls
+- track layout import
 
-## Workbook data
+Train Model:
+- multi-train behavior
+- train input routing by TrainId
+- physics
+- braking
+- passenger behavior
+- failures
+- output publishing
 
-Use the supplied workbook as the authoritative source for:
+Named-pipe communication:
+- existing message types
+- sender/receiver behavior
+- test UIs
 
-- block number;
-- section;
-- length;
-- grade if needed;
-- speed limit;
-- station name;
-- station presence;
-- switch presence;
-- signal/light presence;
-- railway crossing presence;
-- topology.
+Make the changes incrementally and preserve the current architecture where possible.
 
-Do not manually invent infrastructure that is not present in the workbook.
+# Implementation quality
 
-Important examples include:
+Follow the existing coding style.
 
-- Blue Block 3 crossing
-- Blue Block 5 switch
-- Blue Blocks 6 and 11 signal/light locations
-- Blue stations at Blocks 10 and 15
-- Red and Green switches/yard connections from their Infrastructure column
-- Red/Green crossings
-- all Red/Green station locations
-- the section topology shown in the workbook Track Layout diagram
+Prefer:
 
-Do not assume every consecutive block number connects directly; verify branch/loop topology against the workbook.
+- small focused classes
+- clear interfaces
+- MVVM separation
+- thin named-pipe adapters
+- timing/business logic in Core/Common rather than code-behind
+- cancellation-aware async loops
+- deterministic tests
 
-## Runtime dependency
+Avoid:
 
-Do NOT make the real CTC application read Excel.
+- static global clock state scattered across projects
+- per-module independent simulation clocks
+- `Task.Delay` loops with no drift correction
+- variable Train Model physics timestep
+- putting timing business logic directly in WPF code-behind
+- making CTC.Core depend directly on TrainModel or other module implementations
 
-Prefer using the workbook during development to generate a checked-in TestUI fixture, for example:
+# Final deliverable
 
-```text
-CTC.TestUI.Wpf/SampleData/course-vf5-layout.json
-```
+After implementing the changes, provide a concise summary containing:
 
-`SampleTrackLayout.Create()` can deserialize that fixture into a `TrackLayoutMessage`.
+1. Every file added.
+2. Every important file modified.
+3. Where the authoritative simulation clock now lives.
+4. How CTC controls it.
+5. What the clock-control message/contract looks like.
+6. What `SystemTimeMessage` now contains.
+7. How frequently clock state is distributed.
+8. How Train Model converts incoming time deltas into fixed physics steps.
+9. Which real modules currently consume the shared clock.
+10. Which TestUIs still have manual timing functionality.
+11. Any remaining integration work needed for other teams/modules.
+12. How to manually test:
+   - 1x
+   - 5x
+   - 10x
+   - Pause
+   - Resume
+   - scheduled CTC dispatch
+   - CTC dwell completion
+   - Train Model physics staying synchronized
 
-Using `System.Text.Json` is sufficient; do not add a third-party JSON package.
-
-The workbook should remain development/reference data, not a runtime dependency of CTC.
-
----
-
-# 11. TestUI block IDs
-
-Remember that CTC currently finds block statuses by `BlockId`, so block IDs contained in the three-line TestUI fixture must not collide across lines.
-
-Do not perform a large real-system BlockId redesign in this task.
-
-To minimize disruption:
-
-- preserve the existing Blue sample IDs if existing schedules/tests depend on them;
-- use line-qualified internal IDs for newly added Red and Green fixture blocks if necessary, e.g. `RED-C7`, `GREEN-W132`;
-- keep the graphical display human-friendly by showing `C7`, `W132`, etc. using Section + BlockNumber.
-
-All `ConnectedBlockIds` in the generated fixture must use the corresponding internal IDs consistently.
-
-This is TestUI fixture plumbing only. We will reconcile the final Track Model identifier convention during the communication-integration phase.
-
----
-
-# 12. Do not break existing functionality
-
-Do not redesign or remove:
-
-- Current Line selector
-- Selected Block inspector
-- existing block dropdown
-- Maintenance Mode
-- Close/Reopen Block
-- Toggle Switch
-- Schedule Builder
-- dispatch queue
-- dispatched trains
-- active movement plans
-- ticket sales/hour
-- named-pipe communication
-- `CTCService`
-- TestUI communication architecture
-
-Clicking a block on the territory map should simply feed the existing `SelectedBlock` workflow.
-
-That is one of the main design goals of this task.
-
----
-
-# 13. Tests
-
-Add/update appropriate tests.
-
-At minimum verify:
-
-### Layout/test fixture
-
-- sample message contains exactly 3 lines;
-- Blue has 15 blocks;
-- Red has 76 blocks;
-- Green has 150 blocks;
-- total = 241;
-- every `ConnectedBlockId` resolves to an existing block in the same line;
-- there are no duplicate internal BlockIds across the entire fixture;
-- stations/switches/crossings from the workbook are represented.
-
-### ViewModel behavior
-
-- changing `SelectedLine` updates `SelectedLineBlocks`;
-- selecting a block from the current line sets `SelectedBlock`;
-- switching to another line clears an incompatible selected block;
-- occupancy count reflects the visible/current line if we adopt that interpretation;
-- existing schedule/dispatch behavior still works.
-
-### Layout engine
-
-Keep the coordinate computation separate enough from WPF rendering that basic layout behavior can be unit-tested.
-
-Verify:
-
-- all blocks receive placements;
-- layout bounds are positive;
-- no placement returns NaN/infinity;
-- all supported sections for Blue/Red/Green can be laid out;
-- unknown line/section falls back gracefully.
-
-Do not try to pixel-test the WPF rendering.
-
----
-
-# 14. Build and verify
-
-After implementation:
-
-1. Build the entire solution.
-2. Run the existing automated tests.
-3. Fix regressions caused by this change.
-4. Run CTC and CTC.TestUI together.
-5. Click `Send Sample Layout`.
-6. Verify Blue, Red, and Green appear in the Current Line selector.
-7. Verify each map renders.
-8. Click multiple blocks on each map and verify the dropdown/right inspector follows.
-9. Select blocks from the dropdown and verify the map follows.
-10. Use TestUI `BlockStatusMessage`s to change occupancy/signal/switch/crossing/maintenance and verify the map updates live.
-11. Verify Fit / Zoom In / Zoom Out.
-12. Verify the 150-block Green Line remains responsive.
-
----
-
-# Acceptance criteria
-
-The task is complete when I can launch the current CTC and TestUI and do the following:
-
-```text
-Send Sample Layout
-        ↓
-CTC receives Blue + Red + Green
-        ↓
-Select Green Line
-        ↓
-see graphical Green Line territory
-        ↓
-click a block
-        ↓
-right-side Selected Block panel shows that block
-        ↓
-send new BlockStatusMessage from TestUI
-        ↓
-that same block changes visually on the map
-```
-
-I must also be able to switch to Red or Blue and receive the same behavior.
-
-The graphical territory overview should look like an actual railway control schematic, not a generic grid of buttons.
-
-Keep the implementation maintainable and MVVM-friendly, reuse existing CTC state rather than creating duplicate state, and keep all visual-layout information inside `CTC.Wpf`.
-
-Before editing, inspect the referenced files and summarize the implementation approach you intend to use. Then make the changes, build/test them, and give me a concise summary of files added/modified and any assumptions you had to make about the workbook topology.
+Before editing, inspect the relevant current code and adapt this architecture to the repository rather than blindly replacing existing implementations.

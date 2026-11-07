@@ -63,6 +63,18 @@ a `MessageEnvelope` (`messageType` + `payload`, JSON, enums as strings) via
 Only one process can own a pipe, so do not run the real Track Controller and this
 TestUI at the same time.
 
+### Test clock (isolated testing only)
+
+The *System -> CTC* clock is a **test clock source**, not the integrated system clock.
+It sends `SystemTimeMessage { SystemTime, SpeedMultiplier = 1.0, IsPaused = !running }`
+once per second so CTC can be tested without the rest of the system.
+
+In the integrated system the one authoritative clock is hosted by the Launcher and
+controlled from the real CTC window (see the root README, *Simulation timing*). Do not run
+this TestUI's clock while the Launcher is running, or CTC would receive two clocks.
+The CTC window's own clock buttons send to the Launcher's clock, so they report
+"simulation clock is not running" when only this TestUI is providing time.
+
 ## Rules
 
 - **No CTC business logic and no CTC.Core access here.** Inputs only build contract

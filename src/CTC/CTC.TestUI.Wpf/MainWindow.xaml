@@ -281,7 +281,7 @@
 
                     <GroupBox Header="System -> CTC">
                         <StackPanel>
-                            <TextBlock Text="System Time (simulated shared clock, 1x)" FontWeight="SemiBold"/>
+                            <TextBlock Text="System Time: TEST clock (stands in for the shared clock, 1x; do not run with the Launcher)" FontWeight="SemiBold" TextWrapping="Wrap"/>
 
                             <!-- Current clock value and state -->
                             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">

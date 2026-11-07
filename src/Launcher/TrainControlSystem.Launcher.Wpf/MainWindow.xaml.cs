@@ -5,13 +5,13 @@ namespace TrainControlSystem.Launcher.Wpf;
 
 /// <summary>
 /// Interaction logic for MainWindow.xaml. Code-behind is intentionally kept empty —
-/// all process-launching logic lives in ModuleLauncherService.
+/// process launching lives in ModuleLauncherService, the shared clock in SimulationClockHost.
 /// </summary>
 public partial class MainWindow : Window
 {
-    public MainWindow()
+    public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
-        DataContext = new MainWindowViewModel();
+        DataContext = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
     }
 }

@@ -14,7 +14,9 @@ namespace CTC.Wpf.Services;
 /// <remarks>
 /// Its only job is JSON envelope -> contract -> matching ICTCService method; all CTC
 /// behavior stays in CTC.Core. It does not know or care whether the sender is a real
-/// module or CTC.TestUI.Wpf.
+/// module or CTC.TestUI.Wpf. A <see cref="SystemTimeMessage"/> (the shared clock's state,
+/// about ten per second) is also surfaced through <see cref="SystemTimeReceived"/> for the
+/// clock display, and is not reported as a status unless it fails.
 /// </remarks>
 public sealed class CtcNamedPipeReceiver
 {
@@ -32,6 +34,12 @@ public sealed class CtcNamedPipeReceiver
     /// </summary>
     public event EventHandler<string>? StatusReported;
 
+    /// <summary>
+    /// The shared clock's authoritative state, raised on the UI thread just before CTC applies
+    /// its time, so the clock display always matches the time CTC is acting on.
+    /// </summary>
+    public event EventHandler<SystemTimeMessage>? SystemTimeReceived;
+
     /// <summary>Receives until <paramref name="cancellationToken"/> is cancelled.</summary>
     public Task RunAsync(CancellationToken cancellationToken) =>
         NamedPipeTransport.ListenAsync(
@@ -48,7 +56,7 @@ public sealed class CtcNamedPipeReceiver
             nameof(BlockStatusMessage) => Route<BlockStatusMessage>(envelope, (ctc, m) => ctc.ApplyBlockStatus(m)),
             nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => ctc.ApplyTrackLayout(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
-            nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ctc.SetSystemTimeAsync(m.SystemTime, cancellationToken)),
+            nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ApplySystemTimeAsync(ctc, m, cancellationToken)),
             _ => null,
         };
 
@@ -69,6 +77,13 @@ public sealed class CtcNamedPipeReceiver
             try
             {
                 await apply(_ctc);
+
+                // Clock state arrives continuously; reporting each one would hide every other status.
+                if (envelope.MessageType == nameof(SystemTimeMessage))
+                {
+                    return;
+                }
+
                 status = $"Received {displayName}.";
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -83,6 +98,14 @@ public sealed class CtcNamedPipeReceiver
 
             Report(status);
         }).Task.Unwrap();
+    }
+
+    private Task ApplySystemTimeAsync(ICTCService ctc, SystemTimeMessage message, CancellationToken cancellationToken)
+    {
+        SystemTimeReceived?.Invoke(this, message);
+
+        // CTC acts on the authoritative time only; speed and paused state are display concerns.
+        return ctc.SetSystemTimeAsync(message.SystemTime, cancellationToken);
     }
 
     private static Func<ICTCService, Task> Route<TMessage>(MessageEnvelope envelope, Action<ICTCService, TMessage> apply)

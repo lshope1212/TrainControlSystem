@@ -160,15 +160,101 @@
 
                 </StackPanel>
 
-                <!-- Global/system time -->
+                <!-- Simulation clock controls. CTC is the only module that may control the
+                     shared clock (hosted by the Launcher). Each button only SENDS a request;
+                     the state shown is what the clock reports back. -->
+                <StackPanel Grid.Column="3"
+                            DataContext="{Binding Clock}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+
+                    <StackPanel.Resources>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Setter Property="MinHeight" Value="26"/>
+                            <Setter Property="Padding" Value="8,1"/>
+                            <Setter Property="Margin" Value="2,0"/>
+                        </Style>
+                    </StackPanel.Resources>
+
+                    <StackPanel Orientation="Horizontal">
+
+                        <TextBlock Text="Simulation"
+                                   Foreground="#D1D5DB"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"/>
+
+                        <Button Content="Run"
+                                ToolTip="Run or resume the shared simulation clock"
+                                Command="{Binding ResumeSimulationCommand}"/>
+
+                        <Button Content="Pause"
+                                ToolTip="Pause the shared simulation clock"
+                                Command="{Binding PauseSimulationCommand}"/>
+
+                        <TextBlock Text="Speed"
+                                   Foreground="#D1D5DB"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,4,0"/>
+
+                        <ItemsControl ItemsSource="{Binding SpeedOptions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding}"
+                                            ContentStringFormat="{}{0:0}x"
+                                            Command="{Binding DataContext.SetSimulationSpeedCommand,
+                                                              RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBox Width="70"
+                                 Margin="12,0,2,0"
+                                 MinHeight="26"
+                                 ToolTip="Simulation time to set, as HH:mm:ss"
+                                 Text="{Binding EditedTime, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <Button Content="Set Time"
+                                Command="{Binding SetSimulationTimeCommand}"/>
+
+                        <Button Content="Reset"
+                                ToolTip="Return the clock to its start time, paused, 1x"
+                                Command="{Binding ResetSimulationTimeCommand}"/>
+
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding ControlStatus}"
+                               Foreground="#9CA3AF"
+                               FontSize="10"
+                               Margin="0,3,0,0"
+                               MaxWidth="560"
+                               TextTrimming="CharacterEllipsis"
+                               HorizontalAlignment="Right"/>
+
+                </StackPanel>
+
+                <!-- Global/system time, as received from the shared clock -->
                 <StackPanel Grid.Column="4"
                             VerticalAlignment="Center"
                             Margin="18,0,0,0">
 
-                    <TextBlock Text="System Time"
-                               Foreground="#D1D5DB"
+                    <TextBlock Foreground="#D1D5DB"
                                FontSize="10"
-                               HorizontalAlignment="Right"/>
+                               HorizontalAlignment="Right">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="System Time · {0} · {1}">
+                                <Binding Path="Clock.ClockStatusDisplay"/>
+                                <Binding Path="Clock.SimulationSpeedDisplay"/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
 
                     <TextBlock Text="{Binding SystemTimeDisplay}"
                                Foreground="White"

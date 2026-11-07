@@ -8,7 +8,10 @@ namespace CTC.Wpf;
 
 /// <summary>
 /// Composition root of the CTC process. Builds exactly ONE <see cref="CTCService"/> and
-/// shares it between the dispatcher UI and the inbound named-pipe receiver.
+/// shares it between the dispatcher UI and the inbound named-pipe receiver. CTC controls the
+/// shared simulation clock (hosted by the Launcher) but has no clock of its own: the
+/// dispatcher's clock controls send requests, and the clock's state comes back in through
+/// the receiver like any other inbound message.
 /// </summary>
 public partial class App : Application
 {
@@ -21,11 +24,13 @@ public partial class App : Application
         IMessageSender sender = new NamedPipeMessageSender();
         ICTCService ctcService = new CTCService(sender);
 
-        var viewModel = new MainWindowViewModel(ctcService);
+        var clock = new SimulationClockViewModel(new NamedPipeSimulationClockControlSender());
+        var viewModel = new MainWindowViewModel(ctcService, clock);
         var window = new MainWindow(viewModel);
 
         var receiver = new CtcNamedPipeReceiver(ctcService, Dispatcher);
         receiver.StatusReported += (_, status) => viewModel.InboundStatus = status;
+        receiver.SystemTimeReceived += (_, state) => clock.ApplyClockState(state);
 
         // Runs until OnExit cancels it; the receive loop never throws for bad messages.
         _ = receiver.RunAsync(_shutdown.Token);

@@ -17,4 +17,11 @@ public static class NamedPipeNames
     public const string TrackModelTestUi = "TrainControl.TrackModel.TestUI";
     public const string TrainModel = "TrainControl.TrainModel";
     public const string TrainController = "TrainControl.TrainController";
+
+    /// <summary>
+    /// Inbound endpoint of the shared simulation clock (hosted by the Launcher). Receives
+    /// clock-control requests, which only CTC sends; the clock's state goes out to the
+    /// module pipes above as SystemTimeMessages.
+    /// </summary>
+    public const string SimulationClock = "TrainControl.SimulationClock";
 }

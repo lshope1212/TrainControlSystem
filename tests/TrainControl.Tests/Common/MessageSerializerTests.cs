@@ -93,6 +93,46 @@ public class MessageSerializerTests
     }
 
     [TestMethod]
+    public void RoundTrip_SystemTimeMessage_PreservesFullClockState()
+    {
+        var sent = new SystemTimeMessage { SystemTime = new TimeSpan(12, 15, 42), SpeedMultiplier = 5.0, IsPaused = true, Sequence = 9001 };
+
+        var received = MessageSerializer.DeserializePayload<SystemTimeMessage>(MessageSerializer.Deserialize(MessageSerializer.Serialize(sent)));
+
+        Assert.AreEqual(sent.SystemTime, received.SystemTime);
+        Assert.AreEqual(5.0, received.SpeedMultiplier);
+        Assert.IsTrue(received.IsPaused);
+        Assert.AreEqual(9001, received.Sequence);
+    }
+
+    [TestMethod]
+    public void SystemTimeMessage_FromTimeOnlySender_ReadsAsRunningAt1x()
+    {
+        // An older sender (e.g. a TestUI) that only knows SystemTime.
+        var envelope = MessageSerializer.Deserialize("""{"messageType":"SystemTimeMessage","payload":{"systemTime":"07:30:15"}}""");
+
+        var received = MessageSerializer.DeserializePayload<SystemTimeMessage>(envelope);
+
+        Assert.AreEqual(new TimeSpan(7, 30, 15), received.SystemTime);
+        Assert.AreEqual(1.0, received.SpeedMultiplier);
+        Assert.IsFalse(received.IsPaused);
+    }
+
+    [TestMethod]
+    public void RoundTrip_SimulationTimeControlMessage_PreservesCommandAndValues()
+    {
+        var sent = new SimulationTimeControlMessage { Command = SimulationClockCommand.SetSpeed, SpeedMultiplier = 10.0 };
+
+        var json = MessageSerializer.Serialize(sent);
+        var received = MessageSerializer.DeserializePayload<SimulationTimeControlMessage>(MessageSerializer.Deserialize(json));
+
+        Assert.Contains("\"SetSpeed\"", json, "Commands travel as readable names.");
+        Assert.AreEqual(SimulationClockCommand.SetSpeed, received.Command);
+        Assert.AreEqual(10.0, received.SpeedMultiplier);
+        Assert.IsNull(received.SystemTime);
+    }
+
+    [TestMethod]
     public void RoundTrip_TrackLayoutMessage_PreservesNestedBlocks()
     {
         var original = new TrackLayoutMessage
