@@ -112,15 +112,73 @@ public sealed class TrainControllerTickEngine
 
                 var output = await _execution.ExecuteAsync(input, slot.LastOutput, cancellationToken);
                 await _output.RouteAsync(input, output, testMode, cancellationToken);
-                if (testMode && _testMode.SimplePhysicsEnabled)
+                if (testMode)
                 {
-                    slot.TestModel.ApplySimplePhysics(output.Commands, _options.Vehicle, _options.SimulationTimeStepSeconds);
+                    slot.TestModel.FollowCommandedActuators(output.Commands);
+                    if (_testMode.SimplePhysicsEnabled)
+                    {
+                        slot.TestModel.ApplySimplePhysics(output.Commands, _options.Vehicle, _options.SimulationTimeStepSeconds);
+                    }
                 }
 
                 executed.Add(slot.TrainId);
             }
 
             return new TickReport(tickId, simulationTime, executed);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// NORMAL MODE (system clock): computes ONE train for tick <paramref name="tickId"/> right
+    /// after the Train Model's tick-N state for it was submitted, and sends the commands tagged
+    /// with the same TickId (same-tick pairing). Ignored (false) while Test Mode is on.
+    /// </summary>
+    public async Task<bool> ExecuteTrainAsync(string trainId, long tickId, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(trainId);
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var (testMode, provider) = _testMode.Capture();
+            if (testMode)
+            {
+                return false;
+            }
+
+            var slot = _registry.Get(trainId);
+            var simulationTime = tickId * _options.SimulationTimeStepSeconds;
+            if (tickId > Interlocked.Read(ref _tickCount))
+            {
+                Interlocked.Exchange(ref _tickCount, tickId);
+                Volatile.Write(ref _simulationTimeSeconds, simulationTime);
+            }
+
+            var model = provider.TakeForTick(trainId);
+            if (model is null || !model.IsActive)
+            {
+                return false;
+            }
+
+            var input = new TrainControllerInput
+            {
+                TrainId = trainId,
+                TickId = tickId,
+                SimulationTimeSeconds = simulationTime,
+                DeltaTimeSeconds = _options.SimulationTimeStepSeconds,
+                Model = model,
+                Driver = slot.Driver.TakeForTick(),
+                Engineer = slot.Engineer,
+                Vehicle = _options.Vehicle,
+                Policy = _options.Policy,
+            };
+
+            var output = await _execution.ExecuteAsync(input, slot.LastOutput, cancellationToken);
+            await _output.RouteAsync(input, output, false, cancellationToken);
+            return true;
         }
         finally
         {

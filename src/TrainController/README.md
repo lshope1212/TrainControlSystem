@@ -366,3 +366,25 @@ gains (W per m/s) Kp = 1 produces only a few watts, so trains barely move until 
 tunes Kp/Ki for each train. `EngineerSettings.IsUntunedStartupPlaceholder` lets the UI warn
 about it; controllers never special-case it, and no test relies on it as a realistic value
 (behavior tests use explicitly named test-only gains).
+
+
+## Normal mode: Train Model link and global tick clock (interim)
+
+- **Inbound** (pipe `TrainControl.TrainController`): one `TrainModelStatusMessage` per active train per
+  tick, tagged with `TickId`. The controller computes that train immediately and answers with a
+  `TrainControllerCommandMessage` carrying the same `TickId` (same-tick pairing; the Train Model
+  applies it in the next tick). Door and light states are no longer sent by the Train Model: they
+  follow the controller's commands (no door / light failures are modelled), so the last commanded
+  states are used as the actual ones (Test UI shows them read-only).
+- **Until event flags are agreed**, a new authority is inferred from the first value, a changed value
+  or the track signal becoming valid again; a new beacon from a changed station name or distance.
+- **Global tick clock**: `TrainControl.SystemClock.TickClockCoordinator`, in its own shared project
+  (`src/Shared/TrainControl.SystemClock`, so `TrainControl.Common` stays independent of the contracts). This process hosts it for now (`appsettings.json` → `Clock.Host = true`, participants
+  `TrainControl.TrainModel`). Messages: `TickMessage`, `TickDoneMessage`, `ClockControlMessage`
+  (Run / Pause / Step / SetSpeed / Reset), `ClockStateMessage`, `ResetMessage`, `ResetDoneMessage`.
+  The next tick starts only after every participant's `TickDone`; a participant that does not answer
+  within `TickTimeoutMilliseconds` stops the clock with a fault. Reset waits for every `ResetDone`
+  and restarts from tick 1. When CTC hosts the clock, set `Clock.Host = false` (`HostPipe` = CTC):
+  this process then only answers `Tick` / `Reset` as a participant.
+- With Test Mode off, the Test UI's Run / Stop / Step / Reset / speed controls drive the global
+  clock; with Test Mode on they drive the local test simulation as before.

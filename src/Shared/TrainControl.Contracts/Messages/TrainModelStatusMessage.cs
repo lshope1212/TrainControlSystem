@@ -29,6 +29,11 @@ public class TrainModelStatusMessage
 {
     public string TrainId { get; set; } = string.Empty;
 
+    /// <summary>Tick this state belongs to (state at the END of the tick); the controller answers
+    /// with commands tagged with the same TickId. Door and light states are NOT sent: doors and
+    /// lights always follow the controller's commands (no door / light failures are modelled).</summary>
+    public long TickId { get; set; }
+
     /// <summary>
     /// True while the overall system has dispatched the train (CTC -> Track Controller ->
     /// Train Model) and it is in service. Owned by the Train Model / system, never by the
@@ -65,12 +70,6 @@ public class TrainModelStatusMessage
     public Enums.PlatformSide PlatformSide { get; set; } = Enums.PlatformSide.None;
 
     public bool PassengerEmergencyBrakeRequested { get; set; }
-
-    public bool LeftDoorsOpen { get; set; }
-
-    public bool RightDoorsOpen { get; set; }
-
-    public bool ExteriorLightsOn { get; set; }
 
     public double CabinTemperatureCelsius { get; set; }
 }

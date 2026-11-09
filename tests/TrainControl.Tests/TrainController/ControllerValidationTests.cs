@@ -1,3 +1,4 @@
+using PlatformSide = TrainControl.Contracts.Enums.PlatformSide;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 using TrainController.Abstractions.Configuration;
@@ -5,7 +6,6 @@ using TrainController.Abstractions.Inputs;
 using TrainController.Abstractions.Outputs;
 using TrainController.Abstractions.Validation;
 using TrainController.Integration.Mapping;
-using PlatformSide = TrainControl.Contracts.Enums.PlatformSide;
 
 namespace TrainControl.Tests.TrainController;
 
@@ -114,13 +114,12 @@ public class ControllerValidationTests
             DistanceToNextStationMeters = 150.0,
             PlatformSide = PlatformSide.Both,
             PassengerEmergencyBrakeRequested = true,
-            LeftDoorsOpen = true,
-            RightDoorsOpen = false,
-            ExteriorLightsOn = true,
             CabinTemperatureCelsius = 22.5,
         };
 
-        var input = TrainModelContractMapper.ToModelInput(message, beaconNewlyReceived: true, authorityUpdated: true);
+        // Doors and lights are not reported by the Train Model: they follow the last commands.
+        var lastCommands = new TrainModelCommand { LeftDoorsOpenCommand = true, RightDoorsOpenCommand = false, ExteriorLightsCommand = true };
+        var input = TrainModelContractMapper.ToModelInput(message, beaconNewlyReceived: true, authorityUpdated: true, lastCommands);
 
         Assert.IsTrue(input.IsActive);
         Assert.AreEqual(1.5, input.ActualSpeedMetersPerSecond);
@@ -134,6 +133,7 @@ public class ControllerValidationTests
         Assert.IsFalse(input.RightDoorsOpen);
         Assert.IsTrue(input.ExteriorLightsOn);
         Assert.AreEqual(22.5, input.CabinTemperatureCelsius);
+        Assert.IsFalse(TrainModelContractMapper.ToModelInput(message, false, false).LeftDoorsOpen, "No commands yet: closed.");
         Assert.IsFalse(TrainModelContractMapper.ToModelInput(message, beaconNewlyReceived: false, authorityUpdated: false).Beacon.IsNewlyReceived);
 
         var command = TrainModelContractMapper.ToCommandMessage(new TrainControllerOutput

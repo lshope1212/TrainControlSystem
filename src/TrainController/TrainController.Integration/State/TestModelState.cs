@@ -185,6 +185,30 @@ public sealed class TestModelState
     }
 
     /// <summary>
+    /// Doors and exterior lights always follow the controller's commands (the Train Model does
+    /// not report them: no door / light failures are modelled). Applied after every Test Mode tick.
+    /// </summary>
+    public void FollowCommandedActuators(TrainModelCommand commands)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        bool changed;
+        lock (_gate)
+        {
+            changed = _leftDoorsOpen != commands.LeftDoorsOpenCommand
+                || _rightDoorsOpen != commands.RightDoorsOpenCommand
+                || _exteriorLightsOn != commands.ExteriorLightsCommand;
+            _leftDoorsOpen = commands.LeftDoorsOpenCommand;
+            _rightDoorsOpen = commands.RightDoorsOpenCommand;
+            _exteriorLightsOn = commands.ExteriorLightsCommand;
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
     /// TEST TOOL ONLY (Test UI "Simple physics"): moves this Test Model state one tick using the
     /// controller's commands, so normal scenarios behave plausibly without a Train Model. Speed
     /// follows <see cref="SimplePlantModel"/>; doors and exterior lights follow their commands.

@@ -20,7 +20,10 @@ public static class TrainModelContractMapper
     /// Whether this status carries a NEW authority value. Like beacon receptions, the Train Model
     /// interface has not defined how updates are signalled, so the adapter supplies it.
     /// </param>
-    public static TrainModelInput ToModelInput(TrainModelStatusMessage message, bool beaconNewlyReceived, bool authorityUpdated)
+    /// <param name="lastCommands">The controller's previous commands for this train. The Train Model no
+    /// longer reports door / light states: doors and lights always follow the commands (no door
+    /// or light failures are modelled), so the last commanded states are used as the actual ones.</param>
+    public static TrainModelInput ToModelInput(TrainModelStatusMessage message, bool beaconNewlyReceived, bool authorityUpdated, TrainModelCommand? lastCommands = null)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -42,9 +45,9 @@ public static class TrainModelContractMapper
                 PlatformSide = message.PlatformSide,
             },
             PassengerEmergencyBrakeRequested = message.PassengerEmergencyBrakeRequested,
-            LeftDoorsOpen = message.LeftDoorsOpen,
-            RightDoorsOpen = message.RightDoorsOpen,
-            ExteriorLightsOn = message.ExteriorLightsOn,
+            LeftDoorsOpen = lastCommands?.LeftDoorsOpenCommand ?? false,
+            RightDoorsOpen = lastCommands?.RightDoorsOpenCommand ?? false,
+            ExteriorLightsOn = lastCommands?.ExteriorLightsCommand ?? false,
             CabinTemperatureCelsius = message.CabinTemperatureCelsius,
         };
     }

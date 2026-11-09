@@ -140,11 +140,11 @@
                                     <ContentControl Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding PassengerEmergencyBrakeRequested}" Content="Requested"/></ContentControl>
                                     <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="EQUIPMENT STATUS" Style="{StaticResource SectionLabel}" Margin="0,10,0,4"/>
                                     <TextBlock Grid.Row="3" Text="Left doors" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding LeftDoorsOpen}" Content="Open"/></ContentControl>
+                                    <ContentControl Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding LeftDoorsOpen, Mode=OneWay}" IsEnabled="False" Content="Open (follows command)"/></ContentControl>
                                     <TextBlock Grid.Row="4" Text="Right doors" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="4" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding RightDoorsOpen}" Content="Open"/></ContentControl>
+                                    <ContentControl Grid.Row="4" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding RightDoorsOpen, Mode=OneWay}" IsEnabled="False" Content="Open (follows command)"/></ContentControl>
                                     <TextBlock Grid.Row="5" Text="Exterior lights" Style="{StaticResource FormLabel}"/>
-                                    <ContentControl Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding ExteriorLightsOn}" Content="On"/></ContentControl>
+                                    <ContentControl Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><CheckBox IsChecked="{Binding ExteriorLightsOn, Mode=OneWay}" IsEnabled="False" Content="On (follows command)"/></ContentControl>
                                     <TextBlock Grid.Row="6" Text="Cabin temperature (°F)" Style="{StaticResource FormLabel}"/>
                                     <ContentControl Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" Focusable="False"><TextBox Text="{Binding CabinTemperatureFahrenheitText}" Style="{StaticResource FormBox}"/></ContentControl>
                                     <TextBlock Grid.Row="7" Grid.ColumnSpan="2" Text="VALIDATION" Style="{StaticResource SectionLabel}" Margin="0,10,0,4"/>
