@@ -17,7 +17,8 @@
     trains use the canonical three-digit IDs ("000", "001", ...).
 
 .PARAMETER Block
-    Block the train is now in (Track Model block ID, e.g. "2"). Omit, or use -Remove, to take the
+    Block the train is now in, as the Track Model names it: Blue Line "1"-"15", Red Line
+    "RED-1"-"RED-76", Green Line "GREEN-1"-"GREEN-150". Omit, or use -Remove, to take the
     train off the track.
 
 .PARAMETER Remove
@@ -31,6 +32,12 @@
 
 .EXAMPLE
     .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 01 -Block 2
+
+.EXAMPLE
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 07 -Block RED-30
+
+.EXAMPLE
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 08 -Block GREEN-65
 
 .EXAMPLE
     .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 01 -Remove

@@ -65,6 +65,7 @@ public sealed class CtcNamedPipeReceiver
                 ctc.ApplyBlockStatus(m);
                 await ctc.SynchronizeMovementRequestsAsync(cancellationToken);
             }),
+            nameof(BlockStatusBatchMessage) => RouteAsync<BlockStatusBatchMessage>(envelope, (ctc, m) => ApplyBlockStatusesAsync(ctc, m, cancellationToken)),
             nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => _layoutSummary = ctc.ApplyTrackLayout(m).Summary),
             nameof(RequestAcknowledgementMessage) => Route<RequestAcknowledgementMessage>(envelope, (ctc, m) => ctc.ApplyRequestAcknowledgement(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
@@ -119,9 +120,38 @@ public sealed class CtcNamedPipeReceiver
     private string? _layoutSummary;
 
     private static bool IsLiveBlockStatus(MessageEnvelope envelope) =>
-        envelope.MessageType == nameof(BlockStatusMessage)
-        && envelope.Payload.TryGetProperty("reportedAtUtc", out var reportedAt)
-        && reportedAt.ValueKind == System.Text.Json.JsonValueKind.String;
+        envelope.MessageType == nameof(BlockStatusBatchMessage)
+        || (envelope.MessageType == nameof(BlockStatusMessage)
+            && envelope.Payload.TryGetProperty("reportedAtUtc", out var reportedAt)
+            && reportedAt.ValueKind == System.Text.Json.JsonValueKind.String);
+
+    /// <summary>
+    /// A wayside batch is applied exactly as its statuses would be one by one: each in order, each on
+    /// its own (a status CTC cannot apply, e.g. for a block it does not know, is reported, never
+    /// remapped, and does not stop the others). Movement requests are brought in line once, after
+    /// the whole evaluation has been applied.
+    /// </summary>
+    private static async Task ApplyBlockStatusesAsync(ICTCService ctc, BlockStatusBatchMessage batch, CancellationToken cancellationToken)
+    {
+        var rejected = new List<string>();
+        foreach (var status in batch.Statuses ?? [])
+        {
+            try
+            {
+                ctc.ApplyBlockStatus(status);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                rejected.Add(ex.Message);
+            }
+        }
+
+        await ctc.SynchronizeMovementRequestsAsync(cancellationToken);
+        if (rejected.Count > 0)
+        {
+            throw new InvalidOperationException($"{rejected.Count} of {batch.Statuses!.Count} statuses not applied: {string.Join(" ", rejected.Distinct().Take(3))}{(rejected.Count > 3 ? " …" : "")}");
+        }
+    }
 
     private Task ApplySystemTimeAsync(ICTCService ctc, SystemTimeMessage message, CancellationToken cancellationToken)
     {

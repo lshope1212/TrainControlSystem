@@ -151,7 +151,7 @@ Use `MessageSerializer.Serialize` for shared contracts. Small UI controls use `M
 | `GetSnapshot` | empty object |
 | `TrackModelBlockStates` | `blocks`: array of shared `TrackModelBlockStateMessage` values |
 
-A batch validates all measurements before changing the local controller. Single Track Model updates and batches use the same controller method. The test UI sends batches; the actual Track Model sends one shared state per block. The Pi client translates measurement timestamps to the Pi clock. Reservation `null` remains unknown and cannot unlock a protected switch.
+A batch validates all measurements before changing the local controller. Single Track Model updates and batches use the same controller method. The test UI sends batches; the actual Track Model sends one batch per line. The controller publishes its outputs in batches too: one `BlockStatusBatchMessage` to CTC and one `TrackModelCommandBatchMessage` to the Track Model per 500 ms cycle, with acknowledgements to CTC sent ahead of them. The Pi client translates measurement timestamps to the Pi clock. Reservation `null` remains unknown and cannot unlock a protected switch.
 
 ```json
 {"messageType":"MovementSuggestionMessage","payload":{"requestId":"example-1","trainId":"Train 101","targetBlockId":"5","authorityReference":"TargetBlockEntry","pathBlockIds":["6","7","8"],"suggestedSpeedMetersPerSecond":11.176,"suggestedAuthorityMeters":365.76,"active":true}}

@@ -1,0 +1,1218 @@
+{
+  "waysideId": "Shared track map",
+  "lineName": "Red Line",
+  "feedbackTimeoutSeconds": 5,
+  "requestTimeoutSeconds": 10,
+  "blocks": [
+    {
+      "blockId": "RED-1",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-2",
+        "RED-16"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-2",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-1",
+        "RED-3"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-3",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-2",
+        "RED-4"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-4",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-3",
+        "RED-5"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-5",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-4",
+        "RED-6"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-6",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-5",
+        "RED-7"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-7",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-6",
+        "RED-8"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 420,
+      "stationName": "Shadyside"
+    },
+    {
+      "blockId": "RED-8",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-7",
+        "RED-9"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-9",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-8",
+        "RED-10"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-10",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-9",
+        "RED-11"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-11",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-10",
+        "RED-12"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": true,
+      "crossingProtectionBlockIds": [
+        "RED-10",
+        "RED-11",
+        "RED-12"
+      ],
+      "mapX": 1090,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-12",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-11",
+        "RED-13"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-13",
+      "lengthMeters": 70,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-12",
+        "RED-14"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-14",
+      "lengthMeters": 60,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-13",
+        "RED-15"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-15",
+      "lengthMeters": 60,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-14",
+        "RED-16"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-16",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "RED-1",
+        "RED-15",
+        "RED-17"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "RED-15",
+      "reverseNextBlockId": "RED-1",
+      "stemBlockId": "RED-17",
+      "switchProtectionBlockIds": [
+        "RED-1",
+        "RED-15",
+        "RED-16",
+        "RED-17"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 420,
+      "stationName": "Herron Ave"
+    },
+    {
+      "blockId": "RED-17",
+      "lengthMeters": 200,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-16",
+        "RED-18"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-18",
+      "lengthMeters": 400,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-17",
+        "RED-19"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-19",
+      "lengthMeters": 400,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-18",
+        "RED-20"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-20",
+      "lengthMeters": 200,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-19",
+        "RED-21"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 420
+    },
+    {
+      "blockId": "RED-21",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-20",
+        "RED-22"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 530,
+      "stationName": "Swissville"
+    },
+    {
+      "blockId": "RED-22",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-21",
+        "RED-23"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-23",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-22",
+        "RED-24"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-24",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-23",
+        "RED-25"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-25",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-24",
+        "RED-26"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 530,
+      "stationName": "Penn Station"
+    },
+    {
+      "blockId": "RED-26",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-25",
+        "RED-27"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-27",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-26",
+        "RED-28",
+        "RED-76"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "RED-28",
+      "reverseNextBlockId": "RED-76",
+      "stemBlockId": "RED-26",
+      "switchProtectionBlockIds": [
+        "RED-26",
+        "RED-27",
+        "RED-28",
+        "RED-76"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-28",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-27",
+        "RED-29"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-29",
+      "lengthMeters": 60,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-28",
+        "RED-30"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-30",
+      "lengthMeters": 60,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-29",
+        "RED-31"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-31",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-30",
+        "RED-32"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-32",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-31",
+        "RED-33"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-33",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-32",
+        "RED-34",
+        "RED-72"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "RED-32",
+      "reverseNextBlockId": "RED-72",
+      "stemBlockId": "RED-34",
+      "switchProtectionBlockIds": [
+        "RED-32",
+        "RED-33",
+        "RED-34",
+        "RED-72"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-34",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-33",
+        "RED-35"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-35",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-34",
+        "RED-36"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 530,
+      "stationName": "Steel Plaza"
+    },
+    {
+      "blockId": "RED-36",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-35",
+        "RED-37"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-37",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-36",
+        "RED-38"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-38",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-37",
+        "RED-39",
+        "RED-71"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "RED-39",
+      "reverseNextBlockId": "RED-71",
+      "stemBlockId": "RED-37",
+      "switchProtectionBlockIds": [
+        "RED-37",
+        "RED-38",
+        "RED-39",
+        "RED-71"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-39",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-38",
+        "RED-40"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-40",
+      "lengthMeters": 60,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-39",
+        "RED-41"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 530
+    },
+    {
+      "blockId": "RED-41",
+      "lengthMeters": 60,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-40",
+        "RED-42"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-42",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-41",
+        "RED-43"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-43",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-42",
+        "RED-44"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-44",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-43",
+        "RED-45",
+        "RED-67"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "RED-43",
+      "reverseNextBlockId": "RED-67",
+      "stemBlockId": "RED-45",
+      "switchProtectionBlockIds": [
+        "RED-43",
+        "RED-44",
+        "RED-45",
+        "RED-67"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-45",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-44",
+        "RED-46"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 640,
+      "stationName": "First Ave"
+    },
+    {
+      "blockId": "RED-46",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-45",
+        "RED-47"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-47",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-46",
+        "RED-48"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": true,
+      "crossingProtectionBlockIds": [
+        "RED-46",
+        "RED-47",
+        "RED-48"
+      ],
+      "mapX": 666,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-48",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "RED-47",
+        "RED-49"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 640,
+      "stationName": "Station Square"
+    },
+    {
+      "blockId": "RED-49",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 16.666666666666668,
+      "nextBlockIds": [
+        "RED-48",
+        "RED-50"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-50",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 16.666666666666668,
+      "nextBlockIds": [
+        "RED-49",
+        "RED-51"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-51",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-50",
+        "RED-52"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-52",
+      "lengthMeters": 43.2,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-51",
+        "RED-53",
+        "RED-66"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "RED-53",
+      "reverseNextBlockId": "RED-66",
+      "stemBlockId": "RED-51",
+      "switchProtectionBlockIds": [
+        "RED-51",
+        "RED-52",
+        "RED-53",
+        "RED-66"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-53",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-52",
+        "RED-54"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-54",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-53",
+        "RED-55"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-55",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-54",
+        "RED-56"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-56",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-55",
+        "RED-57"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-57",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-56",
+        "RED-58"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-58",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-57",
+        "RED-59"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-59",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-58",
+        "RED-60"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 640
+    },
+    {
+      "blockId": "RED-60",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-59",
+        "RED-61"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 640,
+      "stationName": "South Hills Junction"
+    },
+    {
+      "blockId": "RED-61",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-60",
+        "RED-62"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-62",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-61",
+        "RED-63"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-63",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-62",
+        "RED-64"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-64",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-63",
+        "RED-65"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-65",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-64",
+        "RED-66"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-66",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-52",
+        "RED-65"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-67",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-44",
+        "RED-68"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-68",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-67",
+        "RED-69"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-69",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-68",
+        "RED-70"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-70",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-69",
+        "RED-71"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-71",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-38",
+        "RED-70"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-72",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-33",
+        "RED-73"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-73",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-72",
+        "RED-74"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-74",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-73",
+        "RED-75"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-75",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-74",
+        "RED-76"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 750
+    },
+    {
+      "blockId": "RED-76",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 15.277777777777777,
+      "nextBlockIds": [
+        "RED-27",
+        "RED-75"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 750
+    }
+  ]
+}

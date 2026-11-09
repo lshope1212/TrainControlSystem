@@ -1,0 +1,2195 @@
+{
+  "waysideId": "Shared track map",
+  "lineName": "Green Line",
+  "feedbackTimeoutSeconds": 5,
+  "requestTimeoutSeconds": 10,
+  "blocks": [
+    {
+      "blockId": "GREEN-1",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-13"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-2",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-1"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 950,
+      "stationName": "Pioneer"
+    },
+    {
+      "blockId": "GREEN-3",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-2"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-4",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-3"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-5",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-4"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-6",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-5"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-7",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-6"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-8",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-7"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-9",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-8"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 950,
+      "stationName": "Edgebrook"
+    },
+    {
+      "blockId": "GREEN-10",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-9"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-11",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-10"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-12",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 12.5,
+      "nextBlockIds": [
+        "GREEN-11"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-13",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-1",
+        "GREEN-12",
+        "GREEN-14"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "GREEN-12",
+      "reverseNextBlockId": "GREEN-1",
+      "stemBlockId": "GREEN-14",
+      "switchProtectionBlockIds": [
+        "GREEN-1",
+        "GREEN-12",
+        "GREEN-13",
+        "GREEN-14"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-14",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-13",
+        "GREEN-15"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-15",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-14",
+        "GREEN-16"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-16",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-15",
+        "GREEN-17"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 950,
+      "stationName": "Green 16 (unnamed station)"
+    },
+    {
+      "blockId": "GREEN-17",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 16.666666666666668,
+      "nextBlockIds": [
+        "GREEN-16",
+        "GREEN-18"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-18",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 16.666666666666668,
+      "nextBlockIds": [
+        "GREEN-17",
+        "GREEN-19"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-19",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 16.666666666666668,
+      "nextBlockIds": [
+        "GREEN-18",
+        "GREEN-20"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": true,
+      "crossingProtectionBlockIds": [
+        "GREEN-18",
+        "GREEN-19",
+        "GREEN-20"
+      ],
+      "mapX": 1938,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-20",
+      "lengthMeters": 150,
+      "speedLimitMetersPerSecond": 16.666666666666668,
+      "nextBlockIds": [
+        "GREEN-19",
+        "GREEN-21"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 950
+    },
+    {
+      "blockId": "GREEN-21",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-20",
+        "GREEN-22"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-22",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-21",
+        "GREEN-23"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 1060,
+      "stationName": "Whited"
+    },
+    {
+      "blockId": "GREEN-23",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-22",
+        "GREEN-24"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-24",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-23",
+        "GREEN-25"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-25",
+      "lengthMeters": 200,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-24",
+        "GREEN-26"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-26",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-25",
+        "GREEN-27"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-27",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-26",
+        "GREEN-28"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-28",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-27",
+        "GREEN-29",
+        "GREEN-150"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "GREEN-29",
+      "reverseNextBlockId": "GREEN-150",
+      "stemBlockId": "GREEN-27",
+      "switchProtectionBlockIds": [
+        "GREEN-27",
+        "GREEN-28",
+        "GREEN-29",
+        "GREEN-150"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-29",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-30"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-30",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-31"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-31",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-32"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 1060,
+      "stationName": "South Bank"
+    },
+    {
+      "blockId": "GREEN-32",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-33"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-33",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-34"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-34",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-35"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-35",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-36"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-36",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-37"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-37",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-38"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-38",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-39"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-39",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-40"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 1060,
+      "stationName": "Central"
+    },
+    {
+      "blockId": "GREEN-40",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-41"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 1060
+    },
+    {
+      "blockId": "GREEN-41",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-42"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-42",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-43"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-43",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-44"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-44",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-45"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-45",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-46"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-46",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-47"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-47",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-48"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-48",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-49"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 1170,
+      "stationName": "Inglewood"
+    },
+    {
+      "blockId": "GREEN-49",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-50"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-50",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-51"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-51",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-52"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-52",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-53"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-53",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-54"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-54",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-55"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-55",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-56"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-56",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-57"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-57",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-58"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 1170,
+      "stationName": "Overbrook"
+    },
+    {
+      "blockId": "GREEN-58",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-59"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-59",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-60"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-60",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-61"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 1170
+    },
+    {
+      "blockId": "GREEN-61",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-62"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-62",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-63"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-63",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-64"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-64",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-65"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-65",
+      "lengthMeters": 200,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-66"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 1280,
+      "stationName": "Glenbury"
+    },
+    {
+      "blockId": "GREEN-66",
+      "lengthMeters": 200,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-67"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-67",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-68"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-68",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-69"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-69",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-70"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-70",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-71"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-71",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-72"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-72",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-73"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-73",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-74"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 1280,
+      "stationName": "Dormont"
+    },
+    {
+      "blockId": "GREEN-74",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-75"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-75",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-76"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-76",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 11.11111111111111,
+      "nextBlockIds": [
+        "GREEN-77"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-77",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-76",
+        "GREEN-78",
+        "GREEN-101"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "GREEN-76",
+      "reverseNextBlockId": "GREEN-101",
+      "stemBlockId": "GREEN-78",
+      "switchProtectionBlockIds": [
+        "GREEN-76",
+        "GREEN-77",
+        "GREEN-78",
+        "GREEN-101"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 1280,
+      "stationName": "Mt Lebanon"
+    },
+    {
+      "blockId": "GREEN-78",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-77",
+        "GREEN-79"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-79",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-78",
+        "GREEN-80"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-80",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-79",
+        "GREEN-81"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 1280
+    },
+    {
+      "blockId": "GREEN-81",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-80",
+        "GREEN-82"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-82",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-81",
+        "GREEN-83"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-83",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-82",
+        "GREEN-84"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-84",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-83",
+        "GREEN-85"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-85",
+      "lengthMeters": 300,
+      "speedLimitMetersPerSecond": 19.444444444444443,
+      "nextBlockIds": [
+        "GREEN-84",
+        "GREEN-86",
+        "GREEN-100"
+      ],
+      "hasSignal": false,
+      "normalNextBlockId": "GREEN-86",
+      "reverseNextBlockId": "GREEN-100",
+      "stemBlockId": "GREEN-84",
+      "switchProtectionBlockIds": [
+        "GREEN-84",
+        "GREEN-85",
+        "GREEN-86",
+        "GREEN-100"
+      ],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-86",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-87"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-87",
+      "lengthMeters": 86.6,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-88"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-88",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-89"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 1390,
+      "stationName": "Poplar"
+    },
+    {
+      "blockId": "GREEN-89",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-90"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-90",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-91"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-91",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-92"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-92",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-93"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-93",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-94"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-94",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-95"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-95",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-96"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-96",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-97"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 1390,
+      "stationName": "Castle Shannon"
+    },
+    {
+      "blockId": "GREEN-97",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-98"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-98",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-99"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-99",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-100"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-100",
+      "lengthMeters": 75,
+      "speedLimitMetersPerSecond": 6.944444444444445,
+      "nextBlockIds": [
+        "GREEN-85"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 1390
+    },
+    {
+      "blockId": "GREEN-101",
+      "lengthMeters": 35,
+      "speedLimitMetersPerSecond": 7.222222222222222,
+      "nextBlockIds": [
+        "GREEN-102"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-102",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-103"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-103",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-104"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-104",
+      "lengthMeters": 80,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-105"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-105",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-106"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 1500,
+      "stationName": "Dormont"
+    },
+    {
+      "blockId": "GREEN-106",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-107"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-107",
+      "lengthMeters": 90,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-108"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-108",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-109"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": true,
+      "crossingProtectionBlockIds": [
+        "GREEN-107",
+        "GREEN-108",
+        "GREEN-109"
+      ],
+      "mapX": 772,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-109",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 7.777777777777778,
+      "nextBlockIds": [
+        "GREEN-110"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-110",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-111"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-111",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-112"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-112",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-113"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-113",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-114"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-114",
+      "lengthMeters": 162,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-115"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 1500,
+      "stationName": "Glenbury"
+    },
+    {
+      "blockId": "GREEN-115",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-116"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-116",
+      "lengthMeters": 100,
+      "speedLimitMetersPerSecond": 8.333333333333334,
+      "nextBlockIds": [
+        "GREEN-117"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-117",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 4.166666666666667,
+      "nextBlockIds": [
+        "GREEN-118"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-118",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 4.166666666666667,
+      "nextBlockIds": [
+        "GREEN-119"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-119",
+      "lengthMeters": 40,
+      "speedLimitMetersPerSecond": 4.166666666666667,
+      "nextBlockIds": [
+        "GREEN-120"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-120",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 4.166666666666667,
+      "nextBlockIds": [
+        "GREEN-121"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 1500
+    },
+    {
+      "blockId": "GREEN-121",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 4.166666666666667,
+      "nextBlockIds": [
+        "GREEN-122"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-122",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-123"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-123",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-124"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 1610,
+      "stationName": "Overbrook"
+    },
+    {
+      "blockId": "GREEN-124",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-125"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-125",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-126"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-126",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-127"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-127",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-128"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-128",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-129"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-129",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-130"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-130",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-131"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-131",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-132"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1090,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-132",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-133"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1196,
+      "mapY": 1610,
+      "stationName": "Inglewood"
+    },
+    {
+      "blockId": "GREEN-133",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-134"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1302,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-134",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-135"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1408,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-135",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-136"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1514,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-136",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-137"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1620,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-137",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-138"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1726,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-138",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-139"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1832,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-139",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-140"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 1938,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-140",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-141"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 2044,
+      "mapY": 1610
+    },
+    {
+      "blockId": "GREEN-141",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-142"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 30,
+      "mapY": 1720,
+      "stationName": "Central"
+    },
+    {
+      "blockId": "GREEN-142",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-143"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 136,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-143",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-144"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 242,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-144",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-145"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 348,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-145",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-146"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 454,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-146",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-147"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 560,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-147",
+      "lengthMeters": 50,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-148"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 666,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-148",
+      "lengthMeters": 184,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-149"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 772,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-149",
+      "lengthMeters": 40,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-150"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 878,
+      "mapY": 1720
+    },
+    {
+      "blockId": "GREEN-150",
+      "lengthMeters": 35,
+      "speedLimitMetersPerSecond": 5.555555555555555,
+      "nextBlockIds": [
+        "GREEN-28"
+      ],
+      "hasSignal": false,
+      "switchProtectionBlockIds": [],
+      "hasCrossing": false,
+      "crossingProtectionBlockIds": [],
+      "mapX": 984,
+      "mapY": 1720
+    }
+  ]
+}

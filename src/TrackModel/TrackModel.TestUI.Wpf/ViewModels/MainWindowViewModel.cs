@@ -264,11 +264,12 @@ public sealed class MainWindowViewModel : ViewModelBase
                     TrySynchronizeLayoutInputs();
                     break;
                 case nameof(TrackModelBlockStateMessage):
-                    var state = MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(envelope);
-                    var initialState = GetCaptured(state.BlockId).State is null;
-                    GetCaptured(state.BlockId).Apply(state);
-                    TrySynchronizeLayoutInputs();
-                    if (_layoutSnapshotId == Guid.Empty && initialState && state.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
+                    ApplyCapturedState(MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(envelope));
+                    break;
+                // The Track Model sends its block states to the Track Controller as one batch per line.
+                case "TrackModelBlockStates":
+                    foreach (var batched in MessageSerializer.ReadValue<List<TrackModelBlockStateMessage>>(envelope, "blocks"))
+                        ApplyCapturedState(batched);
                     break;
                 case nameof(TrackModelTrainEnvironmentMessage):
                     var environment = MessageSerializer.DeserializePayload<TrackModelTrainEnvironmentMessage>(envelope);
@@ -301,6 +302,14 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex) { Status = "Output could not be decoded: " + ex.Message; }
         finally { _suppressInputs = wasSuppressed; }
+    }
+
+    private void ApplyCapturedState(TrackModelBlockStateMessage state)
+    {
+        var initialState = GetCaptured(state.BlockId).State is null;
+        GetCaptured(state.BlockId).Apply(state);
+        TrySynchronizeLayoutInputs();
+        if (_layoutSnapshotId == Guid.Empty && initialState && state.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
     }
 
     private CapturedBlockViewModel GetCaptured(string id)

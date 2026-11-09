@@ -40,6 +40,36 @@ public class TrackService : ITrackService
 
     public void ApplyCommand(TrackModelCommandMessage message)
     {
+        ApplyCommandCore(message);
+        Changed();
+    }
+
+    /// <summary>
+    /// Applies a wayside batch: each command is validated and applied on its own, in order, exactly
+    /// as <see cref="ApplyCommand"/> would, so one refused command (e.g. throwing an occupied switch)
+    /// does not hold back the rest. State listeners are notified once, and only if something changed.
+    /// </summary>
+    /// <returns>One "block: reason" entry per refused command; empty when all were applied.</returns>
+    public IReadOnlyList<string> ApplyCommands(IEnumerable<TrackModelCommandMessage> messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        var refused = new List<string>();
+        var changed = false;
+        foreach (var message in messages)
+        {
+            try { changed |= ApplyCommandCore(message); }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                refused.Add($"{message?.BlockId}: {ex.Message}");
+            }
+        }
+        if (changed) Changed();
+        return refused;
+    }
+
+    /// <summary>Validates, then applies one command; true when the block's state changed.</summary>
+    private bool ApplyCommandCore(TrackModelCommandMessage message)
+    {
         ArgumentNullException.ThrowIfNull(message);
         var b = RequireBlock(message.BlockId);
         Nonnegative(message.CommandedSpeedMetersPerSecond, "Commanded speed");
@@ -49,12 +79,14 @@ public class TrackService : ITrackService
             throw new ArgumentException("Choose a specific signal, switch, and crossing command.");
         if (b.HasSwitch && b.IsOccupied && b.Switch != message.Switch)
             throw new InvalidOperationException("An occupied switch cannot be thrown.");
+        var changed = b.CommandedSpeedMetersPerSecond != message.CommandedSpeedMetersPerSecond || b.AuthorityMeters != message.AuthorityMeters
+            || (b.HasSwitch && b.Switch != message.Switch) || (b.HasSignal && b.Signal != message.Signal) || (b.HasCrossing && b.Crossing != message.Crossing);
         b.CommandedSpeedMetersPerSecond = message.CommandedSpeedMetersPerSecond;
         b.AuthorityMeters = message.AuthorityMeters;
         if (b.HasSwitch) b.Switch = message.Switch;
         if (b.HasSignal) b.Signal = message.Signal;
         if (b.HasCrossing) b.Crossing = message.Crossing;
-        Changed();
+        return changed;
     }
 
     public void ApplyTrainUpdate(TrackModelTrainUpdateMessage message)

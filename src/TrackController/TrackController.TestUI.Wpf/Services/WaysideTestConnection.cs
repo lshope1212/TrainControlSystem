@@ -91,7 +91,21 @@ public sealed class WaysideTestConnection : IAsyncDisposable
             Interlocked.Increment(ref _trackModelReceived);
         }
 
-        _recent.Enqueue(envelope);
+        // The controller batches its periodic outputs; like the real CTC and Track Model, the fake
+        // peers apply a batch as the individual statuses or commands it carries.
+        IEnumerable<MessageEnvelope> received = envelope.MessageType switch
+        {
+            nameof(BlockStatusBatchMessage) => MessageSerializer.DeserializePayload<BlockStatusBatchMessage>(envelope).Statuses
+                .Select(status => MessageSerializer.CreateEnvelope(nameof(BlockStatusMessage), status)),
+            nameof(TrackModelCommandBatchMessage) => MessageSerializer.DeserializePayload<TrackModelCommandBatchMessage>(envelope).Commands
+                .Select(command => MessageSerializer.CreateEnvelope(nameof(TrackModelCommandMessage), command)),
+            _ => [envelope]
+        };
+        foreach (var message in received)
+        {
+            _recent.Enqueue(message);
+        }
+
         while (_recent.Count > 100)
         {
             _recent.TryDequeue(out _);

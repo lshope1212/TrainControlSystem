@@ -50,14 +50,24 @@ internal sealed class LiveSystem : IAsyncDisposable
 
     public static string SamplesFolder => Path.Combine(AppContext.BaseDirectory, "WaysideSamples");
 
+    /// <summary>The Track Controller deployment for the production three-line network: one territory per line, on this PC.</summary>
+    public static string CourseDeployment => Path.Combine(SamplesFolder, "course-all-pc.deployment.json");
+
     /// <summary>Starts the Track Controller with a deployment (single-territory Blue Line by default). It starts paused, as in production.</summary>
     public Task StartTrackControllerAsync(string? deploymentPath = null)
     {
         var plan = WaysideDeployment.Read(deploymentPath ?? Path.Combine(SamplesFolder, "blue-line-all-pc.deployment.json"));
         Wayside = new WaysidePipeHost(plan.CreateRuntime(), [TrackControllerPipe, CtcPipe, TrackModelPipe, TrackControllerPipe + ".Monitor"]);
+        Wayside.AcknowledgementReceived += WaysideReceipts.Enqueue;
         Wayside.Start();
         return Task.CompletedTask;
     }
+
+    /// <summary>The Track Controller runtime's answer to every input it handled (what its operator window sees).</summary>
+    public ConcurrentQueue<WaysideAcknowledgementMessage> WaysideReceipts { get; } = new();
+
+    /// <summary>A message to the Track Controller's input pipe, as any module would send it.</summary>
+    public Task SendToTrackControllerAsync(object message) => NamedPipeTransport.SendAsync(TrackControllerPipe, message);
 
     public async Task ResumeTrackControllerAsync() =>
         await NamedPipeTransport.SendAsync(TrackControllerPipe, MessageSerializer.CreateEnvelope("SetSimulation", new { paused = false, speedMultiplier = 1 }));
@@ -71,8 +81,13 @@ internal sealed class LiveSystem : IAsyncDisposable
         }
     }
 
-    /// <summary>Starts the Track Model exactly as TrackModel.Wpf's App does: the bundled Blue Line demonstration.</summary>
-    public async Task StartTrackModelAsync()
+    /// <summary>
+    /// Starts the production Track Model connection. With <paramref name="allLines"/> it loads
+    /// exactly what TrackModel.Wpf's App loads (the Blue, Red and Green course lines); otherwise the
+    /// Blue Line demonstration on its own, the single-line setup the Blue Line tests were written for.
+    /// Either way train 01 starts in block 1.
+    /// </summary>
+    public async Task StartTrackModelAsync(bool allLines = false)
     {
         _trackModelThread = new DispatcherThread("Track Model UI");
         _trackModelStop = new CancellationTokenSource();
@@ -80,7 +95,15 @@ internal sealed class LiveSystem : IAsyncDisposable
         Track = await _trackModelThread.GetAsync(() =>
         {
             var track = new TrackService();
-            BlueLineTrackLayout.LoadDemonstration(track);
+            if (allLines)
+            {
+                CourseTrackLayout.LoadDemonstration(track);
+            }
+            else
+            {
+                BlueLineTrackLayout.LoadDemonstration(track);
+            }
+
             return track;
         });
         var connection = await _trackModelThread.GetAsync(() => new TrackModelConnection(Track, _trackModelThread.Dispatcher, endpoints));

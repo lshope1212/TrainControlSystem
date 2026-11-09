@@ -1,6 +1,6 @@
 # Track Model
 
-Track Model has its own WPF dashboard and a separate TestUI process. The default is the course **Blue Line**, with fifteen 50 m blocks, one branching switch, two stations, two approach signals, a crossing and two transponders.
+Track Model has its own WPF dashboard and a separate TestUI process. The default is the complete course network: the **Blue** (15 blocks), **Red** (76) and **Green** (150) Lines of the vF5 workbook, loaded together and published to CTC as one layout. The Blue Line is unchanged: fifteen 50 m blocks (IDs `1`–`15`), one branching switch, two stations, two approach signals, a crossing and two transponders. Red and Green block IDs are `RED-n` and `GREEN-n`; choose the line to display in the dashboard's line selector.
 
 - `TrackModel.Core` owns layout, equipment state, occupancy, failures, passenger exchange, demand, temperature/heaters and ticket accounting.
 - `TrackModel.Wpf` hosts Core, imports/exports layouts, draws the selectable schematic and exchanges shared messages over named pipes.
@@ -22,7 +22,7 @@ Run these two applications alone for standalone testing. TestUI occupies Track C
 
 ## Blue Line quick start
 
-1. **Restore Blue Line** gives stopped train 01 on block 1, no failures, zero commands/tickets, 24 waiting per station and time 09:00:00.
+1. **Restore course lines** reloads all three lines and gives stopped train 01 on Blue block 1 (Red and Green clear), no failures, zero commands/tickets, 24 waiting per station and time 09:00:00.
 2. Command block **5** controls the one switch: Normal → **6**, Reverse → **11**. Signals are on **6** and **11**; the crossing is on **3**.
 3. Set **Train present** to **Yes**, select current block **10** (Station B), and keep actual speed **0**. Enter boarding **3** and disembarking **2**, then click **Simulate boarding / disembarking**. One click records one event: waiting passengers decrease from 24 to 21 and station tickets increase to 3; inspect these counts in the dashboard's Station Information table or captured messages. **To CTC** shows 3 tickets/hour. Every further click records another event; ordinary telemetry edits and refresh never repeat it. Select **Train present → No** to remove the train and clear its previous block; select **Yes** to place it on the current block.
 4. Beacons are on approach blocks **9** (Station B / target 10) and **14** (Station C / target 15). Station blocks 10 and 15 do not implicitly emit beacons.
@@ -36,7 +36,9 @@ The dashboard groups block properties, equipment and environment under **Block I
 
 ## Import/export and units
 
-**Import layout** accepts JSON, CSV, or the supplied **Track Layout & Vehicle Data vF5.xlsx**. XLSX import supports the course **Blue Line** worksheet/format only; it validates columns, blocks and infrastructure, and reconstructs the supplied branch topology. It does not import Red/Green or schedules. No Excel installation is required. The bundled `SampleLayouts/blue-line.json` exactly matches the production import of the supplied workbook.
+**Import layout** accepts JSON, CSV, or the supplied **Track Layout & Vehicle Data vF5.xlsx**. XLSX import reads the workbook's **Blue Line**, **Red Line** and **Green Line** worksheets (whichever are present); it validates columns, blocks and infrastructure against the vF5 layout and reconstructs the branch topology. It does not import schedules. No Excel installation is required. The bundled `SampleLayouts/course-lines.json` (the default) is exactly the production import of the supplied workbook, exported as JSON; regenerate it the same way (Import the workbook, then Export). `SampleLayouts/blue-line.json` is the Blue Line alone and is identical to the Blue part.
+
+Red/Green conversion rules, since the worksheets list blocks and equipment but not connections (see `CourseWorkbookReader`): a switch `SWITCH (a-b; c-d)` is placed on the block common to both pairs, Normal to the first pair's other end, Reverse to the second's (the workbook writes some on the neighbouring row: Red 15/16, 32/33, 43/44, Green 12/13, 76/77); consecutive numbers are connected except between two switch-branch ends (Red 66-67 and 71-72, Green 100-101). The result matches the independently generated CTC TestUI fixture block for block. Not in the workbook, so not modelled: the yard (yard switches at Red 9, Green 58 and 62 stay plain blocks), Red/Green signals and transponders, station side, underground sections, and a name for the Green 16 station (shown as "Green 16 (unnamed station)").
 
 **Export layout** writes static JSON, excluding live trains, equipment states, failures and ticket totals. Importing validates before replacing live state and resets runtime state. `small-track.json` / `.csv` are additional input examples; `demo-track.json` and `SampleTrackLayout` preserve the earlier illustrative Blue/Green fixture for regression tests and are not the default course layout.
 
@@ -44,14 +46,14 @@ JSON requires `name` and a nonempty `blocks` list. Each block requires unique `i
 
 CSV uses these names case-insensitively, with Id, LineId and LengthMeters required, semicolon-separated connected IDs, true/false booleans and quoted fields. Domain state and contracts use SI. Speed/distance controls use mph/feet; the read-only dashboard temperature display uses Fahrenheit. Captured layout details expose SI values. The schematic describes connectivity, not geographic position or scale.
 
-Blue Line direction, installed heaters, 68°F ambient temperature and initial waiting populations are documented simulation configuration because the workbook does not specify these fields. Heaters operate at/below 32°F when powered. The original workbook is not modified.
+Blue and Red Line direction (bidirectional), installed heaters, 68°F ambient temperature and initial waiting populations are documented simulation configuration because the workbook does not specify these fields. Green Line direction follows the workbook's Track Layout drawing: A–C (1–12) `Reverse` (toward block 1), D–F (13–28) and N (77–85) `Bidirectional`, everything else `Forward` (increasing block numbers). Heaters operate at/below 32°F when powered. The original workbook is not modified.
 
 ## Messages
 
 | Receiving named-pipe endpoint | Messages |
 | --- | --- |
-| `TrainControl.TrackModel` | TrackModelCommandMessage, TrackModelTrainUpdateMessage, TrackModelFailureCommandMessage, TrackModelTemperatureCommandMessage, TrackModelPassengerDemandMessage, MaintenanceRequestMessage, SystemTimeMessage, TrackModelSnapshotRequestMessage |
-| `TrainControl.TrackController` | TrackModelBlockStateMessage |
+| `TrainControl.TrackModel` | TrackModelCommandMessage (and the Track Controller's TrackModelCommandBatchMessage, applied command by command), TrackModelTrainUpdateMessage, TrackModelFailureCommandMessage, TrackModelTemperatureCommandMessage, TrackModelPassengerDemandMessage, MaintenanceRequestMessage, SystemTimeMessage, TrackModelSnapshotRequestMessage |
+| `TrainControl.TrackController` | `TrackModelBlockStates`: one batch of TrackModelBlockStateMessage per line (the Track Controller's batch input) |
 | `TrainControl.TrainModel` | TrackModelTrainEnvironmentMessage |
 | `TrainControl.TrainController` | None: Track Model does not send to this endpoint |
 | `TrainControl.CTC` | TrackLayoutMessage (on start-up, after a layout change or snapshot request, and retried until CTC has it) and TicketSalesMessage |

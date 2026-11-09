@@ -4,7 +4,7 @@ using Microsoft.VisualBasic.FileIO;
 using TrackModel.Core.Models;
 namespace TrackModel.Core.Persistence;
 
-/// <summary>Imports JSON/CSV (SI units), or the course workbook's Blue Line worksheet.</summary>
+/// <summary>Imports JSON/CSV (SI units), or the course workbook (vF5) with its Blue, Red and Green Line worksheets.</summary>
 public sealed class TrackFileRepository : ITrackRepository
 {
     public TrackLayout Load(string source)
@@ -14,8 +14,8 @@ public sealed class TrackFileRepository : ITrackRepository
         else if (Path.GetExtension(source).Equals(".json", StringComparison.OrdinalIgnoreCase))
             layout = JsonSerializer.Deserialize<TrackLayout>(File.ReadAllText(source), new JsonSerializerOptions(JsonSerializerDefaults.Web))
                 ?? throw new InvalidDataException("Layout file is empty.");
-        else if (Path.GetExtension(source).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)) layout = BlueLineWorkbookReader.Load(source);
-        else throw new InvalidDataException("Choose a JSON, CSV, or course Blue Line XLSX layout file.");
+        else if (Path.GetExtension(source).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)) layout = CourseWorkbookReader.Load(source);
+        else throw new InvalidDataException("Choose a JSON, CSV, or course (vF5) XLSX layout file.");
         TrackLayoutValidator.Validate(layout);
         return layout;
     }

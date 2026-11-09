@@ -7,9 +7,10 @@ public static class LineAccent
 {
     private static readonly Brush Blue = Frozen("#2563EB"), Green = Frozen("#16A34A"), Red = Frozen("#DC2626"), Other = Frozen("#6B7280");
 
-    /// <summary>Matches the line's color word; unrecognized lines stay neutral gray.</summary>
+    /// <summary>Matches the line's color word; unrecognized lines, and deployments spanning several lines, stay neutral gray.</summary>
     public static Brush For(string? lineName) => lineName switch
     {
+        _ when new[] { "blue", "green", "red" }.Count(word => Has(lineName, word)) > 1 => Other,
         _ when Has(lineName, "blue") => Blue,
         _ when Has(lineName, "green") => Green,
         _ when Has(lineName, "red") => Red,

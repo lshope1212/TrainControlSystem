@@ -121,8 +121,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             while (!stop.IsCancellationRequested)
             {
                 var snapshot = await _runtime.PollAsync(stop).ConfigureAwait(false);
-                IEnumerable<object> messages = pipe == Pipe.Ctc ? CreateCtcMessages(snapshot)
-                    : pipe == Pipe.TrackModel ? CreateTrackModelMessages(snapshot)
+                IEnumerable<object> messages = pipe == Pipe.TrackModel ? CreateTrackModelBatch(snapshot)
                     : _monitorResults.ToArray().Append(snapshot);
                 bool delivered = true;
                 bool attempted = false;
@@ -138,9 +137,12 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                     {
                         _monitorResults.TryDequeue(out _);
                     }
-                    if (pipe == Pipe.TrackModel && message is TrackModelCommandMessage command)
+                    if (message is TrackModelCommandBatchMessage batch)
                     {
-                        _trackModelSwitches[command.BlockId] = command.Switch;
+                        foreach (var command in batch.Commands)
+                        {
+                            _trackModelSwitches[command.BlockId] = command.Switch;
+                        }
                     }
                 }
 
@@ -159,7 +161,9 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
     /// <summary>
     /// The single CTC sender, so CTC receives everything in order: queued acknowledgements as soon
-    /// as they exist, block statuses every <see cref="PublishInterval"/>.
+    /// as they exist, and every <see cref="PublishInterval"/> one <see cref="BlockStatusBatchMessage"/>
+    /// with every owned block's status (one connection, not one per block: the three course lines
+    /// are 241 blocks). Acknowledgements go first and never wait behind a status batch.
     /// </summary>
     private async Task PublishCtcAsync(CancellationToken stop)
     {
@@ -169,7 +173,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         {
             while (!stop.IsCancellationRequested)
             {
-                IEnumerable<object> statuses = statusesDue ? CreateCtcMessages(await _runtime.PollAsync(stop).ConfigureAwait(false)) : [];
+                IEnumerable<object> statuses = statusesDue ? CreateCtcBatch(await _runtime.PollAsync(stop).ConfigureAwait(false)) : [];
                 bool delivered = true;
                 bool attempted = false;
                 foreach (var acknowledgement in _ctcAcknowledgements.ToArray())
@@ -295,7 +299,21 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         _ => "checking"
     };
 
-    private IEnumerable<object> CreateCtcMessages(WaysideSnapshotMessage snapshot)
+    /// <summary>The periodic CTC report: all block statuses of one evaluation in one message (none when nothing is owned).</summary>
+    private static IEnumerable<object> CreateCtcBatch(WaysideSnapshotMessage snapshot)
+    {
+        var statuses = CreateCtcMessages(snapshot).ToList();
+        return statuses.Count == 0 ? [] : [new BlockStatusBatchMessage { Statuses = statuses }];
+    }
+
+    /// <summary>The periodic Track Model output: every block's command of one evaluation in one message.</summary>
+    private IEnumerable<object> CreateTrackModelBatch(WaysideSnapshotMessage snapshot)
+    {
+        var commands = CreateTrackModelMessages(snapshot).ToList();
+        return commands.Count == 0 ? [] : [new TrackModelCommandBatchMessage { Commands = commands }];
+    }
+
+    private static IEnumerable<BlockStatusMessage> CreateCtcMessages(WaysideSnapshotMessage snapshot)
     {
         // Match the team's current CTC receiver contracts; reported equipment is never replaced by commands.
         bool current = snapshot.ValidUntilUtc > DateTimeOffset.UtcNow;
@@ -356,7 +374,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             && double.IsFinite(block.AuthorizedAuthorityMeters) && block.AuthorizedAuthorityMeters > 0;
     }
 
-    private IEnumerable<object> CreateTrackModelMessages(WaysideSnapshotMessage snapshot)
+    private IEnumerable<TrackModelCommandMessage> CreateTrackModelMessages(WaysideSnapshotMessage snapshot)
     {
         bool current = snapshot.ValidUntilUtc > DateTimeOffset.UtcNow;
         foreach (var block in snapshot.Blocks)

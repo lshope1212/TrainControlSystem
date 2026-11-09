@@ -252,8 +252,16 @@
                                 <TextBlock Text="● Unknown" Foreground="#6B7280" Margin="0,0,12,0"/>
                                 <TextBlock Text="□ Maintenance" Foreground="#BB721F"/>
                             </StackPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,4"
+                                        Visibility="{Binding HasSeveralMapLines, Converter={StaticResource VisibleWhenTrue}}">
+                                <TextBlock Text="Map" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox ItemsSource="{Binding MapLines}"
+                                          SelectedItem="{Binding SelectedMapLine}"
+                                          MinWidth="130"
+                                          ToolTip="Draw one line of this multi-line setup at a time. Display only: every line keeps running."/>
+                            </StackPanel>
                         </DockPanel>
-                        <controls:TerritoryMap Blocks="{Binding Blocks}"
+                        <controls:TerritoryMap Blocks="{Binding MapBlocks}"
                                                SelectedBlockId="{Binding SelectedBlockId}"
                                                Margin="8"/>
                     </DockPanel>
@@ -415,7 +423,7 @@
                                                   MinWidth="210"
                                                   VerticalAlignment="Center"
                                                   Margin="0,0,8,0"
-                                                  ToolTip="Choose Green Line, Blue Line, or a saved setup file."/>
+                                                  ToolTip="Choose the Green Line demonstration, the Blue Line, all three course lines (one territory per line), or a saved setup file."/>
                                         <Button Content="Load setup"
                                                 Command="{Binding LoadSetupCommand}"
                                                 IsEnabled="{Binding Snapshot.IsPaused}"

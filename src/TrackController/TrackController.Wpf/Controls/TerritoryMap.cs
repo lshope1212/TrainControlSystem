@@ -41,10 +41,13 @@ public sealed class TerritoryMap : FrameworkElement
             return;
         }
 
-        double width = blocks.Max(blockStatus => blockStatus.MapX) + 140, height = blocks.Max(blockStatus => blockStatus.MapY) + 105;
+        // A line drawn on its own (e.g. Green of a multi-line setup) starts at the usual 30/60 margin
+        // wherever its band lies on the shared canvas; maps that already start there are unchanged.
+        double shiftX = Math.Max(0, blocks.Min(blockStatus => blockStatus.MapX) - 30), shiftY = Math.Max(0, blocks.Min(blockStatus => blockStatus.MapY) - 60);
+        double width = blocks.Max(blockStatus => blockStatus.MapX) - shiftX + 140, height = blocks.Max(blockStatus => blockStatus.MapY) - shiftY + 105;
         double scale = Math.Min(ActualWidth / width, ActualHeight / height);
         double ox = (ActualWidth - width * scale) / 2, oy = (ActualHeight - height * scale) / 2;
-        Point PointAt(double mapX, double mapY) => new(ox + mapX * scale, oy + mapY * scale);
+        Point PointAt(double mapX, double mapY) => new(ox + (mapX - shiftX) * scale, oy + (mapY - shiftY) * scale);
         foreach (var blockStatus in blocks)
         {
             foreach (string next in blockStatus.NextBlockIds)

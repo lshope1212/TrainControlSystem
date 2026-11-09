@@ -26,6 +26,14 @@ public sealed record TrackModelEndpoints(string Inbound, string TrackController,
 /// not received it (e.g. CTC started after the Track Model).
 /// </para>
 /// <para>
+/// Block states go to the Track Controller as one <c>TrackModelBlockStates</c> batch per line
+/// (the Track Controller's existing batch input), not one connection per block: the three course
+/// lines are 241 blocks. A Track Controller that does not own a line rejects that line's batch
+/// only. Each state keeps its own observation time. Inputs are applied one message at a time on
+/// the UI thread; a <see cref="TrackModelCommandBatchMessage"/> applies its commands one by one,
+/// so one refused command does not hold back the others.
+/// </para>
+/// <para>
 /// Feedback heartbeat: the Track Controller treats measurements older than its wall-clock
 /// watchdog (5 s) as stale, and a healthy but unchanged track produces no state changes. So
 /// whenever no snapshot was published for <see cref="DefaultFeedbackHeartbeat"/>, the current
@@ -49,6 +57,11 @@ public sealed class TrackModelConnection
     private readonly TimeSpan _feedbackHeartbeat;
     private readonly Channel<Snapshot> _pending = Channel.CreateBounded<Snapshot>(
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+
+    // Input results for the optional standalone TestUI. Sent off the input loop: connecting to an
+    // absent pipe waits for the whole connect timeout, which must never delay the next input.
+    private readonly Channel<TrackModelInputResultMessage> _testUiResults = Channel.CreateBounded<TrackModelInputResultMessage>(
+        new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     private readonly DispatcherTimer _debounce;
 
     // UI thread only.
@@ -85,7 +98,8 @@ public sealed class TrackModelConnection
         return Task.WhenAll(
             NamedPipeTransport.ListenAsync(_endpoints.Inbound, HandleAsync,
                 ex => Report("Inbound error: " + ex.Message), token),
-            PublishAsync(token));
+            PublishAsync(token),
+            ForwardTestUiResultsAsync(token));
     }
 
     /// <summary>Call on the UI thread. Publishes a full snapshot, re-sending the layout to every receiver.</summary>
@@ -109,6 +123,12 @@ public sealed class TrackModelConnection
                 {
                     case nameof(TrackModelCommandMessage):
                         _track.ApplyCommand(MessageSerializer.DeserializePayload<TrackModelCommandMessage>(envelope)); break;
+                    case nameof(TrackModelCommandBatchMessage):
+                        var commands = MessageSerializer.DeserializePayload<TrackModelCommandBatchMessage>(envelope).Commands ?? [];
+                        var refused = _track.ApplyCommands(commands);
+                        if (refused.Count > 0)
+                            throw new InvalidOperationException($"{refused.Count} of {commands.Count} wayside commands refused: {string.Join("; ", refused.Take(3))}{(refused.Count > 3 ? "; …" : "")}");
+                        break;
                     case nameof(TrackModelTrainUpdateMessage):
                         _track.ApplyTrainUpdate(MessageSerializer.DeserializePayload<TrackModelTrainUpdateMessage>(envelope)); break;
                     case nameof(TrackModelFailureCommandMessage):
@@ -137,9 +157,21 @@ public sealed class TrackModelConnection
             }
         });
         // This optional tester endpoint never changes delivery to the real modules.
-        try { await NamedPipeTransport.SendAsync(_endpoints.TestUi, result, connectTimeoutMilliseconds: 100); }
-        catch (TimeoutException) { } // The standalone tester need not be running.
-        catch (System.IO.IOException) { }
+        _testUiResults.Writer.TryWrite(result);
+    }
+
+    private async Task ForwardTestUiResultsAsync(CancellationToken token)
+    {
+        try
+        {
+            await foreach (var result in _testUiResults.Reader.ReadAllAsync(token))
+            {
+                try { await NamedPipeTransport.SendAsync(_endpoints.TestUi, result, token, connectTimeoutMilliseconds: 100); }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                catch (Exception ex) when (ex is TimeoutException or System.IO.IOException or UnauthorizedAccessException) { } // The standalone tester need not be running.
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
     private void QueueSnapshot()
@@ -149,32 +181,40 @@ public sealed class TrackModelConnection
         _latestSnapshotId = snapshotId;
         var layout = _track.CreateLayoutMessage();
         layout.SnapshotId = snapshotId;
-        var states = _track.Layout.Blocks.Select(b => _track.CreateBlockState(b.Id)).ToList();
+        var feedback = CaptureBlockStates(snapshotId, observedAt: null);
         var environments = _track.Layout.Blocks.Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
-        foreach (var state in states) state.SnapshotId = snapshotId;
         foreach (var environment in environments) environment.SnapshotId = snapshotId;
         var sales = _track.Layout.Blocks.Select(b => b.LineId).Distinct().Select(_track.CreateTicketSales).ToList();
         _pending.Writer.TryWrite(new(_track.LayoutRevision, _layoutRequestVersion, layout,
-            states, environments, sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
+            feedback, environments, sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
     }
 
     /// <summary>
     /// Re-observes every block for the heartbeat. Runs on the UI thread, which owns the domain, so a
     /// stalled model yields no observation at all rather than a stale one with a new timestamp.
+    /// The states keep the latest snapshot's ID (a newer snapshot, if any, follows immediately), so
+    /// the TestUI keeps pairing layout, state and environment by snapshot.
     /// </summary>
-    private List<TrackModelBlockStateMessage> CaptureFeedback()
-    {
-        var observedAt = DateTimeOffset.UtcNow;
-        var states = _track.Layout.Blocks.Select(b => _track.CreateBlockState(b.Id)).ToList();
-        foreach (var state in states)
+    private List<MessageEnvelope> CaptureFeedback() => CaptureBlockStates(_latestSnapshotId, DateTimeOffset.UtcNow);
+
+    /// <summary>
+    /// Every block's measured state, as one Track Controller batch per line in layout order. UI thread only.
+    /// </summary>
+    /// <param name="observedAt">One observation time for all blocks; null keeps each state's creation time.</param>
+    private List<MessageEnvelope> CaptureBlockStates(Guid snapshotId, DateTimeOffset? observedAt) =>
+        _track.Layout.Blocks.GroupBy(b => b.LineId).Select(line => MessageSerializer.CreateEnvelope(BlockStatesBatchType, new
         {
-            state.ObservedAtUtc = observedAt;
-            // Same state epoch as the latest snapshot (a newer snapshot, if any, follows immediately),
-            // so the TestUI keeps pairing layout, state and environment by snapshot.
-            state.SnapshotId = _latestSnapshotId;
-        }
-        return states;
-    }
+            blocks = line.Select(b =>
+            {
+                var state = _track.CreateBlockState(b.Id);
+                state.SnapshotId = snapshotId;
+                if (observedAt is { } time) state.ObservedAtUtc = time;
+                return state;
+            }).ToList()
+        })).ToList();
+
+    /// <summary>The Track Controller's batch feedback input: <c>{ "blocks": [TrackModelBlockStateMessage, ...] }</c>.</summary>
+    public const string BlockStatesBatchType = "TrackModelBlockStates";
 
     private async Task PublishAsync(CancellationToken token)
     {
@@ -219,7 +259,7 @@ public sealed class TrackModelConnection
         if (snapshot.LayoutRequestVersion != _testUiLayoutRequestVersion || snapshot.Revision != _testUiLayoutRevision) testUi.Add(snapshot.Layout);
         testUi.Add(snapshot.Time);
         var results = await Task.WhenAll(
-            SendBatchAsync(_endpoints.TrackController, snapshot.Blocks.Cast<object>(), token),
+            SendBatchAsync(_endpoints.TrackController, snapshot.Feedback, token),
             SendBatchAsync(_endpoints.TrainModel, snapshot.Environments.Cast<object>(), token),
             PublishToCtcAsync(snapshot, token),
             SendBatchAsync(_endpoints.TestUi, testUi, token));
@@ -238,7 +278,7 @@ public sealed class TrackModelConnection
         var feedback = await _dispatcher.InvokeAsync(CaptureFeedback, DispatcherPriority.Normal, token);
         var layoutRetry = _latestPublished is { } latest && IsCtcLayoutPending(latest) ? latest : null;
 
-        var toController = SendBatchAsync(_endpoints.TrackController, feedback.Cast<object>(), token);
+        var toController = SendBatchAsync(_endpoints.TrackController, feedback, token);
         var toCtc = layoutRetry is null ? null : SendCtcLayoutIfPendingAsync(layoutRetry, token);
 
         bool? previousController = _delivery[0], previousCtc = _delivery[2];
@@ -290,6 +330,6 @@ public sealed class TrackModelConnection
 
     private void Report(string text) => _dispatcher.InvokeAsync(() => StatusReported?.Invoke(this, text));
     private sealed record Snapshot(int Revision, int LayoutRequestVersion, TrackLayoutMessage Layout,
-        List<TrackModelBlockStateMessage> Blocks, List<TrackModelTrainEnvironmentMessage> Environments,
+        List<MessageEnvelope> Feedback, List<TrackModelTrainEnvironmentMessage> Environments,
         List<TicketSalesMessage> Sales, SystemTimeMessage Time);
 }

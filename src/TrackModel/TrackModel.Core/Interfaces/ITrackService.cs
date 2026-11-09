@@ -12,6 +12,7 @@ public interface ITrackService
     TrackBlock? FindBlock(string blockId);
     void LoadLayout(TrackLayout layout);
     void ApplyCommand(TrackModelCommandMessage message);
+    IReadOnlyList<string> ApplyCommands(IEnumerable<TrackModelCommandMessage> messages);
     void ApplyTrainUpdate(TrackModelTrainUpdateMessage message);
     void ApplyFailures(TrackModelFailureCommandMessage message);
     void ApplyTemperature(TrackModelTemperatureCommandMessage message);
