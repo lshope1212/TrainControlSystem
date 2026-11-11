@@ -12,6 +12,8 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     public bool? HasCrossing { get; private set; }
     public TrackModelBlockStateMessage? State { get; private set; }
     public TrackModelTrainEnvironmentMessage? Environment { get; private set; }
+    public TrackModelSignalMessage? SignalMessage { get; private set; }
+    public string TrafficLight => SignalMessage is null ? "No output received" : Describe(SignalMessage.Signal);
     public TrackBlockDefinition? Definition { get; private set; }
     public string Connections => Definition is null ? "—" : string.Join(", ", Definition.ConnectedBlockIds);
     public string Occupancy => State?.Occupancy.ToString().ToUpperInvariant() ?? "—";
@@ -34,6 +36,7 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
         State?.Occupancy == OccupancyState.Clear ? Brushes.ForestGreen : Brushes.DarkOrange;
     public void Apply(TrackModelBlockStateMessage state) { State = state; Changed(); }
     public void Apply(TrackModelTrainEnvironmentMessage environment) { Environment = environment; Changed(); }
+    public void Apply(TrackModelSignalMessage signal) { SignalMessage = signal; Changed(); }
     public void ApplyDefinition(TrackBlockDefinition block)
     {
         HasSignal = block.HasSignal; HasSwitch = block.HasSwitch; HasCrossing = block.HasCrossing;
@@ -42,5 +45,5 @@ public sealed class CapturedBlockViewModel(string id) : ViewModelBase
     }
     private void Changed() { LastReceived = DateTime.Now.ToString("HH:mm:ss"); OnPropertyChanged(string.Empty); }
     private static string Describe(SignalState state) => state switch
-        { SignalState.Green => "PROCEED", SignalState.Yellow => "CAUTION", SignalState.Red => "STOP", _ => "UNKNOWN" };
+        { SignalState.Green => "PROCEED", SignalState.SuperGreen => "PROCEED (SUPER GREEN)", SignalState.Yellow => "CAUTION", SignalState.Red => "STOP", _ => "UNKNOWN" };
 }

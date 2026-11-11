@@ -13,11 +13,13 @@ public sealed class BlockViewModel : ViewModelBase
     private readonly ITrackService _track;
     public BlockViewModel(TrackBlock block, ITrackService track) { _block = block; _track = track; }
     public string Id => _block.Id;
+    public string DisplayName => $"{_block.Section}{_block.Number}";
     public int Number => _block.Number;
     public string LineId => _block.LineId;
     public string Section => _block.Section;
     public IReadOnlyList<string> Connections => _block.ConnectedBlockIds;
     public string Station => _block.StationName;
+    public bool HasStation => !string.IsNullOrWhiteSpace(_block.StationName);
     public bool HasSwitch => _block.HasSwitch;
     public bool HasCrossing => _block.HasCrossing;
     public bool HasSignal => _block.HasSignal;
@@ -39,6 +41,8 @@ public sealed class BlockViewModel : ViewModelBase
     public string Signal => !HasSignal ? "No signal" : _block.EffectiveSignal switch
         { SignalState.Green => "Proceed", SignalState.Yellow => "Caution", SignalState.Red => "Stop", _ => "Unknown" };
     public SignalState SignalState => _block.EffectiveSignal;
+    public SwitchPosition SwitchState => _block.Switch;
+    public CrossingState CrossingPosition => _block.Crossing;
     public string Switch => HasSwitch ? _block.Switch.ToString() : "—";
     public string Crossing => HasCrossing ? (_block.Crossing == CrossingState.Closed ? "Gates down" : "Gates up") : "—";
     public string NextBlock => _block.NextBlockId.Length > 0 ? _block.NextBlockId : "—";

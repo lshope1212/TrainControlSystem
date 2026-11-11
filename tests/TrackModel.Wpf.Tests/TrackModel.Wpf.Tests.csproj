@@ -6,5 +6,6 @@
     <ProjectReference Include="../../src/TrackModel/TrackModel.TestUI.Wpf/TrackModel.TestUI.Wpf.csproj" />
     <ProjectReference Include="../../src/TrackModel/TrackModel.Core/TrackModel.Core.csproj" />
     <ProjectReference Include="../../src/TrackModel/TrackModel.Wpf/TrackModel.Wpf.csproj" />
+    <ProjectReference Include="../../src/TrainController/TrainController.Integration/TrainController.Integration.csproj" />
   </ItemGroup>
 </Project>

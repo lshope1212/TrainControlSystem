@@ -10,6 +10,10 @@ namespace TrackModel.Wpf.Services;
 /// <summary>Named-pipe endpoints of the Track Model connection; tests substitute isolated names.</summary>
 public sealed record TrackModelEndpoints(string Inbound, string TrackController, string TrainModel, string Ctc, string TestUi)
 {
+    // Existing five-argument callers keep their API; custom connections stay on isolated pipes.
+    public string TrainController { get; init; } = Inbound == NamedPipeNames.TrackModel
+        ? NamedPipeNames.TrainController : Inbound + ".TrainController";
+
     public static TrackModelEndpoints Production { get; } = new(
         NamedPipeNames.TrackModel, NamedPipeNames.TrackController, NamedPipeNames.TrainModel, NamedPipeNames.Ctc, NamedPipeNames.TrackModelTestUi);
 }
@@ -19,7 +23,9 @@ public sealed record TrackModelEndpoints(string Inbound, string TrackController,
 /// <remarks>
 /// <para>
 /// Outputs: block states to the Track Controller, train environments to the Train Model, the
-/// layout and ticket sales to CTC, and private setup to the standalone TestUI. A state change
+/// layout and ticket sales to CTC, per-train light states to the Train Controller, and private
+/// setup to the standalone TestUI. Lights have their own sender and update immediately on state
+/// changes, on snapshot requests and on heartbeat. A state change
 /// publishes one full snapshot (debounced). The layout goes to CTC only when CTC does not have
 /// the current revision yet: on start-up, after a layout change, after an explicit
 /// <see cref="TrackModelSnapshotRequestMessage"/>, and again on every heartbeat while CTC has
@@ -37,8 +43,9 @@ public sealed record TrackModelEndpoints(string Inbound, string TrackController,
 /// Feedback heartbeat: the Track Controller treats measurements older than its wall-clock
 /// watchdog (5 s) as stale, and a healthy but unchanged track produces no state changes. So
 /// whenever no snapshot was published for <see cref="DefaultFeedbackHeartbeat"/>, the current
-/// block states are re-observed on the UI thread and sent to the Track Controller only, with a
-/// fresh observation time. Nothing else (layout, environments, ticket sales) is regenerated.
+/// block states are re-observed on the UI thread and sent to the Track Controller with a
+/// fresh observation time. Current train environments and direct traffic lights are retried too;
+/// layout and ticket-sales snapshots are not regenerated.
 /// The heartbeat runs on wall time, independent of simulation speed and pause. If the Track
 /// Model stops or its UI thread stops responding, no observation is taken and the Track
 /// Controller's feedback goes stale; nothing is ever sent on the model's behalf.
@@ -49,11 +56,12 @@ public sealed class TrackModelConnection
     /// <summary>Heartbeat interval: well inside the Track Controller's 5 s feedback watchdog.</summary>
     public static readonly TimeSpan DefaultFeedbackHeartbeat = TimeSpan.FromSeconds(1);
 
-    private static readonly string[] DestinationNames = ["Track Controller", "Train Model", "CTC", "TestUI setup"];
+    private static readonly string[] DestinationNames = ["Track Controller", "Train Model", "CTC", "TestUI setup", "Train Controller (lights)"];
 
     private readonly ITrackService _track;
     private readonly Dispatcher _dispatcher;
     private readonly TrackModelEndpoints _endpoints;
+    private readonly TrainControllerSignalPublisher _trainControllerSignals;
     private readonly TimeSpan _feedbackHeartbeat;
     private readonly Channel<Snapshot> _pending = Channel.CreateBounded<Snapshot>(
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -97,11 +105,17 @@ public sealed class TrackModelConnection
         _track = track;
         _dispatcher = dispatcher;
         _endpoints = endpoints ?? TrackModelEndpoints.Production;
+        _trainControllerSignals = new TrainControllerSignalPublisher(track, _endpoints.TrainController);
         _feedbackHeartbeat = feedbackHeartbeat ?? DefaultFeedbackHeartbeat;
         if (_feedbackHeartbeat <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(feedbackHeartbeat), "The feedback heartbeat must be positive.");
         _debounce = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = TimeSpan.FromMilliseconds(100) };
         _debounce.Tick += (_, _) => { _debounce.Stop(); QueueSnapshot(); };
-        _track.StateChanged += (_, _) => { _debounce.Stop(); _debounce.Start(); };
+        _track.StateChanged += (_, _) =>
+        {
+            _trainControllerSignals.Capture();
+            _debounce.Stop();
+            _debounce.Start();
+        };
         _authorityLease = new DispatcherTimer(DispatcherPriority.Normal, dispatcher) { Interval = AuthorityLeaseCheckInterval };
         _authorityLease.Tick += (_, _) => ApplyThenPublishIfTrainCodesChanged(() => { _track.ExpireCommands(DateTimeOffset.UtcNow); });
     }
@@ -116,6 +130,11 @@ public sealed class TrackModelConnection
                 ex => Report("Inbound error: " + ex.Message), token),
             PublishAsync(token),
             ForwardTrainEnvironmentsAsync(token),
+            _trainControllerSignals.RunAsync(async delivered =>
+            {
+                lock (_delivery) _delivery[4] = delivered;
+                await ReportDeliveryAsync(token);
+            }, token),
             ForwardTestUiResultsAsync(token));
     }
 
@@ -243,6 +262,7 @@ public sealed class TrackModelConnection
 
     private void QueueSnapshot()
     {
+        _trainControllerSignals.Capture(force: true);
         // Capture before leaving the UI thread; background sends never read mutable domain state.
         var snapshotId = Guid.NewGuid();
         _latestSnapshotId = snapshotId;
@@ -272,6 +292,7 @@ public sealed class TrackModelConnection
     /// </remarks>
     private List<MessageEnvelope> CaptureFeedback()
     {
+        _trainControllerSignals.Capture(force: true);
         var sequence = ++_environmentSequence;
         var environments = _track.Layout.Blocks.Where(b => b.TrainId.Length > 0).Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
         foreach (var environment in environments) { environment.SnapshotId = _latestSnapshotId; environment.Sequence = sequence; }

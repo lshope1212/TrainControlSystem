@@ -278,6 +278,10 @@ public sealed class MainWindowViewModel : ViewModelBase
                     TrySynchronizeLayoutInputs();
                     if (_layoutSnapshotId == Guid.Empty && initialEnvironment && environment.BlockId == BlockId && _pendingInputs.Count == 0) LoadCapturedInputs();
                     break;
+                case nameof(TrackModelSignalMessage):
+                    var light = MessageSerializer.DeserializePayload<TrackModelSignalMessage>(envelope);
+                    if (!string.IsNullOrEmpty(light.BlockId)) GetCaptured(light.BlockId).Apply(light);
+                    break;
                 case nameof(TicketSalesMessage):
                     var sales = MessageSerializer.DeserializePayload<TicketSalesMessage>(envelope);
                     _ticketRates[sales.LineId] = sales.TicketsPerHour; OnPropertyChanged(nameof(TicketSales)); break;
