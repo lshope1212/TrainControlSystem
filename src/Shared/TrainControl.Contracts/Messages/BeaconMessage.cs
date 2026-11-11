@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Enums;
 namespace TrainControl.Contracts.Messages;
 
 /// <summary>
@@ -24,9 +25,3 @@ public class BeaconMessage
 }
 
 /// <summary>Which side of the train the station platform is on.</summary>
-public enum PlatformSide
-{
-    None = 0,
-    Left,
-    Right
-}

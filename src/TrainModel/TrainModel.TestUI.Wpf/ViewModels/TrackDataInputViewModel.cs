@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 using TrainModel.TestUI.Wpf.Services;
 

@@ -22,6 +22,10 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly SimulationClock _clock;
     private readonly DispatcherTimer _timer;
     private readonly Dictionary<string, TrainInputs> _inputsByTrain = new(StringComparer.OrdinalIgnoreCase);
+
+    // Last controller TickId received per train, echoed back on that train's status message
+    // so the Train Controller can correlate its command (tick N) with the resulting state.
+    private readonly Dictionary<string, long> _lastControllerTickByTrain = new(StringComparer.OrdinalIgnoreCase);
     private DateTime _lastFrameUtc;
     private readonly TrainModelOutputPublisher _publisher = new();
     private DateTime _lastPublishUtc = DateTime.MinValue;
@@ -135,7 +139,11 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         foreach (var plant in _fleet.Trains)
         {
-            _publisher.Publish(plant.CurrentState);
+            string id = plant.Train.Id;
+            long tickId = _lastControllerTickByTrain.TryGetValue(id, out var t) ? t : 0;
+            bool isActive = true;   // a train in the fleet is dispatched/in service
+            bool passengerRequested = _inputsByTrain.TryGetValue(id, out var inp) && inp.PassengerEmergencyBrakeRequest;
+            _publisher.Publish(plant.CurrentState, tickId, isActive, passengerRequested);
         }
     }
 
@@ -257,18 +265,22 @@ public sealed class MainWindowViewModel : ViewModelBase
         return inputs;
     }
 
-    public void ApplyTrainCommand(string trainId, double powerWatts, bool serviceBrake,
+    public void ApplyTrainCommand(string trainId, long tickId, double powerWatts, bool serviceBrake,
         bool emergencyBrake, bool leftDoor, bool rightDoor, bool lights, double cabinCelsius,
         string announcement)
     {
         var inp = EnsureTrain(trainId);
 
-        // Detect a change in the controller's DIRECT emergency-brake command so we can
-        // log its application/release distinctly (not on every repeated command tick).
+        // Detect a change in the emergency-brake command so we can log apply/release once.
         bool wasEmergency = inp.EmergencyBrakeApplied;
+
+        // Remember the controller's tick for this train so our status message can echo it.
+        _lastControllerTickByTrain[trainId] = tickId;
 
         inp.PowerCommandWatts = powerWatts;
         inp.ServiceBrakeApplied = serviceBrake;
+        // Direct-apply emergency brake: the Train Controller is the sole authority. There is
+        // no approval handshake — the brake follows the controller's EmergencyBrakeCommand.
         inp.EmergencyBrakeApplied = emergencyBrake;
         inp.LeftDoorCommandOpen = leftDoor;
         inp.RightDoorCommandOpen = rightDoor;
@@ -314,9 +326,10 @@ public sealed class MainWindowViewModel : ViewModelBase
             DistanceToStopMeters = distanceMeters,
             Side = side switch
             {
-                "Left" => TrainControl.Contracts.Messages.PlatformSide.Left,
-                "Right" => TrainControl.Contracts.Messages.PlatformSide.Right,
-                _ => TrainControl.Contracts.Messages.PlatformSide.None,
+                "Left" => TrainControl.Contracts.Enums.PlatformSide.Left,
+                "Right" => TrainControl.Contracts.Enums.PlatformSide.Right,
+                "Both" => TrainControl.Contracts.Enums.PlatformSide.Both,
+                _ => TrainControl.Contracts.Enums.PlatformSide.None,
             },
             Announcement = announcement,
         };
@@ -344,33 +357,11 @@ public sealed class MainWindowViewModel : ViewModelBase
     public void ApplyPassengerEmergencyBrake(string trainId, bool requested)
     {
         var inp = EnsureTrain(trainId);
-        // Raises a PENDING request only — the controller must approve before it engages.
+        // The passenger raises a REQUEST only. There is no local approval: the request is
+        // reported to the Train Controller (in the status message) and the controller decides
+        // whether to command the emergency brake. The Train Model never engages it from here.
         inp.PassengerEmergencyBrakeRequest = requested;
-        Log("ALERT", "Passenger", $"{trainId} passenger emergency brake requested (awaiting controller approval).");
-        RefreshAll();
-    }
-
-    public void ApplyEmergencyBrakeApproval(string trainId, bool approved)
-    {
-        var inp = EnsureTrain(trainId);
-
-        // Is there actually a pending request for this train? The ruling only takes
-        // effect if so (the plant guards this too); otherwise it is a no-op and we say so.
-        bool pending = _fleet.GetTrain(trainId) is { } plant && plant.Train.PassengerEmergencyBrakePending;
-
-        if (!pending)
-        {
-            // No request to rule on — do not set approve/deny flags; report it clearly.
-            Log("INFO", "Controller",
-                $"{trainId}: emergency brake {(approved ? "approval" : "denial")} received with NO pending request — brake not activated.");
-            RefreshAll();
-            return;
-        }
-
-        inp.ControllerApproveEmergencyBrake = approved;
-        inp.ControllerDenyEmergencyBrake = !approved;
-        Log(approved ? "ALERT" : "INFO", "Controller",
-            $"{trainId} emergency brake request {(approved ? "APPROVED (engaging)" : "DENIED")}.");
+        Log("ALERT", "Passenger", $"{trainId} passenger emergency brake requested (reported to controller).");
         RefreshAll();
     }
 
