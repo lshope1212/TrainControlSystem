@@ -1,242 +1,889 @@
+// Track Model presentation adaptation of the CTC map; domain state stays in Track Model.
 using System.Collections;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
+using TrackModel.Wpf.Layout;
 using TrackModel.Wpf.ViewModels;
 using TrainControl.Contracts.Enums;
 
 namespace TrackModel.Wpf.Controls;
 
-/// <summary>Scalable schematic renderer with click/keyboard block selection.
-/// Coordinates belong to presentation; layout connectivity comes from domain data.</summary>
+/// <summary>
+/// Interactive schematic of the selected line's territory. Blocks are drawn as track
+/// segments coloured by occupancy, with maintenance, selection, switch, signal, crossing and
+/// station markings. Clicking a block sets <see cref="SelectedBlock"/> (two-way bound to the
+/// view model's selection). Geometry comes from <see cref="TerritoryLayoutEngine"/>; the
+/// control redraws whenever a displayed <see cref="BlockViewModel"/> raises PropertyChanged.
+/// </summary>
+/// <remarks>
+/// Zoom is a purely visual concern, so Fit / Zoom In / Zoom Out are routed commands handled
+/// here. Place the map inside a ScrollViewer to pan when zoomed in.
+/// </remarks>
 public sealed class TrackDiagram : FrameworkElement
 {
-    public static readonly DependencyProperty BlocksProperty = DependencyProperty.Register(nameof(Blocks), typeof(IEnumerable), typeof(TrackDiagram),
-        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
-    public static readonly DependencyProperty SelectedBlockProperty = DependencyProperty.Register(nameof(SelectedBlock), typeof(BlockViewModel), typeof(TrackDiagram),
-        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
-    public static readonly DependencyProperty RevisionProperty = DependencyProperty.Register(nameof(Revision), typeof(int), typeof(TrackDiagram),
+    public const double MinZoom = 0.4;
+    public const double MaxZoom = 3.0;
+    private const double ZoomStep = 1.25;
+
+    // Below this zoom, block labels and badge text are hidden (tooltips still show everything).
+    private const double DetailZoom = 0.65;
+
+    // Layout units.
+    private const double TrackThickness = 7;
+    private const double HitTolerance = 9;
+    private const double LabelFontSize = 10;
+    private const double BadgeFontSize = 8.5;
+    private const double StationFontSize = 10.5;
+
+    public static readonly RoutedUICommand FitCommand = new RoutedUICommand("Fit", nameof(FitCommand), typeof(TrackDiagram));
+    public static readonly RoutedUICommand ZoomInCommand = new RoutedUICommand("Zoom In", nameof(ZoomInCommand), typeof(TrackDiagram));
+    public static readonly RoutedUICommand ZoomOutCommand = new RoutedUICommand("Zoom Out", nameof(ZoomOutCommand), typeof(TrackDiagram));
+
+    public static readonly DependencyProperty RevisionProperty = DependencyProperty.Register(
+        nameof(Revision), typeof(int), typeof(TrackDiagram),
         new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.AffectsRender));
-    public IEnumerable? Blocks { get => (IEnumerable?)GetValue(BlocksProperty); set => SetValue(BlocksProperty, value); }
-    public BlockViewModel? SelectedBlock { get => (BlockViewModel?)GetValue(SelectedBlockProperty); set => SetValue(SelectedBlockProperty, value); }
-    public int Revision { get => (int)GetValue(RevisionProperty); set => SetValue(RevisionProperty, value); }
-    private readonly Dictionary<BlockViewModel, Rect> _hits = [];
-    private static readonly Brush Ink = Brushes.Black;
-    private static readonly Brush Muted = Brushes.Black;
-    private static readonly Pen TrackPen = new(new SolidColorBrush(Color.FromRgb(96, 118, 147)), 2);
 
-    public TrackDiagram() { Focusable = true; Cursor = Cursors.Hand; }
-    protected override void OnRender(DrawingContext dc)
+    public int Revision
     {
-        base.OnRender(dc);
-        dc.DrawRectangle(Brushes.White, null, new Rect(RenderSize));
-        var blocks = Blocks?.Cast<BlockViewModel>().ToList() ?? [];
-        _hits.Clear();
-        if (blocks.Count == 0) { Label(dc, "No track loaded", new(40, 60), 22); return; }
-        var points = Place(blocks);
-        var courseBlue = IsCourseBlue(blocks);
-        var hasReturn = blocks.Any(b => b.Section == "Return");
-        var edges = new HashSet<string>();
-        foreach (var b in blocks)
+        get => (int)GetValue(RevisionProperty);
+        set => SetValue(RevisionProperty, value);
+    }
+
+    public static readonly DependencyProperty BlocksProperty = DependencyProperty.Register(
+        nameof(Blocks), typeof(IEnumerable), typeof(TrackDiagram),
+        new FrameworkPropertyMetadata(null, OnBlocksChanged));
+
+    public static readonly DependencyProperty SelectedBlockProperty = DependencyProperty.Register(
+        nameof(SelectedBlock), typeof(BlockViewModel), typeof(TrackDiagram),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnSelectedBlockChanged));
+
+    public static readonly DependencyProperty LineIdProperty = DependencyProperty.Register(
+        nameof(LineId), typeof(string), typeof(TrackDiagram),
+        new FrameworkPropertyMetadata(null, (d, _) => ((TrackDiagram)d).InvalidateLayoutGeometry()));
+
+    public static readonly DependencyProperty ZoomProperty = DependencyProperty.Register(
+        nameof(Zoom), typeof(double), typeof(TrackDiagram),
+        new FrameworkPropertyMetadata(1.0, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, null, CoerceZoom));
+
+    private static readonly Brush BackgroundBrush = Frozen(Brushes.White);
+    private static readonly Brush ClearBrush = Hex("#368653");
+    private static readonly Brush OccupiedBrush = Hex("#C84036");
+    private static readonly Brush UnknownBrush = Hex("#9BA8B8");
+    private static readonly Brush MaintenanceBrush = Hex("#D97706");
+    private static readonly Brush SelectionBrush = Hex("#2563EB");
+    private static readonly Brush ConnectionBrush = Hex("#A3ADBA");
+    private static readonly Brush LabelBrush = Hex("#374151");
+    private static readonly Brush StationBrush = Hex("#111827");
+    private static readonly Brush PlatformBrush = Hex("#4B5563");
+    private static readonly Brush BadgeBackground = Hex("#F9FAFB");
+    private static readonly Brush BadgeBorder = Hex("#CBD5E1");
+    private static readonly Brush SwitchBrush = Hex("#1D4ED8");
+    private static readonly Brush SignalRedBrush = Hex("#C84036");
+    private static readonly Brush SignalYellowBrush = Hex("#D4A017");
+    private static readonly Brush SignalGreenBrush = Hex("#368653");
+    private static readonly Brush SignalSuperGreenBrush = Hex("#00C46A");
+    private static readonly Brush CrossingBrush = Hex("#7C3AED");
+    private static readonly Brush YardBrush = Hex("#E5E7EB");
+
+    private static readonly Typeface LabelTypeface = new Typeface("Segoe UI");
+    private static readonly Typeface BoldTypeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+
+    private readonly HashSet<INotifyPropertyChanged> _subscribedBlocks = new HashSet<INotifyPropertyChanged>();
+    private readonly ToolTip _toolTip = new ToolTip { Placement = PlacementMode.Mouse, HasDropShadow = true };
+    private INotifyCollectionChanged? _observedCollection;
+    private TerritoryLayout? _layout;
+    private BlockViewModel? _hoveredBlock;
+    private bool _isFitted = true;
+    private bool _fitPending;
+    private bool _isSelectingFromMap;
+
+    static TrackDiagram()
+    {
+        FocusableProperty.OverrideMetadata(typeof(TrackDiagram), new FrameworkPropertyMetadata(true));
+        ClipToBoundsProperty.OverrideMetadata(typeof(TrackDiagram), new FrameworkPropertyMetadata(true));
+
+        CommandManager.RegisterClassCommandBinding(typeof(TrackDiagram), new CommandBinding(FitCommand, (s, _) => ((TrackDiagram)s).FitToView()));
+        CommandManager.RegisterClassCommandBinding(typeof(TrackDiagram), new CommandBinding(ZoomInCommand, (s, _) => ((TrackDiagram)s).ZoomBy(ZoomStep), (s, e) => e.CanExecute = ((TrackDiagram)s).Zoom < MaxZoom));
+        CommandManager.RegisterClassCommandBinding(typeof(TrackDiagram), new CommandBinding(ZoomOutCommand, (s, _) => ((TrackDiagram)s).ZoomBy(1 / ZoomStep), (s, e) => e.CanExecute = ((TrackDiagram)s).Zoom > ((TrackDiagram)s).MinimumZoom + 0.001));
+    }
+
+    public TrackDiagram()
+    {
+        _toolTip.PlacementTarget = this;
+        Loaded += (_, _) =>
         {
-            foreach (var id in b.Connections)
+            AttachToBlocks(Blocks);
+            if (FindScrollViewer() is { } viewer)
             {
-                var target = blocks.FirstOrDefault(x => x.Id == id);
-                if (target is null) continue;
-                var key = string.CompareOrdinal(b.Id, id) < 0 ? b.Id + ":" + id : id + ":" + b.Id;
-                if (!edges.Add(key)) continue;
-                var a = points[b]; var z = points[target];
-                if (courseBlue && (b.Number == 5 && target.Number is 6 or 11 || target.Number == 5 && b.Number is 6 or 11))
-                {
-                    var junction = b.Number == 5 ? b : target;
-                    var branch = b.Number == 5 ? target : b;
-                    dc.DrawLine(new Pen(branch.Id == junction.NextBlock ? Brushes.DodgerBlue : Brushes.LightSlateGray,
-                        branch.Id == junction.NextBlock ? 4 : 2), a, z);
-                }
-                else DrawConnection(dc, b, target, a, z, hasReturn);
+                viewer.SizeChanged += OnViewportSizeChanged;
             }
-        }
-        foreach (var b in blocks)
+
+            RequestFit();
+        };
+        Unloaded += (_, _) =>
         {
-            var p = points[b];
-            var r = new Rect(p.X - 31, p.Y - 14, 62, 28);
-            _hits[b] = new Rect(p.X - 37, p.Y - 32, 74, 70);
-            dc.DrawRoundedRectangle(b.StateBrush, new Pen(b == SelectedBlock ? Brushes.DodgerBlue : Brushes.White, b == SelectedBlock ? 3 : 1), r, 2, 2);
-            if (b.HasFailure) Label(dc, "×", new(p.X - 8, p.Y - 17), 24, Brushes.White);
-            Label(dc, b.Id, new(p.X - 15, p.Y + 20), 18, Muted);
-            if (b.HasSwitch)
+            DetachFromBlocks();
+            if (FindScrollViewer() is { } viewer)
             {
-                var diamond = new StreamGeometry();
-                using (var ctx = diamond.Open())
-                {
-                    ctx.BeginFigure(new(p.X - 36, p.Y - 3), true, true);
-                    ctx.PolyLineTo(new[] { new Point(p.X - 30, p.Y - 9), new Point(p.X - 24, p.Y - 3), new Point(p.X - 30, p.Y + 3) }, true, false);
-                }
-                dc.DrawGeometry(Brushes.DodgerBlue, null, diamond);
-                Label(dc, b.Switch, new(p.X - 32, p.Y + (b.IsOccupied || b.HasFailure ? 90 : 45)), 14, Muted);
+                viewer.SizeChanged -= OnViewportSizeChanged;
             }
-            if (b.Station.Length > 0)
-            {
-                dc.DrawLine(new Pen(Brushes.SlateGray, 5), new(p.X - 35, p.Y - 52), new(p.X + 35, p.Y - 52));
-                Label(dc, b.Station, new(p.X - 40, p.Y - 78), 18);
-            }
-            if (b.HasSignal)
-            {
-                var color = b.SignalState switch { SignalState.Green => Brushes.ForestGreen, SignalState.Red => Brushes.IndianRed,
-                    SignalState.Yellow => Brushes.DarkOrange, _ => Brushes.SlateGray };
-                dc.DrawEllipse(color, null, new(p.X + 36, p.Y - 22), 4, 7);
-            }
-            if (b.HasCrossing) Label(dc, b.Crossing, new(p.X - 32, p.Y + (b.IsOccupied || b.HasFailure ? 90 : 45)), 15, Muted);
-            if (b.HasBeacon)
-            {
-                dc.DrawEllipse(Brushes.DarkViolet, null, new(p.X, p.Y - 29), 5, 5);
-                Label(dc, "Beacon", new(p.X - 28, p.Y - 58), 14, Brushes.DarkViolet);
-            }
-            if (b.IsOccupied) Label(dc, "Train " + b.Train + " →", new(p.X - 34, p.Y + 45), 18,
-                maxWidth: b.Section == "Yard" ? 120 : null);
-            if (b.HasFailure) Label(dc, b.FailureSummary, new(p.X - 40, p.Y + 65), 15, Brushes.DarkOrange,
-                maxWidth: b.Section == "Yard" ? 130 : null);
-        }
-        if (blocks.Any(b => b.Section == "Bypass")) Label(dc, "Bypass", new(600, 135), 19, Muted);
-        if (blocks.Any(b => b.Section == "Yard")) Label(dc, "Yard", new(70, 75), 19, Muted);
-        if (courseBlue)
+
+            _toolTip.IsOpen = false;
+        };
+    }
+
+    /// <summary>Blocks of the displayed line (BlockViewModel items).</summary>
+    public IEnumerable? Blocks
+    {
+        get => (IEnumerable?)GetValue(BlocksProperty);
+        set => SetValue(BlocksProperty, value);
+    }
+
+    /// <summary>The dispatcher's selected block; binds two-way by default.</summary>
+    public BlockViewModel? SelectedBlock
+    {
+        get => (BlockViewModel?)GetValue(SelectedBlockProperty);
+        set => SetValue(SelectedBlockProperty, value);
+    }
+
+    /// <summary>Line ID (or name) used to choose the line's schematic.</summary>
+    public string? LineId
+    {
+        get => (string?)GetValue(LineIdProperty);
+        set => SetValue(LineIdProperty, value);
+    }
+
+    /// <summary>Visual scale of the schematic, between the fit size and <see cref="MaxZoom"/>.</summary>
+    public double Zoom
+    {
+        get => (double)GetValue(ZoomProperty);
+        set => SetValue(ZoomProperty, value);
+    }
+
+    /// <summary>The layout currently drawn (computed on demand).</summary>
+    public TerritoryLayout CurrentLayout => _layout ??= TerritoryLayoutEngine.Compute(LineId, BlockItems());
+
+    // Zooming out stops at MinZoom, or lower when that is what fitting a large line takes.
+    private double MinimumZoom => Math.Min(MinZoom, FitZoom() ?? MinZoom);
+
+    private static object CoerceZoom(DependencyObject d, object value)
+    {
+        double zoom = (double)value;
+        return double.IsFinite(zoom) ? Math.Clamp(zoom, 0.05, MaxZoom) : 1.0;
+    }
+
+    private static void OnBlocksChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var map = (TrackDiagram)d;
+        map.AttachToBlocks(e.NewValue as IEnumerable);
+        map.InvalidateLayoutGeometry();
+    }
+
+    private static void OnSelectedBlockChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var map = (TrackDiagram)d;
+
+        // Selected elsewhere (the block selector): scroll the block into view.
+        if (!map._isSelectingFromMap && e.NewValue is BlockViewModel block)
         {
-            dc.DrawRoundedRectangle(Brushes.WhiteSmoke, new Pen(Brushes.SlateGray, 2), new Rect(25, 318, 75, 65), 12, 12);
-            Label(dc, "Yard", new(40, 337), 20);
-            dc.DrawLine(TrackPen, new(100, 350), new(109, 350));
+            map.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => map.BringBlockIntoView(block));
         }
     }
 
-    private static void DrawConnection(DrawingContext dc, BlockViewModel source, BlockViewModel target,
-        Point a, Point z, bool hasReturn)
+    private IEnumerable<BlockViewModel> BlockItems() => Blocks?.OfType<BlockViewModel>() ?? [];
+
+    #region Block subscriptions
+
+    private void AttachToBlocks(IEnumerable? blocks)
     {
-        if (!hasReturn) { dc.DrawLine(TrackPen, a, z); return; }
-        var geometry = new StreamGeometry();
-        using (var ctx = geometry.Open())
+        DetachFromBlocks();
+
+        if (blocks is INotifyCollectionChanged observable)
         {
-            if ((source.Section == "Main" && target.Section == "Return" ||
-                 source.Section == "Return" && target.Section == "Main") && Math.Abs(a.X - z.X) < 10)
-            {
-                // Equal offsets from the block side ports give mirrored loop ends.
-                var direction = a.X > 600 ? 1 : -1;
-                a.X += direction * 31; z.X += direction * 31;
-                var outside = a.X + direction * 90;
-                ctx.BeginFigure(a, false, false);
-                ctx.BezierTo(new(outside, a.Y), new(outside, z.Y), z, true, false);
-            }
-            else if (source.Section == "Main" && target.Section == "Bypass" ||
-                     source.Section == "Bypass" && target.Section == "Main")
-            {
-                var main = source.Section == "Main" ? a : z;
-                var bypass = source.Section == "Bypass" ? a : z;
-                var direction = bypass.X > main.X ? 1 : -1;
-                const double radius = 40, control = radius * 0.5522847498;
-                ctx.BeginFigure(new(main.X, main.Y - 14), false, false);
-                ctx.LineTo(new(main.X, bypass.Y + radius), true, false);
-                ctx.BezierTo(new(main.X, bypass.Y + radius - control),
-                    new(main.X + direction * (radius - control), bypass.Y),
-                    new(main.X + direction * radius, bypass.Y), true, false);
-                ctx.LineTo(new(bypass.X - direction * 31, bypass.Y), true, false);
-            }
-            else if (source.Section == "Main" && target.Section == "Yard" ||
-                     source.Section == "Yard" && target.Section == "Main")
-            {
-                var main = source.Section == "Main" ? a : z;
-                var yard = source.Section == "Yard" ? a : z;
-                main.X -= 31; yard.X -= 31;
-                var outside = Math.Min(main.X, yard.X) - 30;
-                ctx.BeginFigure(main, false, false);
-                ctx.BezierTo(new(outside, main.Y), new(outside, yard.Y), yard, true, false);
-            }
-            else if (source.Section == "Yard" && target.Section == "Yard")
-            {
-                if (a.X > z.X) (a, z) = (z, a);
-                a.X += 31; z.X -= 31;
-                var middle = (a.X + z.X) / 2;
-                ctx.BeginFigure(a, false, false);
-                ctx.BezierTo(new(middle, a.Y), new(middle, z.Y), z, true, false);
-            }
-            else
-            {
-                ctx.BeginFigure(a, false, false);
-                ctx.LineTo(z, true, false);
-            }
+            _observedCollection = observable;
+            observable.CollectionChanged += OnBlocksCollectionChanged;
         }
-        dc.DrawGeometry(null, TrackPen, geometry);
+
+        SubscribeAll(blocks);
     }
 
-    private static Dictionary<BlockViewModel, Point> Place(List<BlockViewModel> blocks)
+    private void DetachFromBlocks()
     {
-        var result = new Dictionary<BlockViewModel, Point>();
-        if (IsCourseBlue(blocks))
+        if (_observedCollection is not null)
         {
-            foreach (var b in blocks)
-                result[b] = b.Number <= 5 ? new Point(140 + (b.Number - 1) * 95, 350)
-                    : b.Number <= 10 ? new Point(625 + (b.Number - 6) * 100, 270 - (b.Number - 6) * 40)
-                    : new Point(625 + (b.Number - 11) * 100, 430 + (b.Number - 11) * 40);
-            return result;
+            _observedCollection.CollectionChanged -= OnBlocksCollectionChanged;
+            _observedCollection = null;
         }
-        var hasReturn = blocks.Any(b => b.Section == "Return");
-        if (hasReturn)
+
+        foreach (var block in _subscribedBlocks)
         {
-            foreach (var section in blocks.GroupBy(b => b.Section))
+            block.PropertyChanged -= OnBlockPropertyChanged;
+        }
+
+        _subscribedBlocks.Clear();
+    }
+
+    private void SubscribeAll(IEnumerable? blocks)
+    {
+        foreach (var block in blocks?.OfType<INotifyPropertyChanged>() ?? [])
+        {
+            if (_subscribedBlocks.Add(block))
             {
-                var list = section.OrderBy(b => b.Number).ToList();
-                for (var i = 0; i < list.Count; i++)
-                {
-                    var x = section.Key switch { "Bypass" => 420 + i * (list.Count > 1 ? 425d / (list.Count - 1) : 0), "Yard" => i == 0 ? 105 : 245,
-                        "Return" => 930 - i * 85, _ => 165 + i * 85 };
-                    var y = section.Key switch { "Bypass" => 190, "Yard" => i == 0 ? 150 : 100 + (i - 1) * 100, "Return" => 550, _ => 320 };
-                    result[list[i]] = new(x, y);
-                }
+                block.PropertyChanged += OnBlockPropertyChanged;
             }
+        }
+    }
+
+    private void OnBlocksCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            // Reset carries no OldItems, so drop every subscription and re-read the collection.
+            foreach (var block in _subscribedBlocks)
+            {
+                block.PropertyChanged -= OnBlockPropertyChanged;
+            }
+
+            _subscribedBlocks.Clear();
+            SubscribeAll(Blocks);
         }
         else
         {
-            // General imported layouts: serpentine rows, with all actual graph edges drawn.
-            const int columns = 8;
-            for (var i = 0; i < blocks.Count; i++)
+            foreach (var block in e.OldItems?.OfType<INotifyPropertyChanged>() ?? [])
             {
-                var row = i / columns;
-                var col = row % 2 == 0 ? i % columns : columns - 1 - i % columns;
-                result[blocks[i]] = new(110 + col * 125, 220 + row * 150);
+                if (_subscribedBlocks.Remove(block))
+                {
+                    block.PropertyChanged -= OnBlockPropertyChanged;
+                }
             }
+
+            SubscribeAll(e.NewItems);
         }
-        return result;
+
+        InvalidateLayoutGeometry();
     }
 
-    private static bool IsCourseBlue(List<BlockViewModel> blocks) => blocks.Count == 15
-        && blocks.All(b => b.LineId == "Blue") && blocks.Select(b => b.Number).Order().SequenceEqual(Enumerable.Range(1, 15));
-
-    private void Label(DrawingContext dc, string text, Point p, double size, Brush? brush = null, double? maxWidth = null)
+    private void OnBlockPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-            size, brush ?? Ink, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-        if (maxWidth is double width)
+        // Live status only changes colours and badges; the geometry stays.
+        InvalidateVisual();
+
+        if (_toolTip.IsOpen && ReferenceEquals(sender, _hoveredBlock))
         {
-            label.MaxTextWidth = width;
-            label.MaxLineCount = 1;
-            label.Trimming = TextTrimming.CharacterEllipsis;
+            _toolTip.Content = BuildToolTip(_hoveredBlock!);
         }
-        dc.DrawText(label, p);
+    }
+
+    /// <summary>A different line or layout: recompute geometry and return to the fit view.</summary>
+    private void InvalidateLayoutGeometry()
+    {
+        _layout = null;
+        _hoveredBlock = null;
+        _toolTip.IsOpen = false;
+        _isFitted = true;
+        InvalidateMeasure();
+        InvalidateVisual();
+        RequestFit();
+    }
+
+    #endregion
+
+    #region Zoom
+
+    private ScrollViewer? FindScrollViewer()
+    {
+        DependencyObject? current = this;
+        while (current is not null and not ScrollViewer)
+        {
+            current = VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current);
+        }
+
+        return current as ScrollViewer;
+    }
+
+    /// <summary>Zoom at which the whole schematic fits the viewport; null when unknown yet.</summary>
+    private double? FitZoom()
+    {
+        var viewer = FindScrollViewer();
+        var bounds = CurrentLayout.Bounds;
+        double width = viewer?.ViewportWidth > 0 ? viewer.ViewportWidth : viewer?.ActualWidth ?? 0;
+        double height = viewer?.ViewportHeight > 0 ? viewer.ViewportHeight : viewer?.ActualHeight ?? 0;
+        if (width <= 0 || height <= 0 || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return null;
+        }
+
+        // Slightly under the exact fit so no scrollbars appear.
+        return Math.Min(width / bounds.Width, height / bounds.Height) * 0.98;
+    }
+
+    public void FitToView()
+    {
+        if (FitZoom() is { } zoom)
+        {
+            SetCurrentValue(ZoomProperty, Math.Min(zoom, MaxZoom));
+            _isFitted = true;
+            if (FindScrollViewer() is { } viewer)
+            {
+                viewer.ScrollToHome();
+            }
+        }
+    }
+
+    private void ZoomBy(double factor)
+    {
+        var viewer = FindScrollViewer();
+        double oldZoom = Zoom;
+        double newZoom = Math.Clamp(oldZoom * factor, MinimumZoom, MaxZoom);
+        if (Math.Abs(newZoom - oldZoom) < 0.0001)
+        {
+            return;
+        }
+
+        // Keep the centre of the viewport where it was.
+        double centreX = viewer is null ? 0 : (viewer.HorizontalOffset + viewer.ViewportWidth / 2) / oldZoom;
+        double centreY = viewer is null ? 0 : (viewer.VerticalOffset + viewer.ViewportHeight / 2) / oldZoom;
+
+        SetCurrentValue(ZoomProperty, newZoom);
+        _isFitted = false;
+
+        if (viewer is not null)
+        {
+            viewer.UpdateLayout();
+            viewer.ScrollToHorizontalOffset(centreX * newZoom - viewer.ViewportWidth / 2);
+            viewer.ScrollToVerticalOffset(centreY * newZoom - viewer.ViewportHeight / 2);
+        }
+    }
+
+    private void RequestFit()
+    {
+        if (_fitPending)
+        {
+            return;
+        }
+
+        _fitPending = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            _fitPending = false;
+            if (_isFitted)
+            {
+                FitToView();
+            }
+        });
+    }
+
+    private void OnViewportSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Keep "fit" meaning fit while the window is resized; a manual zoom is left alone.
+        if (_isFitted)
+        {
+            RequestFit();
+        }
+    }
+
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            ZoomBy(e.Delta > 0 ? ZoomStep : 1 / ZoomStep);
+            e.Handled = true;
+        }
+    }
+
+    private void BringBlockIntoView(BlockViewModel block)
+    {
+        if (!CurrentLayout.Placements.TryGetValue(block.Id, out var placement))
+        {
+            return;
+        }
+
+        var origin = ContentOrigin();
+        var points = placement.Points.Select(point => new Point(origin.X + point.X * Zoom, origin.Y + point.Y * Zoom)).ToList();
+        double left = points.Min(p => p.X), top = points.Min(p => p.Y);
+        var rect = new Rect(left, top, points.Max(p => p.X) - left, points.Max(p => p.Y) - top);
+        rect.Inflate(60, 60);
+        BringIntoView(rect);
+    }
+
+    #endregion
+
+    #region Layout and hit testing
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var bounds = CurrentLayout.Bounds;
+        return new Size(bounds.Width * Zoom, bounds.Height * Zoom);
+    }
+
+    /// <summary>Top-left of the drawn schematic; centred when the viewport is larger.</summary>
+    private Point ContentOrigin()
+    {
+        var bounds = CurrentLayout.Bounds;
+        return new Point(
+            Math.Max(0, (ActualWidth - bounds.Width * Zoom) / 2),
+            Math.Max(0, (ActualHeight - bounds.Height * Zoom) / 2));
+    }
+
+    private Point ToLayout(Point screen)
+    {
+        var origin = ContentOrigin();
+        return new Point((screen.X - origin.X) / Zoom, (screen.Y - origin.Y) / Zoom);
+    }
+
+    /// <summary>The block whose track segment is under <paramref name="screenPoint"/>, if any.</summary>
+    public BlockViewModel? HitTestBlock(Point screenPoint)
+    {
+        var point = ToLayout(screenPoint);
+        double tolerance = Math.Max(HitTolerance, 6 / Zoom);
+        BlockViewModel? best = null;
+        double bestDistance = double.MaxValue;
+
+        foreach (var block in BlockItems())
+        {
+            if (CurrentLayout.Placements.TryGetValue(block.Id, out var placement))
+            {
+                double distance = placement.DistanceTo(point);
+                if (distance <= tolerance && distance < bestDistance)
+                {
+                    best = block;
+                    bestDistance = distance;
+                }
+            }
+        }
+
+        return best;
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
         Focus();
-        var hit = _hits.FirstOrDefault(pair => pair.Value.Contains(e.GetPosition(this)));
-        if (hit.Key is not null) SetCurrentValue(SelectedBlockProperty, hit.Key);
+
+        if (HitTestBlock(e.GetPosition(this)) is { } block)
+        {
+            _isSelectingFromMap = true;
+            try
+            {
+                SetCurrentValue(SelectedBlockProperty, block);
+            }
+            finally
+            {
+                _isSelectingFromMap = false;
+            }
+
+            e.Handled = true;
+        }
     }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        var block = HitTestBlock(e.GetPosition(this));
+        Cursor = block is null ? null : Cursors.Hand;
+
+        if (ReferenceEquals(block, _hoveredBlock))
+        {
+            return;
+        }
+
+        _hoveredBlock = block;
+        _toolTip.IsOpen = false;
+        if (block is not null)
+        {
+            _toolTip.Content = BuildToolTip(block);
+            _toolTip.IsOpen = true;
+        }
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _hoveredBlock = null;
+        _toolTip.IsOpen = false;
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        var blocks = Blocks?.Cast<BlockViewModel>().ToList() ?? [];
-        if (blocks.Count == 0 || e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down)) { base.OnKeyDown(e); return; }
+        var blocks = BlockItems().ToList();
+        if (blocks.Count == 0 || e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down))
+        {
+            base.OnKeyDown(e);
+            return;
+        }
+
         var index = blocks.IndexOf(SelectedBlock!);
         var delta = e.Key is Key.Left or Key.Up ? -1 : 1;
         SetCurrentValue(SelectedBlockProperty, blocks[(index + delta + blocks.Count) % blocks.Count]);
         e.Handled = true;
     }
+
+    #endregion
+
+    #region Tooltip
+
+    private static object BuildToolTip(BlockViewModel block)
+    {
+        var panel = new StackPanel { MinWidth = 180 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = block.HasStation ? $"Block {block.DisplayName} — {block.Station}" : $"Block {block.DisplayName}",
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 4),
+        });
+
+        void Row(string label, string value) => panel.Children.Add(new TextBlock { Text = $"{label}: {value}" });
+
+        Row("Section", block.Section);
+        Row("Length", $"{block.Length}");
+        Row("Speed Limit", $"{block.SpeedLimit}");
+        Row("Occupancy", block.Occupancy);
+        Row("Maintenance", MaintenanceText(block));
+        Row("Train", block.Train);
+        Row("Actual speed", block.ActualSpeed);
+        Row("Grade", block.Grade);
+        if (block.HasBeacon) Row("Beacon", block.Beacon);
+        if (block.HasFailure) Row("Failures", block.FailureSummary);
+        if (block.HasStation)
+        {
+            Row("Station", block.Station);
+        }
+
+        if (block.HasSwitch)
+        {
+            Row("Switch", block.SwitchState.ToString());
+        }
+
+        if (block.HasSignal)
+        {
+            Row("Signal", block.Signal);
+        }
+
+        if (block.HasCrossing)
+        {
+            Row("Crossing", block.Crossing);
+        }
+
+        return panel;
+    }
+
+    private static string MaintenanceText(BlockViewModel block) => block.Maintenance;
+
+    #endregion
+
+    #region Rendering
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        dc.DrawRectangle(BackgroundBrush, null, new Rect(RenderSize));
+
+        var layout = CurrentLayout;
+        var blocks = BlockItems().Where(block => layout.Placements.ContainsKey(block.Id)).ToList();
+        if (blocks.Count == 0)
+        {
+            DrawText(dc, "No track layout loaded for this line.", new Point(16, 16), 13, LabelBrush, LabelTypeface, 1);
+            return;
+        }
+
+        var origin = ContentOrigin();
+        dc.PushTransform(new MatrixTransform(Zoom, 0, 0, Zoom, origin.X, origin.Y));
+
+        bool detailed = Zoom >= DetailZoom;
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+
+        DrawConnections(dc, layout);
+        DrawTerminals(dc, layout, pixelsPerDip);
+
+        // The selection is drawn first so neighbouring blocks stay on top of its outline.
+        if (SelectedBlock is { } selected && layout.Placements.TryGetValue(selected.Id, out var selectedPlacement))
+        {
+            DrawSelection(dc, selectedPlacement);
+        }
+
+        foreach (var block in blocks)
+        {
+            DrawBlockTrack(dc, block, layout.Placements[block.Id]);
+        }
+
+        foreach (var block in blocks)
+        {
+            DrawBlockAnnotations(dc, block, layout.Placements[block.Id], detailed, pixelsPerDip);
+        }
+
+        dc.Pop();
+    }
+
+    private void DrawConnections(DrawingContext dc, TerritoryLayout layout)
+    {
+        var pen = Frozen(new Pen(ConnectionBrush, TrackWidth * 0.45) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
+        foreach (var connection in layout.Connections)
+        {
+            var (from, to) = ClosestEnds(layout.Placements[connection.FromBlockId], layout.Placements[connection.ToBlockId]);
+            dc.DrawLine(pen, from, to);
+        }
+    }
+
+    private static (Point From, Point To) ClosestEnds(TerritoryBlockPlacement a, TerritoryBlockPlacement b)
+    {
+        Point[] aEnds = [a.Start, a.End], bEnds = [b.Start, b.End];
+        return aEnds.SelectMany(p => bEnds.Select(q => (From: p, To: q)))
+            .MinBy(pair => (pair.From - pair.To).LengthSquared);
+    }
+
+    private void DrawTerminals(DrawingContext dc, TerritoryLayout layout, double pixelsPerDip)
+    {
+        var linkPen = Frozen(new Pen(ConnectionBrush, TrackWidth * 0.45) { DashStyle = DashStyles.Dash });
+        foreach (var terminal in layout.Terminals)
+        {
+            foreach (var blockId in terminal.BlockIds)
+            {
+                var placement = layout.Placements[blockId];
+                var end = (placement.Start - terminal.Position).LengthSquared <= (placement.End - terminal.Position).LengthSquared ? placement.Start : placement.End;
+                dc.DrawLine(linkPen, terminal.Position, end);
+            }
+
+            var text = Text(terminal.Label, Scaled(BadgeFontSize + 1, 8), BoldTypeface, LabelBrush, pixelsPerDip);
+            var box = new Rect(terminal.Position.X - text.Width / 2 - 6, terminal.Position.Y - text.Height / 2 - 3, text.Width + 12, text.Height + 6);
+            dc.DrawRoundedRectangle(YardBrush, new Pen(PlatformBrush, 1 / Zoom), box, 3, 3);
+            dc.DrawText(text, new Point(box.X + 6, box.Y + 3));
+        }
+    }
+
+    private void DrawBlockTrack(DrawingContext dc, BlockViewModel block, TerritoryBlockPlacement placement)
+    {
+        var geometry = PolylineGeometry(placement.Points);
+        if (block.IsClosed)
+        {
+            dc.DrawGeometry(null, TrackPen(MaintenanceBrush, TrackWidth + Math.Max(5, 2.5 / Zoom)), geometry);
+        }
+
+        // Track Model displays physical occupancy and local failures, as its dashboard does.
+        var fill = block.HasFailure ? Brushes.DarkOrange : block.IsOccupied ? OccupiedBrush : ClearBrush;
+        dc.DrawGeometry(null, TrackPen(fill, TrackWidth), geometry);
+    }
+    /// <summary>Track width in layout units; never thinner than about 3 px when zoomed far out.</summary>
+    private double TrackWidth => Math.Max(TrackThickness, 3.2 / Zoom);
+
+    /// <summary>Total width of the selection outline around a track.</summary>
+    private double SelectionWidth => TrackWidth + Math.Max(15, 9 / Zoom);
+
+    /// <summary>A blue capsule outside the block (and its maintenance outline), with a white gap.</summary>
+    private void DrawSelection(DrawingContext dc, TerritoryBlockPlacement placement)
+    {
+        var geometry = PolylineGeometry(placement.Points);
+        dc.DrawGeometry(null, SelectionPen(SelectionBrush, SelectionWidth), geometry);
+        dc.DrawGeometry(null, SelectionPen(BackgroundBrush, SelectionWidth - Math.Max(6, 3.5 / Zoom)), geometry);
+    }
+
+    private static Pen SelectionPen(Brush brush, double thickness) =>
+        Frozen(new Pen(brush, thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round });
+
+    private void DrawBlockAnnotations(DrawingContext dc, BlockViewModel block, TerritoryBlockPlacement placement, bool detailed, double pixelsPerDip)
+    {
+        bool isSelected = ReferenceEquals(block, SelectedBlock);
+
+        var label = detailed || isSelected
+            ? Text(block.DisplayName, Scaled(LabelFontSize, 8), isSelected ? BoldTypeface : LabelTypeface, isSelected ? SelectionBrush : LabelBrush, pixelsPerDip)
+            : null;
+        bool labelWithBadges = placement.LabelSide == placement.BadgeSide;
+
+        if (label is not null && !labelWithBadges)
+        {
+            double labelDistance = isSelected ? SelectionWidth / 2 + 2 : TrackWidth + 3;
+            DrawAligned(dc, label, placement.Midpoint + placement.LabelNormal * labelDistance, placement.LabelNormal);
+        }
+
+        // Station platform, then (the label,) status badges and the station name, stacked outward on the badge side.
+        var normal = placement.BadgeNormal;
+        double distance = isSelected ? SelectionWidth / 2 + 2 : TrackWidth / 2 + 3;
+
+        if (block.HasStation)
+        {
+            var offset = normal * (distance + 1.5);
+            var platformPen = Frozen(new Pen(PlatformBrush, 3) { StartLineCap = PenLineCap.Flat, EndLineCap = PenLineCap.Flat });
+            dc.DrawGeometry(null, platformPen, PolylineGeometry(Inset(placement.Points, 0.15).Select(p => p + offset).ToList()));
+            distance += 6;
+        }
+
+        if (label is not null && labelWithBadges)
+        {
+            DrawAligned(dc, label, placement.Midpoint + normal * distance, normal);
+            distance += (Math.Abs(normal.Y) >= Math.Abs(normal.X) ? label.Height : label.Width) + 3;
+        }
+
+        foreach (var badge in Badges(block, detailed))
+        {
+            distance += DrawBadge(dc, badge, placement.Midpoint + normal * distance, normal, pixelsPerDip) + 2;
+        }
+
+        if (block.HasStation)
+        {
+            var name = Text(block.Station, Scaled(StationFontSize, 8.5), BoldTypeface, StationBrush, pixelsPerDip);
+            DrawAligned(dc, name, placement.Midpoint + normal * (distance + 1), normal);
+        }
+    }
+
+    private readonly record struct Badge(string Text, Brush Accent, Geometry? Symbol, Brush? SymbolFill);
+
+    private IEnumerable<Badge> Badges(BlockViewModel block, bool detailed)
+    {
+        if (block.HasFailure)
+        {
+            yield return new Badge(detailed ? block.FailureSummary : "!", Brushes.DarkOrange, null, null);
+        }
+
+        if (block.IsOccupied)
+        {
+            yield return new Badge(detailed ? $"Train {block.Train}" : block.Train, OccupiedBrush, null, null);
+        }
+
+        if (block.HasBeacon)
+        {
+            yield return new Badge(detailed ? "BEACON" : "B", Brushes.DarkViolet, null, null);
+        }
+
+        if (block.HasSwitch)
+        {
+            string position = block.SwitchState switch
+            {
+                SwitchPosition.Normal => "N",
+                SwitchPosition.Reverse => "R",
+                _ => "?",
+            };
+            yield return new Badge(detailed ? $"SW {position}" : position, SwitchBrush, Diamond(), SwitchBrush);
+        }
+
+        if (block.HasSignal)
+        {
+            var (brush, shortText) = block.SignalState switch
+            {
+                SignalState.Red => (SignalRedBrush, "R"),
+                SignalState.Yellow => (SignalYellowBrush, "Y"),
+                SignalState.Green => (SignalGreenBrush, "G"),
+                SignalState.SuperGreen => (SignalSuperGreenBrush, "SG"),
+                _ => (UnknownBrush, "?"),
+            };
+            yield return new Badge(detailed ? shortText : string.Empty, LabelBrush, new EllipseGeometry(new Point(0, 0), 0.5, 0.5), brush);
+        }
+
+        if (block.HasCrossing)
+        {
+            string state = block.CrossingPosition switch
+            {
+                CrossingState.Open => "OPEN",
+                CrossingState.Closed => "CLOSED",
+                _ => "?",
+            };
+            yield return new Badge(detailed ? $"XING {state}" : string.Empty, CrossingBrush, Cross(), null);
+        }
+
+        if (block.IsClosed)
+        {
+            yield return new Badge("M", MaintenanceBrush, null, null);
+        }
+    }
+
+    /// <summary>Draws a pill badge outward from <paramref name="anchor"/>; returns its extent along the normal.</summary>
+    private double DrawBadge(DrawingContext dc, Badge badge, Point anchor, Vector normal, double pixelsPerDip)
+    {
+        double fontSize = Scaled(BadgeFontSize, 7);
+        double symbolSize = fontSize * 0.85;
+        var text = string.IsNullOrEmpty(badge.Text) ? null : Text(badge.Text, fontSize, BoldTypeface, badge.Accent, pixelsPerDip);
+        double padding = fontSize * 0.3;
+        double height = (text?.Height ?? symbolSize) + padding;
+        double width = padding * 2 + (badge.Symbol is null ? 0 : symbolSize) + (text is null ? 0 : text.Width) + (badge.Symbol is not null && text is not null ? padding : 0);
+
+        var box = AlignedBox(new Size(width, height), anchor, normal);
+        dc.DrawRoundedRectangle(BadgeBackground, new Pen(BadgeBorder, 1 / Zoom), box, height / 3, height / 3);
+
+        double x = box.X + padding;
+        if (badge.Symbol is not null)
+        {
+            var symbolCentre = new Point(x + symbolSize / 2, box.Y + box.Height / 2);
+            var transform = new TransformGroup();
+            transform.Children.Add(new ScaleTransform(symbolSize, symbolSize));
+            transform.Children.Add(new TranslateTransform(symbolCentre.X, symbolCentre.Y));
+            var symbol = badge.Symbol.Clone();
+            symbol.Transform = transform;
+            dc.DrawGeometry(badge.SymbolFill, badge.SymbolFill is null ? new Pen(badge.Accent, symbolSize * 0.22) : null, symbol);
+            x += symbolSize + padding;
+        }
+
+        if (text is not null)
+        {
+            dc.DrawText(text, new Point(x, box.Y + padding / 2));
+        }
+
+        return Math.Abs(normal.Y) >= Math.Abs(normal.X) ? height : width;
+    }
+
+    // Unit-size symbols centred on the origin; scaled when drawn.
+    private static Geometry Diamond() => Geometry.Parse("M 0,-0.5 L 0.5,0 L 0,0.5 L -0.5,0 Z");
+
+    private static Geometry Cross() => Geometry.Parse("M -0.45,-0.45 L 0.45,0.45 M -0.45,0.45 L 0.45,-0.45");
+
+    /// <summary>Font size in layout units that never renders below <paramref name="minPixels"/>.</summary>
+    private double Scaled(double size, double minPixels) => Math.Max(size, minPixels / Zoom);
+
+    private Pen TrackPen(Brush brush, double thickness) =>
+        Frozen(new Pen(brush, thickness) { StartLineCap = PenLineCap.Flat, EndLineCap = PenLineCap.Flat, LineJoin = PenLineJoin.Round });
+
+    private static StreamGeometry PolylineGeometry(IReadOnlyList<Point> points)
+    {
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(points[0], false, false);
+            context.PolyLineTo(points.Skip(1).ToList(), true, true);
+        }
+
+        geometry.Freeze();
+        return geometry;
+    }
+
+    /// <summary>The polyline shortened by <paramref name="fraction"/> of its length at each end.</summary>
+    private static List<Point> Inset(IReadOnlyList<Point> points, double fraction)
+    {
+        double length = PolylineMath.Length(points);
+        return PolylineMath.SubPath(points, length * fraction, length * (1 - fraction));
+    }
+
+    private static FormattedText Text(string text, double size, Typeface typeface, Brush brush, double pixelsPerDip) =>
+        new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, size, brush, pixelsPerDip);
+
+    private static void DrawText(DrawingContext dc, string text, Point point, double size, Brush brush, Typeface typeface, double pixelsPerDip) =>
+        dc.DrawText(Text(text, size, typeface, brush, pixelsPerDip), point);
+
+    private static void DrawAligned(DrawingContext dc, FormattedText text, Point anchor, Vector normal) =>
+        dc.DrawText(text, AlignedBox(new Size(text.Width, text.Height), anchor, normal).TopLeft);
+
+    /// <summary>Places a box of <paramref name="size"/> beside <paramref name="anchor"/> on the side the normal points to.</summary>
+    private static Rect AlignedBox(Size size, Point anchor, Vector normal)
+    {
+        double x = normal.X > 0.35 ? anchor.X : normal.X < -0.35 ? anchor.X - size.Width : anchor.X - size.Width / 2;
+        double y = normal.Y > 0.35 ? anchor.Y : normal.Y < -0.35 ? anchor.Y - size.Height : anchor.Y - size.Height / 2;
+        return new Rect(new Point(x, y), size);
+    }
+
+    private static Brush Hex(string color) => Frozen((Brush)new BrushConverter().ConvertFromString(color)!);
+
+    private static T Frozen<T>(T freezable) where T : Freezable
+    {
+        if (freezable.CanFreeze && !freezable.IsFrozen)
+        {
+            freezable.Freeze();
+        }
+
+        return freezable;
+    }
+
+    #endregion
 }

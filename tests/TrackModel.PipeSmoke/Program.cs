@@ -19,7 +19,8 @@ var tasks=endpoints.Select(pipe=>NamedPipeTransport.ListenAsync(pipe,envelope=>
         // The Track Model sends block states to the Track Controller as one batch per line.
         case "TrackModelBlockStates": foreach(var b in MessageSerializer.ReadValue<List<TrackModelBlockStateMessage>>(envelope,"blocks"))values["state:"+b.BlockId]=b;break;
         case nameof(TrackModelTrainEnvironmentMessage): var e=MessageSerializer.DeserializePayload<TrackModelTrainEnvironmentMessage>(envelope);values["env:"+e.BlockId]=e;break;
-        case nameof(TicketSalesMessage): values["tickets"]=MessageSerializer.DeserializePayload<TicketSalesMessage>(envelope);break;
+        case nameof(TrackModelSignalMessage): var light=MessageSerializer.DeserializePayload<TrackModelSignalMessage>(envelope);values["light:"+light.TrainId]=light;break;
+        case nameof(TicketSalesMessage): var sales=MessageSerializer.DeserializePayload<TicketSalesMessage>(envelope);values["tickets:"+sales.LineId]=sales;break;
         case nameof(SystemTimeMessage): values["time"]=MessageSerializer.DeserializePayload<SystemTimeMessage>(envelope);break;
         case nameof(TrackModelInputResultMessage): replies.Writer.TryWrite(MessageSerializer.DeserializePayload<TrackModelInputResultMessage>(envelope));break;
     }
@@ -52,35 +53,41 @@ try
     await Send(new TrackModelSnapshotRequestMessage());
     await Check("full layout (15-block Blue Line, 76 Red, 150 Green) received on private TestUI endpoint",()=>Get<TrackLayoutMessage>("layout")?.Lines.Select(l=>l.Blocks.Count).SequenceEqual(new[]{15,76,150})==true&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(TrackLayoutMessage)));
     await Check("clean Blue Line profile (click Restore course lines before running)",()=>Env("1")?.TrainId=="01"&&Env("10")?.TrainId==""&&Env("10")?.TicketsSold==0);
+    // Replace the legacy demonstration label with the existing canonical wire ID.
+    await Send(new TrackModelTrainUpdateMessage{TrainId="01",CurrentBlockId=""});
+    await Send(new TrackModelTrainUpdateMessage{TrainId="001",CurrentBlockId="1"});
     await Check("beacons on 9 and 14, no station beacon on 10",()=>Env("9")?.Beacon=="Station B"&&Env("14")?.Beacon=="Station C"&&Env("10")?.Beacon=="");
     await Send(new TrackModelCommandMessage{BlockId="5",CommandedSpeedMetersPerSecond=20*0.44704,AuthorityMeters=600*0.3048,Switch=SwitchPosition.Reverse});
     await Check("command speed/authority and reverse switch reach separate outputs",()=>Env("5")?.NextBlockId=="11"&&Env("5")?.AuthorityMeters==600*0.3048&&State("5")?.Switch==SwitchPosition.Reverse);
+    await Send(new TrackModelTrainUpdateMessage{TrainId="001",CurrentBlockId="6"});
     foreach(var signal in new[]{SignalState.Green,SignalState.Yellow,SignalState.Red})
     {
         await Send(new TrackModelCommandMessage{BlockId="6",Signal=signal});
-        await Check(signal+" reaches Train Model track-signal output",()=>Env("6")?.Signal==signal);
+        await Check(signal+" reaches Train Model and the direct Train Controller output",()=>Env("6")?.Signal==signal&&Get<TrackModelSignalMessage>("light:001") is {BlockId:"6"} light&&light.Signal==signal);
     }
+    await Send(new TrackModelTrainUpdateMessage{TrainId="001",CurrentBlockId="1"});
+    await Check("moving off a signal clears the Train Controller's previous aspect",()=>Get<TrackModelSignalMessage>("light:001") is {BlockId:"1",Signal:SignalState.Unknown});
     await Send(new TrackModelCommandMessage{BlockId="3",Crossing=CrossingState.Closed});
     await Check("crossing closed output",()=>State("3")?.Crossing==CrossingState.Closed);
     await Send(new TrackModelPassengerDemandMessage{BlockId="10",WaitingPassengers=7});
     await Check("demand changes waiting without selling tickets",()=>Env("10")?.WaitingPassengers==7&&Env("10")?.TicketsSold==0);
-    var exchange=new TrackModelTrainUpdateMessage{TrainId="01",CurrentBlockId="10",BoardingPassengers=3,DisembarkingPassengers=2,ExchangeId=Guid.NewGuid().ToString()};
+    var exchange=new TrackModelTrainUpdateMessage{TrainId="001",CurrentBlockId="10",BoardingPassengers=3,DisembarkingPassengers=2,ExchangeId=Guid.NewGuid().ToString()};
     await Send(exchange);
-    await Check("train move and passenger exchange update occupancy, demand, totals and CTC",()=>State("1")?.Occupancy==OccupancyState.Clear&&State("10")?.Occupancy==OccupancyState.Occupied&&Env("10")?.WaitingPassengers==4&&Env("10")?.BoardingPassengers==3&&Env("10")?.DisembarkingPassengers==2&&Env("10")?.TicketsSold==3&&Get<TicketSalesMessage>("tickets")?.TicketsPerHour==3);
+    await Check("train move and passenger exchange update occupancy, demand, totals and CTC",()=>State("1")?.Occupancy==OccupancyState.Clear&&State("10")?.Occupancy==OccupancyState.Occupied&&Env("10")?.WaitingPassengers==4&&Env("10")?.BoardingPassengers==3&&Env("10")?.DisembarkingPassengers==2&&Env("10")?.TicketsSold==3&&Get<TicketSalesMessage>("tickets:Blue")?.TicketsPerHour==3);
     await Send(exchange);
     var before=Get<TrackLayoutMessage>("layout")!.SnapshotId;
     await Send(new TrackModelSnapshotRequestMessage());
     await Check("retry and fresh snapshot preserve one-shot counts",()=>Get<TrackLayoutMessage>("layout")!.SnapshotId!=before&&Env("10")?.SnapshotId==Get<TrackLayoutMessage>("layout")!.SnapshotId&&Env("10")?.TicketsSold==3&&Env("10")?.WaitingPassengers==4);
     await Send(new TrackModelFailureCommandMessage{BlockId="10",BrokenRail=true,TrackCircuitFailure=true,PowerFailure=true});
-    await Check("all failures reach wayside, physical train remains",()=>State("10") is {BrokenRail:true,TrackCircuitFailure:true,PowerFailure:true,Occupancy:OccupancyState.Unknown}&&Env("10") is {TrainId:"01",Signal:SignalState.Unknown});
+    await Check("all failures reach wayside, physical train remains",()=>State("10") is {BrokenRail:true,TrackCircuitFailure:true,PowerFailure:true,Occupancy:OccupancyState.Unknown}&&Env("10") is {TrainId:"001",Signal:SignalState.Unknown});
     await Send(new TrackModelFailureCommandMessage{BlockId="10"});
     await Send(new TrackModelCommandMessage{BlockId="5",CommandedSpeedMetersPerSecond=-1},accepted:false);
     await Check("rejected negative command preserves accepted speed",()=>Env("5")?.CommandedSpeedMetersPerSecond==20*0.44704);
     await Send(new SystemTimeMessage{SystemTime=new TimeSpan(10,0,0)});
-    await Check("private clock setup updates, hourly tickets expire, cumulative tickets remain",()=>Get<SystemTimeMessage>("time")?.SystemTime==new TimeSpan(10,0,0)&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(SystemTimeMessage))&&Get<TicketSalesMessage>("tickets")?.TicketsPerHour==0&&Env("10")?.TicketsSold==3);
-    await Task.Delay(1000); // Observe the otherwise idle forbidden destination after all mutations.
+    await Check("private clock setup updates, hourly tickets expire, cumulative tickets remain",()=>Get<SystemTimeMessage>("time")?.SystemTime==new TimeSpan(10,0,0)&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(SystemTimeMessage))&&Get<TicketSalesMessage>("tickets:Blue")?.TicketsPerHour==0&&Env("10")?.TicketsSold==3);
+    await Task.Delay(1000);
     await Check("CTC received only its layout and ticket sales throughout the run",()=>received.Any(m=>m.Pipe==NamedPipeNames.Ctc&&m.Type==nameof(TrackLayoutMessage))&&received.Where(m=>m.Pipe==NamedPipeNames.Ctc).All(m=>m.Type is nameof(TicketSalesMessage) or nameof(TrackLayoutMessage)));
-    await Check("Train Controller received no messages throughout the run",()=>!received.Any(m=>m.Pipe==NamedPipeNames.TrainController));
+    await Check("Train Controller receives only traffic-light messages",()=>received.Any(m=>m.Pipe==NamedPipeNames.TrainController)&&received.Where(m=>m.Pipe==NamedPipeNames.TrainController).All(m=>m.Type==nameof(TrackModelSignalMessage)));
     Console.WriteLine($"COMPLETE: {checks} real-process output checks passed, with accepted/rejected acknowledgements for every input.");
 }
 finally {stop.Cancel();await Task.WhenAll(tasks);}

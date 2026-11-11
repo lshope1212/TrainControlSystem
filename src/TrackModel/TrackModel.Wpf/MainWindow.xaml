@@ -37,7 +37,18 @@
      </Border>
      <TabControl BorderThickness="0" Background="White" Margin="5">
       <TabItem Header="Schematic">
-       <Viewbox Stretch="Uniform"><controls:TrackDiagram Width="1120" Height="{Binding DiagramHeight}" Blocks="{Binding Blocks}" SelectedBlock="{Binding SelectedBlock, Mode=TwoWay}" Revision="{Binding DiagramRevision}"/></Viewbox>
+       <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#F7FAFD" Padding="8,4" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button Content="Fit" ToolTip="Fit the whole line in view" Command="{x:Static controls:TrackDiagram.FitCommand}" CommandTarget="{Binding ElementName=TrackMap}" AutomationProperties.Name="Fit track layout" Margin="0,0,6,0"/>
+          <Button Content="+" ToolTip="Zoom in (Ctrl+wheel)" Command="{x:Static controls:TrackDiagram.ZoomInCommand}" CommandTarget="{Binding ElementName=TrackMap}" AutomationProperties.Name="Zoom in" MinWidth="36" Margin="0,0,6,0"/>
+          <Button Content="−" ToolTip="Zoom out (Ctrl+wheel)" Command="{x:Static controls:TrackDiagram.ZoomOutCommand}" CommandTarget="{Binding ElementName=TrackMap}" AutomationProperties.Name="Zoom out" MinWidth="36"/>
+         </StackPanel>
+        </Border>
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" CanContentScroll="False" Padding="8">
+         <controls:TrackDiagram x:Name="TrackMap" Blocks="{Binding Blocks}" LineId="{Binding SelectedLine.Id}" SelectedBlock="{Binding SelectedBlock, Mode=TwoWay}" Revision="{Binding DiagramRevision}" AutomationProperties.Name="Track layout schematic"/>
+        </ScrollViewer>
+       </DockPanel>
       </TabItem>
       <TabItem Header="All blocks">
        <DataGrid ItemsSource="{Binding Blocks}" SelectedItem="{Binding SelectedBlock}" Margin="8">
