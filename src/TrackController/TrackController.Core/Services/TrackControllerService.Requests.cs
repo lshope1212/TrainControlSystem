@@ -49,6 +49,7 @@ public sealed partial class TrackControllerService
 
                 if (_requests.Remove(message.TargetBlockId))
                 {
+                    GetBlock(message.TargetBlockId).Authority = null;
                     DiscardSuccessorsOf(message.RequestId);
                 }
 
@@ -112,6 +113,10 @@ public sealed partial class TrackControllerService
             {
                 throw new ArgumentException("This request took over its predecessor's end point at a block transition and cannot be extended. A new movement needs a new request.");
             }
+
+            // Preserve CTC's cancel/reissue and departure semantics. The replacement is still subject
+            // to the full PLC and independent checks; it does not require optional speed telemetry.
+            PrepareCtcMovement(message);
 
             // An ordinary request, or a renewal of an active one (including a promoted successor, which
             // keeps the ID of the request it replaced for diagnostics). A successor CTC now sends as an

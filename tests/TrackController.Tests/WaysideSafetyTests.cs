@@ -136,7 +136,8 @@ public sealed class WaysideSafetyTests
     public void LoadPlc_ValidProgram_PausesUntilExplicitResume()
     {
         var fixture = new Fixture(true);
-        fixture.Submit();
+        var request = fixture.Request();
+        fixture.Submit(request);
         fixture.Service.LoadPlc("updated.plc", GoodPlc);
         Assert.IsTrue(fixture.Service.GetSnapshot().IsPaused);
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
@@ -213,14 +214,15 @@ public sealed class WaysideSafetyTests
         Assert.AreEqual(0d, fixture.Submit().AuthorizedAuthorityMeters);
     }
 
-    /// <summary>Verifies that stale feedback stops and fresh feedback recovers.</summary>
+    /// <summary>Fresh safe feedback recovers the existing movement without optional speed telemetry.</summary>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
     public void ApplyFeedback_StaleThenFresh_StopsThenRecoversMovement(bool hardware)
     {
         var fixture = new Fixture(hardware);
-        fixture.Submit();
+        var request = fixture.Request();
+        fixture.Submit(request);
         fixture.Clock.Advance(5.1);
         Assert.AreEqual(0d, fixture.Output.AuthorizedAuthorityMeters);
         fixture.Feedback();
@@ -383,7 +385,7 @@ public sealed class WaysideSafetyTests
             BlockId = "7",
             RequestedState = MaintenanceState.Open
         });
-        Assert.AreEqual(350d, fixture.Output.AuthorizedAuthorityMeters);
+        Assert.AreEqual(200d, fixture.Output.AuthorizedAuthorityMeters, "Reopening must not extend an issued mid-block authority.");
     }
 
     /// <summary>Verifies that faults remain restrictive after connection recovery.</summary>
@@ -514,16 +516,19 @@ public sealed class WaysideSafetyTests
         Assert.Throws<ArgumentException>(() => fixture.Service.SubmitMovement(request));
     }
 
-    /// <summary>Verifies that repeated request may change limits but cannot mutate its route.</summary>
+    /// <summary>Explicit CTC limit updates are accepted; changing a live request's route needs a new ID.</summary>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void SubmitMovement_RepeatedId_AllowsNewLimitsButRejectsNewRoute(bool hardware)
+    public void SubmitMovement_RepeatedId_AllowsCtcLimitUpdatesButRejectsNewRoute(bool hardware)
     {
         var fixture = new Fixture(hardware);
         var request = fixture.Request();
         fixture.Submit(request);
         request.SuggestedSpeedMetersPerSecond = 3;
+        fixture.Submit(request);
+        Assert.AreEqual(3d, fixture.Output.AuthorizedSpeedMetersPerSecond);
+        Assert.AreEqual(350d, fixture.Output.AuthorizedAuthorityMeters);
         request.SuggestedAuthorityMeters = 100;
         fixture.Submit(request);
         Assert.AreEqual(3d, fixture.Output.AuthorizedSpeedMetersPerSecond);

@@ -158,6 +158,67 @@ public sealed class AuthorityContinuityIntegrationTests
     }
 
     [TestMethod]
+    public async Task StationDeparture_UsesCtcReplacementAndProductionTrackModelFeedback()
+    {
+        var run = new TrainRun("001", "Blue", ["1", "2", "3", "4"]);
+        await using var system = await StartAsync(false, null, run);
+        await using var onboard = new OnboardTrains(system.TrainModelPipe, run.TrainId);
+        var train = onboard[run.TrainId];
+        var (active, _) = await PreparedAsync(system, run);
+        await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority > 0), "the approach authority reaches the train.");
+
+        // Replay CTC's hold/departure lifecycle without its periodic renewal restoring the approach.
+        // Feedback still comes from the real Track Model connection, not hand-built speed samples.
+        await system.StopCtcAsync();
+        await system.SendToTrackControllerAsync(active.Plan.ToCancellation(active.RequestId));
+        var dwell = (active.Plan with { SpeedMetersPerSecond = 0 }).ToMessage("station-dwell");
+        await system.SendToTrackControllerAsync(dwell);
+        await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority == 0), "the station hold reaches the train.");
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = run.TrainId, CurrentBlockId = "1", ActualSpeedMetersPerSecond = 0 });
+        Console.WriteLine($"Optional speed in production wayside feedback: {await system.OnTrackModel(track => track.CreateBlockState("1").ActualSpeedMetersPerSecond)}");
+
+        await system.SendToTrackControllerAsync(active.Plan.ToCancellation(dwell.RequestId));
+        var departure = active.Plan.ToMessage("station-departure");
+        await system.SendToTrackControllerAsync(departure);
+        await LiveSystem.UntilAsync(() => Task.FromResult(
+            system.WaysideBlock("1").Request?.RequestId == departure.RequestId
+            && Math.Abs(train.Authority - active.Plan.AuthorityMeters) < 1e-6),
+            "departure authority reaches the train without requiring a stopped-speed feedback field.");
+        double fullRoute = await system.OnTrackModel(track => run.Route.Sum(id => track.FindBlock(id)!.LengthMeters));
+        Assert.AreEqual(fullRoute, train.Authority, 1e-6, "Departure includes the full current block and the onward blocks.");
+    }
+
+    [TestMethod]
+    public async Task CtcSpeedOnlyReplan_CancelAndReissueDoesNotLeaveTheMovingTrainAtZero()
+    {
+        var run = new TrainRun("001", "Blue", ["1", "2", "3", "4"]);
+        await using var system = await StartAsync(false, null, run);
+        await using var onboard = new OnboardTrains(system.TrainModelPipe, run.TrainId);
+        var train = onboard[run.TrainId];
+        var (active, _) = await PreparedAsync(system, run);
+        await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority > 0), "the original CTC movement reaches the train.");
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = run.TrainId, CurrentBlockId = "1", ActualSpeedMetersPerSecond = 8 });
+
+        // Changing arrival time changes suggested speed, not the current block or route endpoint.
+        // The production CTC coordinator sends a cancellation and a replacement request ID.
+        await system.OnCtcAsync(ctc => ctc.UpdateDispatchedTrainPlanAsync(run.TrainId, "4", Departure + TimeSpan.FromSeconds(180)));
+        await LiveSystem.UntilAsync(async () =>
+        {
+            var current = await Dispatched(system, run.TrainId);
+            return current.MovementRequest is { IsMovementAuthorized: true } replacement
+                && replacement.RequestId != active.RequestId
+                && system.WaysideBlock("1").Request?.RequestId == replacement.RequestId
+                && Math.Abs(train.Authority - active.AuthorizedAuthorityMeters) < 1e-6;
+        }, "the CTC replacement restores permission in the same block.");
+
+        var replanned = await Dispatched(system, run.TrainId);
+        Assert.AreEqual("1", replanned.CurrentBlockId);
+        Assert.AreEqual(active.Plan.AuthorityMeters, replanned.MovementRequest!.Plan.AuthorityMeters, 1e-6);
+        Assert.AreNotEqual(active.Plan.SpeedMetersPerSecond, replanned.MovementRequest.Plan.SpeedMetersPerSecond);
+        Assert.AreEqual(8d, await system.OnTrackModel(track => track.FindBlock("1")!.ActualSpeedMetersPerSecond), "The wayside did not require the train to stop before accepting CTC's replacement.");
+    }
+
+    [TestMethod]
     public async Task FaultAheadDuringPreparation_WithdrawsTheGrantAtOnce_AndThePreparedSuccessorNeverOverridesIt()
     {
         var run = new TrainRun("001", "Blue", ["1", "2", "3", "4"]);

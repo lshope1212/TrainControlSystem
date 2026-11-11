@@ -100,11 +100,13 @@ public sealed partial class TrackControllerService
                 }
             }
 
+            result = HoldBlockAuthority(result);
             if (!IsAuthorizationSafe(result))
             {
                 result = Stop(result, "Independent safety check withheld authority.");
             }
 
+            RememberBlockAuthority(result);
             authorizations.Add(result);
         }
 
@@ -222,7 +224,7 @@ public sealed partial class TrackControllerService
         }
 
         var path = GetRequestPath(receivedRequest).ToArray();
-        if (_requests.Values.Any(other => other != receivedRequest && IsActive(other) && GetRequestPath(other).Intersect(path).Any()))
+        if (_requests.Values.Any(other => other != receivedRequest && IsActive(other) && !_retiredRequests.Contains(other.Value.RequestId) && GetRequestPath(other).Intersect(path).Any()))
         {
             return Stop(output, "Conflicting active movement requests overlap this route.");
         }

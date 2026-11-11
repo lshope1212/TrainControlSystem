@@ -293,6 +293,215 @@ public sealed class AuthorityHandoffTests
         Assert.Throws<ArgumentException>(() => line.Service.SubmitMovement(predecessor), "Its target cleared: the old request is retired.");
     }
 
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public void DownstreamRestriction_AfterGrant_WithdrawsToZeroInsteadOfShortening(bool hardware, bool closed)
+    {
+        var (line, _, _) = Prepared(hardware);
+        line.Feedback(rows =>
+        {
+            rows.Single(row => row.BlockId == "1").ActualSpeedMetersPerSecond = 12;
+            var obstacle = rows.Single(row => row.BlockId == "3");
+            if (closed)
+            {
+                obstacle.IsClosed = true;
+            }
+            else
+            {
+                obstacle.Occupancy = OccupancyState.Occupied;
+            }
+        });
+
+        Assert.AreEqual(0d, line.TrainAuthority("1"), "Never replace the issued 300 m by 200 m within block 1.");
+        Assert.IsNull(line.Block("2").Continuation, "Withdrawal must also remove the prepared continuation.");
+        line.Feedback();
+        Assert.AreEqual(300d, line.TrainAuthority("1"), "Existing CTC permission becomes eligible again when the safety restriction clears.");
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ImprovingConditions_KeepIssuedAuthority_AndPreserveItsEndpointAcrossTheBoundary(bool hardware)
+    {
+        var line = new Territory(hardware);
+        line.Trains["3"] = "";
+        line.Feedback();
+        var request = line.Request("1", null, 300, "2", "3");
+        line.Service.SubmitMovement(request);
+        Assert.AreEqual(200d, line.TrainAuthority("1"));
+        line.Service.SubmitMovement(Territory.Successor(request));
+
+        line.Trains.Remove("3");
+        line.Feedback();
+        line.Service.SubmitMovement(request);
+        Assert.AreEqual(200d, line.TrainAuthority("1"), "Improved conditions and renewals cannot extend an issued grant.");
+        Assert.AreEqual(100d, line.Block("2").Continuation!.AuthorizedAuthorityMeters);
+
+        line.Move("1", "2");
+        Assert.AreEqual(100d, line.TrainAuthority("2"), "Carry the actual endpoint, not the larger original suggestion.");
+        Assert.IsNull(line.Block("1").Request);
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void CtcReplacement_StartsNewMovement_WhileSpeedOnlyRenewalKeepsIssuedAuthority(bool hardware)
+    {
+        var line = new Territory(hardware);
+        var request = line.Request("1", null, 200, "2");
+        line.Service.SubmitMovement(request);
+        line.Feedback(rows => rows.Single(row => row.BlockId == "1").ActualSpeedMetersPerSecond = 8);
+
+        request.SuggestedSpeedMetersPerSecond = 6;
+        line.Service.SubmitMovement(request);
+        Assert.AreEqual(200d, line.TrainAuthority("1"));
+        Assert.AreEqual(6d, line.Block("1").AuthorizedSpeedMetersPerSecond);
+
+        var replacement = line.Request("1", null, 300, "2", "3");
+        line.Service.SubmitMovement(replacement);
+        Assert.AreEqual(300d, line.TrainAuthority("1"), "A new CTC request is a new movement, including a same-block replan.");
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ExplicitCtcLimitChange_IsEvaluatedAsANewMovement(bool hardware)
+    {
+        var line = new Territory(hardware);
+        var request = line.Request("1", null, 300, "2", "3");
+        line.Service.SubmitMovement(request);
+        request.SuggestedAuthorityMeters = 200;
+        line.Service.SubmitMovement(request);
+        Assert.AreEqual(200d, line.TrainAuthority("1"), "An explicit CTC limit change is distinct from an autonomous track-condition revision.");
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void CancellationAndReplacement_AreSupportedWithoutStoppedSpeedTelemetry(bool hardware)
+    {
+        var line = new Territory(hardware);
+        var request = line.Request("1", null, 300, "2", "3");
+        line.Service.SubmitMovement(request);
+        request.IsActive = false;
+        line.Service.SubmitMovement(request);
+        Assert.AreEqual(0d, line.TrainAuthority("1"), "Cancellation still withdraws permission immediately.");
+
+        foreach (double? speed in new double?[] { null, 12 })
+        {
+            line.Feedback(rows => rows.Single(row => row.BlockId == "1").ActualSpeedMetersPerSecond = speed);
+            line.Service.SubmitMovement(line.Request("1", null, 200, "2"));
+            Assert.AreEqual(200d, line.TrainAuthority("1"), "CTC owns replacement timing; optional speed feedback is not a restart condition.");
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void StationDwell_DepartureWithoutSpeedTelemetryIncludesFullCurrentBlock_ThenRebasesAtNextEntry(bool hardware)
+    {
+        var line = new Territory(hardware);
+        var arrival = line.Request("1", null, 100);
+        line.Service.SubmitMovement(arrival);
+        Assert.AreEqual(100d, line.TrainAuthority("1"));
+
+        arrival.SuggestedSpeedMetersPerSecond = 0;
+        line.Service.SubmitMovement(arrival);
+        Assert.AreEqual(0d, line.TrainAuthority("1"), "Zero authority is allowed during station dwell.");
+        line.Feedback();
+        Assert.IsNull(line.Block("1").ActualSpeedMetersPerSecond);
+        Assert.AreEqual(0d, line.TrainAuthority("1"));
+
+        var departure = line.Request("1", null, 300, "2", "3");
+        line.Service.SubmitMovement(departure);
+        Assert.AreEqual(300d, line.TrainAuthority("1"), "100 m current block + 200 m onward, with no inferred position offset.");
+        line.Service.SubmitMovement(Territory.Successor(departure));
+        line.Move("1", "2");
+        Assert.AreEqual(200d, line.TrainAuthority("2"));
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void EmergencyRecovery_RechecksSafetyWithoutRequiringSpeedTelemetry(bool hardware)
+    {
+        var line = new Territory(hardware);
+        var request = line.Request("1", null, 300, "2", "3");
+        line.Service.SubmitMovement(request);
+
+        line.Trains["3"] = "another train";
+        line.Feedback();
+        Assert.AreEqual(0d, line.TrainAuthority("1"));
+        line.Service.SubmitMovement(request);
+        Assert.AreEqual(0d, line.TrainAuthority("1"), "An unchanged renewal cannot bypass a still-unsafe issued grant.");
+
+        line.Trains.Remove("3");
+        line.Feedback();
+        Assert.IsNull(line.Block("1").ActualSpeedMetersPerSecond);
+        Assert.AreEqual(300d, line.TrainAuthority("1"));
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void CtcReplacement_StillWithholdsForFaultsWithoutSpeedTelemetry(bool hardware)
+    {
+        var line = new Territory(hardware);
+        var request = line.Request("1", null, 200, "2");
+        line.Service.SubmitMovement(request);
+        line.Feedback(rows => rows.Single(row => row.BlockId == "1").BrokenRail = true);
+        Assert.AreEqual(0d, line.TrainAuthority("1"));
+        request.IsActive = false;
+        line.Service.SubmitMovement(request);
+        line.Service.SubmitMovement(line.Request("1", null, 300, "2", "3"));
+        Assert.AreEqual(0d, line.TrainAuthority("1"), "Accepting CTC's request lifecycle must not bypass a fault.");
+        line.Feedback();
+        Assert.AreEqual(300d, line.TrainAuthority("1"));
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void DifferentBlockLengths_AreSubtractedInFullAtEachHandoff(bool hardware)
+    {
+        var configuration = WaysideConfiguration.CreateDemo();
+        configuration.Blocks.Single(block => block.BlockId == "1").LengthMeters = 80;
+        configuration.Blocks.Single(block => block.BlockId == "2").LengthMeters = 120;
+        configuration.Blocks.Single(block => block.BlockId == "3").LengthMeters = 160;
+        var line = new Territory(hardware, configuration);
+        var first = line.Request("1", null, 360, "2", "3");
+        line.Service.SubmitMovement(first);
+        var second = Territory.Successor(first, 280);
+        line.Service.SubmitMovement(second);
+        line.Move("1", "2");
+        Assert.AreEqual(280d, line.TrainAuthority("2"));
+        line.Service.SubmitMovement(Territory.Successor(second, 160));
+        line.Move("2", "3");
+        Assert.AreEqual(160d, line.TrainAuthority("3"));
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RerouteRequestedFromNewBlock_IsEvaluatedFromThatBlocksStart(bool hardware)
+    {
+        var line = new Territory(hardware);
+        var first = line.Request("1", null, 300, "2", "3");
+        line.Service.SubmitMovement(first);
+        line.Move("1", "2", rows => rows.Single(row => row.BlockId == "2").ActualSpeedMetersPerSecond = 12);
+        Assert.AreEqual(0d, line.TrainAuthority("2"), "Without a prepared successor, the new block waits for its request.");
+
+        var rerouted = line.Request("2", "1", 300, "3", "4");
+        line.Service.SubmitMovement(rerouted);
+        Assert.AreEqual(300d, line.TrainAuthority("2"), "A new block may receive a new endpoint; the old block's grant does not constrain it.");
+        first.IsActive = false;
+        line.Service.SubmitMovement(first);
+        Assert.AreEqual(300d, line.TrainAuthority("2"), "Cleaning up the old request must not cancel the new one.");
+    }
+
     public enum RevocationPoint { BeforeTransition, DuringPreparation, DuringTransfer, AfterTransfer }
 
     [TestMethod]

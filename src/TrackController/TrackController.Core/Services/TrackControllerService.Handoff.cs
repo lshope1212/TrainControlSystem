@@ -155,6 +155,12 @@ public sealed partial class TrackControllerService
                 _requests.Remove(successor.Value.EntryBlockId!);
                 _retiredRequests.Add(predecessor.Value.RequestId);
                 _requests[successor.Value.TargetBlockId] = successor;
+                // Carry the actual grant, not the larger original suggestion. Clearing a restriction
+                // during the crossing must not move the endpoint or change the pre-coded continuation.
+                double remaining = grantsBefore[predecessor.Value.RequestId].AuthorizedAuthorityMeters
+                    - GetBlock(predecessor.Value.TargetBlockId).Definition.LengthMeters;
+                GetBlock(successor.Value.TargetBlockId).Authority = new BlockAuthority(successor.Value,
+                    Math.Min(remaining, successor.Value.SuggestedAuthorityMeters));
                 _staged.Remove(successor.Value.RequestId);
             }
             else
@@ -208,7 +214,7 @@ public sealed partial class TrackControllerService
         // No other request holds the target or any block of the successor's route.
         var route = new[] { target }.Concat(successor.PathBlockIds).ToArray();
         return !_requests.ContainsKey(target)
-            && !_requests.Values.Any(other => other.Value.RequestId != predecessor.Value.RequestId && IsActive(other) && GetRequestPath(other).Intersect(route).Any());
+            && !_requests.Values.Any(other => other.Value.RequestId != predecessor.Value.RequestId && IsActive(other) && !_retiredRequests.Contains(other.Value.RequestId) && GetRequestPath(other).Intersect(route).Any());
     }
 
     /// <summary>Drops the staged successors of <paramref name="predecessorId"/> (its request was cancelled), retiring their IDs.</summary>

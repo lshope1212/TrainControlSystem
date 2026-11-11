@@ -94,7 +94,7 @@ public sealed partial class TrackControllerService
             inputs["request_fresh"] = [IsActive(receivedRequest)];
             inputs["request_retired"] = [_retiredRequests.Contains(request.RequestId)];
             inputs["origin_occupied"] = [GetBlock(request.TargetBlockId).Feedback?.Occupancy == OccupancyState.Occupied];
-            inputs["route_conflict"] = [_requests.Values.Any(other => other != receivedRequest && IsActive(other) && GetRequestPath(other).Intersect(path).Any())];
+            inputs["route_conflict"] = [_requests.Values.Any(other => other != receivedRequest && IsActive(other) && !_retiredRequests.Contains(other.Value.RequestId) && GetRequestPath(other).Intersect(path).Any())];
             inputs["suggested_speed"] = VitalPlcProgram.Encode(request.SuggestedSpeedMetersPerSecond);
             inputs["suggested_authority"] = VitalPlcProgram.Encode(request.SuggestedAuthorityMeters);
             inputs["speed_in"] = inputs["suggested_speed"];

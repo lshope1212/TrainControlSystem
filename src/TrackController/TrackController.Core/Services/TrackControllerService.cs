@@ -22,6 +22,7 @@ public sealed partial class TrackControllerService
         public CrossingState CommandedCrossing = CrossingState.Closed;
         public bool ManualRed;
         public bool ManualCrossingClosed;
+        public BlockAuthority? Authority;
     }
 
     private readonly object _gate = new();
@@ -228,6 +229,10 @@ public sealed partial class TrackControllerService
 
                 block.Feedback = feedback with { };
                 block.Received = now;
+                if (feedback.Occupancy == OccupancyState.Clear)
+                {
+                    block.Authority = null;
+                }
                 applied.Add(block);
             }
 
