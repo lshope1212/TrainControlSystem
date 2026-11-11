@@ -1,6 +1,10 @@
 using System.IO;
 using System.Windows;
+using TrainControl.SystemClock;
 using TrainController.Integration;
+using TrainController.Integration.Communication;
+using TrainController.Integration.Configuration;
+using TrainController.Integration.Output;
 using TrainController.Integration.Hardware;
 using TrainController.Integration.Logging;
 using TrainController.Wpf.ViewModels;
@@ -17,6 +21,7 @@ public partial class App : Application
 {
     private TrainControllerSubsystem? _subsystem;
     private TcpHardwareTrainControllerBackend? _hardware;
+    private TrainControllerPipeReceiver? _pipeReceiver;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -42,7 +47,32 @@ public partial class App : Application
         log.Log(TrainControllerLogLevel.Info, "Hardware", null, $"Raspberry Pi endpoint: {linkOptions.Endpoint}");
 
         _hardware = new TcpHardwareTrainControllerBackend(linkOptions, log);
-        _subsystem = TrainControllerSubsystem.Create(hardwareBackend: _hardware, log: log);
+        _subsystem = TrainControllerSubsystem.Create(
+            hardwareBackend: _hardware,
+            trainModelSink: new NamedPipeTrainModelCommandSink(),
+            log: log);
+
+        // Global tick clock ("Clock" in appsettings.json). Host = true: this process runs the
+        // clock for now; set Host = false once CTC hosts it — nothing else changes.
+        var clock = ClockSettings.Load(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
+        if (clock.Host)
+        {
+            var coordinator = new TickClockCoordinator(new TickClockOptions(
+                clock.Participants, _subsystem.Engine.DeltaTimeSeconds, TimeSpan.FromMilliseconds(clock.TickTimeoutMilliseconds)));
+            coordinator.Diagnostic += (_, text) => log.Log(TrainControllerLogLevel.Info, "Clock", null, text);
+            _subsystem.SystemClock = coordinator;
+        }
+
+        var receiver = new TrainControllerPipeReceiver(_subsystem, clock.Host ? null : clock.HostPipe);
+        _pipeReceiver = receiver;
+        if (_subsystem.SystemClock is { } hosted)
+        {
+            hosted.LocalReset += ct => receiver.ResetLocalAsync(ct);
+            hosted.Start();
+            log.Log(TrainControllerLogLevel.Info, "Clock", null, $"Hosting the global tick clock for: {string.Join(", ", clock.Participants)} (interim, until CTC).");
+        }
+
+        receiver.Start();
 
         // Test UI default: simple physics on, so normal scenarios behave without a Train Model
         // (turn it off in the Test UI to hold the speed by hand, e.g. to reproduce failures).
@@ -60,6 +90,8 @@ public partial class App : Application
     {
         // The process is exiting: request shutdown of the simulation loop and the Pi link
         // without blocking the UI thread on them.
+        _ = _pipeReceiver?.StopAsync();
+        _ = _subsystem?.SystemClock?.DisposeAsync().AsTask();
         _ = _subsystem?.Simulation.StopAsync();
         _ = _hardware?.DisposeAsync().AsTask();
 

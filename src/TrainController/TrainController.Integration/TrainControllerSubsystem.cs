@@ -32,7 +32,7 @@ public sealed class TrainControllerSubsystem
         HardwareBackend = hardwareBackend;
         Router = new TrainControllerRouter(softwareBackend, hardwareBackend);
         Execution = new TrainControllerExecutionService(Router, log);
-        NormalModelInput = new NormalModelInputProvider();
+        NormalModelInput = new NormalModelInputProvider(trainId => Registry.Get(trainId).LastOutput?.Commands);
         TestModelInput = new TestModelInputProvider(Registry);
         TestMode = new TestModeController(NormalModelInput, TestModelInput, log);
         OutputRouter = new OutputRouter(Registry, trainModelSink, log);
@@ -41,6 +41,12 @@ public sealed class TrainControllerSubsystem
     }
 
     public TrainControllerRuntimeOptions Options { get; }
+
+    /// <summary>
+    /// Global tick clock while this process hosts it (interim, until CTC hosts it); null when the
+    /// clock is hosted elsewhere or disabled. Normal mode only — Test Mode uses <see cref="Simulation"/>.
+    /// </summary>
+    public TrainControl.SystemClock.TickClockCoordinator? SystemClock { get; set; }
 
     public ITrainControllerEventLog Log { get; }
 

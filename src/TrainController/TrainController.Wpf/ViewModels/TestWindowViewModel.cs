@@ -50,9 +50,9 @@ public sealed class TestWindowViewModel : ViewModelBase
         Fleet = new ObservableCollection<TestFleetRowStatus>(_subsystem.Registry.Trains.Select(TrainControllerPresenter.BuildTestFleetRow));
         InputWarnings = new ObservableCollection<string>();
 
-        RunCommand = new RelayCommand(_ => Run(), _ => IsTestMode && !IsRunning);
+        RunCommand = new RelayCommand(_ => Run(), _ => (IsTestMode || UsesSystemClock) && !IsRunning);
         StopCommand = new AsyncRelayCommand(_ => StopAsync(), _ => IsRunning);
-        StepCommand = new AsyncRelayCommand(_ => StepAsync(), _ => IsTestMode && !IsRunning);
+        StepCommand = new AsyncRelayCommand(_ => StepAsync(), _ => (IsTestMode || UsesSystemClock) && !IsRunning);
         ResetCommand = new AsyncRelayCommand(_ => ResetAsync());
         TransmitBeaconCommand = new RelayCommand(_ => Model.TransmitBeacon());
         SendAuthorityCommand = new RelayCommand(_ => Model.SendAuthorityUpdate());
@@ -107,7 +107,12 @@ public sealed class TestWindowViewModel : ViewModelBase
         set => IsTestMode = !value;
     }
 
-    public bool IsRunning => _subsystem.Simulation.State == TestSimulationState.Running;
+    /// <summary>Test Mode off and this process hosts the global clock: Run / Stop / Step / Reset / speed control it.</summary>
+    public bool UsesSystemClock => !IsTestMode && _subsystem.SystemClock is not null;
+
+    public bool IsRunning => UsesSystemClock
+        ? _subsystem.SystemClock!.State.IsRunning
+        : _subsystem.Simulation.State == TestSimulationState.Running;
 
     public IReadOnlyList<int> SpeedMultipliers => _subsystem.Simulation.SupportedSpeedMultipliers;
 
@@ -117,6 +122,7 @@ public sealed class TestWindowViewModel : ViewModelBase
         set
         {
             _subsystem.Simulation.SetSpeedMultiplier(value);
+            _subsystem.SystemClock?.SetSpeed(value);
             OnPropertyChanged();
         }
     }
@@ -426,8 +432,11 @@ public sealed class TestWindowViewModel : ViewModelBase
         BeaconPendingText = Model.BeaconReceptionPending ? "Beacon queued for this train's next tick." : string.Empty;
         AuthorityPendingText = Model.AuthorityUpdatePending ? "Update queued for next tick." : string.Empty;
         HeaderTimeText = DisplayUnits.SimulationTime(_subsystem.Engine.SimulationTimeSeconds);
+        var clockFault = UsesSystemClock ? _subsystem.SystemClock!.State.Fault : string.Empty;
         SimulationText =
+            (UsesSystemClock ? "System clock  ·  " : string.Empty) +
             $"{(IsRunning ? "Running" : "Stopped")}  ·  Tick {_subsystem.Engine.TickCount}" +
+            (clockFault.Length > 0 ? $"  ·  {clockFault}" : string.Empty) +
             $"  ·  dt {DisplayUnits.Number(_subsystem.Simulation.DeltaTimeSeconds, 2)} s" +
             $"  ·  {SelectedSpeedMultiplier}x";
     }
@@ -436,6 +445,14 @@ public sealed class TestWindowViewModel : ViewModelBase
 
     public bool Run()
     {
+        if (UsesSystemClock)
+        {
+            _subsystem.SystemClock!.Run();
+            CommandMessage = "System clock running (Normal mode).";
+            OnSimulationStateChanged();
+            return true;
+        }
+
         var started = _subsystem.Simulation.Run();
         CommandMessage = started ? string.Empty : "Run requires Test Mode and a stopped simulation.";
         OnSimulationStateChanged();
@@ -444,12 +461,27 @@ public sealed class TestWindowViewModel : ViewModelBase
 
     public async Task StopAsync()
     {
+        if (UsesSystemClock)
+        {
+            _subsystem.SystemClock!.Pause();
+            OnSimulationStateChanged();
+            return;
+        }
+
         await _subsystem.Simulation.StopAsync();
         OnSimulationStateChanged();
     }
 
     public async Task StepAsync()
     {
+        if (UsesSystemClock)
+        {
+            _subsystem.SystemClock!.Step();
+            CommandMessage = "System clock: one tick requested.";
+            Refresh();
+            return;
+        }
+
         var report = await _subsystem.Simulation.StepAsync();
         CommandMessage = report is null
             ? "Step requires Test Mode and a stopped simulation."
@@ -459,6 +491,14 @@ public sealed class TestWindowViewModel : ViewModelBase
 
     public async Task ResetAsync()
     {
+        if (UsesSystemClock)
+        {
+            _subsystem.SystemClock!.Reset();
+            CommandMessage = "System clock reset requested (all participants).";
+            Refresh();
+            return;
+        }
+
         await _subsystem.Simulation.ResetAsync();
         CommandMessage = "Test simulation reset for all trains (inputs and Kp/Ki kept).";
         Refresh();

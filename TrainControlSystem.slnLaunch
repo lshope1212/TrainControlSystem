@@ -3,14 +3,12 @@
     "Name": "Track Model standalone",
     "Projects": [
       {
-        "Path": "src\\TrackModel\\TrackModel.Wpf\\TrackModel.Wpf.csproj",
-        "Action": "Start",
-        "DebugTarget": "TrackModel.Wpf"
+        "Path": "src\\TrainModel\\TrainModel.Wpf\\TrainModel.Wpf.csproj",
+        "Action": "Start"
       },
       {
-        "Path": "src\\TrackModel\\TrackModel.TestUI.Wpf\\TrackModel.TestUI.Wpf.csproj",
-        "Action": "Start",
-        "DebugTarget": "TrackModel.TestUI.Wpf"
+        "Path": "src\\TrainModel\\TrainModel.TestUI.Wpf\\TrainModel.TestUI.Wpf.csproj",
+        "Action": "Start"
       }
     ]
   }

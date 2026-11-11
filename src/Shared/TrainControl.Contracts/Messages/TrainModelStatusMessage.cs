@@ -13,7 +13,7 @@ namespace TrainControl.Contracts.Messages;
 /// the Software or the Hardware Train Controller.
 /// </para>
 /// <para>
-/// <see cref="CommandedSpeedMetersPerSecond"/> and <see cref="RemainingAuthorityMeters"/>
+/// <see cref="CommandedSpeedMetersPerSecond"/> and <see cref="CommandedAuthorityMeters"/>
 /// are the values the wayside has authorized, relayed to the train through the track.
 /// The Train Controller never reads the track-layout workbook itself.
 /// </para>
@@ -29,6 +29,11 @@ public class TrainModelStatusMessage
 {
     public string TrainId { get; set; } = string.Empty;
 
+    /// <summary>Tick this state belongs to (state at the END of the tick); the controller answers
+    /// with commands tagged with the same TickId. Door and light states are NOT sent: doors and
+    /// lights always follow the controller's commands (no door / light failures are modelled).</summary>
+    public long TickId { get; set; }
+
     /// <summary>
     /// True while the overall system has dispatched the train (CTC -> Track Controller ->
     /// Train Model) and it is in service. Owned by the Train Model / system, never by the
@@ -40,7 +45,11 @@ public class TrainModelStatusMessage
 
     public double CommandedSpeedMetersPerSecond { get; set; }
 
-    public double RemainingAuthorityMeters { get; set; }
+    /// <summary>Commanded authority as ISSUED by the wayside and relayed unchanged by the
+    /// Train Model (measured from the current block's start). The Train Model does NOT compute
+    /// remaining authority; the Train Controller derives remaining from this plus integrated
+    /// actual speed. (Contract change: formerly RemainingAuthorityMeters.)</summary>
+    public double CommandedAuthorityMeters { get; set; }
 
     /// <summary>False when the track-circuit speed/authority signal is lost or invalid.</summary>
     public bool TrackSignalValid { get; set; }
@@ -65,12 +74,6 @@ public class TrainModelStatusMessage
     public Enums.PlatformSide PlatformSide { get; set; } = Enums.PlatformSide.None;
 
     public bool PassengerEmergencyBrakeRequested { get; set; }
-
-    public bool LeftDoorsOpen { get; set; }
-
-    public bool RightDoorsOpen { get; set; }
-
-    public bool ExteriorLightsOn { get; set; }
 
     public double CabinTemperatureCelsius { get; set; }
 }

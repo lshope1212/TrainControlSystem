@@ -14,6 +14,7 @@
     <ProjectReference Include="..\TrainController.Core\TrainController.Core.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
+    <ProjectReference Include="..\..\Shared\TrainControl.SystemClock\TrainControl.SystemClock.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

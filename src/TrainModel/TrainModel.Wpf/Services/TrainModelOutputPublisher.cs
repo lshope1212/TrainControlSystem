@@ -15,10 +15,17 @@ namespace TrainModel.Wpf.Services;
 /// </summary>
 public sealed class TrainModelOutputPublisher
 {
-    /// <summary>Publish one train's current state to both neighbour endpoints.</summary>
-    public void Publish(TrainState s)
+    /// <summary>
+    /// Publish one train's current state to both neighbour endpoints.
+    /// <paramref name="tickId"/> is the controller tick this state answers (echoed back for
+    /// correlation); <paramref name="isActive"/> is true while the train is dispatched and in
+    /// service; <paramref name="passengerRequested"/> is the raw passenger emergency-brake
+    /// request (the controller decides whether to command the brake — the Train Model does not).
+    /// </summary>
+    public void Publish(TrainState s, long tickId, bool isActive, bool passengerRequested)
     {
         // ---- To Track Model ----
+        // Raw position + actual speed (the Track Model resolves occupancy from position).
         FireAndForget(NamedPipeNames.TrackController, new TrainStateMessage
         {
             TrainId = s.TrainId,
@@ -39,38 +46,37 @@ public sealed class TrainModelOutputPublisher
         }
 
         // ---- To Train Controller ----
-        FireAndForget(NamedPipeNames.TrainController, new TrainStateMessage
+        // One consolidated status message (replaces the old TrainState + CabinStatus +
+        // TrainToController trio). Door/light states are NOT sent (the controller commands
+        // them). Commanded (not remaining) authority is relayed. TrafficLight is left Unknown:
+        // the controller sources signal aspect from the on-board Driver, not the Train Model.
+        FireAndForget(NamedPipeNames.TrainController, new TrainModelStatusMessage
         {
             TrainId = s.TrainId,
-            PositionMeters = s.PositionMeters,
-            SpeedMetersPerSecond = s.VelocityMetersPerSecond,
-            AccelerationMetersPerSecondSquared = s.AccelerationMetersPerSecondSquared,
-        });
-
-        FireAndForget(NamedPipeNames.TrainController, new TrainCabinStatusMessage
-        {
-            TrainId = s.TrainId,
-            LeftDoorOpen = s.LeftDoorOpen,
-            RightDoorOpen = s.RightDoorOpen,
-            ExteriorLightsOn = s.ExteriorLightsOn,
-            CabinTemperatureCelsius = s.CabinTemperatureCelsius,
-        });
-
-        // Pass-through + status bundle: the track data the train relays to the
-        // controller, plus the passenger emergency brake state.
-        FireAndForget(NamedPipeNames.TrainController, new TrainToControllerMessage
-        {
-            TrainId = s.TrainId,
+            TickId = tickId,
+            IsActive = isActive,
+            ActualSpeedMetersPerSecond = s.VelocityMetersPerSecond,
             CommandedSpeedMetersPerSecond = s.CommandedSpeedMetersPerSecond,
             CommandedAuthorityMeters = s.CommandedAuthorityMeters,
-            TrackSignalStatus = s.TrackSignal == SignalAvailability.Acquired ? "Acquired" : "Lost",
-            BeaconStationName = s.BeaconStationName,
-            BeaconDistanceToStopMeters = s.BeaconDistanceToStopMeters,
-            BeaconPlatformSide = s.BeaconPlatformSide,
-            PassengerEmergencyBrakeStatus = s.PassengerEmergencyBrakeActive ? "Engaged"
-                : s.PassengerEmergencyBrakePending ? "Pending" : "Released",
+            TrackSignalValid = s.TrackSignal == SignalAvailability.Acquired,
+            // TrafficLight intentionally left at SignalState.Unknown (not sourced by Train Model).
+            BeaconValid = !string.IsNullOrEmpty(s.BeaconStationName),
+            NextStationName = s.BeaconStationName,
+            DistanceToNextStationMeters = s.BeaconDistanceToStopMeters,
+            PlatformSide = ParsePlatformSide(s.BeaconPlatformSide),
+            PassengerEmergencyBrakeRequested = passengerRequested,
+            CabinTemperatureCelsius = s.CabinTemperatureCelsius,
         });
     }
+
+    private static TrainControl.Contracts.Enums.PlatformSide ParsePlatformSide(string side) =>
+        side switch
+        {
+            "Left" => TrainControl.Contracts.Enums.PlatformSide.Left,
+            "Right" => TrainControl.Contracts.Enums.PlatformSide.Right,
+            "Both" => TrainControl.Contracts.Enums.PlatformSide.Both,
+            _ => TrainControl.Contracts.Enums.PlatformSide.None,
+        };
 
     private static void FireAndForget<TMessage>(string pipeName, TMessage message)
         where TMessage : class

@@ -1,6 +1,7 @@
 using TrainControl.Contracts.Messages;
 using TrainController.Abstractions.Fleet;
 using TrainController.Abstractions.Inputs;
+using TrainController.Abstractions.Outputs;
 using TrainController.Integration.Mapping;
 
 namespace TrainController.Integration.ModelInput;
@@ -22,6 +23,13 @@ public sealed class NormalModelInputProvider : IModelInputProvider
     private readonly Dictionary<string, TrainModelStatusMessage> _latest = new Dictionary<string, TrainModelStatusMessage>(StringComparer.Ordinal);
     private readonly HashSet<string> _pendingBeacon = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _pendingAuthority = new HashSet<string>(StringComparer.Ordinal);
+    private readonly Func<string, TrainModelCommand?> _lastCommands;
+
+    /// <param name="lastCommands">Previous commands per train (door / light states follow them).</param>
+    public NormalModelInputProvider(Func<string, TrainModelCommand?>? lastCommands = null)
+    {
+        _lastCommands = lastCommands ?? (_ => null);
+    }
 
     /// <exception cref="UnknownTrainException">The message is for a train outside the fleet.</exception>
     public void Submit(TrainModelStatusMessage message, bool beaconNewlyReceived, bool authorityUpdated)
@@ -49,7 +57,7 @@ public sealed class NormalModelInputProvider : IModelInputProvider
         lock (_gate)
         {
             return _latest.TryGetValue(trainId, out var message)
-                ? TrainModelContractMapper.ToModelInput(message, _pendingBeacon.Contains(trainId), _pendingAuthority.Contains(trainId))
+                ? TrainModelContractMapper.ToModelInput(message, _pendingBeacon.Contains(trainId), _pendingAuthority.Contains(trainId), _lastCommands(trainId))
                 : null;
         }
     }
@@ -65,7 +73,7 @@ public sealed class NormalModelInputProvider : IModelInputProvider
 
             var newlyReceived = _pendingBeacon.Remove(trainId);
             var authorityUpdated = _pendingAuthority.Remove(trainId);
-            return TrainModelContractMapper.ToModelInput(message, newlyReceived, authorityUpdated);
+            return TrainModelContractMapper.ToModelInput(message, newlyReceived, authorityUpdated, _lastCommands(trainId));
         }
     }
 }

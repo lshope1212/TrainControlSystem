@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Global simulation tick clock (system timing design): Tick / TickDone barrier, clock
+    controls and the reset handshake. Owned by whichever module hosts the clock: the Train
+    Controller for now, CTC in the final system. Kept out of TrainControl.Common so that Common
+    stays independent of the message contracts.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrainControl.Common\TrainControl.Common.csproj" />
+    <ProjectReference Include="..\TrainControl.Contracts\TrainControl.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
