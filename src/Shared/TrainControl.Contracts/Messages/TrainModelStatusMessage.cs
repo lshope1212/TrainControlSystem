@@ -13,7 +13,7 @@ namespace TrainControl.Contracts.Messages;
 /// the Software or the Hardware Train Controller.
 /// </para>
 /// <para>
-/// <see cref="CommandedSpeedMetersPerSecond"/> and <see cref="RemainingAuthorityMeters"/>
+/// <see cref="CommandedSpeedMetersPerSecond"/> and <see cref="CommandedAuthorityMeters"/>
 /// are the values the wayside has authorized, relayed to the train through the track.
 /// The Train Controller never reads the track-layout workbook itself.
 /// </para>
@@ -45,7 +45,11 @@ public class TrainModelStatusMessage
 
     public double CommandedSpeedMetersPerSecond { get; set; }
 
-    public double RemainingAuthorityMeters { get; set; }
+    /// <summary>Commanded authority as ISSUED by the wayside and relayed unchanged by the
+    /// Train Model (measured from the current block's start). The Train Model does NOT compute
+    /// remaining authority; the Train Controller derives remaining from this plus integrated
+    /// actual speed. (Contract change: formerly RemainingAuthorityMeters.)</summary>
+    public double CommandedAuthorityMeters { get; set; }
 
     /// <summary>False when the track-circuit speed/authority signal is lost or invalid.</summary>
     public bool TrackSignalValid { get; set; }

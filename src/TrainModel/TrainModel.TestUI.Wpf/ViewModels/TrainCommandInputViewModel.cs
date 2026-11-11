@@ -100,16 +100,20 @@ public sealed class TrainCommandInputViewModel : TrainModelInputViewModelBase
         double tempF = double.TryParse(CabinSetpointF, out var t) ? t : 72.0;
         double tempC = (tempF - 32.0) * 5.0 / 9.0;
 
-        var msg = new TrainCommandMessage
+        // The Test UI stands in for the Train Controller, so it now emits the SAME message
+        // the real controller does: TrainControllerCommandMessage with her field names.
+        // (TickId is 0 here; in standalone Test-UI mode the Test UI is not tick-synchronised.)
+        var msg = new TrainControllerCommandMessage
         {
             TrainId = TargetTrainId,
+            TickId = 0,
             PowerCommandWatts = watts,
-            ServiceBrakeApplied = ServiceBrake,
-            EmergencyBrakeApplied = EmergencyBrake,
-            LeftDoorOpen = LeftDoor,
-            RightDoorOpen = RightDoor,
-            ExteriorLightsOn = Lights,
-            CabinSetpointCelsius = tempC,
+            ServiceBrakeCommand = ServiceBrake,
+            EmergencyBrakeCommand = EmergencyBrake,
+            LeftDoorsOpenCommand = LeftDoor,
+            RightDoorsOpenCommand = RightDoor,
+            ExteriorLightsCommand = Lights,
+            CabinTemperatureSetpointCelsius = tempC,
             StationAnnouncement = StationAnnouncement,
         };
         return Sender.SendToTrainModelAsync(msg);

@@ -37,10 +37,12 @@ public sealed class TrainModelNamedPipeReceiver
         // Deserialize on the background thread; the VM mutation runs on the UI thread.
         Action? apply = envelope.MessageType switch
         {
-            nameof(TrainCommandMessage) => Bind<TrainCommandMessage>(envelope, m =>
-                _vm.ApplyTrainCommand(m.TrainId, m.PowerCommandWatts, m.ServiceBrakeApplied,
-                    m.EmergencyBrakeApplied, m.LeftDoorOpen, m.RightDoorOpen, m.ExteriorLightsOn,
-                    m.CabinSetpointCelsius, m.StationAnnouncement)),
+            // The Train Controller's per-tick command (her contract + field names). Replaces
+            // the old TrainCommandMessage. TickId is accepted and echoed on the status message.
+            nameof(TrainControllerCommandMessage) => Bind<TrainControllerCommandMessage>(envelope, m =>
+                _vm.ApplyTrainCommand(m.TrainId, m.TickId, m.PowerCommandWatts, m.ServiceBrakeCommand,
+                    m.EmergencyBrakeCommand, m.LeftDoorsOpenCommand, m.RightDoorsOpenCommand,
+                    m.ExteriorLightsCommand, m.CabinTemperatureSetpointCelsius, m.StationAnnouncement)),
 
             nameof(SpeedCommandMessage) => Bind<SpeedCommandMessage>(envelope, m =>
                 _vm.ApplyCommandedSpeed(m.TrainId, m.CommandedSpeedMetersPerSecond)),
@@ -62,9 +64,6 @@ public sealed class TrainModelNamedPipeReceiver
 
             nameof(PassengerEmergencyBrakeMessage) => Bind<PassengerEmergencyBrakeMessage>(envelope, m =>
                 _vm.ApplyPassengerEmergencyBrake(m.TrainId, m.Requested)),
-
-            nameof(EmergencyBrakeApprovalMessage) => Bind<EmergencyBrakeApprovalMessage>(envelope, m =>
-                _vm.ApplyEmergencyBrakeApproval(m.TrainId, m.Approved)),
 
             _ => null,
         };
