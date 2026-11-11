@@ -13,6 +13,9 @@ public interface ITrackService
     void LoadLayout(TrackLayout layout);
     void ApplyCommand(TrackModelCommandMessage message);
     IReadOnlyList<string> ApplyCommands(IEnumerable<TrackModelCommandMessage> messages);
+    IReadOnlyList<string> ApplyCommandBatch(TrackModelCommandBatchMessage batch, DateTimeOffset receivedAtUtc);
+    int ExpireCommands(DateTimeOffset now);
+    IReadOnlyDictionary<string, (string BlockId, double Speed, double Authority, string RequestId)> CaptureTrainCodes();
     void ApplyTrainUpdate(TrackModelTrainUpdateMessage message);
     void ApplyFailures(TrackModelFailureCommandMessage message);
     void ApplyTemperature(TrackModelTemperatureCommandMessage message);

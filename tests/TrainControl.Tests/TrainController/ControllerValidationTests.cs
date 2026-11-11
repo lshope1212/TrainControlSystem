@@ -107,7 +107,7 @@ public class ControllerValidationTests
             IsActive = true,
             ActualSpeedMetersPerSecond = 1.5,
             CommandedSpeedMetersPerSecond = 12.5,
-            RemainingAuthorityMeters = 400.0,
+            CommandedAuthorityMeters = 400.0,
             TrackSignalValid = true,
             BeaconValid = true,
             NextStationName = "WHITED",

@@ -137,7 +137,7 @@ public class SystemClockAndTrainModelLinkTests
         TrainModelStatusMessage State(long tick) => new TrainModelStatusMessage
         {
             TrainId = "TRAIN-001", TickId = tick, IsActive = true, ActualSpeedMetersPerSecond = 0.0,
-            CommandedSpeedMetersPerSecond = 10.0, RemainingAuthorityMeters = 2_000.0, TrackSignalValid = true,
+            CommandedSpeedMetersPerSecond = 10.0, CommandedAuthorityMeters = 2_000.0, TrackSignalValid = true,
         };
 
         await receiver.HandleAsync(MessageSerializer.Deserialize(MessageSerializer.Serialize(State(41))), CancellationToken.None);

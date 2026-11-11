@@ -32,7 +32,7 @@ public static class TrainModelContractMapper
             IsActive = message.IsActive,
             ActualSpeedMetersPerSecond = message.ActualSpeedMetersPerSecond,
             CommandedSpeedMetersPerSecond = message.CommandedSpeedMetersPerSecond,
-            RemainingAuthorityMeters = message.RemainingAuthorityMeters,
+            RemainingAuthorityMeters = message.CommandedAuthorityMeters,
             AuthorityUpdateReceived = authorityUpdated,
             TrackSignalValid = message.TrackSignalValid,
             TrafficLight = message.TrafficLight,

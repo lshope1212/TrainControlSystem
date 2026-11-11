@@ -101,13 +101,13 @@ public sealed class TrainControllerPipeReceiver
         {
             _seen.TryGetValue(status.TrainId, out var last);
             authorityUpdated = status.TrackSignalValid
-                && (!last.Known || !last.Authority.Equals(status.RemainingAuthorityMeters) || !last.SignalValid);
+                && (!last.Known || !last.Authority.Equals(status.CommandedAuthorityMeters) || !last.SignalValid);
             var station = status.NextStationName ?? string.Empty;
             beaconNew = status.BeaconValid && station.Length > 0
                 && (!string.Equals(station, last.Station, StringComparison.Ordinal) || !status.DistanceToNextStationMeters.Equals(last.Distance));
             _seen[status.TrainId] = (
                 last.Known || status.TrackSignalValid,
-                status.TrackSignalValid ? status.RemainingAuthorityMeters : last.Authority,
+                status.TrackSignalValid ? status.CommandedAuthorityMeters : last.Authority,
                 status.TrackSignalValid,
                 status.BeaconValid ? station : last.Station,
                 status.BeaconValid ? status.DistanceToNextStationMeters : last.Distance);

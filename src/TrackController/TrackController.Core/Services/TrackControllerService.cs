@@ -31,6 +31,16 @@ public sealed partial class TrackControllerService
     private HashSet<string> _owned = [], _neighbors = [];
     private readonly Dictionary<string, (MovementSuggestionMessage Value, DateTimeOffset Received)> _requests = [];
     private readonly HashSet<string> _retiredRequests = [];
+
+    /// <summary>
+    /// Staged successor requests, by request ID. Kept apart from <see cref="_requests"/>: a staged
+    /// successor is never evaluated, takes part in no route-conflict check and commands nothing.
+    /// It only becomes a request when <see cref="TransferStagedAuthority"/> promotes it.
+    /// </summary>
+    private readonly Dictionary<string, (MovementSuggestionMessage Value, DateTimeOffset Received)> _staged = new(StringComparer.Ordinal);
+
+    /// <summary>Every request's final result from the latest evaluation (the grants actually in force).</summary>
+    private List<(MovementSuggestionMessage Request, double AuthorizedSpeedMetersPerSecond, double AuthorizedAuthorityMeters, string Status, string Reason)> _lastResults = [];
     private VitalPlcProgram? _plc;
     private string _plcName = "No program loaded";
     private string _plcStatus = "Load a Boolean PLC program to enable hardware mode.";
@@ -77,7 +87,7 @@ public sealed partial class TrackControllerService
         var copy = WaysideConfiguration.ValidateAndCopy(configuration);
         lock (_gate)
         {
-            if (_requests.Count > 0 || _blocks.Values.Any(block => block.Maintenance != "Open" || (block.Feedback is not null && (!IsFresh(block) || block.Feedback.Occupancy != OccupancyState.Clear))))
+            if (_requests.Count > 0 || _staged.Count > 0 || _blocks.Values.Any(block => block.Maintenance != "Open" || (block.Feedback is not null && (!IsFresh(block) || block.Feedback.Occupancy != OccupancyState.Clear))))
             {
                 throw new InvalidOperationException("Cancel requests, confirm clear track, and reopen maintenance blocks before replacing the layout.");
             }
@@ -195,6 +205,19 @@ public sealed partial class TrackControllerService
                 }
             }
 
+            // The grants in force BEFORE this observation: a staged successor may only take over
+            // from a predecessor that actually authorized movement into the successor's target.
+            if (_staged.Count > 0)
+            {
+                Reevaluate();
+            }
+
+            var grantsBefore = _lastResults.Where(result => result.AuthorizedAuthorityMeters > 0)
+                .ToDictionary(result => result.Request.RequestId, StringComparer.Ordinal);
+            var clearBefore = _staged.Count == 0 ? [] : _blocks.Values
+                .Where(block => IsFresh(block) && block.Feedback!.Occupancy == OccupancyState.Clear && !block.Feedback.IsFaulted)
+                .Select(block => block.Definition.BlockId).ToHashSet(StringComparer.Ordinal);
+            var applied = new List<Block>();
             foreach (var feedback in blocks)
             {
                 var block = GetBlock(feedback.BlockId);
@@ -205,7 +228,16 @@ public sealed partial class TrackControllerService
 
                 block.Feedback = feedback with { };
                 block.Received = now;
-                if (feedback.Occupancy == OccupancyState.Clear && _requests.TryGetValue(feedback.BlockId, out var request))
+                applied.Add(block);
+            }
+
+            // One state transition: promotions (with their predecessors' retirement) happen before
+            // any other request is retired or re-evaluated, so no evaluation ever sees both or neither.
+            TransferStagedAuthority(applied, clearBefore, grantsBefore);
+
+            foreach (var block in applied)
+            {
+                if (block.Feedback!.Occupancy == OccupancyState.Clear && _requests.TryGetValue(block.Definition.BlockId, out var request))
                 {
                     _retiredRequests.Add(request.Value.RequestId);
                 }
@@ -226,6 +258,7 @@ public sealed partial class TrackControllerService
         lock (_gate)
         {
             _requests.Clear();
+            _staged.Clear();
             _retiredRequests.Clear();
             _paused = true;
             _maintenanceMode = false;

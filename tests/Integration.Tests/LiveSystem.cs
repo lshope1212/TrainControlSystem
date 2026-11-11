@@ -36,6 +36,9 @@ internal sealed class LiveSystem : IAsyncDisposable
 
     public string CtcPipe => _prefix + ".CTC";
 
+    /// <summary>Where the Track Model sends train environments (the Train Model's inbound pipe).</summary>
+    public string TrainModelPipe => _prefix + ".TrainModel";
+
     public TrackService? Track { get; private set; }
 
     public WaysidePipeHost? Wayside { get; private set; }
