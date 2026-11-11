@@ -1,415 +1,425 @@
-# Task: Extend Live CTC Integration to All Three Railway Lines
+# Claude Code Task: Eliminate False Zero-Authority Gaps During Train Block Transitions
 
-## Project context
+## Project
 
 Repository: https://github.com/lshope1212/TrainControlSystem
 
-Working branch: `Luke_CTC` (or the current active development branch if changes have moved).
+Branch: `Luke_CTC` or the current integration development branch.
 
-We recently completed a significant portion of the live integration between the Centralized Traffic Control (CTC), Track Controller, and Track Model modules.
+This task concerns safety-critical movement-authority handoffs between CTC, Track Controller, Track Model, Train Model, and Train Controller.
 
-The Blue Line currently supports real named-pipe communication between these modules, including:
+**Primary objective:** Prevent an otherwise valid, continuously moving train from receiving a temporary zero-authority command merely because its movement request is being transferred from one block to the next.
 
-- Automatic track layout synchronization from Track Model to CTC.
-- Live block occupancy and equipment status updates through the Track Controller.
-- CTC maintenance requests, acknowledgements, and confirmed block closures.
-- Movement suggestions containing speed, authority, and route information.
-- Track Controller evaluation of movement requests and reporting of its actual authorization.
-- Stale-feedback detection and communication failure handling.
-- CTC train-location inference using sequential block occupancy.
+**Equally important objective:** Preserve immediate emergency-brake response to a genuine loss or revocation of movement authority.
 
-However, this functionality has only been fully integrated and demonstrated using the production Blue Line setup.
+Do not implement a grace period that suppresses actual zero authority.
 
-**Your task is to extend the existing functionality so the Blue, Red, and Green Lines can all operate simultaneously through the real Track Model, Track Controller, and CTC modules.**
+## 1. Existing architecture and problem
 
-This is an actual system integration task, not a UI demonstration or additional TestUI implementation.
+The current implementation uses `MovementSuggestionMessage`, which contains:
 
-## 1. First, investigate the existing implementation
+- `RequestId`
+- `TrainId`
+- `TargetBlockId`
+- `EntryBlockId`
+- `PathBlockIds`
+- `SuggestedSpeedMetersPerSecond`
+- `SuggestedAuthorityMeters`
+- `AuthorityReference = TargetBlockEntry`
+- `IsActive`
 
-Before modifying code, thoroughly inspect:
+Relevant files include:
 
-- `docs/integration/LIVE_INTEGRATION_GUIDE.md`
-- `src/CTC/CTC.Core/`
-- `src/CTC/CTC.Wpf/`
-- `src/TrackModel/`
-- `src/TrackController/`
-- `src/Shared/TrainControl.Contracts/`
-- `src/Shared/TrainControl.Common/`
-- Existing integration tests and sample deployment files.
+- `src/CTC/CTC.Core/Dispatching/MovementRequestCoordinator.cs`
+- `src/CTC/CTC.Core/Dispatching/MovementRequestPlan.cs`
+- `src/CTC/CTC.Core/Tracking/TrainLocationTracker.cs`
+- `src/CTC/CTC.Core/Services/CTCService.cs`
+- `src/CTC/CTC.Wpf/Services/CtcNamedPipeReceiver.cs`
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.cs`
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.Requests.cs`
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.Evaluation.cs`
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.VitalPlc.cs`
+- `src/TrackController/TrackController.Wpf/Services/WaysidePipeHost.cs`
+- `src/TrackModel/TrackModel.Core/Services/TrackService.cs`
+- `src/TrainController/TrainController.Core/Control/AuthorityTracker.cs`
+- `src/TrainController/TrainController.Core/Safety/AuthorityProtection.cs`
 
-Pay particular attention to:
+Currently, when a train moves from Block A to Block B:
 
-- `TrackLayoutReconciler`
-- `TrackModelConnection`
-- `WaysidePipeHost`
-- `TerritoryRuntimeRouter`
-- Track Controller deployment/configuration loading
-- CTC movement request and acknowledgement handling
-- Block identifier conventions
-- Shared message serialization and transport
+1. Track Model reports the occupancy change.
+2. Track Controller retires the movement request for A when A becomes clear.
+3. CTC infers that the train entered B.
+4. CTC sends cancellation for A.
+5. CTC sends a new movement request targeting B.
+6. Track Controller evaluates it.
+7. Track Controller publishes the new authority to Track Model.
 
-Determine what is already implemented, what is Blue-specific, and what must change for multi-line operation.
+During this sequence, the new block may temporarily report zero authority.
 
-**Do not rebuild working functionality unnecessarily. Extend the existing architecture.**
+This is problematic because the Train Controller's authority protection treats insufficient authority while moving as an emergency-brake condition.
 
-## 2. Support the actual Red and Green Line layouts
+The current handoff is therefore not suitable for uninterrupted train movement.
 
-The course project uses three railway lines:
+### Important constraints
 
-| Line | Blocks |
-|---|---:|
-| Blue | 15 |
-| Red | 76 |
-| Green | 150 |
-| **Total** | **241** |
+Simply reversing the cancellation and creation operations is insufficient.
 
-The CTC TestUI already contains a complete sample layout in:
+Track Controller currently rejects overlapping active routes, and a movement request targeting an unoccupied block cannot yet receive positive authorization.
 
-`src/CTC/CTC.TestUI.Wpf/SampleData/course-vf5-layout.json`
+Also, Track Model stores commanded authority by block.
 
-This fixture was generated from the course's `Track Layout & Vehicle Data vF5` workbook.
+You must investigate and address these behaviors rather than only changing message ordering.
 
-However, the production Track Model currently defaults to the Blue Line, and its Excel workbook importer is Blue-specific.
+## 2. Required behavior
 
-### Requirements
+Implement a coordinated authority handoff that allows a valid train to move between blocks without an artificial zero-authority interruption.
 
-1. Extend the production Track Model to load all three railway lines simultaneously.
-2. Use the actual course topology and block properties, including section identifiers, lengths, speed limits, stations, connections, switches, signals, and crossings.
-3. Reuse existing validated course data where possible instead of manually inventing layouts.
-4. Preserve existing Blue Line behavior.
-5. Ensure Track Model publishes one complete `TrackLayoutMessage` containing all three lines.
-6. Ensure CTC automatically receives and displays all three lines without requiring `Send Sample Layout`.
-7. Preserve the existing layout synchronization/reconciliation behavior.
+Use a **prepare → transfer → retire** approach, or an equally safe and demonstrably correct solution that fits the existing architecture.
 
-Important: The CTC TestUI fixture is a contract-level layout, not necessarily a production Track Model file. If necessary, create a validated conversion process rather than simply deserializing it into an incompatible model.
+### Phase A: Prepare the successor
 
-Do not use the generic Track Controller Green Line demonstration map as a substitute for the actual course Green Line.
+While the train occupies Block A and has valid authority extending into Block B:
 
-If any required track data is missing or ambiguous, identify the issue explicitly rather than inventing connections or properties.
+- CTC prepares a successor movement request for B.
+- The successor uses a new request ID.
+- It identifies A as the entry block.
+- It includes the remaining authorized route.
+- It retains the same absolute authority endpoint as the original movement.
+- Track Controller validates the proposed route, ownership, topology, and safety requirements.
+- Track Controller records the successor as staged/pending.
 
-## 3. Standardize block identifiers
+The staged request must not independently grant a second overlapping movement authority.
 
-Block IDs must be globally unique across all three lines because the existing shared messages generally identify blocks without including a separate line ID.
+It must not interfere with the existing active request or cause the conflict detector to withdraw valid authority.
+
+A successful preparation acknowledgement means only that the successor is prepared. It must never be interpreted as a grant of authority.
+
+### Phase B: Transfer authority
+
+When fresh Track Model occupancy feedback confirms the appropriate A-to-B transition:
+
+- Track Controller revalidates the successor against current conditions.
+- Verify the transition is consistent with the staged route and cannot ambiguously represent another train.
+- Treat train IDs carried by CTC as labels, not independently verified occupancy identities.
+- Confirm that no conflicting movement, unsafe equipment condition, or loss of freshness exists.
+- If safe, promote the successor and retire the predecessor as one atomic Track Controller state transition.
+- Never grant two conflicting authorities simultaneously.
+- Publish the resulting authority using the successor request ID.
+
+The predecessor must not need to be cancelled first in a separate network operation.
+
+If the handoff is invalid, the controller must withhold authority rather than force a successful transfer.
+
+### Phase C: Retire the predecessor
+
+Once the replacement is active:
+
+- Retire the predecessor.
+- Reject late renewals of its old request ID.
+- Handle late or duplicate cancellation messages idempotently.
+- Prevent replayed messages from reactivating retired authority.
+- Record the transition clearly for CTC diagnostics.
+
+The entire transfer must preserve the existing independent safety checks and PLC restrictions.
+
+## 3. Preserve the fixed authority endpoint
+
+The existing implementation intentionally defines movement authority relative to the entry of the current target block.
+
+Maintain this behavior.
+
+Example, using hypothetical 50 m blocks:
+
+Initial request:
+
+- Target: A
+- Authority: 300 m
+- Fixed endpoint: 300 m from A's entry
+
+After advancing into B:
+
+- Target: B
+- Entry: A
+- Authority: 250 m
+- Fixed endpoint: unchanged
+
+Do not restart the original 300 m allowance when the train enters B.
+
+Do not extend authority simply because a request was transferred, renewed, resent, or acknowledged.
+
+Preserve existing speed restrictions and any reductions imposed by Track Controller.
+
+A dispatcher re-plan may establish a new endpoint, but a routine block transition must not.
+
+## 4. Eliminate the downstream false-zero gap
+
+This requirement is essential.
+
+A correct CTC/Track Controller handoff is insufficient if Track Model or Train Model still exposes temporary zero authority during the transition.
+
+Investigate the complete data flow:
+
+Track Controller → Track Model → Train Model → Train Controller.
+
+Track Model currently receives `TrackModelCommandBatchMessage`, while individual `TrackModelTrainEnvironmentMessage` values contain block-specific authority.
+
+Determine how the train receives its actual movement authority when its occupied block changes.
+
+Implement the appropriate synchronization and contract changes so that:
+
+- Authority belongs to a validated movement and its fixed endpoint, rather than being treated as an unrelated allowance restarted at each block.
+- A successful, safe block handoff preserves the train's valid authority.
+- No intermediate default-zero block value is incorrectly interpreted as an authoritative zero command for that train.
+- The receiving module can distinguish an expected handoff from an actual revocation.
+- Messages are correlated with train identity, movement/request identity, and ordering information as needed.
+- Replayed or out-of-order updates cannot restore withdrawn authority.
+- A train never receives more authority than the Track Controller has actually granted.
+
+Consider an explicit train-scoped authority state or grant/revocation contract if the existing per-block commands cannot safely represent this distinction.
+
+Keep the existing named-pipe architecture and shared contracts.
+
+Do not introduce an unbounded authority cache or simply continue using the last nonzero value regardless of safety state.
+
+Where atomic batch application is required, make the state transition atomic from the consuming train's perspective.
+
+Where the current Train Model/Train Controller live integration is incomplete, identify and implement the necessary compatible interfaces. Do not claim end-to-end continuity is achieved without verifying those consumers.
+
+## 5. Genuine zero authority must remain safety-critical
+
+**THIS IS THE MOST IMPORTANT SAFETY REQUIREMENT.**
+
+The change must distinguish between:
+
+**Case A — Normal, valid handoff**
+
+A train travels from A into B with a valid, still-protected movement endpoint.
+
+Expected result: Authority remains continuous. No emergency brake is caused merely by request replacement.
+
+**Case B — Actual authority revocation**
+
+Examples:
+
+- Track Controller determines movement is unsafe.
+- The route becomes occupied or blocked in a way that requires immediate withdrawal.
+- Required equipment or feedback becomes unsafe.
+- A genuine zero-authority command is issued.
+- The current grant is revoked or expires.
+- The handoff fails safety validation.
+
+Expected result: Authority is withdrawn or restricted according to the actual wayside decision. Any resulting emergency-brake condition must be handled immediately by the Train Controller on receiving that authoritative safety event.
+
+### Non-negotiable rules
+
+DO NOT:
+
+- Add a fixed delay before applying zero authority.
+- Ignore zero authority for a few simulation ticks.
+- Filter zero authority based only on how recently the train changed blocks.
+- Preserve authority after an explicit revocation.
+- Override PLC decisions.
+- Relax occupancy or route conflict protection.
+- Assume missing feedback means the previous authorization is still valid.
+- Turn an invalid successor request into an automatic grant.
+- Modify emergency-brake stopping-distance thresholds merely to hide this issue.
+
+Investigate how explicit authority revocation reaches Train Model and Train Controller.
+
+If the current 500 ms wayside publication interval delays urgent revocations, provide an event-driven safety update path that does not wait for the next routine periodic batch. Preserve ordered delivery and safe behavior on communication failure.
+
+Real network and control scheduling cannot guarantee literally zero physical latency, but the software must introduce no intentional grace period or debounce before acting on a genuine revocation.
+
+Review `AuthorityTracker` and `AuthorityProtection` to ensure an explicit authoritative zero is not accidentally ignored during an invalid track-signal condition.
+
+Preserve the existing Train Controller safety algorithms wherever possible.
+
+## 6. Request lifecycle and communication handling
+
+Update CTC's movement request coordinator to distinguish:
+
+- Active request
+- Staged successor
+- Successful transfer
+- Rejected or expired successor
+- Explicit revocation
+- Retired predecessor
 
 Requirements:
 
-- Preserve the existing production Blue Line IDs (`1`–`15`) unless there is a compelling compatibility reason to change them.
-- Give Red and Green unique, consistent identifiers, such as `RED-12` and `GREEN-12`.
-- Use exactly the same IDs in Track Model, Track Controller, and CTC.
-- Do not introduce implicit ID conversions inside CTC.
-- Keep section and block-number metadata separate from the unique block ID.
-- Validate that no duplicate block IDs exist across the entire network.
+- Prepare the next request proactively when a safe successor block exists.
+- Keep staged and active requests separate in the Track Controller.
+- Ensure staged requests do not produce conflicting active grants.
+- Renew or expire staged requests safely.
+- Use request IDs to correlate all acknowledgements and transitions.
+- Avoid duplicate successor creation from repeated occupancy messages.
+- Handle CTC reconnects without resurrecting stale grants.
+- Handle delayed and out-of-order messages.
+- If CTC stops, existing safety watchdogs must remain effective.
+- If a train changes route, cancel invalid staged successors and prepare the correct replacement.
+- If a train reaches its final destination, correctly terminate its movement authorization.
+- If no successor is valid, fail safely rather than masking zero authority.
 
-Update every related reference, including topology connections, switch configurations, protection zones, station/beacon references, and deployment files.
+CTC must continue addressing blocks through their unique block IDs.
 
-**Track Model must remain the authoritative source of block identities and the physical layout.**
+Do not introduce knowledge of Track Controller territory ownership into CTC.Core.
 
-## 4. Configure the Track Controller for all three lines
+Preserve compatibility with the existing three-line deployment.
 
-The Track Controller currently supports deployment configurations and multiple wayside territories through its runtime architecture.
+## 7. Testing requirements
 
-Investigate how to extend this architecture to support the entire 241-block network.
+Add comprehensive unit and integration tests.
 
-### Requirements
+Use the production CTC, Track Controller, Track Model, and relevant Train Controller authority handling wherever possible.
 
-- Support a combined configuration containing Blue, Red, and Green.
-- Every production block must be owned by exactly one Track Controller territory.
-- Preserve the existing ownership-routing architecture.
-- Configure the appropriate topology and equipment for each line.
-- Ensure the Track Controller accepts real `TrackModelBlockStateMessage` feedback for every block.
-- Ensure the Track Controller can publish `BlockStatusMessage` feedback for every line.
-- Maintain the existing PLC safety rules, watchdogs, and request validation.
+### Test A — Normal transition without authority interruption
 
-For this integration milestone, a **single Track Controller application hosting multiple logical territories on the PC** is acceptable.
+1. Place a train in Block A.
+2. Grant authority extending through B and several blocks beyond.
+3. Prepare the successor for B.
+4. Simulate the actual A-to-B occupancy transition.
+5. Verify that the successor becomes active and the predecessor is retired.
+6. Observe the authoritative train-level outputs throughout the transition.
 
-Do not require three competing processes to listen on the same named-pipe endpoint.
+Assert that no artificial zero authority is delivered to the moving train.
 
-The design should remain compatible with future PC/Raspberry Pi deployment and multiple Track Controllers per line.
+Test both transitions where A and B occupancy changes arrive together and where observations arrive in separate messages.
 
-### Important architectural rule
+### Test B — Genuine emergency revocation
 
-CTC must not need to know which Track Controller owns a block.
+Repeat with the train moving.
 
-It should continue issuing requests using the shared contracts and unique block IDs. Territory ownership and message routing belong to the Track Controller infrastructure.
+Introduce a genuine safety condition requiring withdrawal of all movement authority:
 
-Do not add territory-specific routing logic to CTC.Core.
+- Before the block transition.
+- During successor preparation.
+- During the transfer.
+- Immediately after transfer.
 
-Also, do not silently change the topology or bypass safety validation to make the combined deployment load successfully.
+Verify that the authoritative zero/revocation reaches the Train Controller without a grace delay and triggers the existing emergency-brake protection when required.
 
-## 5. Live occupancy and block-status integration
+An already prepared successor must not override the revocation.
 
-This is the highest-priority functional requirement.
+### Test C — Fixed endpoint
 
-For every block on all three lines, the following process should work:
+Verify that moving from A to B decreases authority measured from the target entry by the appropriate block length.
 
-1. Track Model determines the block's actual state.
-2. Track Model sends its state to the Track Controller.
-3. Track Controller evaluates the received information.
-4. Track Controller sends the corresponding block status to CTC.
-5. CTC updates the correct line and block automatically.
+Confirm that the original endpoint never extends accidentally.
 
-This must work continuously without TestUI applications.
+### Test D — Unsafe or missing successor
 
-### Verify the following
+Test:
 
-- Occupancy changes update the correct block on the correct line.
-- Clearing a block removes its occupied status.
-- Signals, switches, crossings, failures, and maintenance status update correctly.
-- An update on one line does not accidentally change another line.
-- An unknown block ID is rejected rather than silently mapped.
-- Stale or disconnected feedback is handled conservatively.
-- Reconnecting a module restores live updates without requiring a full application restart.
-- Repeated equivalent layout messages do not unnecessarily reset CTC state.
+- Missing staged request.
+- Rejected successor.
+- Occupied/conflicting next block.
+- Stale Track Model feedback.
+- Wrong direction of travel.
+- Switch misalignment.
+- Invalid signal/crossing protection.
+- CTC disconnection.
+- Lost acknowledgement.
+- Unavailable Train Model.
+- Request watchdog expiration.
 
-The existing functionality should behave consistently across all three lines.
+Verify safe withdrawal rather than silently preserving invalid authority.
 
-## 6. Extend CTC maintenance control
+### Test E — Repeated and out-of-order updates
 
-The CTC dispatcher should be able to select any of the three lines and close or reopen blocks using the existing UI.
+Ensure stale messages cannot:
 
-For example:
+- Reinstate the old request.
+- Reactivate withdrawn authority.
+- Duplicate a handoff.
+- Cause two overlapping positive grants.
+- Extend the authority endpoint.
 
-- Close a block on Blue.
-- Close a block on Red.
-- Close a block on Green.
-- Reopen those blocks.
+### Test F — Multiple trains and lines
 
-Each action should follow the current request/acknowledgement/confirmation design.
+Verify independent handoffs for trains on Blue, Red, and Green.
 
-CTC sends the request, Track Controller acknowledges whether it was accepted, and the actual block status confirms the final state.
+Test two trains near one another, with conflicting or ambiguous occupancy.
 
-Preserve pending closure behavior for occupied blocks.
+Do not permit train identity to be guessed merely to complete a handoff.
 
-Do not treat successful pipe delivery as proof that a requested action was executed.
+### Test G — End-to-end Train Controller behavior
 
-Confirm that commands on different lines do not interfere with one another.
+For a moving train with a valid, continuing movement grant, verify that the Train Controller does not engage emergency braking because of a temporary request-ID replacement.
 
-## 7. Movement requests and authority evaluation
+Then issue a genuine zero-authority command and verify that the Train Controller's existing safety protection engages at the next applicable control evaluation, without a handoff grace period.
 
-The existing CTC can calculate suggested speeds and authority, send complete movement requests, and interpret Track Controller authorization reports.
+Run regression tests covering existing CTC movement requests, PLC safety, occupancy, and maintenance handling.
 
-Extend this functionality to Red and Green wherever the current controller architecture can safely support it.
+## 8. Implementation scope
 
-### Requirements
+You may modify:
 
-- CTC generates movement suggestions using the selected line's actual topology and speed limits.
-- Requests contain correct block IDs and route information.
-- Track Controller evaluates them against the correct territory.
-- The response is correlated to the correct request.
-- CTC displays actual authorization, not merely the requested authority.
-- Existing request cancellation, renewal, expiration, and re-planning behavior remains intact.
-- Requests are never accidentally applied to a different line.
+- CTC.Core and CTC.Wpf communication services
+- TrackController.Core, runtime, and publication services
+- TrackModel.Core and communication services
+- Shared message contracts
+- Train Model integration adapters
+- Train Controller integration adapters where necessary
+- Automated tests
+- Integration documentation
 
-### Cross-territory limitations
+Minimize changes to TrainController.Core emergency-brake logic.
 
-The current Track Controller can reject movement requests that cross territory boundaries.
+If an adjustment is necessary to distinguish an explicit revocation from a missing or intermediate authority update, document it carefully and ensure the actual safety decision is never suppressed.
 
-Investigate whether this prevents otherwise valid movement requests on Red and Green.
+Avoid unrelated changes, especially shared-clock work currently being handled by teammates.
 
-For this milestone:
+Do not modify hardware-specific code unless necessary to maintain correct interface behavior.
 
-- Ensure movement requests confined to a territory work correctly.
-- Preserve safe rejection for unsupported cross-territory movements.
-- Do not bypass territory safety checks.
-- Clearly document what would be required for future cross-territory handoff.
+## 9. Implementation process
 
-If a safe, straightforward solution already fits the existing architecture, you may implement it with tests. Otherwise, leave cross-territory movement as an explicitly documented limitation rather than introducing an untested redesign.
+First, trace the complete existing authority lifecycle and identify every place where zero authority can appear during a normal block transition.
 
-Full train physics and automatic physical train release are outside the scope of this task.
+Then implement the smallest coherent solution that achieves all the required safety properties.
 
-## 8. Address performance with 241 blocks
+A partial fix that changes only CTC message ordering is not sufficient.
 
-The previous Blue Line integration used frequent individual named-pipe messages.
+If the proposed staged-handoff design conflicts with existing safety requirements, choose a better design and explain the difference.
 
-This may become inefficient with all 241 blocks active.
+Preserve existing tested behavior and update tests to match the new protocol.
 
-Investigate:
+Proceed with implementation. Do not stop after writing a design proposal.
 
-- Track Model's one-second feedback heartbeat.
-- Track Controller's 500 ms block-status publication.
-- Number of named-pipe connections created.
-- Whether continuous updates could delay acknowledgements or CTC UI processing.
-- Whether large initial snapshots could delay layout synchronization.
+Run the applicable builds and automated tests.
 
-Implement batching where necessary to support the complete network reliably.
+Do not weaken tests or safety checks merely to make the suite pass.
 
-The Track Controller already has some batch-input capability. Reuse existing infrastructure where appropriate.
-
-If new batch contracts are needed, maintain compatibility with existing single-message consumers and TestUIs.
-
-Preserve correct message ordering, request correlation, and freshness timestamps.
-
-Do not reduce safety or freshness guarantees just to improve throughput.
-
-## 9. Preserve existing CTC behavior
-
-Do not make unnecessary changes to CTC's existing user interface or domain logic.
-
-The following must continue working:
-
-- The three-line selector.
-- Territory overview/map.
-- Selected block details.
-- Schedule builder.
-- Dispatched trains.
-- Active movement plans.
-- Suggested speeds and authority.
-- Manual schedule modifications.
-- Maintenance controls.
-- Train tracking through sequential occupancy.
-- Shared simulation clock controls.
-
-Ensure the CTC territory map can handle the larger Red and Green layouts without becoming unusable.
-
-Improve layout performance or scrolling if necessary, but avoid a major UI redesign.
-
-Preserve the current rule that CTC never automatically assumes a command was accepted merely because it was transmitted.
-
-## 10. Testing and verification
-
-Add or extend automated integration tests using the actual production services, contracts, and named-pipe handlers.
-
-Do not rely entirely on mocked services or TestUIs.
-
-### Required tests
-
-**Layout integration**
-- All three lines load successfully.
-- Expected counts are 15, 76, and 150 blocks.
-- All 241 block IDs are unique.
-- CTC receives all three lines automatically.
-- Duplicate layout messages preserve live state.
-- Restarting CTC triggers successful layout synchronization.
-
-**Occupancy integration**
-- Change a block on each line.
-- Verify that the Track Controller receives the change.
-- Verify that CTC receives the correct updated status.
-- Verify that changes remain isolated to the correct line.
-- Verify occupied-to-clear transitions.
-- Verify communication failures produce conservative Unknown/stale states.
-
-**Maintenance integration**
-- Close and reopen at least one block on each line.
-- Verify acknowledgements and actual confirmed status.
-- Verify unsafe or invalid requests are rejected appropriately.
-- Verify pending closures work correctly.
-
-**Movement integration**
-- Send a valid movement request on each line.
-- Confirm the Track Controller evaluates it correctly.
-- Verify the resulting authorization is reported back to CTC.
-- Test unknown blocks, invalid paths, stale feedback, and territory boundaries.
-
-**Performance**
-- Confirm that all three lines can publish statuses continuously without significant backlog.
-- Confirm a disconnected recipient does not block healthy modules.
-- Confirm maintenance acknowledgements are not starved by bulk status updates.
-
-Preserve existing Blue Line tests.
-
-Run the complete solution build and all applicable tests. Report actual results, not assumptions.
-
-## 11. Documentation and demonstration
+## 10. Documentation and final report
 
 Update:
 
 `docs/integration/LIVE_INTEGRATION_GUIDE.md`
 
-Provide a straightforward demonstration procedure that I can follow in Visual Studio.
+Include a new section titled:
 
-Ideally, I should be able to:
+**Movement Authority Continuity and Emergency Revocation**
 
-1. Build the solution.
-2. Launch the system Launcher.
-3. Start the actual Track Model, Track Controller, and CTC applications.
-4. Load or automatically initialize the combined three-line deployment.
-5. See Blue, Red, and Green in the CTC line selector.
-6. View live block statuses on all three lines.
-7. Change occupancy on a Red or Green block using a development-only input harness.
-8. Observe the change propagating through Track Model → Track Controller → CTC.
-9. Close and reopen a block on each line from CTC.
-10. Verify acknowledgements and final confirmed block statuses.
+Explain the new message lifecycle, exactly when authority changes hands, and how real zero-authority conditions are treated differently from normal block transitions.
 
-If a manual setup step remains necessary, document it clearly.
+In your final response provide:
 
-Prefer a reproducible combined deployment configuration rather than requiring numerous manual configuration steps.
-
-Keep standalone TestUIs operational for isolated testing, but do not require them for the live demonstration.
-
-## 12. Scope restrictions
-
-This is intended as the next manageable integration milestone, not a complete rebuild of the entire Train Control System.
-
-Do NOT:
-
-- Implement Train Model physics.
-- Implement automatic physical train placement/release.
-- Redesign the shared clock.
-- Rewrite CTC dispatching or schedule management.
-- Remove existing safety interlocks.
-- Replace named-pipe communication with an unrelated networking architecture.
-- Add fake occupancy updates inside CTC.
-- Hardcode test-only Red/Green statuses into production modules.
-- Introduce unnecessary dependencies between module Core projects.
-- Change teammates' unrelated functionality.
-
-You may modify Track Model, Track Controller, shared contracts, and shared infrastructure where those modifications are necessary for this integration.
-
-Avoid unrelated refactoring.
-
-## 13. Implementation workflow
-
-Work systematically:
-
-**Phase A — Investigation**
-
-Identify exact missing functionality and relevant files. Determine whether production Red/Green source data is available and trustworthy. Identify any architectural constraints before coding.
-
-**Phase B — Production layouts and controller configuration**
-
-Implement the necessary layout data, globally unique identifiers, and combined controller deployment.
-
-**Phase C — Live communication**
-
-Extend the existing named-pipe flows to handle all three lines, including batching if required.
-
-**Phase D — Controls and movement requests**
-
-Verify maintenance operations and supported movement requests throughout the network.
-
-**Phase E — Testing and documentation**
-
-Run automated tests, resolve regressions, and update the integration guide.
-
-Proceed with implementation rather than stopping after the investigation.
-
-When making design decisions, prioritize reuse of existing functionality, preserving Blue Line compatibility, and maintaining conservative safety behavior.
-
-## 14. Final report
-
-After implementing the changes, provide a concise report containing:
-
-1. **What changed:** Files/modules modified and major changes made.
-2. **What now works:** Specific verified functionality across all three lines.
-3. **Test results:** Builds, automated tests, and any checks that could not be executed.
-4. **Remaining blockers:** Clearly distinguish work left in CTC, Track Controller, Track Model, Train Model, and Train Controller.
-5. **Manual demonstration:** Exact instructions to reproduce the working system.
-6. **Recommended next integration step:** What should happen after three-line monitoring/control is complete.
-
-Clearly distinguish verified functionality from functionality that is only implemented or expected to work.
+1. **Original problem:** Why the current system produces false-zero authority gaps.
+2. **Implemented solution:** How preparation, transfer, retirement, and downstream propagation work.
+3. **Affected modules:** Changes made in CTC, Track Controller, Track Model, Train Model, and Train Controller.
+4. **Final behavior:** What happens during normal transitions versus genuine revocation.
+5. **Tests:** Exact tests run, results, and any untested scenarios.
+6. **Remaining limitations:** Any integration dependencies or risks that prevent claiming end-to-end continuity.
 
 ### Definition of done
 
-The primary objective is achieved when the real Track Model, Track Controller, and CTC applications can run simultaneously and:
+The task is complete only when:
 
-- CTC displays all 241 blocks across Blue, Red, and Green.
-- Each line's layout comes from the production Track Model.
-- Live block occupancy and equipment statuses propagate correctly.
-- CTC can close and reopen blocks on every line.
-- Acknowledgements and final status confirmations work correctly.
-- Existing supported movement requests can be evaluated on all three lines.
-- Existing Blue Line functionality remains intact.
-- The system remains responsive during continuous three-line updates.
+- A moving train can transition between blocks without receiving a false zero caused by request replacement.
+- Authority never exceeds the wayside-approved fixed movement endpoint.
+- No conflicting positive movement authorities are created.
+- A genuine zero-authority decision is never delayed or suppressed to facilitate a handoff.
+- Stale feedback, missing requests, and communication failures remain fail-safe.
+- Existing CTC functionality works across Blue, Red, and Green.
+- Integration tests demonstrate both uninterrupted valid movement and immediate safety response to actual revocation.
 
-At that point, the three-line integration should be ready to demonstrate to the team, with any remaining train-physics or cross-territory limitations explicitly documented.
+**Safety behavior takes precedence over uninterrupted movement. If continuity cannot be achieved safely in a scenario, the train must be allowed to brake.**

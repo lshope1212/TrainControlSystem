@@ -52,6 +52,11 @@ public sealed class TrainModelNamedPipeReceiver
             nameof(AuthorityMessage) => Bind<AuthorityMessage>(envelope, m =>
                 _vm.ApplyCommandedAuthority(m.TrainId, m.AuthorityMeters)),
 
+            // The Track Model's track-circuit data, one message per block per snapshot. Only the block
+            // naming a train in service here applies (newest snapshot first; see TrackCircuitReceiver).
+            nameof(TrackModelTrainEnvironmentMessage) => Bind<TrackModelTrainEnvironmentMessage>(envelope, m =>
+                _vm.ApplyTrackEnvironment(m)),
+
             nameof(TrackConditionMessage) => Bind<TrackConditionMessage>(envelope, m =>
                 _vm.ApplyTrackCondition(m.TrainId, m.GradePercent)),
 

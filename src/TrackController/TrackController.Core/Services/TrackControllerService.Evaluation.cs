@@ -17,6 +17,7 @@ public sealed partial class TrackControllerService
         }
 
         _lastPulse = now;
+        PruneStaged();
         foreach (var block in _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId)))
         {
             block.CommandedSignal = SignalState.Red;
@@ -117,6 +118,8 @@ public sealed partial class TrackControllerService
                 block.CommandedSignal = SignalState.Red;
             }
         }
+        _lastResults = authorizations;
+        var continuations = ComputeContinuations(authorizations);
         var resultsByBlock = authorizations.ToDictionary(result => result.Request.TargetBlockId);
         var blockStatuses = _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId) || _neighbors.Contains(block.Definition.BlockId)).Select(block =>
         {
@@ -139,11 +142,13 @@ public sealed partial class TrackControllerService
                 {
                     RequestId = request.RequestId, TrainId = request.TrainId, TargetBlockId = request.TargetBlockId,
                     EntryBlockId = request.EntryBlockId, PathBlockIds = [.. request.PathBlockIds], AuthorityReference = request.AuthorityReference,
-                    SuggestedSpeedMetersPerSecond = request.SuggestedSpeedMetersPerSecond, SuggestedAuthorityMeters = request.SuggestedAuthorityMeters
+                    SuggestedSpeedMetersPerSecond = request.SuggestedSpeedMetersPerSecond, SuggestedAuthorityMeters = request.SuggestedAuthorityMeters,
+                    PredecessorRequestId = request.PredecessorRequestId
                 },
                 AuthorizedSpeedMetersPerSecond = movement.AuthorizedSpeedMetersPerSecond,
                 AuthorizedAuthorityMeters = movement.AuthorizedAuthorityMeters,
-                MovementStatus = movement.Status ?? "", MovementReason = movement.Reason ?? ""
+                MovementStatus = movement.Status ?? "", MovementReason = movement.Reason ?? "",
+                Continuation = continuations.GetValueOrDefault(definition.BlockId)
             };
         }).ToArray();
 

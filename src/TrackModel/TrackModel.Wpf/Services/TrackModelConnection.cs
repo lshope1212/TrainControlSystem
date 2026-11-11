@@ -64,9 +64,22 @@ public sealed class TrackModelConnection
         new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     private readonly DispatcherTimer _debounce;
 
+    // Train environments for the Train Model's own sender (see ForwardTrainEnvironmentsAsync).
+    private readonly Channel<List<TrackModelTrainEnvironmentMessage>> _trainModelPending = Channel.CreateBounded<List<TrackModelTrainEnvironmentMessage>>(
+        new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+
+    // Lapses wayside speed/authority codes whose lease ran out (a silent Track Controller).
+    private readonly DispatcherTimer _authorityLease;
+
+    /// <summary>How often lapsed wayside authority leases are checked.</summary>
+    public static readonly TimeSpan AuthorityLeaseCheckInterval = TimeSpan.FromMilliseconds(100);
+
     // UI thread only.
     private int _layoutRequestVersion;
     private Guid _latestSnapshotId;
+
+    // Orders train environments across snapshots and restarts (seeded from the clock). UI thread only.
+    private long _environmentSequence = DateTime.UtcNow.Ticks;
 
     // Publisher loop only.
     private int _testUiLayoutRevision = -1;
@@ -89,17 +102,41 @@ public sealed class TrackModelConnection
         _debounce = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = TimeSpan.FromMilliseconds(100) };
         _debounce.Tick += (_, _) => { _debounce.Stop(); QueueSnapshot(); };
         _track.StateChanged += (_, _) => { _debounce.Stop(); _debounce.Start(); };
+        _authorityLease = new DispatcherTimer(DispatcherPriority.Normal, dispatcher) { Interval = AuthorityLeaseCheckInterval };
+        _authorityLease.Tick += (_, _) => ApplyThenPublishIfTrainCodesChanged(() => { _track.ExpireCommands(DateTimeOffset.UtcNow); });
     }
 
     /// <summary>Call on the UI thread. Publishes the initial snapshot (including the layout) and runs until cancelled.</summary>
     public Task RunAsync(CancellationToken token)
     {
+        _authorityLease.Start();
         RequestSnapshot();
         return Task.WhenAll(
             NamedPipeTransport.ListenAsync(_endpoints.Inbound, HandleAsync,
                 ex => Report("Inbound error: " + ex.Message), token),
             PublishAsync(token),
+            ForwardTrainEnvironmentsAsync(token),
             ForwardTestUiResultsAsync(token));
+    }
+
+    /// <summary>
+    /// The Train Model's own sender: train environments, newest snapshot first and in order, never
+    /// waiting behind a slow or absent CTC, Track Controller or TestUI pipe. Only the newest pending
+    /// snapshot is kept, since each snapshot fully describes every train's current code.
+    /// </summary>
+    private async Task ForwardTrainEnvironmentsAsync(CancellationToken token)
+    {
+        try
+        {
+            await foreach (var environments in _trainModelPending.Reader.ReadAllAsync(token))
+            {
+                bool delivered = await SendBatchAsync(_endpoints.TrainModel, environments, token);
+                bool changed;
+                lock (_delivery) { changed = _delivery[1] != delivered; _delivery[1] = delivered; }
+                if (changed) await ReportDeliveryAsync(token);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
     /// <summary>Call on the UI thread. Publishes a full snapshot, re-sending the layout to every receiver.</summary>
@@ -110,7 +147,34 @@ public sealed class TrackModelConnection
         QueueSnapshot();
     }
 
-    public void Stop() => _debounce.Stop();
+    public void Stop()
+    {
+        _debounce.Stop();
+        _authorityLease.Stop();
+    }
+
+    /// <summary>
+    /// Applies <paramref name="apply"/>, then publishes at once (no debounce) if any train moved to
+    /// another block or its speed or authority code changed: a revocation, the code of the block a
+    /// train just entered, and the occupancy the wayside needs for a handoff are never held back. UI thread only.
+    /// </summary>
+    private void ApplyThenPublishIfTrainCodesChanged(Action apply)
+    {
+        var before = _track.CaptureTrainCodes();
+        apply();
+        var after = _track.CaptureTrainCodes();
+        if (before.Count != after.Count || after.Any(code => !before.TryGetValue(code.Key, out var previous) || previous != code.Value))
+        {
+            PublishNow();
+        }
+    }
+
+    /// <summary>Publishes a snapshot at once, skipping the debounce (safety-relevant changes). UI thread only.</summary>
+    private void PublishNow()
+    {
+        _debounce.Stop();
+        QueueSnapshot();
+    }
 
     private async Task HandleAsync(MessageEnvelope envelope)
     {
@@ -124,15 +188,18 @@ public sealed class TrackModelConnection
                     case nameof(TrackModelCommandMessage):
                         _track.ApplyCommand(MessageSerializer.DeserializePayload<TrackModelCommandMessage>(envelope)); break;
                     case nameof(TrackModelCommandBatchMessage):
-                        var commands = MessageSerializer.DeserializePayload<TrackModelCommandBatchMessage>(envelope).Commands ?? [];
-                        var refused = _track.ApplyCommands(commands);
+                        var batch = MessageSerializer.DeserializePayload<TrackModelCommandBatchMessage>(envelope);
+                        IReadOnlyList<string> refused = [];
+                        ApplyThenPublishIfTrainCodesChanged(() => refused = _track.ApplyCommandBatch(batch, DateTimeOffset.UtcNow));
                         if (refused.Count > 0)
-                            throw new InvalidOperationException($"{refused.Count} of {commands.Count} wayside commands refused: {string.Join("; ", refused.Take(3))}{(refused.Count > 3 ? "; …" : "")}");
+                            throw new InvalidOperationException($"{refused.Count} of {batch.Commands?.Count ?? 0} wayside commands refused: {string.Join("; ", refused.Take(3))}{(refused.Count > 3 ? "; …" : "")}");
                         break;
                     case nameof(TrackModelTrainUpdateMessage):
-                        _track.ApplyTrainUpdate(MessageSerializer.DeserializePayload<TrackModelTrainUpdateMessage>(envelope)); break;
+                        var update = MessageSerializer.DeserializePayload<TrackModelTrainUpdateMessage>(envelope);
+                        ApplyThenPublishIfTrainCodesChanged(() => _track.ApplyTrainUpdate(update)); break;
                     case nameof(TrackModelFailureCommandMessage):
-                        _track.ApplyFailures(MessageSerializer.DeserializePayload<TrackModelFailureCommandMessage>(envelope)); break;
+                        _track.ApplyFailures(MessageSerializer.DeserializePayload<TrackModelFailureCommandMessage>(envelope));
+                        PublishNow(); break; // a fault is safety-relevant: no debounce before the wayside sees it
                     case nameof(SystemTimeMessage):
                         _track.SetSystemTime(MessageSerializer.DeserializePayload<SystemTimeMessage>(envelope).SystemTime); break;
                     case nameof(TrackModelTemperatureCommandMessage):
@@ -182,11 +249,14 @@ public sealed class TrackModelConnection
         var layout = _track.CreateLayoutMessage();
         layout.SnapshotId = snapshotId;
         var feedback = CaptureBlockStates(snapshotId, observedAt: null);
-        var environments = _track.Layout.Blocks.Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
-        foreach (var environment in environments) environment.SnapshotId = snapshotId;
+        // Occupied blocks first, so a train's own environment is never queued behind the whole network.
+        var sequence = ++_environmentSequence;
+        var environments = _track.Layout.Blocks.OrderBy(b => b.TrainId.Length == 0).Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
+        foreach (var environment in environments) { environment.SnapshotId = snapshotId; environment.Sequence = sequence; }
+        _trainModelPending.Writer.TryWrite(environments);
         var sales = _track.Layout.Blocks.Select(b => b.LineId).Distinct().Select(_track.CreateTicketSales).ToList();
         _pending.Writer.TryWrite(new(_track.LayoutRevision, _layoutRequestVersion, layout,
-            feedback, environments, sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
+            feedback, sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
     }
 
     /// <summary>
@@ -195,7 +265,19 @@ public sealed class TrackModelConnection
     /// The states keep the latest snapshot's ID (a newer snapshot, if any, follows immediately), so
     /// the TestUI keeps pairing layout, state and environment by snapshot.
     /// </summary>
-    private List<MessageEnvelope> CaptureFeedback() => CaptureBlockStates(_latestSnapshotId, DateTimeOffset.UtcNow);
+    /// <remarks>
+    /// The occupied blocks' train environments are re-sent with it (newer sequence, same values), so a
+    /// Train Model that starts or reconnects receives its train's current code within a heartbeat
+    /// instead of waiting for the next change.
+    /// </remarks>
+    private List<MessageEnvelope> CaptureFeedback()
+    {
+        var sequence = ++_environmentSequence;
+        var environments = _track.Layout.Blocks.Where(b => b.TrainId.Length > 0).Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
+        foreach (var environment in environments) { environment.SnapshotId = _latestSnapshotId; environment.Sequence = sequence; }
+        if (environments.Count > 0) _trainModelPending.Writer.TryWrite(environments);
+        return CaptureBlockStates(_latestSnapshotId, DateTimeOffset.UtcNow);
+    }
 
     /// <summary>
     /// Every block's measured state, as one Track Controller batch per line in layout order. UI thread only.
@@ -258,17 +340,17 @@ public sealed class TrackModelConnection
         var testUi = new List<object>();
         if (snapshot.LayoutRequestVersion != _testUiLayoutRequestVersion || snapshot.Revision != _testUiLayoutRevision) testUi.Add(snapshot.Layout);
         testUi.Add(snapshot.Time);
+        // Train environments have their own sender (ForwardTrainEnvironmentsAsync).
         var results = await Task.WhenAll(
             SendBatchAsync(_endpoints.TrackController, snapshot.Feedback, token),
-            SendBatchAsync(_endpoints.TrainModel, snapshot.Environments.Cast<object>(), token),
             PublishToCtcAsync(snapshot, token),
             SendBatchAsync(_endpoints.TestUi, testUi, token));
-        if (results[3])
+        if (results[2])
         {
             _testUiLayoutRevision = snapshot.Revision;
             _testUiLayoutRequestVersion = snapshot.LayoutRequestVersion;
         }
-        for (int i = 0; i < results.Length; i++) _delivery[i] = results[i];
+        lock (_delivery) { _delivery[0] = results[0]; _delivery[2] = results[1]; _delivery[3] = results[2]; }
         await ReportDeliveryAsync(token);
     }
 
@@ -330,6 +412,6 @@ public sealed class TrackModelConnection
 
     private void Report(string text) => _dispatcher.InvokeAsync(() => StatusReported?.Invoke(this, text));
     private sealed record Snapshot(int Revision, int LayoutRequestVersion, TrackLayoutMessage Layout,
-        List<MessageEnvelope> Feedback, List<TrackModelTrainEnvironmentMessage> Environments,
+        List<MessageEnvelope> Feedback,
         List<TicketSalesMessage> Sales, SystemTimeMessage Time);
 }

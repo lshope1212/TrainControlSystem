@@ -23,6 +23,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly SimulationClock _clock;
     private readonly DispatcherTimer _timer;
     private readonly Dictionary<string, TrainInputs> _inputsByTrain = new(StringComparer.OrdinalIgnoreCase);
+    private readonly TrackCircuitReceiver _trackCircuit = new();
 
     // Last controller TickId received per train, echoed back on that train's status message
     // so the Train Controller can correlate its command (tick N) with the resulting state.
@@ -397,6 +398,33 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         EnsureTrain(trainId).CommandedAuthorityMeters = meters;
         RefreshAll();
+    }
+
+    /// <summary>
+    /// Track-circuit data from the Track Model for the block a train occupies: commanded speed,
+    /// authority (relayed unchanged, zero included) and grade. Applies only to trains in service
+    /// here and only in snapshot order; environments of other blocks and trains are ignored.
+    /// </summary>
+    public void ApplyTrackEnvironment(TrainControl.Contracts.Messages.TrackModelTrainEnvironmentMessage environment)
+    {
+        if (string.IsNullOrEmpty(environment.TrainId))
+        {
+            return;
+        }
+
+        // The Track Model names trains by canonical ID ("001"); trains here may carry the Train
+        // Controller's fleet label ("TRAIN-001"). Translated at this boundary, never guessed.
+        var inputs = _inputsByTrain.TryGetValue(environment.TrainId, out var exact) ? exact
+            : _inputsByTrain.FirstOrDefault(train => TrainControl.Common.Identity.TrainIdConvention.TryNormalize(train.Key, out var canonical) && canonical == environment.TrainId).Value;
+        if (inputs is null)
+        {
+            return;
+        }
+
+        if (_trackCircuit.TryApply(environment.TrainId, environment, inputs))
+        {
+            RefreshAll();
+        }
     }
 
     public void ApplyTrackCondition(string trainId, double gradePercent)

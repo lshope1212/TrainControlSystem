@@ -134,6 +134,20 @@ public class DispatchedTrainState
     /// placement, completed, or no safe authority).
     /// </summary>
     public MovementRequestState? MovementRequest { get; set; }
+
+    /// <summary>
+    /// The successor CTC has prepared at the Track Controller for the train's next block, behind
+    /// <see cref="MovementRequest"/>; null when none. It grants nothing: the Track Controller hands
+    /// authority over to it only when it observes the train entering that block, and CTC adopts it
+    /// as <see cref="MovementRequest"/> once it tracks the train there.
+    /// </summary>
+    public MovementRequestState? StagedMovementRequest { get; set; }
+
+    /// <summary>
+    /// Requests CTC no longer holds whose clean-up cancellation could not be delivered yet; retried
+    /// on every synchronization pass. Cancellations are idempotent at the Track Controller.
+    /// </summary>
+    public List<MovementRequestState> UncancelledRequests { get; } = [];
 }
 
 /// <summary>Whether a released train has been seen on the track (see <see cref="DispatchedTrainState.ReleaseStatus"/>).</summary>

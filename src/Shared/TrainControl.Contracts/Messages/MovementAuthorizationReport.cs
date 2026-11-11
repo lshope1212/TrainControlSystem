@@ -33,4 +33,10 @@ public sealed class MovementAuthorizationReport
 
     /// <summary>Readable explanation, e.g. why authority was withheld or restricted.</summary>
     public string Reason { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When this request was promoted from a staged successor: the request it replaced at the
+    /// train's block transition (retired in the same step). Diagnostic only; empty otherwise.
+    /// </summary>
+    public string SupersededRequestId { get; set; } = string.Empty;
 }

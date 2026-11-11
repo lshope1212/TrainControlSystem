@@ -26,6 +26,9 @@ public class TrackService : ITrackService
             b.IsOccupied = b.IsClosed = false;
             b.TrainId = string.Empty;
             b.ActualSpeedMetersPerSecond = b.CommandedSpeedMetersPerSecond = b.AuthorityMeters = 0;
+            b.MovementRequestId = b.AuthorityEntryBlockId = b.TrainEntryBlockId = string.Empty;
+            b.CommandSequence = 0;
+            b.AuthorityExpiresAtUtc = null;
             b.Switch = SwitchPosition.Normal; b.Signal = SignalState.Red; b.Crossing = CrossingState.Open;
             b.BrokenRail = b.TrackCircuitFailure = b.PowerFailure = false;
             b.WaitingPassengers = b.InitialWaitingPassengers;
@@ -50,14 +53,28 @@ public class TrackService : ITrackService
     /// does not hold back the rest. State listeners are notified once, and only if something changed.
     /// </summary>
     /// <returns>One "block: reason" entry per refused command; empty when all were applied.</returns>
-    public IReadOnlyList<string> ApplyCommands(IEnumerable<TrackModelCommandMessage> messages)
+    public IReadOnlyList<string> ApplyCommands(IEnumerable<TrackModelCommandMessage> messages) =>
+        ApplyCommandBatch(new TrackModelCommandBatchMessage { Commands = (messages ?? throw new ArgumentNullException(nameof(messages))).ToList() }, DateTimeOffset.UtcNow);
+
+    /// <summary>
+    /// Applies a wayside batch like <see cref="ApplyCommands"/>, honouring its ordering and lease: a
+    /// block's command is skipped (not refused) when the block was already commanded by a batch with
+    /// the same or a newer <see cref="TrackModelCommandBatchMessage.Sequence"/>, so a late or replayed
+    /// batch can never restore withdrawn authority; and speed/authority codes lapse to zero
+    /// <see cref="TrackModelCommandBatchMessage.AuthorityLeaseSeconds"/> after
+    /// <paramref name="receivedAtUtc"/> unless a newer batch renews them (see <see cref="ExpireCommands"/>).
+    /// </summary>
+    public IReadOnlyList<string> ApplyCommandBatch(TrackModelCommandBatchMessage batch, DateTimeOffset receivedAtUtc)
     {
-        ArgumentNullException.ThrowIfNull(messages);
+        ArgumentNullException.ThrowIfNull(batch);
+        if (batch.Sequence < 0 || !double.IsFinite(batch.AuthorityLeaseSeconds) || batch.AuthorityLeaseSeconds < 0)
+            throw new ArgumentException("A command batch needs a nonnegative sequence and authority lease.");
+        DateTimeOffset? expiresAt = batch.AuthorityLeaseSeconds > 0 ? receivedAtUtc.AddSeconds(batch.AuthorityLeaseSeconds) : null;
         var refused = new List<string>();
         var changed = false;
-        foreach (var message in messages)
+        foreach (var message in batch.Commands ?? [])
         {
-            try { changed |= ApplyCommandCore(message); }
+            try { changed |= ApplyCommandCore(message, batch.Sequence, expiresAt); }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {
                 refused.Add($"{message?.BlockId}: {ex.Message}");
@@ -67,8 +84,31 @@ public class TrackService : ITrackService
         return refused;
     }
 
+    /// <summary>
+    /// Replaces every speed/authority code whose lease lapsed with zero: the wayside stopped renewing
+    /// it, so it no longer authorizes anything. Returns how many blocks were stopped.
+    /// </summary>
+    public int ExpireCommands(DateTimeOffset now)
+    {
+        var expired = 0;
+        foreach (var b in Layout.Blocks.Where(b => b.AuthorityExpiresAtUtc is { } at && at <= now))
+        {
+            b.CommandedSpeedMetersPerSecond = b.AuthorityMeters = 0;
+            b.MovementRequestId = b.AuthorityEntryBlockId = string.Empty;
+            b.AuthorityExpiresAtUtc = null;
+            expired++;
+        }
+        if (expired > 0) Changed();
+        return expired;
+    }
+
+    /// <summary>Where each train on the track is and the speed/authority code it receives now, by train ID.</summary>
+    public IReadOnlyDictionary<string, (string BlockId, double Speed, double Authority, string RequestId)> CaptureTrainCodes() =>
+        Layout.Blocks.Where(b => b.IsOccupied && b.TrainId.Length > 0)
+            .ToDictionary(b => b.TrainId, b => (b.Id, b.TrainCommandedSpeedMetersPerSecond, b.TrainAuthorityMeters, b.CodeAppliesToOccupant ? b.MovementRequestId : string.Empty), StringComparer.Ordinal);
+
     /// <summary>Validates, then applies one command; true when the block's state changed.</summary>
-    private bool ApplyCommandCore(TrackModelCommandMessage message)
+    private bool ApplyCommandCore(TrackModelCommandMessage message, long sequence = 0, DateTimeOffset? expiresAt = null)
     {
         ArgumentNullException.ThrowIfNull(message);
         var b = RequireBlock(message.BlockId);
@@ -77,12 +117,23 @@ public class TrackService : ITrackService
         if (!Enum.IsDefined(message.Signal) || !Enum.IsDefined(message.Switch) || !Enum.IsDefined(message.Crossing)
             || message.Signal == SignalState.Unknown || message.Switch == SwitchPosition.Unknown || message.Crossing == CrossingState.Unknown)
             throw new ArgumentException("Choose a specific signal, switch, and crossing command.");
+        var requestId = message.MovementRequestId ?? string.Empty;
+        var entry = message.AuthorityEntryBlockId ?? string.Empty;
+        if (requestId.Length > 128 || (entry.Length > 0 && (entry == b.Id || FindBlock(entry) is null)))
+            throw new ArgumentException("A movement code needs a request ID of up to 128 characters and a known, different entry block.");
+        // Ordering: this block already has a newer wayside command. Nothing from an older batch applies.
+        if (sequence > 0 && sequence <= b.CommandSequence) return false;
         if (b.HasSwitch && b.IsOccupied && b.Switch != message.Switch)
             throw new InvalidOperationException("An occupied switch cannot be thrown.");
         var changed = b.CommandedSpeedMetersPerSecond != message.CommandedSpeedMetersPerSecond || b.AuthorityMeters != message.AuthorityMeters
+            || b.MovementRequestId != requestId || b.AuthorityEntryBlockId != entry
             || (b.HasSwitch && b.Switch != message.Switch) || (b.HasSignal && b.Signal != message.Signal) || (b.HasCrossing && b.Crossing != message.Crossing);
         b.CommandedSpeedMetersPerSecond = message.CommandedSpeedMetersPerSecond;
         b.AuthorityMeters = message.AuthorityMeters;
+        b.MovementRequestId = requestId;
+        b.AuthorityEntryBlockId = entry;
+        if (sequence > 0) b.CommandSequence = sequence;
+        b.AuthorityExpiresAtUtc = message.CommandedSpeedMetersPerSecond > 0 || message.AuthorityMeters > 0 ? expiresAt : null;
         if (b.HasSwitch) b.Switch = message.Switch;
         if (b.HasSignal) b.Signal = message.Signal;
         if (b.HasCrossing) b.Crossing = message.Crossing;
@@ -124,9 +175,12 @@ public class TrackService : ITrackService
         if (previous is not null && previous != destination)
         {
             previous.TrainId = string.Empty; previous.IsOccupied = false; previous.ActualSpeedMetersPerSecond = 0;
+            previous.TrainEntryBlockId = string.Empty;
         }
         if (destination is not null)
         {
+            // The physical boundary the train crossed; a continuation code applies only across it.
+            if (previous != destination) destination.TrainEntryBlockId = previous?.Id ?? string.Empty;
             destination.TrainId = message.TrainId; destination.IsOccupied = true;
             destination.ActualSpeedMetersPerSecond = message.ActualSpeedMetersPerSecond;
             if (applyExchange)
@@ -222,9 +276,12 @@ public class TrackService : ITrackService
     public TrackModelTrainEnvironmentMessage CreateTrainEnvironment(string blockId)
     {
         var b = RequireBlock(blockId);
+        // An occupied block reports the code that applies to ITS train (zero for a continuation code
+        // the train did not enter under); an unoccupied block reports its code as commanded.
         return new() { BlockId = b.Id, TrainId = b.TrainId,
-            CommandedSpeedMetersPerSecond = b.CommandedSpeedMetersPerSecond, ActualSpeedMetersPerSecond = b.ActualSpeedMetersPerSecond,
-            AuthorityMeters = b.AuthorityMeters,
+            CommandedSpeedMetersPerSecond = b.TrainCommandedSpeedMetersPerSecond, ActualSpeedMetersPerSecond = b.ActualSpeedMetersPerSecond,
+            AuthorityMeters = b.TrainAuthorityMeters,
+            MovementRequestId = !b.IsOccupied || b.CodeAppliesToOccupant ? b.MovementRequestId : string.Empty,
             Signal = b.EffectiveSignal, Beacon = b.Beacon, BeaconTargetBlockId = b.BeaconTargetBlockId, ElevationMeters = b.ElevationMeters,
             GradePercent = b.GradePercent, TemperatureCelsius = b.TemperatureCelsius, WaitingPassengers = b.WaitingPassengers,
             BoardingPassengers = b.BoardingPassengers, DisembarkingPassengers = b.DisembarkingPassengers, TicketsSold = b.TicketsSold,

@@ -6,4 +6,12 @@ namespace TrackController.Contracts.Messages;
 public sealed record WaysideAcknowledgementMessage(
     [property: JsonPropertyName("accepted")] bool IsAccepted,
     string Detail,
-    string MessageType = "");
+    string MessageType = "")
+{
+    /// <summary>
+    /// True when an accepted movement request was only staged as a successor behind its predecessor.
+    /// Staging grants nothing; CTC is told <see cref="RequestAcknowledgementOutcome.PreparedAsSuccessor"/>.
+    /// </summary>
+    [JsonPropertyName("stagedSuccessor")]
+    public bool IsStagedSuccessor { get; init; }
+}

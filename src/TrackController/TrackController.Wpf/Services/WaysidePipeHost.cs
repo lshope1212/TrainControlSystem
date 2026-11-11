@@ -36,6 +36,15 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     private readonly ConcurrentQueue<object> _monitorResults = new();
     private readonly ConcurrentQueue<RequestAcknowledgementMessage> _ctcAcknowledgements = new();
     private readonly SemaphoreSlim _ctcAcknowledgementQueued = new(0);
+
+    // Wakes the Track Model publisher as soon as an input changes what is commanded for movement,
+    // so a revocation (or a handoff) never waits for the next periodic batch. It stays one
+    // publisher, so batches remain in order.
+    private readonly SemaphoreSlim _trackModelOutputChanged = new(0);
+    private string _lastMovementSignature = string.Empty;
+
+    // Orders Track Model batches across this host's lifetime and its restarts (seeded from the clock).
+    private long _trackModelSequence = DateTime.UtcNow.Ticks;
     private readonly object _connectionGate = new();
     private bool? _ctcConnected;
     private bool? _trackModelConnected;
@@ -92,6 +101,8 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         {
             AcknowledgementReceived?.Invoke(receipt);
         }
+
+        SignalIfMovementOutputChanged(_runtime.LatestSnapshot);
 
         if (result is WaysideAcknowledgementMessage { IsAccepted: false } rejected)
         {
@@ -150,7 +161,19 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                 {
                     UpdateConnection(pipe == Pipe.Ctc, delivered);
                 }
-                await Task.Delay(PublishInterval, stop).ConfigureAwait(false);
+
+                if (pipe == Pipe.TrackModel)
+                {
+                    // Periodic, or at once when an input changed a movement output (e.g. a revocation).
+                    await _trackModelOutputChanged.WaitAsync(PublishInterval, stop).ConfigureAwait(false);
+                    while (_trackModelOutputChanged.CurrentCount > 0 && _trackModelOutputChanged.Wait(0))
+                    {
+                    }
+                }
+                else
+                {
+                    await Task.Delay(PublishInterval, stop).ConfigureAwait(false);
+                }
             }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
@@ -247,7 +270,12 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         {
             RequestId = request.RequestId ?? "",
             RequestType = envelope.MessageType,
-            Outcome = receipt is { IsAccepted: true } ? RequestAcknowledgementOutcome.AcceptedForEvaluation : RequestAcknowledgementOutcome.Rejected,
+            Outcome = receipt switch
+            {
+                { IsAccepted: true, IsStagedSuccessor: true } => RequestAcknowledgementOutcome.PreparedAsSuccessor,
+                { IsAccepted: true } => RequestAcknowledgementOutcome.AcceptedForEvaluation,
+                _ => RequestAcknowledgementOutcome.Rejected,
+            },
             Detail = receipt?.Detail ?? "The controller runtime returned no acknowledgement.",
             BlockId = request.BlockId ?? "",
             TrainId = request.TrainId ?? "",
@@ -306,11 +334,43 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         return statuses.Count == 0 ? [] : [new BlockStatusBatchMessage { Statuses = statuses }];
     }
 
-    /// <summary>The periodic Track Model output: every block's command of one evaluation in one message.</summary>
+    /// <summary>
+    /// The periodic Track Model output: every block's command of one evaluation in one message, in
+    /// order (<see cref="TrackModelCommandBatchMessage.Sequence"/>) and with the evaluation's own
+    /// validity as the authority lease, so the codes lapse to zero if this controller goes silent.
+    /// </summary>
     private IEnumerable<object> CreateTrackModelBatch(WaysideSnapshotMessage snapshot)
     {
         var commands = CreateTrackModelMessages(snapshot).ToList();
-        return commands.Count == 0 ? [] : [new TrackModelCommandBatchMessage { Commands = commands }];
+        return commands.Count == 0 ? [] : [new TrackModelCommandBatchMessage
+        {
+            Commands = commands,
+            Sequence = Interlocked.Increment(ref _trackModelSequence),
+            AuthorityLeaseSeconds = Math.Clamp((snapshot.ValidUntilUtc - DateTimeOffset.UtcNow).TotalSeconds, 0, 5),
+        }];
+    }
+
+    /// <summary>
+    /// Wakes the Track Model publisher when what is commanded for movement changed: grants, their
+    /// request IDs, limits and decisions, and prepared handoffs.
+    /// </summary>
+    private void SignalIfMovementOutputChanged(WaysideSnapshotMessage snapshot)
+    {
+        string signature = string.Join(";", snapshot.Blocks
+            .Where(block => block.Request is not null || block.Continuation is not null)
+            .Select(block => $"{block.BlockId}|{block.Request?.RequestId}|{block.MovementStatus}|{block.AuthorizedSpeedMetersPerSecond:R}|{block.AuthorizedAuthorityMeters:R}|{block.Continuation}"))
+            + $"|{snapshot.IsPaused}|{snapshot.IsMaintenanceMode}";
+        lock (_connectionGate)
+        {
+            if (signature == _lastMovementSignature)
+            {
+                return;
+            }
+
+            _lastMovementSignature = signature;
+        }
+
+        _trackModelOutputChanged.Release();
     }
 
     private static IEnumerable<BlockStatusMessage> CreateCtcMessages(WaysideSnapshotMessage snapshot)
@@ -351,7 +411,8 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             State = granted ? evaluated : MovementAuthorizationState.Withheld,
             AuthorizedSpeedMetersPerSecond = granted ? block.AuthorizedSpeedMetersPerSecond : 0,
             AuthorizedAuthorityMeters = granted ? block.AuthorizedAuthorityMeters : 0,
-            Reason = granted || evaluated == MovementAuthorizationState.Withheld ? block.MovementReason : WithheldReason(snapshot, block, current)
+            Reason = granted || evaluated == MovementAuthorizationState.Withheld ? block.MovementReason : WithheldReason(snapshot, block, current),
+            SupersededRequestId = request.PredecessorRequestId ?? string.Empty
         };
     }
 
@@ -395,12 +456,18 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             }
 
             bool permitted = IsMovementCommandPermitted(snapshot, block, current);
+            // A prepared handoff: the granted predecessor's own authority, from this next block's entry,
+            // for a train entering from the predecessor's block. Coded only while that grant is commanded.
+            var continuation = permitted ? null : PermittedContinuation(snapshot, block, current);
             yield return new TrackModelCommandMessage
             {
                 BlockId = block.BlockId,
-                CommandedSpeedMetersPerSecond = permitted ? block.AuthorizedSpeedMetersPerSecond : 0,
-                // Preserve the fixed limit measured from this target block's entry; do not copy it onto route blocks.
-                AuthorityMeters = permitted ? block.AuthorizedAuthorityMeters : 0,
+                CommandedSpeedMetersPerSecond = permitted ? block.AuthorizedSpeedMetersPerSecond : continuation?.AuthorizedSpeedMetersPerSecond ?? 0,
+                // Preserve the fixed limit measured from this target block's entry; never copy it unchanged onto
+                // route blocks. A continuation is the same end point measured from the next block's entry.
+                AuthorityMeters = permitted ? block.AuthorizedAuthorityMeters : continuation?.AuthorizedAuthorityMeters ?? 0,
+                MovementRequestId = permitted ? block.Request!.RequestId : continuation?.PredecessorRequestId ?? string.Empty,
+                AuthorityEntryBlockId = continuation?.EntryBlockId ?? string.Empty,
                 Switch = position,
                 Signal = fresh && block.CommandedSignal is SignalState.Red or SignalState.Yellow or SignalState.Green or SignalState.SuperGreen
                     ? block.CommandedSignal : SignalState.Red,
@@ -408,6 +475,27 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                     ? block.CommandedCrossing : CrossingState.Closed
             };
         }
+    }
+
+    /// <summary>
+    /// The block's continuation code, when the predecessor it belongs to is itself commanded to the
+    /// track this cycle and the block is in a state a train may be authorized into.
+    /// </summary>
+    private static WaysideContinuation? PermittedContinuation(WaysideSnapshotMessage snapshot, WaysideBlockStatus block, bool current)
+    {
+        if (block.Continuation is not { } continuation || !current || !block.IsFresh || block.IsFaulted || block.Maintenance == "Closed"
+            || block.Occupancy is not (OccupancyState.Clear or OccupancyState.Occupied)
+            || !(continuation.AuthorizedAuthorityMeters > 0) || !(continuation.AuthorizedSpeedMetersPerSecond > 0))
+        {
+            return null;
+        }
+
+        var origin = snapshot.Blocks.FirstOrDefault(candidate => candidate.BlockId == continuation.EntryBlockId);
+        return origin?.Request?.RequestId == continuation.PredecessorRequestId && IsMovementCommandPermitted(snapshot, origin, current)
+            && continuation.AuthorizedAuthorityMeters < origin.AuthorizedAuthorityMeters
+            && continuation.AuthorizedSpeedMetersPerSecond <= origin.AuthorizedSpeedMetersPerSecond
+            ? continuation
+            : null;
     }
 
     private static async Task<bool> TrySendAsync(string pipe, object message, CancellationToken stop)
@@ -437,5 +525,6 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         await _runtime.DisposeAsync();
         _stop.Dispose();
         _ctcAcknowledgementQueued.Dispose();
+        _trackModelOutputChanged.Dispose();
     }
 }

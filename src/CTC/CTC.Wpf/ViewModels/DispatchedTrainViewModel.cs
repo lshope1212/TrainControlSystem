@@ -77,7 +77,7 @@ public class DispatchedTrainViewModel : ViewModelBase
                 return _train.ReleaseStatus == TrainReleaseStatus.AwaitingPlacement ? "No request (awaiting placement)" : "No request";
             }
 
-            return request.Delivery switch
+            string status = request.Delivery switch
             {
                 MovementRequestDelivery.Failed => $"Not delivered: {request.DeliveryError}",
                 MovementRequestDelivery.NotSent => "Not sent yet",
@@ -90,10 +90,15 @@ public class DispatchedTrainViewModel : ViewModelBase
                         MovementAuthorizationState.Approved => $"Authorized {Authorized(request)}",
                         MovementAuthorizationState.Restricted => $"Restricted to {Authorized(request)}",
                         MovementAuthorizationState.Withheld => $"Withheld: {request.AuthorizationReason}",
-                        _ => "Accepted for evaluation",
+                        _ => request.Acknowledgement == RequestAcknowledgementOutcome.PreparedAsSuccessor ? "Prepared as successor" : "Accepted for evaluation",
                     },
                 },
             };
+
+            // The prepared handoff for the next block is shown, never as an authorization.
+            return _train.StagedMovementRequest is { Acknowledgement: RequestAcknowledgementOutcome.PreparedAsSuccessor } staged
+                ? $"{status} · handoff to {staged.Plan.TargetBlockId} prepared"
+                : status;
         }
     }
 

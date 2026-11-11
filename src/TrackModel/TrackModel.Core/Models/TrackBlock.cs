@@ -32,6 +32,25 @@ public class TrackBlock
     [JsonIgnore] public double ActualSpeedMetersPerSecond { get; set; }
     [JsonIgnore] public double CommandedSpeedMetersPerSecond { get; set; }
     [JsonIgnore] public double AuthorityMeters { get; set; }
+    /// <summary>Wayside movement request the speed/authority code belongs to; empty when none is coded.</summary>
+    [JsonIgnore] public string MovementRequestId { get; set; } = string.Empty;
+    /// <summary>For a continuation code: the block a train must have entered from for the code to apply.</summary>
+    [JsonIgnore] public string AuthorityEntryBlockId { get; set; } = string.Empty;
+    /// <summary>Where the occupying train came from (its previous block); empty when placed here or unknown.</summary>
+    [JsonIgnore] public string TrainEntryBlockId { get; set; } = string.Empty;
+    /// <summary>Sequence of the wayside batch that last commanded this block; older batches are ignored.</summary>
+    [JsonIgnore] public long CommandSequence { get; set; }
+    /// <summary>When the speed/authority code lapses to zero without a newer wayside command; null = no lease.</summary>
+    [JsonIgnore] public DateTimeOffset? AuthorityExpiresAtUtc { get; set; }
+    /// <summary>
+    /// Whether the code is for the train in this block: always for an ordinary code, and for a
+    /// continuation code only when the train entered from the code's entry block.
+    /// </summary>
+    [JsonIgnore] public bool CodeAppliesToOccupant => AuthorityEntryBlockId.Length == 0 || AuthorityEntryBlockId == TrainEntryBlockId;
+    /// <summary>Authority the occupying train receives (an unoccupied block reports its code as is).</summary>
+    [JsonIgnore] public double TrainAuthorityMeters => !IsOccupied || CodeAppliesToOccupant ? AuthorityMeters : 0;
+    /// <summary>Commanded speed the occupying train receives (an unoccupied block reports its code as is).</summary>
+    [JsonIgnore] public double TrainCommandedSpeedMetersPerSecond => !IsOccupied || CodeAppliesToOccupant ? CommandedSpeedMetersPerSecond : 0;
     [JsonIgnore] public SwitchPosition Switch { get; set; } = SwitchPosition.Normal;
     [JsonIgnore] public SignalState Signal { get; set; } = SignalState.Red;
     [JsonIgnore] public CrossingState Crossing { get; set; } = CrossingState.Open;
