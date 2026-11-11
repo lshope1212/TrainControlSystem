@@ -105,4 +105,50 @@ public class DispatchedTrainState
 
     /// <summary>Planned dwell at <see cref="TargetBlockId"/>.</summary>
     public TimeSpan TargetDwellTime => CurrentStop?.DwellTime ?? TimeSpan.Zero;
+
+    /// <summary>
+    /// Whether the train has been seen on the track since CTC released it. No module confirms a
+    /// physical release yet (Train Model integration), so CTC only knows the train is there once
+    /// its start block reports occupied (<see cref="CurrentBlockOccupancyObserved"/>).
+    /// </summary>
+    public TrainReleaseStatus ReleaseStatus => CurrentBlockOccupancyObserved ? TrainReleaseStatus.DetectedOnTrack : TrainReleaseStatus.AwaitingPlacement;
+
+    /// <summary>
+    /// The block the train was in before <see cref="CurrentBlockId"/>, empty at its start block.
+    /// It is the entry block of the train's movement request, and survives a re-plan (which
+    /// restarts <see cref="ActiveRouteBlockIds"/> at the current block).
+    /// </summary>
+    public string PreviousBlockId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Fixed end of the current movement's authority: the index in <see cref="ActiveRouteBlockIds"/>
+    /// of the last block it covers; -1 for none. Set only when a movement starts (release, departure
+    /// after a stop, a dispatcher re-plan); moving block to block never extends it, and requests only
+    /// ever cover less (when a block ahead is unsafe), never more.
+    /// </summary>
+    public int AuthorityLimitRouteIndex { get; set; } = -1;
+
+    /// <summary>
+    /// The movement request CTC currently holds at the Track Controller for this train, with its
+    /// delivery, acknowledgement and authorization; null when the train holds none (awaiting
+    /// placement, completed, or no safe authority).
+    /// </summary>
+    public MovementRequestState? MovementRequest { get; set; }
+}
+
+/// <summary>Whether a released train has been seen on the track (see <see cref="DispatchedTrainState.ReleaseStatus"/>).</summary>
+public enum TrainReleaseStatus
+{
+    /// <summary>
+    /// CTC released the train (its departure time came and its start block was safe), but nothing
+    /// has placed it on the track yet: no module receives release requests until the Train Model
+    /// integration exists. CTC sends no movement request for it.
+    /// </summary>
+    AwaitingPlacement = 0,
+
+    /// <summary>
+    /// The train's start block reported occupied after release and CTC attributes that occupancy to
+    /// it (inferred from anonymous occupancy, not confirmed by the Train Model).
+    /// </summary>
+    DetectedOnTrack,
 }

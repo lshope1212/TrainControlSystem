@@ -505,20 +505,32 @@ public class MainWindowViewModel : ViewModelBase
         switch (e.Kind)
         {
             case CtcStateChangeKind.TrackLayout:
-                // The old CtcBlockState objects were discarded, so the adapters must be rebuilt.
+                // Lines or blocks may have been added, rebuilt or removed, so the adapters are rebuilt.
                 RebuildTerritory();
+                RebuildDestinationBlocks();
                 MarkTerritoryUpdated();
+                break;
+
+            case CtcStateChangeKind.TrackLayoutRejected:
+                CommunicationStatus = $"Warning: {e.Message}";
                 break;
 
             case CtcStateChangeKind.BlockStatus:
             case CtcStateChangeKind.MaintenanceRequest:
-                foreach (var block in Blocks)
+                // Live statuses arrive continuously for every block; refresh only the one that changed.
+                var changedBlock = e.BlockId is null ? null : Blocks.FirstOrDefault(block => block.BlockId == e.BlockId);
+                foreach (var block in changedBlock is null ? Blocks : [changedBlock])
                 {
                     block.Refresh();
                 }
 
                 OnPropertyChanged(nameof(OccupiedBlockCount));
                 MarkTerritoryUpdated();
+                break;
+
+            case CtcStateChangeKind.BlockStatusStale:
+            case CtcStateChangeKind.RequestAcknowledged:
+                CommunicationStatus = e.Message ?? CommunicationStatus;
                 break;
 
             case CtcStateChangeKind.SystemTime:
@@ -539,8 +551,18 @@ public class MainWindowViewModel : ViewModelBase
             case CtcStateChangeKind.TrainDispatched:
                 RebuildDispatchQueue();
                 RebuildDispatchedTrains();
-                CommunicationStatus = $"{TrainIds.DisplayName(e.TrainId ?? string.Empty)} dispatched at {SystemTimeDisplay} (movement suggestion and request sent)."
+                CommunicationStatus = $"{TrainIds.DisplayName(e.TrainId ?? string.Empty)} released at {SystemTimeDisplay}; awaiting placement on the track. No module confirms a physical release yet, so CTC sends its first movement request when its start block reports occupied."
                     + (e.Message is null ? string.Empty : $" Warning: {e.Message}");
+                break;
+
+            case CtcStateChangeKind.TrainDetectedOnTrack:
+            case CtcStateChangeKind.MovementRequestUpdated:
+                RefreshDispatchedTrain(e.TrainId, reloadEdits: false);
+                if (e.Message is not null)
+                {
+                    CommunicationStatus = e.Message;
+                }
+
                 break;
 
             case CtcStateChangeKind.DispatchFailed:

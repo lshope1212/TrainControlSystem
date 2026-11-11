@@ -84,10 +84,10 @@ public sealed class WaysidePublicationTests
             NamedPipeTransport.ListenAsync(endpoints[(int)Pipe.TrackModel], e =>
             {
                 trackMessages.Enqueue(e);
-                Assert.AreEqual(nameof(TrackModelCommandMessage), e.MessageType);
-                var command = MessageSerializer.DeserializePayload<TrackModelCommandMessage>(e);
-                track.ApplyCommand(command); // The unmodified production Track Model service validates and applies the payload.
-                latest[command.BlockId] = command;
+                Assert.AreEqual(nameof(TrackModelCommandBatchMessage), e.MessageType);
+                var commands = MessageSerializer.DeserializePayload<TrackModelCommandBatchMessage>(e).Commands;
+                Assert.IsEmpty(track.ApplyCommands(commands)); // The production Track Model service validates and applies the payload.
+                foreach (var command in commands) latest[command.BlockId] = command;
                 return Task.CompletedTask;
             }, errors.Enqueue, stop.Token),
             NamedPipeTransport.ListenAsync(endpoints[(int)Pipe.Monitor], e => { monitor.Enqueue(e); return Task.CompletedTask; }, errors.Enqueue, stop.Token)
@@ -96,21 +96,25 @@ public sealed class WaysidePublicationTests
         {
             await using var host = new WaysidePipeHost(runtime, endpoints);
             host.Start();
-            await UntilAsync(() => latest.Count == 3 && ctc.Count >= 3 && !monitor.IsEmpty);
+            await UntilAsync(() => latest.Count == 3 && !ctc.IsEmpty && !monitor.IsEmpty);
             Assert.AreEqual(7d, track.FindBlock("A")!.CommandedSpeedMetersPerSecond);
             Assert.AreEqual(250d, track.FindBlock("A")!.AuthorityMeters);
             Assert.AreEqual(0d, track.FindBlock("B")!.AuthorityMeters, "Route blocks must not inherit the target block's fixed authority limit.");
             Assert.AreEqual(SwitchPosition.Reverse, track.FindBlock("B")!.Switch);
             Assert.AreEqual(CrossingState.Closed, track.FindBlock("A")!.Crossing);
-            var report = ctc.Where(e => e.MessageType == nameof(BlockStatusMessage)).Select(MessageSerializer.DeserializePayload<BlockStatusMessage>).First(b => b.BlockId == "B");
+            // One evaluation reaches CTC as one batch carrying every owned block's status, in order.
+            var batch = MessageSerializer.DeserializePayload<BlockStatusBatchMessage>(ctc.First(e => e.MessageType == nameof(BlockStatusBatchMessage)));
+            CollectionAssert.AreEqual(new[] { "A", "B", "C" }, batch.Statuses.Select(status => status.BlockId).ToArray());
+            Assert.IsTrue(batch.Statuses.All(status => status.ReportedAtUtc == batch.Statuses[0].ReportedAtUtc && status.ReportedAtUtc is not null));
+            var report = batch.Statuses.Single(b => b.BlockId == "B");
             Assert.AreEqual(SwitchPosition.Normal, report.Switch, "CTC receives measured state, not the switch command.");
             Assert.AreEqual(SignalState.Yellow, report.Signal);
 
             await NamedPipeTransport.SendAsync(endpoints[(int)Pipe.Input], MessageSerializer.CreateEnvelope("GetSnapshot", new { }));
             await NamedPipeTransport.SendAsync(endpoints[(int)Pipe.Input], MessageSerializer.CreateEnvelope("SetSimulation", new { paused = true, speedMultiplier = 1 }));
             await UntilAsync(() => monitor.Any(e => e.MessageType == nameof(WaysideAcknowledgementMessage)));
-            Assert.IsTrue(trackMessages.All(e => e.MessageType == nameof(TrackModelCommandMessage)));
-            Assert.IsTrue(ctc.All(e => e.MessageType == nameof(BlockStatusMessage)), "The CTC receives only its supported block-status contract.");
+            Assert.IsTrue(trackMessages.All(e => e.MessageType == nameof(TrackModelCommandBatchMessage)));
+            Assert.IsTrue(ctc.All(e => e.MessageType == nameof(BlockStatusBatchMessage)), "The CTC receives only its supported block-status contract.");
             var reportedSnapshot = MessageSerializer.DeserializePayload<WaysideSnapshotMessage>(monitor.Last(e => e.MessageType == nameof(WaysideSnapshotMessage)));
             var movement = reportedSnapshot.Authorizations.Single();
             Assert.AreEqual("request", movement.Request!.RequestId);
@@ -188,8 +192,10 @@ public sealed class WaysidePublicationTests
         using var stop = new CancellationTokenSource();
         var listener = NamedPipeTransport.ListenAsync(endpoints[(int)Pipe.TrackModel], e =>
         {
-            var command = MessageSerializer.DeserializePayload<TrackModelCommandMessage>(e);
-            received[command.BlockId] = command;
+            foreach (var command in MessageSerializer.DeserializePayload<TrackModelCommandBatchMessage>(e).Commands)
+            {
+                received[command.BlockId] = command;
+            }
             return Task.CompletedTask;
         }, errors.Enqueue, stop.Token);
         try

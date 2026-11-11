@@ -18,9 +18,12 @@ public static class MessageDisplayNameFormatter
     {
         ["AuthorityMessage"] = "Authority",
         ["BlockStatusMessage"] = "Block status",
+        ["BlockStatusBatchMessage"] = "Block statuses",
+        ["TrackModelCommandBatchMessage"] = "Track Model commands",
         ["MaintenanceRequestMessage"] = "Maintenance request",
         ["MovementRequestMessage"] = "Movement request",
         ["MovementSuggestionMessage"] = "Movement suggestion",
+        ["RequestAcknowledgementMessage"] = "Track Controller acknowledgement",
         ["SpeedCommandMessage"] = "Speed command",
         ["SwitchPositionRequestMessage"] = "Switch position request",
         ["SimulationTimeControlMessage"] = "Simulation clock control",

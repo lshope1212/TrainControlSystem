@@ -18,6 +18,17 @@ namespace CTC.Wpf.Services;
 /// </remarks>
 public sealed class NamedPipeMessageSender : IMessageSender
 {
+    private readonly string _pipeName;
+    private readonly int _connectTimeoutMilliseconds;
+
+    /// <param name="pipeName">Track Controller inbound pipe; <see cref="NamedPipeNames.TrackController"/> unless a test isolates it.</param>
+    /// <param name="connectTimeoutMilliseconds">How long to wait for the Track Controller to accept the connection.</param>
+    public NamedPipeMessageSender(string? pipeName = null, int connectTimeoutMilliseconds = 2500)
+    {
+        _pipeName = string.IsNullOrWhiteSpace(pipeName) ? NamedPipeNames.TrackController : pipeName;
+        _connectTimeoutMilliseconds = connectTimeoutMilliseconds;
+    }
+
     public async Task SendAsync<TMessage>(TMessage message, CancellationToken cancellationToken = default)
         where TMessage : class
     {
@@ -25,7 +36,7 @@ public sealed class NamedPipeMessageSender : IMessageSender
 
         try
         {
-            await NamedPipeTransport.SendAsync(NamedPipeNames.TrackController, message, cancellationToken);
+            await NamedPipeTransport.SendAsync(_pipeName, message, cancellationToken, _connectTimeoutMilliseconds);
         }
         catch (TimeoutException ex)
         {

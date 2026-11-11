@@ -98,7 +98,7 @@ public class MainWindowViewModel : ViewModelBase
 
     private void Import()
     {
-        var dialog = new OpenFileDialog { Title = "Import track layout (XLSX imports the course Blue Line)", Filter = "Track layouts (*.json;*.csv;*.xlsx)|*.json;*.csv;*.xlsx" };
+        var dialog = new OpenFileDialog { Title = "Import track layout (XLSX imports the course vF5 Blue, Red and Green Lines)", Filter = "Track layouts (*.json;*.csv;*.xlsx)|*.json;*.csv;*.xlsx" };
         if (dialog.ShowDialog() != true) return;
         try
         {
@@ -123,7 +123,7 @@ public class MainWindowViewModel : ViewModelBase
 
     private void LoadDemo()
     {
-        if (_track is TrackService service) { BlueLineTrackLayout.LoadDemonstration(service); Status = "Course Blue Line restored"; }
+        if (_track is TrackService service) { CourseTrackLayout.LoadDemonstration(service); Status = "Course Blue, Red and Green Lines restored"; }
     }
 
 }

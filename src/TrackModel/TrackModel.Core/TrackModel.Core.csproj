@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\SampleLayouts\blue-line.json" LogicalName="TrackModel.BlueLine.json" />
+    <EmbeddedResource Include="..\SampleLayouts\course-lines.json" LogicalName="TrackModel.CourseLines.json" />
     <ProjectReference Include="..\..\Shared\TrainControl.Contracts\TrainControl.Contracts.csproj" />
     <ProjectReference Include="..\..\Shared\TrainControl.Common\TrainControl.Common.csproj" />
   </ItemGroup>

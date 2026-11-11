@@ -9,11 +9,13 @@ public class CtcSpeedAndAuthorityTests
 {
     private static readonly TimeSpan Noon = new TimeSpan(12, 0, 0);
 
+    /// <summary>A block the wayside reports Clear (a block with no report is Unknown, and unsafe).</summary>
     private static CtcBlockState Block(string blockId, double lengthMeters = 50, double speedLimitKph = 50) => new CtcBlockState
     {
         BlockId = blockId,
         LengthMeters = lengthMeters,
         SpeedLimitKilometersPerHour = speedLimitKph,
+        Occupancy = OccupancyState.Clear,
     };
 
     private static List<CtcBlockState> Route(int count) => Enumerable.Range(1, count).Select(n => Block($"B{n}")).ToList();
@@ -277,12 +279,50 @@ public class CtcSpeedAndAuthorityTests
     }
 
     [TestMethod]
-    public void Authority_UnknownOccupancy_IsNotTreatedAsOccupied()
+    public void Authority_UnknownOccupancy_IsTreatedAsUnsafe()
     {
+        // Integration rule: CTC never suggests movement into track whose occupancy it does not know.
         var route = Route(3);
         route[1].Occupancy = OccupancyState.Unknown;
 
-        Assert.AreEqual(150.0, AuthorityManager.CalculateInitialAuthorityMeters(route));
+        Assert.AreEqual(50.0, AuthorityManager.CalculateInitialAuthorityMeters(route));
+        Assert.IsTrue(AuthorityManager.IsUnsafe(route[1]));
+    }
+
+    [TestMethod]
+    public void Authority_StaleStatus_IsTreatedAsUnsafe()
+    {
+        var route = Route(3);
+        route[1].IsStatusStale = true;
+
+        Assert.AreEqual(50.0, AuthorityManager.CalculateInitialAuthorityMeters(route));
+    }
+
+    [TestMethod]
+    public void Authority_BlockWithNoReport_IsUnsafe()
+    {
+        Assert.IsTrue(AuthorityManager.IsUnsafe(new CtcBlockState { BlockId = "X", LengthMeters = 50 }));
+    }
+
+    [TestMethod]
+    public void Authority_UnknownStartBlock_IsZero()
+    {
+        var route = Route(3);
+        route[0].Occupancy = OccupancyState.Unknown;
+
+        Assert.AreEqual(0.0, AuthorityManager.CalculateInitialAuthorityMeters(route));
+    }
+
+    [TestMethod]
+    public void UpdatedAuthority_TrainsOwnBlockUnknown_StillCountsButBlockAheadUnknownStops()
+    {
+        // The train's own block is ignored for occupancy (it is the train); anything ahead must be Clear.
+        var route = Route(3);
+        route[0].Occupancy = OccupancyState.Unknown;
+        route[2].Occupancy = OccupancyState.Unknown;
+
+        Assert.AreEqual(100.0, AuthorityManager.CalculateUpdatedAuthorityMeters(route));
+        Assert.AreEqual(2, AuthorityManager.CountAuthorizedBlocks(route, trainOccupiesStartBlock: true));
     }
 
     // ---- Maintenance safety (confirmed vs requested) ----

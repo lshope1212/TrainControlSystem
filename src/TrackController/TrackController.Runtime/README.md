@@ -39,7 +39,21 @@ Edit `territories.json`, move block IDs between lists, then pause and reload the
 }
 ```
 
-Every map block must have exactly one owner. Missing, duplicate, and unknown block IDs are rejected. A switch or crossing and its complete protection zone must stay in the same territory. Each territory needs one execution assignment, with a matching `territoryId`. This version supports 1–16 territories on one line, using the existing 500-block map limit.
+Every map block must have exactly one owner. Missing, duplicate, and unknown block IDs are rejected. A switch or crossing and its complete protection zone must stay in the same territory. Each territory needs one execution assignment, with a matching `territoryId`. This version supports 1–16 territories per deployment, using the existing 500-block map limit per line.
+
+## Several lines in one deployment
+
+`course-all-pc.deployment.json` runs the Blue, Red and Green course lines in one controller process, one territory per line. Instead of `trackFile`/`territoriesFile` it lists `lines`, each with its own shared map and ownership file:
+
+```json
+"lines": [
+  { "trackFile": "blue-line-track-map.json", "territoriesFile": "blue-line-territories-single.json" },
+  { "trackFile": "red-line-track-map.json", "territoriesFile": "red-line-territories-single.json" },
+  { "trackFile": "green-line-track-map.json", "territoriesFile": "green-line-territories-single.json" }
+]
+```
+
+Each line's rules are the single-line rules above. In addition, a line may appear once, territory IDs are unique across the deployment, and block IDs are unique across every line (the Track Model's `1`–`15`, `RED-n`, `GREEN-n`), because module messages identify a block without its line. A territory owns blocks of one line. The router delivers every message to the owner of its block, so CTC never needs to know which territory owns what. The Red and Green maps are derived from the Track Model layout (see `tests/Integration.Tests/CourseTrackMaps.cs`, which also checks they stay identical): Green's exits follow its one-way sections, and Red runs both ways. Red and Green have no signals, because the workbook lists none.
 
 Do not cut physical edges to make a territory load. The sample retains the real `3 → 4` connection in the shared map even though those blocks have different owners. Ownership affects permission, not topology. Keep boundaries on simpler track stretches and choose final boundaries with the team; disconnected pieces in a territory are not automatically split into additional controllers.
 

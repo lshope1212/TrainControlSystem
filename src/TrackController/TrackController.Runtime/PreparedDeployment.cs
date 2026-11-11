@@ -29,7 +29,9 @@ public sealed class PreparedDeployment
 
     public string Name => _document.Name;
 
-    public string LayoutDescription => _document.TrackFile is null ? "Legacy territory files" : $"Map: {_document.TrackFile} · Ownership: {_document.TerritoriesFile}";
+    public string LayoutDescription => _document.Lines is { } lines
+        ? $"{lines.Count} lines · Maps: {string.Join(", ", lines.Select(line => line.TrackFile))} · Ownership: {string.Join(", ", lines.Select(line => line.TerritoriesFile))}"
+        : _document.TrackFile is null ? "Legacy territory files" : $"Map: {_document.TrackFile} · Ownership: {_document.TerritoriesFile}";
 
     public IReadOnlyList<PreparedTerritory> Territories { get; }
 

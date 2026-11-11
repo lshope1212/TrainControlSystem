@@ -12,7 +12,8 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var track = new TrackService();
-        BlueLineTrackLayout.LoadDemonstration(track);
+        // Production default: the Blue, Red and Green course lines together.
+        CourseTrackLayout.LoadDemonstration(track);
         var vm = new MainWindowViewModel(track);
         _connection = new TrackModelConnection(track, Dispatcher);
         _connection.StatusReported += (_, status) => vm.Status = status;

@@ -135,7 +135,7 @@ The LED monitor reads the runtime's atomic status file and checks its output exp
 ## Boundaries and remaining integration work
 
 - The shared map retains its 3→4 boundary connection. Territories exchange adjacent feedback as read-only observations, with exactly one command owner per block. No request may span owners yet: coordinated inter-controller handoff remains to be implemented. Every switch/crossing protection zone must stay with its controller. Final territory allocation needs your team's actual topology.
-- Routing uses block IDs on one line. Those IDs must be unique across the deployment.
+- Routing uses block IDs, which must be unique across the deployment; a deployment may span several lines (see the Runtime README).
 - CTC/Track Model continue using the same Windows named-pipe messages. The PC's internal Pi link uses those same JSON envelopes over an ordered request/reply TCP stream protected by SSH. The other modules do not need to know the Pi address.
 - Reconnection creates a new paused controller session rather than replaying old movement commands. A missing Pi never causes its territory to run on a local substitute.
 - The transport estimates the PC/Pi clock offset during connection and translates feedback timestamps and output leases. Received leases are also bounded from the local request start so network delay cannot extend permission.

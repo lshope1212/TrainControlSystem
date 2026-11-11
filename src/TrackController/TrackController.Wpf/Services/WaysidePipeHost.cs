@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 using TrackController.Contracts.Messages;
 using TrackController.Core.Services;
 using TrackController.Runtime;
@@ -13,6 +15,9 @@ namespace TrackController.Wpf.Services;
 public sealed class WaysidePipeHost : IAsyncDisposable
 {
     public enum Pipe { Input, Ctc, TrackModel, Monitor }
+
+    /// <summary>Cadence of the periodic outputs: block statuses to CTC, commands to the Track Model, diagnostics.</summary>
+    private static readonly TimeSpan PublishInterval = TimeSpan.FromMilliseconds(500);
 
     private readonly IWaysideRuntime _runtime;
 
@@ -29,6 +34,8 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     private Task[]? _workers;
     private readonly Dictionary<string, SwitchPosition> _trackModelSwitches = [];
     private readonly ConcurrentQueue<object> _monitorResults = new();
+    private readonly ConcurrentQueue<RequestAcknowledgementMessage> _ctcAcknowledgements = new();
+    private readonly SemaphoreSlim _ctcAcknowledgementQueued = new(0);
     private readonly object _connectionGate = new();
     private bool? _ctcConnected;
     private bool? _trackModelConnected;
@@ -72,7 +79,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         _workers =
         [
             NamedPipeTransport.ListenAsync(_pipes[(int)Pipe.Input], HandleAsync, ex => InputReceived?.Invoke($"Input connection: {ex.Message}"), _stop.Token),
-            PublishAsync(Pipe.Ctc, _stop.Token),
+            PublishCtcAsync(_stop.Token),
             PublishAsync(Pipe.TrackModel, _stop.Token),
             PublishAsync(Pipe.Monitor, _stop.Token)
         ];
@@ -90,6 +97,17 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         {
             InputReceived?.Invoke($"Rejected: {rejected.Detail}");
         }
+
+        // CTC learns whether each of its requests was accepted for evaluation or rejected (and why);
+        // delivery of its bytes alone tells it nothing. Sent by the CTC publisher, never from this
+        // receive loop, so a busy CTC can never stall the controller's input pipe.
+        if (CreateCtcAcknowledgement(envelope, result) is { } acknowledgement)
+        {
+            _ctcAcknowledgements.Enqueue(acknowledgement);
+            while (_ctcAcknowledgements.Count > 100) _ctcAcknowledgements.TryDequeue(out _);
+            _ctcAcknowledgementQueued.Release();
+        }
+
         // Receipts and requested snapshots are diagnostics, not Track Model commands.
         _monitorResults.Enqueue(result);
         // Diagnostics are optional; retain recent receipts without growing indefinitely while the test UI is closed.
@@ -103,8 +121,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             while (!stop.IsCancellationRequested)
             {
                 var snapshot = await _runtime.PollAsync(stop).ConfigureAwait(false);
-                IEnumerable<object> messages = pipe == Pipe.Ctc ? CreateCtcMessages(snapshot)
-                    : pipe == Pipe.TrackModel ? CreateTrackModelMessages(snapshot)
+                IEnumerable<object> messages = pipe == Pipe.TrackModel ? CreateTrackModelBatch(snapshot)
                     : _monitorResults.ToArray().Append(snapshot);
                 bool delivered = true;
                 bool attempted = false;
@@ -120,9 +137,12 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                     {
                         _monitorResults.TryDequeue(out _);
                     }
-                    if (pipe == Pipe.TrackModel && message is TrackModelCommandMessage command)
+                    if (message is TrackModelCommandBatchMessage batch)
                     {
-                        _trackModelSwitches[command.BlockId] = command.Switch;
+                        foreach (var command in batch.Commands)
+                        {
+                            _trackModelSwitches[command.BlockId] = command.Switch;
+                        }
                     }
                 }
 
@@ -130,12 +150,122 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                 {
                     UpdateConnection(pipe == Pipe.Ctc, delivered);
                 }
-                await Task.Delay(500, stop).ConfigureAwait(false);
+                await Task.Delay(PublishInterval, stop).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
             return;
+        }
+    }
+
+    /// <summary>
+    /// The single CTC sender, so CTC receives everything in order: queued acknowledgements as soon
+    /// as they exist, and every <see cref="PublishInterval"/> one <see cref="BlockStatusBatchMessage"/>
+    /// with every owned block's status (one connection, not one per block: the three course lines
+    /// are 241 blocks). Acknowledgements go first and never wait behind a status batch.
+    /// </summary>
+    private async Task PublishCtcAsync(CancellationToken stop)
+    {
+        var sinceStatuses = Stopwatch.StartNew();
+        bool statusesDue = true;
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                IEnumerable<object> statuses = statusesDue ? CreateCtcBatch(await _runtime.PollAsync(stop).ConfigureAwait(false)) : [];
+                bool delivered = true;
+                bool attempted = false;
+                foreach (var acknowledgement in _ctcAcknowledgements.ToArray())
+                {
+                    attempted = true;
+                    if (!await TrySendAsync(_pipes[(int)Pipe.Ctc], acknowledgement, stop).ConfigureAwait(false))
+                    {
+                        delivered = false;
+                        break;
+                    }
+
+                    if (_ctcAcknowledgements.TryPeek(out var head) && ReferenceEquals(head, acknowledgement))
+                    {
+                        _ctcAcknowledgements.TryDequeue(out _);
+                    }
+                }
+
+                foreach (object status in delivered ? statuses : [])
+                {
+                    attempted = true;
+                    if (!await TrySendAsync(_pipes[(int)Pipe.Ctc], status, stop).ConfigureAwait(false))
+                    {
+                        delivered = false;
+                        break;
+                    }
+                }
+
+                if (statusesDue)
+                {
+                    sinceStatuses.Restart();
+                }
+
+                if (attempted && (statusesDue || !delivered))
+                {
+                    UpdateConnection(true, delivered);
+                }
+
+                // Wake early only for a new acknowledgement; statuses keep their cadence.
+                var remaining = PublishInterval - sinceStatuses.Elapsed;
+                statusesDue = remaining <= TimeSpan.Zero || !await _ctcAcknowledgementQueued.WaitAsync(remaining, stop).ConfigureAwait(false);
+                while (_ctcAcknowledgementQueued.CurrentCount > 0 && _ctcAcknowledgementQueued.Wait(0))
+                {
+                }
+            }
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Correlated answer to one of CTC's request types (movement, maintenance, switch). Track Model
+    /// feedback and operator/test inputs get none.
+    /// </summary>
+    private static RequestAcknowledgementMessage? CreateCtcAcknowledgement(MessageEnvelope envelope, object result)
+    {
+        (string RequestId, string BlockId, string TrainId)? identity = envelope.MessageType switch
+        {
+            nameof(MovementSuggestionMessage) => ReadIdentity<MovementSuggestionMessage>(envelope, request => (request.RequestId, request.TargetBlockId, request.TrainId)),
+            nameof(MaintenanceRequestMessage) => ReadIdentity<MaintenanceRequestMessage>(envelope, request => (request.RequestId, request.BlockId, "")),
+            nameof(SwitchPositionRequestMessage) => ReadIdentity<SwitchPositionRequestMessage>(envelope, request => (request.RequestId, request.BlockId, "")),
+            _ => null
+        };
+        if (identity is not { } request)
+        {
+            return null;
+        }
+
+        var receipt = result as WaysideAcknowledgementMessage;
+        return new RequestAcknowledgementMessage
+        {
+            RequestId = request.RequestId ?? "",
+            RequestType = envelope.MessageType,
+            Outcome = receipt is { IsAccepted: true } ? RequestAcknowledgementOutcome.AcceptedForEvaluation : RequestAcknowledgementOutcome.Rejected,
+            Detail = receipt?.Detail ?? "The controller runtime returned no acknowledgement.",
+            BlockId = request.BlockId ?? "",
+            TrainId = request.TrainId ?? "",
+            AcknowledgedAtUtc = DateTimeOffset.UtcNow
+        };
+    }
+
+    /// <summary>An unreadable request is still answered (the runtime rejects it); it just has no identity.</summary>
+    private static (string, string, string) ReadIdentity<TRequest>(MessageEnvelope envelope, Func<TRequest, (string, string, string)> select)
+        where TRequest : class
+    {
+        try
+        {
+            return select(MessageSerializer.DeserializePayload<TRequest>(envelope));
+        }
+        catch (JsonException)
+        {
+            return ("", "", "");
         }
     }
 
@@ -169,9 +299,24 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         _ => "checking"
     };
 
-    private IEnumerable<object> CreateCtcMessages(WaysideSnapshotMessage snapshot)
+    /// <summary>The periodic CTC report: all block statuses of one evaluation in one message (none when nothing is owned).</summary>
+    private static IEnumerable<object> CreateCtcBatch(WaysideSnapshotMessage snapshot)
+    {
+        var statuses = CreateCtcMessages(snapshot).ToList();
+        return statuses.Count == 0 ? [] : [new BlockStatusBatchMessage { Statuses = statuses }];
+    }
+
+    /// <summary>The periodic Track Model output: every block's command of one evaluation in one message.</summary>
+    private IEnumerable<object> CreateTrackModelBatch(WaysideSnapshotMessage snapshot)
+    {
+        var commands = CreateTrackModelMessages(snapshot).ToList();
+        return commands.Count == 0 ? [] : [new TrackModelCommandBatchMessage { Commands = commands }];
+    }
+
+    private static IEnumerable<BlockStatusMessage> CreateCtcMessages(WaysideSnapshotMessage snapshot)
     {
         // Match the team's current CTC receiver contracts; reported equipment is never replaced by commands.
+        bool current = snapshot.ValidUntilUtc > DateTimeOffset.UtcNow;
         foreach (var blockStatus in snapshot.Blocks)
         {
             yield return new BlockStatusMessage
@@ -181,14 +326,55 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                 Signal = blockStatus.IsFresh ? blockStatus.ReportedSignal : SignalState.Unknown,
                 Switch = blockStatus.IsFresh ? blockStatus.ReportedSwitch : SwitchPosition.Unknown,
                 Crossing = blockStatus.IsFresh ? blockStatus.ReportedCrossing : CrossingState.Unknown,
-                Maintenance = blockStatus.Maintenance == "Closed" ? MaintenanceState.Closed : MaintenanceState.Open
+                Maintenance = blockStatus.Maintenance == "Closed" ? MaintenanceState.Closed : MaintenanceState.Open,
+                // Lets CTC drop a late report and detect that reports stopped (wall clock, like the watchdogs).
+                ReportedAtUtc = snapshot.EvaluatedAtUtc,
+                Movement = blockStatus.Request is { } request ? CreateMovementReport(snapshot, blockStatus, request, current) : null
             };
         }
-
-
     }
 
-    private IEnumerable<object> CreateTrackModelMessages(WaysideSnapshotMessage snapshot)
+    /// <summary>What the controller actually commands for this request: the Track Model output, not just the evaluation.</summary>
+    private static MovementAuthorizationReport CreateMovementReport(WaysideSnapshotMessage snapshot, WaysideBlockStatus block, MovementSuggestionMessage request, bool current)
+    {
+        var evaluated = block.MovementStatus switch
+        {
+            "Approved" => MovementAuthorizationState.Approved,
+            "Restricted" => MovementAuthorizationState.Restricted,
+            _ => MovementAuthorizationState.Withheld
+        };
+        bool granted = evaluated != MovementAuthorizationState.Withheld && IsMovementCommandPermitted(snapshot, block, current);
+        return new MovementAuthorizationReport
+        {
+            RequestId = request.RequestId,
+            TrainId = request.TrainId,
+            State = granted ? evaluated : MovementAuthorizationState.Withheld,
+            AuthorizedSpeedMetersPerSecond = granted ? block.AuthorizedSpeedMetersPerSecond : 0,
+            AuthorizedAuthorityMeters = granted ? block.AuthorizedAuthorityMeters : 0,
+            Reason = granted || evaluated == MovementAuthorizationState.Withheld ? block.MovementReason : WithheldReason(snapshot, block, current)
+        };
+    }
+
+    private static string WithheldReason(WaysideSnapshotMessage snapshot, WaysideBlockStatus block, bool current) =>
+        !current ? "Track Controller output expired."
+        : snapshot.IsPaused ? "Track Controller is paused."
+        : snapshot.IsMaintenanceMode ? "Track Controller maintenance mode is active."
+        : !block.IsFresh || block.IsFaulted ? $"Block {block.BlockId} feedback is unavailable or faulted."
+        : $"Movement from block {block.BlockId} is not permitted by the wayside.";
+
+    /// <summary>The one rule for whether a movement result may be commanded to the track.</summary>
+    private static bool IsMovementCommandPermitted(WaysideSnapshotMessage snapshot, WaysideBlockStatus block, bool current)
+    {
+        var request = block.Request;
+        return current && block.IsFresh && !block.IsFaulted && !snapshot.IsPaused && !snapshot.IsMaintenanceMode
+            && block.Occupancy == OccupancyState.Occupied && block.Maintenance != "Closed"
+            && (!block.HasSwitch || block.CommandedSwitch is SwitchPosition.Normal or SwitchPosition.Reverse)
+            && request is { AuthorityReference: MovementSuggestionMessage.BlockEntryReference } && request.TargetBlockId == block.BlockId
+            && double.IsFinite(block.AuthorizedSpeedMetersPerSecond) && block.AuthorizedSpeedMetersPerSecond > 0
+            && double.IsFinite(block.AuthorizedAuthorityMeters) && block.AuthorizedAuthorityMeters > 0;
+    }
+
+    private IEnumerable<TrackModelCommandMessage> CreateTrackModelMessages(WaysideSnapshotMessage snapshot)
     {
         bool current = snapshot.ValidUntilUtc > DateTimeOffset.UtcNow;
         foreach (var block in snapshot.Blocks)
@@ -208,13 +394,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                 if (position is not (SwitchPosition.Normal or SwitchPosition.Reverse)) continue;
             }
 
-            var request = block.Request;
-            bool permitted = fresh && !snapshot.IsPaused && !snapshot.IsMaintenanceMode
-                && block.Occupancy == OccupancyState.Occupied && block.Maintenance != "Closed"
-                && (!block.HasSwitch || block.CommandedSwitch is SwitchPosition.Normal or SwitchPosition.Reverse)
-                && request is { AuthorityReference: MovementSuggestionMessage.BlockEntryReference } && request.TargetBlockId == block.BlockId
-                && double.IsFinite(block.AuthorizedSpeedMetersPerSecond) && block.AuthorizedSpeedMetersPerSecond > 0
-                && double.IsFinite(block.AuthorizedAuthorityMeters) && block.AuthorizedAuthorityMeters > 0;
+            bool permitted = IsMovementCommandPermitted(snapshot, block, current);
             yield return new TrackModelCommandMessage
             {
                 BlockId = block.BlockId,
@@ -256,5 +436,6 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
         await _runtime.DisposeAsync();
         _stop.Dispose();
+        _ctcAcknowledgementQueued.Dispose();
     }
 }

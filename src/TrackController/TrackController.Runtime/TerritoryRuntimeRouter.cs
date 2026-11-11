@@ -199,7 +199,8 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
     private WaysideSnapshotMessage Combine()
     {
         var snapshots = _entries.Select(entry => entry.Runtime.LatestSnapshot.ValidUntilUtc > DateTimeOffset.UtcNow ? entry.Runtime.LatestSnapshot : entry.Runtime.LatestSnapshot.CreateStopSnapshot($"{entry.Configuration.WaysideId} output expired.")).ToArray();
-        return new(_name, snapshots[0].LineName, snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId} ({snapshot.PlcName}): {snapshot.PlcStatus}")), snapshots.SelectMany(snapshot => snapshot.Blocks).ToArray());
+        // A multi-line deployment reports every line it controls, e.g. "Blue Line / Red Line / Green Line".
+        return new(_name, string.Join(" / ", snapshots.Select(snapshot => snapshot.LineName).Distinct()), snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId} ({snapshot.PlcName}): {snapshot.PlcStatus}")), snapshots.SelectMany(snapshot => snapshot.Blocks).ToArray());
     }
 
     /// <summary>Stops owned background operations and releases connections before returning.</summary>

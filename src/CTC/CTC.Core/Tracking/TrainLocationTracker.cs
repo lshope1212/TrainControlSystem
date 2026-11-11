@@ -5,9 +5,10 @@ namespace CTC.Core.Tracking;
 
 /// <summary>
 /// Outcome of one occupancy report: the train CTC moved forward, or the trains that could each
-/// explain the occupancy (more than one means it is ambiguous and nobody moved).
+/// explain the occupancy (more than one means it is ambiguous and nobody moved), or the released
+/// train first seen in the block CTC released it at (<paramref name="DetectedTrain"/>).
 /// </summary>
-public sealed record TrainLocationResult(DispatchedTrainState? AdvancedTrain, IReadOnlyList<DispatchedTrainState> AmbiguousTrains)
+public sealed record TrainLocationResult(DispatchedTrainState? AdvancedTrain, IReadOnlyList<DispatchedTrainState> AmbiguousTrains, DispatchedTrainState? DetectedTrain = null)
 {
     public static TrainLocationResult None { get; } = new TrainLocationResult(null, []);
 
@@ -79,12 +80,13 @@ public static class TrainLocationTracker
         {
             // The train is now seen at the block CTC already places it in; the chain is established.
             arriving[0].CurrentBlockOccupancyObserved = true;
-            return TrainLocationResult.None;
+            return new TrainLocationResult(null, [], arriving[0]);
         }
 
         if (advancing.Count == 1 && advancing[0].CurrentBlockOccupancyObserved)
         {
             var train = advancing[0];
+            train.PreviousBlockId = train.CurrentBlockId;
             train.CurrentBlockId = block.BlockId;
             train.ActiveRouteIndex++;
             train.CurrentBlockOccupancyObserved = true;

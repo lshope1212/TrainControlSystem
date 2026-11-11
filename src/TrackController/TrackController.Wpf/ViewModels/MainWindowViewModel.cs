@@ -312,6 +312,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             nameof(LineAccentBrush),
             nameof(PlcSummary),
             nameof(Blocks),
+            nameof(MapBlocks),
             nameof(Movements),
             nameof(Equipment),
             nameof(SimulationStatus),

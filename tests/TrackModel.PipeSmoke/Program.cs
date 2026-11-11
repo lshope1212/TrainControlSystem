@@ -16,6 +16,8 @@ var tasks=endpoints.Select(pipe=>NamedPipeTransport.ListenAsync(pipe,envelope=>
     {
         case nameof(TrackLayoutMessage): values["layout"]=MessageSerializer.DeserializePayload<TrackLayoutMessage>(envelope);break;
         case nameof(TrackModelBlockStateMessage): var s=MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(envelope);values["state:"+s.BlockId]=s;break;
+        // The Track Model sends block states to the Track Controller as one batch per line.
+        case "TrackModelBlockStates": foreach(var b in MessageSerializer.ReadValue<List<TrackModelBlockStateMessage>>(envelope,"blocks"))values["state:"+b.BlockId]=b;break;
         case nameof(TrackModelTrainEnvironmentMessage): var e=MessageSerializer.DeserializePayload<TrackModelTrainEnvironmentMessage>(envelope);values["env:"+e.BlockId]=e;break;
         case nameof(TicketSalesMessage): values["tickets"]=MessageSerializer.DeserializePayload<TicketSalesMessage>(envelope);break;
         case nameof(SystemTimeMessage): values["time"]=MessageSerializer.DeserializePayload<SystemTimeMessage>(envelope);break;
@@ -48,8 +50,8 @@ async Task Send(object message,bool accepted=true)
 try
 {
     await Send(new TrackModelSnapshotRequestMessage());
-    await Check("full 15-block layout received on private TestUI endpoint",()=>Get<TrackLayoutMessage>("layout")?.Lines.Single().Blocks.Count==15&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(TrackLayoutMessage)));
-    await Check("clean Blue Line profile (click Restore Blue Line before running)",()=>Env("1")?.TrainId=="01"&&Env("10")?.TrainId==""&&Env("10")?.TicketsSold==0);
+    await Check("full layout (15-block Blue Line, 76 Red, 150 Green) received on private TestUI endpoint",()=>Get<TrackLayoutMessage>("layout")?.Lines.Select(l=>l.Blocks.Count).SequenceEqual(new[]{15,76,150})==true&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(TrackLayoutMessage)));
+    await Check("clean Blue Line profile (click Restore course lines before running)",()=>Env("1")?.TrainId=="01"&&Env("10")?.TrainId==""&&Env("10")?.TicketsSold==0);
     await Check("beacons on 9 and 14, no station beacon on 10",()=>Env("9")?.Beacon=="Station B"&&Env("14")?.Beacon=="Station C"&&Env("10")?.Beacon=="");
     await Send(new TrackModelCommandMessage{BlockId="5",CommandedSpeedMetersPerSecond=20*0.44704,AuthorityMeters=600*0.3048,Switch=SwitchPosition.Reverse});
     await Check("command speed/authority and reverse switch reach separate outputs",()=>Env("5")?.NextBlockId=="11"&&Env("5")?.AuthorityMeters==600*0.3048&&State("5")?.Switch==SwitchPosition.Reverse);
@@ -77,7 +79,7 @@ try
     await Send(new SystemTimeMessage{SystemTime=new TimeSpan(10,0,0)});
     await Check("private clock setup updates, hourly tickets expire, cumulative tickets remain",()=>Get<SystemTimeMessage>("time")?.SystemTime==new TimeSpan(10,0,0)&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(SystemTimeMessage))&&Get<TicketSalesMessage>("tickets")?.TicketsPerHour==0&&Env("10")?.TicketsSold==3);
     await Task.Delay(1000); // Observe the otherwise idle forbidden destination after all mutations.
-    await Check("CTC received ticket sales only throughout the run",()=>received.Any(m=>m.Pipe==NamedPipeNames.Ctc)&&received.Where(m=>m.Pipe==NamedPipeNames.Ctc).All(m=>m.Type==nameof(TicketSalesMessage)));
+    await Check("CTC received only its layout and ticket sales throughout the run",()=>received.Any(m=>m.Pipe==NamedPipeNames.Ctc&&m.Type==nameof(TrackLayoutMessage))&&received.Where(m=>m.Pipe==NamedPipeNames.Ctc).All(m=>m.Type is nameof(TicketSalesMessage) or nameof(TrackLayoutMessage)));
     await Check("Train Controller received no messages throughout the run",()=>!received.Any(m=>m.Pipe==NamedPipeNames.TrainController));
     Console.WriteLine($"COMPLETE: {checks} real-process output checks passed, with accepted/rejected acknowledgements for every input.");
 }

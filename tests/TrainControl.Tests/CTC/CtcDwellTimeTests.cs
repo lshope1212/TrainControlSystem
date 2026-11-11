@@ -39,6 +39,7 @@ public class CtcDwellTimeTests
     {
         var service = new CTCService(sender ?? new FakeMessageSender());
         service.ApplyTrackLayout(LayoutWithStation());
+        BlueLine.ReportAllClear(service);
         return service;
     }
 
@@ -83,14 +84,17 @@ public class CtcDwellTimeTests
         var service = CreateService(sender);
         service.QueueSchedule([Schedule(a3Dwell ?? StationDwell, a5Arrival ?? At(12, 5, 0))]);
         await service.SetSystemTimeAsync(At(12, 0, 0));
+        await BlueLine.PlaceTrainAsync(service, "A1");
         Assert.HasCount(1, service.State.DispatchedTrains, "Setup: the train should have been dispatched.");
+        Assert.HasCount(1, sender.SentMessages, "Setup: the placed train should hold its first movement request.");
         return (service, sender);
     }
 
     private static DispatchedTrainState Train(CTCService service) => service.State.DispatchedTrains.Single();
 
+    /// <summary>Active movement requests sent, oldest first (cancellations of superseded ones excluded).</summary>
     private static List<MovementSuggestionMessage> Suggestions(FakeMessageSender sender) =>
-        sender.SentMessages.OfType<MovementSuggestionMessage>().ToList();
+        sender.SentMessages.OfType<MovementSuggestionMessage>().Where(suggestion => suggestion.IsActive).ToList();
 
     private static void Occupy(CTCService service, params string[] blockIds)
     {
@@ -296,7 +300,7 @@ public class CtcDwellTimeTests
 
         Assert.Contains("cannot be negative", ex.Message);
         Assert.AreEqual(StationDwell, Train(service).Stops[0].DwellTime);
-        Assert.HasCount(2, sender.SentMessages);
+        Assert.HasCount(1, sender.SentMessages);
     }
 
     // ---- 7: dwell shortens the next movement ----
@@ -371,7 +375,7 @@ public class CtcDwellTimeTests
         CollectionAssert.AreEqual(routeBefore, train.ActiveRouteBlockIds.ToArray());
         Assert.AreEqual(authorityBefore, train.SuggestedAuthorityMeters);
         Assert.AreEqual(speedBefore, train.SuggestedSpeedMetersPerSecond);
-        Assert.HasCount(2, sender.SentMessages, "A dwell change alone does not change the movement under way.");
+        Assert.HasCount(1, sender.SentMessages, "A dwell change alone does not change the movement under way.");
         Assert.AreEqual(CtcStateChangeKind.TrainMovementPlanUpdated, events.Single().Kind);
     }
 
@@ -404,7 +408,7 @@ public class CtcDwellTimeTests
             "Train 000 dwells 300 s at A3 and does not depart until 12:06:00, so it cannot enter A5 at 12:05:00. Shorten the dwell or make the arrival later.",
             ex.Message);
         Assert.AreEqual(StationDwell, Train(service).Stops[0].DwellTime);
-        Assert.HasCount(2, sender.SentMessages);
+        Assert.HasCount(1, sender.SentMessages);
     }
 
     [TestMethod]
@@ -512,7 +516,8 @@ public class CtcDwellTimeTests
         Assert.HasCount(2, Suggestions(sender));
         Assert.AreEqual(100.0 / 195.0, Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.AreEqual(Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond, train.SuggestedSpeedMetersPerSecond);
-        Assert.HasCount(1, sender.SentMessages.OfType<MovementRequestMessage>());
+        Assert.IsEmpty(sender.SentMessages.OfType<MovementRequestMessage>(), "No release request is ever sent.");
+        Assert.AreEqual("A3", Suggestions(sender)[^1].TargetBlockId, "The departure request starts at the stop the train is in.");
     }
 
     [TestMethod]

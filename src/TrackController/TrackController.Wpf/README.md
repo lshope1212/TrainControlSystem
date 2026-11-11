@@ -151,7 +151,7 @@ Use `MessageSerializer.Serialize` for shared contracts. Small UI controls use `M
 | `GetSnapshot` | empty object |
 | `TrackModelBlockStates` | `blocks`: array of shared `TrackModelBlockStateMessage` values |
 
-A batch validates all measurements before changing the local controller. Single Track Model updates and batches use the same controller method. The test UI sends batches; the actual Track Model sends one shared state per block. The Pi client translates measurement timestamps to the Pi clock. Reservation `null` remains unknown and cannot unlock a protected switch.
+A batch validates all measurements before changing the local controller. Single Track Model updates and batches use the same controller method. The test UI sends batches; the actual Track Model sends one batch per line. The controller publishes its outputs in batches too: one `BlockStatusBatchMessage` to CTC and one `TrackModelCommandBatchMessage` to the Track Model per 500 ms cycle, with acknowledgements to CTC sent ahead of them. The Pi client translates measurement timestamps to the Pi clock. Reservation `null` remains unknown and cannot unlock a protected switch.
 
 ```json
 {"messageType":"MovementSuggestionMessage","payload":{"requestId":"example-1","trainId":"Train 101","targetBlockId":"5","authorityReference":"TargetBlockEntry","pathBlockIds":["6","7","8"],"suggestedSpeedMetersPerSecond":11.176,"suggestedAuthorityMeters":365.76,"active":true}}
@@ -167,13 +167,13 @@ Replace the example timestamp with the actual measurement time. Update relevant 
 
 The input connection remains one-way. Outputs use separate pipes:
 
-- `TrainControl.CTC`: shared `BlockStatusMessage` containing measured block/equipment status. Movement results stay on the target blocks in runtime/monitor snapshots and supply the Track Model commands; no authorization response is published to the CTC.
+- `TrainControl.CTC`: shared `BlockStatusMessage` containing measured block/equipment status every 500 ms, stamped with `reportedAtUtc` (the evaluation time) so CTC can drop late reports and detect that reports stopped. The status of a movement request's target block also carries `movement`: the request ID and the authorization actually commanded to the Track Model (Approved/Restricted with speed and authority, or Withheld with the reason). Each CTC request (`MovementSuggestionMessage`, `MaintenanceRequestMessage`, `SwitchPositionRequestMessage`) is answered with a shared `RequestAcknowledgementMessage` carrying its request ID and whether it was accepted for evaluation or rejected (with the reason). Acknowledgements are queued by the input receiver and sent by the single CTC publisher, so a busy CTC never stalls the controller's input pipe.
 - `TrainControl.TrackModel`: shared `TrackModelCommandMessage`, combining commanded equipment with authorized movement for the occupied target block.
 - `TrainControl.TrackController.Monitor`: `WaysideSnapshotMessage` and `WaysideAcknowledgementMessage` for UI/testing. An acknowledgement means an input was accepted; inspect the resulting authorization and measured equipment to confirm its effect. `GetSnapshot` publishes here.
 
 Both module destinations share `PublishAsync`, their output projection, and `TrySendAsync`. The monitor is separate. Snapshot validity is bounded to 1.5 seconds and shortened by feedback/request expiry; the Pi client stops outputs on expiry or communication loss.
 
-Remaining integration limits: route handoff between owners and CTC yard release/continuing route updates are not implemented. CTC still sends its separate release intent after a suggestion; that intent has no implemented Track Controller handler. Track IDs, reservation reporting, and deployment territories must agree across modules. Reusing the shared contracts does not complete those behaviors.
+Remaining integration limits: route handoff between owners is not implemented, so a request whose route leaves its owner's territory is rejected. CTC now sends a complete movement request for the train's current block on every block change and renews it within the request watchdog; it no longer sends its separate release intent. The Track Model does not report `IsReservedByCtc`, so with the real Track Model switch protection reports "missing CTC reservation feedback" and switch requests are refused. With the bundled `wayside.plc`, a route through the signalled blocks (6, 11) is withheld waiting for proceed-signal feedback, while signals are commanded only for blocks a granted authority covers. Deployment territories and track IDs must agree with the Track Model layout. See `docs/integration/LIVE_INTEGRATION_GUIDE.md`.
 
 ## Verification
 

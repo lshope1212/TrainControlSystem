@@ -3,8 +3,18 @@ namespace CTC.Core.Models;
 /// <summary>Which part of <see cref="CtcSystemState"/> a change affected.</summary>
 public enum CtcStateChangeKind
 {
-    /// <summary>Lines and blocks were replaced; any cached block references are stale.</summary>
+    /// <summary>
+    /// Lines were added, removed or rebuilt, or static block attributes changed in place; rebuild
+    /// any cached line/block references. Not raised for an equivalent repeated layout.
+    /// <see cref="CtcStateChangedEventArgs.Message"/> summarizes what changed.
+    /// </summary>
     TrackLayout,
+
+    /// <summary>
+    /// Part of a received layout was refused (an incompatible topology change on a line with
+    /// released trains); that line kept its topology. <see cref="CtcStateChangedEventArgs.Message"/> says why.
+    /// </summary>
+    TrackLayoutRejected,
 
     BlockStatus,
 
@@ -21,16 +31,45 @@ public enum CtcStateChangeKind
     DispatchQueue,
 
     /// <summary>
-    /// A train's MovementSuggestion and MovementRequest were sent: it left the dispatch queue
-    /// and was added to the dispatched trains. <see cref="CtcStateChangedEventArgs.TrainId"/>
-    /// names the train; <see cref="CtcStateChangedEventArgs.Message"/> carries a warning
-    /// (e.g. the train left late) or is null.
+    /// A train was released: its departure time came and its start block was safe, so it left the
+    /// dispatch queue and was added to the dispatched trains, awaiting placement on the track. This is
+    /// CTC's decision only: no module confirms a physical release yet, and no message is sent until
+    /// the train is detected at its start block (<see cref="TrainDetectedOnTrack"/>).
+    /// <see cref="CtcStateChangedEventArgs.TrainId"/> names the train;
+    /// <see cref="CtcStateChangedEventArgs.Message"/> carries a warning (e.g. the train left late) or is null.
     /// </summary>
     TrainDispatched,
 
     /// <summary>
-    /// A train could not be released (a send failed, or its start block is unsafe). Nothing
-    /// was dispatched and the train stays queued for retry;
+    /// A released train's start block became occupied and CTC attributes it to that train (inferred
+    /// from occupancy); its movement requests start now. <see cref="CtcStateChangedEventArgs.BlockId"/>
+    /// is the block.
+    /// </summary>
+    TrainDetectedOnTrack,
+
+    /// <summary>
+    /// A train's movement request changed: issued, cancelled, a send failed, or the Track Controller
+    /// acknowledged it or changed its authorization. <see cref="CtcStateChangedEventArgs.Message"/>
+    /// describes it.
+    /// </summary>
+    MovementRequestUpdated,
+
+    /// <summary>
+    /// The Track Controller answered a maintenance or switch request (accepted for evaluation or
+    /// rejected). A rejected maintenance request is withdrawn: its requested state reverts to the
+    /// confirmed state. <see cref="CtcStateChangedEventArgs.Message"/> gives the wayside's detail.
+    /// </summary>
+    RequestAcknowledged,
+
+    /// <summary>
+    /// Live wayside reports for one or more blocks stopped arriving; their status is now Unknown.
+    /// <see cref="CtcStateChangedEventArgs.Message"/> names them.
+    /// </summary>
+    BlockStatusStale,
+
+    /// <summary>
+    /// A train could not be released (e.g. its start block is occupied, of unknown occupancy or
+    /// closed). Nothing was dispatched and the train stays queued for retry;
     /// <see cref="CtcStateChangedEventArgs.Message"/> gives the reason.
     /// </summary>
     DispatchFailed,

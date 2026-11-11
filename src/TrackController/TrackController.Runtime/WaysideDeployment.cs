@@ -24,6 +24,13 @@ public sealed class WaysideDeployment
 
     public string? TerritoriesFile { get; set; }
 
+    /// <summary>
+    /// Several lines in one deployment, each with its own shared track map and ownership file,
+    /// instead of <see cref="TrackFile"/>/<see cref="TerritoriesFile"/>. Block IDs must be unique
+    /// across every line, because the module messages identify a block without its line.
+    /// </summary>
+    public List<WaysideLineFiles>? Lines { get; set; }
+
     public List<TerritoryAssignment> Territories { get; set; } = [];
 
     /// <summary>Loads and validates deployment files before any controller connection is opened.</summary>
@@ -41,45 +48,51 @@ public sealed class WaysideDeployment
         string plc = ReadBounded(Resolve(folder, plan.PlcFile), VitalPlcProgram.MaximumSourceBytes);
         VitalPlcProgram.Compile(plc);
         var prepared = new List<PreparedDeployment.PreparedTerritory>();
-        if (plan.TrackFile is not null || plan.TerritoriesFile is not null)
+        if (plan.Lines is not null)
+        {
+            if (plan.TrackFile is not null || plan.TerritoriesFile is not null || plan.Territories.Any(assignment => assignment.ConfigurationFile is not null))
+            {
+                throw new ArgumentException("Use either lines or one trackFile and territoriesFile; do not mix them or legacy territory definitions.");
+            }
+
+            if (plan.Lines.Count is < 1 or > 16 || plan.Lines.Any(line => line is null || string.IsNullOrWhiteSpace(line.TrackFile) || string.IsNullOrWhiteSpace(line.TerritoriesFile)))
+            {
+                throw new ArgumentException("Each of the 1–16 lines needs a trackFile and a territoriesFile.");
+            }
+
+            var lineOf = new Dictionary<string, string>(StringComparer.Ordinal);
+            var lineNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var definitions = new List<(TerritoryDefinition Definition, WaysideConfigurationMessage Track)>();
+            foreach (var line in plan.Lines)
+            {
+                var (track, ownership) = ReadSharedMap(folder, line.TrackFile!, line.TerritoriesFile!);
+                if (!lineNames.Add(track.LineName))
+                {
+                    throw new ArgumentException($"{track.LineName} appears in more than one line of the deployment.");
+                }
+
+                foreach (var block in track.Blocks)
+                {
+                    if (!lineOf.TryAdd(block.BlockId, track.LineName))
+                    {
+                        throw new ArgumentException($"Block ID '{block.BlockId}' is on both {lineOf[block.BlockId]} and {track.LineName}. Block IDs must be unique across every line because module messages carry no line; use the Track Model's IDs (e.g. \"RED-12\").");
+                    }
+                }
+
+                definitions.AddRange(ownership.Territories.Select(definition => (definition, track)));
+            }
+
+            prepared.AddRange(PrepareTerritories(plan, definitions));
+        }
+        else if (plan.TrackFile is not null || plan.TerritoriesFile is not null)
         {
             if (plan.TrackFile is null || plan.TerritoriesFile is null || plan.Territories.Any(assignment => assignment.ConfigurationFile is not null))
             {
                 throw new ArgumentException("Use one trackFile and territoriesFile; do not mix shared and legacy territory definitions.");
             }
 
-            var track = ReadConfiguration(Resolve(folder, plan.TrackFile));
-            if (track.OwnedBlockIds is not null)
-            {
-                throw new ArgumentException("The shared track map describes all blocks; put ownership in the territories file.");
-            }
-
-            var ownership = JsonSerializer.Deserialize<TerritoryDefinitions>(ReadBounded(Resolve(folder, plan.TerritoriesFile), 1_048_576), Json) ?? throw new ArgumentException("Empty territory definitions.");
-            if (ownership.Territories is null || ownership.Territories.Count is < 1 or > 16 || ownership.Territories.Any(territoryDefinition => territoryDefinition is null || string.IsNullOrWhiteSpace(territoryDefinition.Id) || territoryDefinition.BlockIds is null || territoryDefinition.BlockIds.Count == 0) || ownership.Territories.Select(territoryDefinition => territoryDefinition.Id).Distinct().Count() != ownership.Territories.Count)
-            {
-                throw new ArgumentException("Define 1–16 uniquely named territories, each with owned block IDs.");
-            }
-
-            var ids = ownership.Territories.SelectMany(territoryDefinition => territoryDefinition.BlockIds).ToArray();
-            if (ids.Distinct().Count() != ids.Length || !ids.Order().SequenceEqual(track.Blocks.Select(blockDefinition => blockDefinition.BlockId).Order()))
-            {
-                throw new ArgumentException("Every shared-map block must have exactly one territory owner; check missing, unknown, or duplicate block IDs.");
-            }
-
-            if (plan.Territories.Any(assignment => string.IsNullOrWhiteSpace(assignment.TerritoryId)) || !plan.Territories.Select(assignment => assignment.TerritoryId).Order().SequenceEqual(ownership.Territories.Select(territoryDefinition => territoryDefinition.Id).Order()))
-            {
-                throw new ArgumentException("Provide exactly one execution assignment for every territory ID.");
-            }
-
-            foreach (var definition in ownership.Territories)
-            {
-                var assignment = plan.Territories.Single(assignment => assignment.TerritoryId == definition.Id);
-                var configuration = WaysideConfiguration.ValidateAndCopy(track);
-                configuration.WaysideId = definition.Id;
-                configuration.OwnedBlockIds = [.. definition.BlockIds];
-                configuration = WaysideConfiguration.ValidateAndCopy(configuration);
-                prepared.Add(new(definition.Id, string.IsNullOrWhiteSpace(definition.Name) ? definition.Id : definition.Name, configuration, assignment.Execution, assignment.Host, assignment.Port));
-            }
+            var (track, ownership) = ReadSharedMap(folder, plan.TrackFile, plan.TerritoriesFile);
+            prepared.AddRange(PrepareTerritories(plan, ownership.Territories.Select(definition => (definition, track))));
         }
         else
         {
@@ -106,11 +119,73 @@ public sealed class WaysideDeployment
         return new(path, source, plan, prepared, Path.GetFileName(plan.PlcFile), plc);
     }
 
+    /// <summary>Reads one line's shared track map and the territories that own its blocks; every map block needs exactly one owner.</summary>
+    private static (WaysideConfigurationMessage Track, TerritoryDefinitions Ownership) ReadSharedMap(string folder, string trackFile, string territoriesFile)
+    {
+        var track = ReadConfiguration(Resolve(folder, trackFile));
+        if (track.OwnedBlockIds is not null)
+        {
+            throw new ArgumentException("The shared track map describes all blocks; put ownership in the territories file.");
+        }
+
+        var ownership = JsonSerializer.Deserialize<TerritoryDefinitions>(ReadBounded(Resolve(folder, territoriesFile), 1_048_576), Json) ?? throw new ArgumentException("Empty territory definitions.");
+        if (ownership.Territories is null || ownership.Territories.Count is < 1 or > 16 || ownership.Territories.Any(territoryDefinition => territoryDefinition is null || string.IsNullOrWhiteSpace(territoryDefinition.Id) || territoryDefinition.BlockIds is null || territoryDefinition.BlockIds.Count == 0) || ownership.Territories.Select(territoryDefinition => territoryDefinition.Id).Distinct().Count() != ownership.Territories.Count)
+        {
+            throw new ArgumentException("Define 1–16 uniquely named territories, each with owned block IDs.");
+        }
+
+        var ids = ownership.Territories.SelectMany(territoryDefinition => territoryDefinition.BlockIds).ToArray();
+        if (ids.Distinct().Count() != ids.Length || !ids.Order().SequenceEqual(track.Blocks.Select(blockDefinition => blockDefinition.BlockId).Order()))
+        {
+            throw new ArgumentException($"Every shared-map block{(string.IsNullOrWhiteSpace(track.LineName) ? "" : $" of {track.LineName}")} must have exactly one territory owner; check missing, unknown, or duplicate block IDs.");
+        }
+
+        return (track, ownership);
+    }
+
+    /// <summary>One validated controller configuration per territory: its line's full map plus the blocks it alone may command.</summary>
+    private static IEnumerable<PreparedDeployment.PreparedTerritory> PrepareTerritories(WaysideDeployment plan, IEnumerable<(TerritoryDefinition Definition, WaysideConfigurationMessage Track)> territories)
+    {
+        var all = territories.ToList();
+        if (all.Count is < 1 or > 16 || all.Select(territory => territory.Definition.Id).Distinct().Count() != all.Count)
+        {
+            throw new ArgumentException("A deployment has 1–16 territories with unique IDs across all of its lines.");
+        }
+
+        if (plan.Territories.Any(assignment => string.IsNullOrWhiteSpace(assignment.TerritoryId)) || !plan.Territories.Select(assignment => assignment.TerritoryId).Order().SequenceEqual(all.Select(territory => territory.Definition.Id).Order()))
+        {
+            throw new ArgumentException("Provide exactly one execution assignment for every territory ID.");
+        }
+
+        foreach (var (definition, track) in all)
+        {
+            var assignment = plan.Territories.Single(assignment => assignment.TerritoryId == definition.Id);
+            var configuration = WaysideConfiguration.ValidateAndCopy(track);
+            configuration.WaysideId = definition.Id;
+            configuration.OwnedBlockIds = [.. definition.BlockIds];
+            configuration = WaysideConfiguration.ValidateAndCopy(configuration);
+            yield return new(definition.Id, string.IsNullOrWhiteSpace(definition.Name) ? definition.Id : definition.Name, configuration, assignment.Execution, assignment.Host, assignment.Port);
+        }
+    }
+
     internal static void ValidateTargets(IReadOnlyList<PreparedDeployment.PreparedTerritory> territories)
     {
-        if (territories.Count is < 1 or > 16 || territories.Select(territory => territory.Id).Distinct().Count() != territories.Count || territories.Select(territory => territory.Configuration.LineName).Distinct().Count() != 1)
+        if (territories.Count is < 1 or > 16 || territories.Select(territory => territory.Id).Distinct().Count() != territories.Count)
         {
-            throw new ArgumentException("Territories need unique IDs and must belong to one line.");
+            throw new ArgumentException("Territories need unique IDs.");
+        }
+
+        // A deployment may span several lines; a territory belongs to exactly one, and no block ID may exist on two.
+        var lineOf = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in territories.GroupBy(territory => territory.Configuration.LineName))
+        {
+            foreach (string id in line.SelectMany(territory => territory.Configuration.Blocks.Select(block => block.BlockId)).Distinct())
+            {
+                if (!lineOf.TryAdd(id, line.Key))
+                {
+                    throw new ArgumentException($"Block ID '{id}' is on both {lineOf[id]} and {line.Key}; block IDs must be unique across lines.");
+                }
+            }
         }
 
         var ids = territories.SelectMany(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration)).ToArray();
