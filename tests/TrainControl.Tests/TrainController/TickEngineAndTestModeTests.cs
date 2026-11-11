@@ -15,7 +15,7 @@ public class TickEngineAndTestModeTests
         IsActive = true,
         TrackSignalValid = true,
         CommandedSpeedMetersPerSecond = 10.0,
-        RemainingAuthorityMeters = 10_000.0,
+        CommandedAuthorityMeters = 10_000.0,
         CabinTemperatureCelsius = 21.0,
     };
 

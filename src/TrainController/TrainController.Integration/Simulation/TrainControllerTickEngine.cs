@@ -137,7 +137,11 @@ public sealed class TrainControllerTickEngine
     /// after the Train Model's tick-N state for it was submitted, and sends the commands tagged
     /// with the same TickId (same-tick pairing). Ignored (false) while Test Mode is on.
     /// </summary>
-    public async Task<bool> ExecuteTrainAsync(string trainId, long tickId, CancellationToken cancellationToken)
+    public Task<bool> ExecuteTrainAsync(string trainId, long tickId, CancellationToken cancellationToken) =>
+        ExecuteTrainAsync(trainId, tickId, _options.SimulationTimeStepSeconds, cancellationToken);
+
+    /// <param name="deltaTimeSeconds">Simulation time since this train's previous state (a multiple of dt).</param>
+    public async Task<bool> ExecuteTrainAsync(string trainId, long tickId, double deltaTimeSeconds, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(trainId);
         await _gate.WaitAsync(cancellationToken);
@@ -168,7 +172,7 @@ public sealed class TrainControllerTickEngine
                 TrainId = trainId,
                 TickId = tickId,
                 SimulationTimeSeconds = simulationTime,
-                DeltaTimeSeconds = _options.SimulationTimeStepSeconds,
+                DeltaTimeSeconds = deltaTimeSeconds > 0.0 ? deltaTimeSeconds : _options.SimulationTimeStepSeconds,
                 Model = model,
                 Driver = slot.Driver.TakeForTick(),
                 Engineer = slot.Engineer,

@@ -32,7 +32,9 @@ public static class TrainModelContractMapper
             IsActive = message.IsActive,
             ActualSpeedMetersPerSecond = message.ActualSpeedMetersPerSecond,
             CommandedSpeedMetersPerSecond = message.CommandedSpeedMetersPerSecond,
-            RemainingAuthorityMeters = message.RemainingAuthorityMeters,
+            // The Train Model relays the COMMANDED authority (from the start of the block the train
+            // is in); the controller recalibrates on a new value and counts it down itself.
+            RemainingAuthorityMeters = message.CommandedAuthorityMeters,
             AuthorityUpdateReceived = authorityUpdated,
             TrackSignalValid = message.TrackSignalValid,
             TrafficLight = message.TrafficLight,

@@ -37,9 +37,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     /// <summary>Train ids the harness knows about (matches the Train Model's seeded
     /// fleet). The selector is editable, so any id can also be typed in.</summary>
     public ObservableCollection<string> KnownTrainIds { get; } =
-        new() { "T04", "T08", "T12" };
+        new() { "001", "002", "003" }; // canonical three-digit train IDs
 
-    private string _selectedTrainId = "T04";
+    private string _selectedTrainId = "001";
     /// <summary>The single target train every input panel sends to.</summary>
     public string SelectedTrainId
     {
