@@ -38,11 +38,31 @@ public partial class App : Application
         trackControllerListener.ErrorOccurred += (_, msg) =>
             viewModel.Communication.NeighbourListenerStatus = $"Track Model listener error: {msg}";
 
-        _ = trainControllerListener.RunAsync(_shutdown.Token);
-        _ = trackControllerListener.RunAsync(_shutdown.Token);
+        // One owner per pipe: if the REAL neighbour is running, do not stand in for it, or this
+        // TestUI would take its pipe and the neighbour would stop receiving the Train Model's
+        // outputs. (Start the real neighbours first, or restart the TestUI after starting them.)
+        bool realTrainController = IsRunning("TrainController.Wpf");
+        bool realTrackController = IsRunning("TrackController.Wpf");
+        if (!realTrainController) _ = trainControllerListener.RunAsync(_shutdown.Token);
+        if (!realTrackController) _ = trackControllerListener.RunAsync(_shutdown.Token);
+        viewModel.Communication.NeighbourListenerStatus =
+            $"Capturing: Train Controller pipe {(realTrainController ? "OFF (real Train Controller running)" : "ON")}, " +
+            $"Track pipe {(realTrackController ? "OFF (real Track Controller running)" : "ON")}";
 
         MainWindow = window;
         window.Show();
+    }
+
+    private static bool IsRunning(string processName)
+    {
+        try
+        {
+            return System.Diagnostics.Process.GetProcessesByName(processName).Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

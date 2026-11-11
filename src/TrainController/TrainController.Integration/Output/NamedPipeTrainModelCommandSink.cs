@@ -1,4 +1,5 @@
 using TrainControl.Common.Communication;
+using TrainControl.Common.Identity;
 using TrainControl.Contracts.Messages;
 
 namespace TrainController.Integration.Output;
@@ -14,6 +15,16 @@ public sealed class NamedPipeTrainModelCommandSink : ITrainModelCommandSink
     /// <summary>Short connect timeout: a missing Train Model must not stall the tick for seconds.</summary>
     public const int ConnectTimeoutMilliseconds = 250;
 
-    public Task SendAsync(TrainControllerCommandMessage message, CancellationToken cancellationToken) =>
-        NamedPipeTransport.SendAsync(NamedPipeNames.TrainModel, message, cancellationToken, ConnectTimeoutMilliseconds);
+    public Task SendAsync(TrainControllerCommandMessage message, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        // The fleet label "TRAIN-007" is translated to the canonical ID "007" at this boundary.
+        if (TrainIdConvention.TryNormalize(message.TrainId, out var canonical))
+        {
+            message.TrainId = canonical;
+        }
+
+        return NamedPipeTransport.SendAsync(NamedPipeNames.TrainModel, message, cancellationToken, ConnectTimeoutMilliseconds);
+    }
 }

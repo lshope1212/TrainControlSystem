@@ -28,8 +28,12 @@ public sealed class FakeNeighbourReceiver
     public Task RunAsync(CancellationToken cancellationToken) =>
         NamedPipeTransport.ListenAsync(_pipeName, OnMessageAsync, OnError, cancellationToken);
 
-    private async Task OnMessageAsync(MessageEnvelope envelope) =>
-        await _dispatcher.InvokeAsync(() => MessageReceived?.Invoke(this, envelope));
+    private Task OnMessageAsync(MessageEnvelope envelope)
+    {
+        // Queue on the UI thread without waiting, so the pipe can accept the next message at once.
+        _dispatcher.BeginInvoke(() => MessageReceived?.Invoke(this, envelope));
+        return Task.CompletedTask;
+    }
 
     private void OnError(Exception exception) =>
         _dispatcher.InvokeAsync(() => ErrorOccurred?.Invoke(this, exception.Message));

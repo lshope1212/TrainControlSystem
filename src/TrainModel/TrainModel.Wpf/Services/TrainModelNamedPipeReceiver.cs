@@ -32,7 +32,7 @@ public sealed class TrainModelNamedPipeReceiver
     public Task RunAsync(CancellationToken cancellationToken) =>
         NamedPipeTransport.ListenAsync(NamedPipeNames.TrainModel, HandleAsync, ReportError, cancellationToken);
 
-    private async Task HandleAsync(MessageEnvelope envelope)
+    private Task HandleAsync(MessageEnvelope envelope)
     {
         // Deserialize on the background thread; the VM mutation runs on the UI thread.
         Action? apply = envelope.MessageType switch
@@ -44,6 +44,8 @@ public sealed class TrainModelNamedPipeReceiver
                     m.EmergencyBrakeCommand, m.LeftDoorsOpenCommand, m.RightDoorsOpenCommand,
                     m.ExteriorLightsCommand, m.CabinTemperatureSetpointCelsius, m.StationAnnouncement)),
 
+            // Shared simulation clock (Launcher / CTC, or the TestUI test clock).
+            nameof(SystemTimeMessage) => Bind<SystemTimeMessage>(envelope, m => _vm.ApplySystemTime(m)),
             nameof(SpeedCommandMessage) => Bind<SpeedCommandMessage>(envelope, m =>
                 _vm.ApplyCommandedSpeed(m.TrainId, m.CommandedSpeedMetersPerSecond)),
 
@@ -70,12 +72,17 @@ public sealed class TrainModelNamedPipeReceiver
 
         if (apply is null)
         {
-            await ReportOnUiThreadAsync($"Ignored inbound message of unknown type '{envelope.MessageType}'.");
-            return;
+            Post(() => StatusReported?.Invoke(this, $"Ignored inbound message of unknown type '{envelope.MessageType}'."));
+            return Task.CompletedTask;
         }
 
-        await _dispatcher.InvokeAsync(apply);
+        // Queue the change on the UI thread WITHOUT waiting for it: the pipe is free to accept
+        // the next message at once (the UI keeps the arrival order).
+        Post(apply);
+        return Task.CompletedTask;
     }
+
+    private void Post(Action action) => _dispatcher.BeginInvoke(DispatcherPriority.Normal, action);
 
     /// <summary>Deserialize the payload and bind it into a UI-thread action, or report a bad payload.</summary>
     private Action? Bind<TMessage>(MessageEnvelope envelope, Action<TMessage> apply)
@@ -92,9 +99,6 @@ public sealed class TrainModelNamedPipeReceiver
         }
     }
 
-    private async Task ReportOnUiThreadAsync(string message) =>
-        await _dispatcher.InvokeAsync(() => StatusReported?.Invoke(this, message));
-
     private void ReportError(Exception exception) =>
-        _dispatcher.InvokeAsync(() => StatusReported?.Invoke(this, $"Receive error: {exception.Message}"));
+        Post(() => StatusReported?.Invoke(this, $"Receive error: {exception.Message}"));
 }

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Threading;
 using TrainControl.Common.Utilities;
+using TrainControl.Contracts.Messages;
 using TrainModel.Core.Interfaces;
 using TrainModel.Core.Models;
 using TrainModel.Core.Services;
@@ -31,6 +32,24 @@ public sealed class MainWindowViewModel : ViewModelBase
     private DateTime _lastPublishUtc = DateTime.MinValue;
     private static readonly TimeSpan PublishInterval = TimeSpan.FromMilliseconds(250);
 
+    // ---- Timing (state-driven link to the Train Controller) ----
+    // Every 0.1 s physics step is numbered (_stepCount = the TickId on the controller status).
+    // Steps follow the shared system clock (SystemTimeMessage from the Launcher/CTC or the
+    // TestUI test clock) while it is being received; otherwise the local clock runs them.
+    // Due system-clock steps are PACED over real time at the clock's speed instead of being
+    // run in one burst, so the controller's answers arrive between steps.
+    private static readonly TimeSpan SystemClockTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(100);
+    private readonly SystemTimeStepper _stepper = new();
+    private long _stepCount;
+    private DateTime _lastSystemTimeUtc = DateTime.MinValue;
+    private double _systemSpeed = 1.0;
+    private bool _systemPaused;
+    private int _pendingSystemSteps;
+    private double _paceCarry;
+    private DateTime _lastRefreshUtc = DateTime.MinValue;
+    private bool _refreshDirty;
+
     public MainWindowViewModel()
         : this(new TrainFleetService())
     {
@@ -54,7 +73,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         SeedDemoTrains();
 
         _lastFrameUtc = DateTime.UtcNow;
-        _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(50) };
+        _timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(15) };
         _timer.Tick += OnTick;
         _timer.Start();
 
@@ -66,10 +85,11 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private void SeedDemoTrains()
     {
-        AddSeededTrain("T04", "Red Line", 400, 19.44, TrainOperatingStatus.Operating, powerW: 0);
-        AddSeededTrain("T08", "Green Line", 820, 17.0, TrainOperatingStatus.Operating, powerW: 60000);
-        AddSeededTrain("T12", "Green Line", 680, 0.0, TrainOperatingStatus.Holding, powerW: 0);
-        SelectedTrainId = "T04";
+        // Canonical three-digit train IDs (TrainIdConvention / CTC dispatch IDs).
+        AddSeededTrain("001", "Red Line", 400, 19.44, TrainOperatingStatus.Operating, powerW: 0);
+        AddSeededTrain("002", "Green Line", 820, 17.0, TrainOperatingStatus.Operating, powerW: 60000);
+        AddSeededTrain("003", "Green Line", 680, 0.0, TrainOperatingStatus.Holding, powerW: 0);
+        SelectedTrainId = "001";
     }
 
     private void AddSeededTrain(string id, string line, double posM, double speedMs,
@@ -99,36 +119,104 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     // ---------------- Simulation loop ----------------
 
+    private bool UsesSystemClock => DateTime.UtcNow - _lastSystemTimeUtc < SystemClockTimeout;
+
     private void OnTick(object? sender, EventArgs e)
     {
         var now = DateTime.UtcNow;
         double realSeconds = (now - _lastFrameUtc).TotalSeconds;
         _lastFrameUtc = now;
 
-        int steps = _clock.StepsFor(realSeconds);
+        int steps;
+        if (UsesSystemClock)
+        {
+            // Pace the steps the system clock has made due: about speed / dt steps per real second.
+            _paceCarry += _systemPaused ? 0.0 : realSeconds * _systemSpeed / _clock.DtSeconds;
+            steps = Math.Min(_pendingSystemSteps, (int)_paceCarry);
+            _pendingSystemSteps -= steps;
+            _paceCarry -= steps;
+            if (_pendingSystemSteps == 0)
+            {
+                _paceCarry = Math.Min(_paceCarry, 1.0); // no burst after an idle period
+            }
+        }
+        else
+        {
+            steps = _clock.StepsFor(realSeconds);
+        }
+
         for (int i = 0; i < steps; i++)
         {
-            foreach (var kv in _inputsByTrain)
-            {
-                _fleet.ApplyInputs(kv.Key, kv.Value);
-            }
-            _fleet.StepAll(TimeSpan.FromSeconds(_clock.DtSeconds));
-
-            // One-shot signals consumed after a step: passenger request latches to
-            // pending in the service; controller approve/deny are applied once.
-            foreach (var inp in _inputsByTrain.Values)
-            {
-                inp.PassengerEmergencyBrakeRequest = false;
-                inp.ControllerApproveEmergencyBrake = false;
-                inp.ControllerDenyEmergencyBrake = false;
-            }
+            StepOnce();
         }
 
         if (steps > 0)
         {
-            RefreshAll();
             PublishOutputsThrottled();
+            _refreshDirty = true;
         }
+
+        if (_refreshDirty && now - _lastRefreshUtc >= RefreshInterval)
+        {
+            RefreshNow();
+        }
+    }
+
+    /// <summary>One 0.1 s physics step for every train, then one status per train to the controller.</summary>
+    private void StepOnce()
+    {
+        foreach (var kv in _inputsByTrain)
+        {
+            _fleet.ApplyInputs(kv.Key, kv.Value);
+        }
+        _fleet.StepAll(TimeSpan.FromSeconds(_clock.DtSeconds));
+
+        // One-shot signals consumed after a step: passenger request latches to
+        // pending in the service; controller approve/deny are applied once.
+        foreach (var inp in _inputsByTrain.Values)
+        {
+            inp.PassengerEmergencyBrakeRequest = false;
+            inp.ControllerApproveEmergencyBrake = false;
+            inp.ControllerDenyEmergencyBrake = false;
+        }
+
+        _stepCount++;
+        foreach (var plant in _fleet.Trains)
+        {
+            var state = plant.CurrentState;
+            // The pending/active passenger request from the train STATE (the input flag is a
+            // one-shot cleared every step); it stays on until the controller's e-brake arrives.
+            bool passengerRequested = state.PassengerEmergencyBrakePending || state.PassengerEmergencyBrakeActive;
+            _publisher.PublishToController(state, _stepCount, isActive: true, passengerRequested);
+        }
+    }
+
+    /// <summary>Shared system clock update (Launcher/CTC or the TestUI test clock).</summary>
+    public void ApplySystemTime(SystemTimeMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        bool connected = UsesSystemClock;
+        _lastSystemTimeUtc = DateTime.UtcNow;
+        _systemSpeed = Math.Clamp(message.SpeedMultiplier, 1.0, 10.0);
+        _systemPaused = message.IsPaused;
+
+        var advance = _stepper.Advance(message.SystemTime, _ => _pendingSystemSteps++);
+        switch (advance.Kind)
+        {
+            case SystemTimeAdvanceKind.Baseline:
+                if (!connected) Log("INFO", "Clock", "Following the shared system clock.");
+                break;
+            case SystemTimeAdvanceKind.MovedBackward:
+                _pendingSystemSteps = 0;
+                Log("INFO", "Clock", "System time moved back: counting fresh from the new time.");
+                break;
+            case SystemTimeAdvanceKind.JumpedForward:
+                _pendingSystemSteps = 0;
+                Log("WARN", "Clock", "System time jumped ahead more than 10 s: not simulating the gap.");
+                break;
+        }
+
+        _refreshDirty = true;
     }
 
     private void PublishOutputsThrottled()
@@ -137,18 +225,21 @@ public sealed class MainWindowViewModel : ViewModelBase
         if (now - _lastPublishUtc < PublishInterval) return;
         _lastPublishUtc = now;
 
+        // Track-side messages stay throttled; the controller status goes out every step.
         foreach (var plant in _fleet.Trains)
         {
-            string id = plant.Train.Id;
-            long tickId = _lastControllerTickByTrain.TryGetValue(id, out var t) ? t : 0;
-            bool isActive = true;   // a train in the fleet is dispatched/in service
-            bool passengerRequested = _inputsByTrain.TryGetValue(id, out var inp) && inp.PassengerEmergencyBrakeRequest;
-            _publisher.Publish(plant.CurrentState, tickId, isActive, passengerRequested);
+            _publisher.PublishTrackSide(plant.CurrentState);
         }
     }
 
     private void TogglePlayPause()
     {
+        if (UsesSystemClock)
+        {
+            Log("INFO", "Console", "The shared system clock is running this simulation: run/pause it from the CTC.");
+            return;
+        }
+
         if (_clock.IsPaused) { _lastFrameUtc = DateTime.UtcNow; _clock.Resume(); }
         else { _clock.Pause(); }
         OnPropertyChanged(nameof(IsRunning));
@@ -184,7 +275,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     // ---------------- Selected-train helpers ----------------
 
-    private string _selectedTrainId = "T04";
+    private string _selectedTrainId = "001";
     public string SelectedTrainId
     {
         get => _selectedTrainId;
@@ -243,7 +334,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private TrainInputs EnsureTrain(string trainId, string lineName = "Red Line")
     {
-        if (string.IsNullOrWhiteSpace(trainId)) trainId = "TRAIN-001";
+        if (string.IsNullOrWhiteSpace(trainId)) trainId = "001";
         if (_inputsByTrain.TryGetValue(trainId, out var existing))
         {
             return existing;
@@ -288,7 +379,6 @@ public sealed class MainWindowViewModel : ViewModelBase
         inp.CabinSetpointCelsius = cabinCelsius;
         inp.StationAnnouncement = announcement;
 
-        Log("INFO", "Controller", $"{trainId} command received (power {powerWatts/745.7:0.0} hp).");
         if (emergencyBrake && !wasEmergency)
             Log("ALERT", "Controller", $"{trainId} EMERGENCY BRAKE applied by controller.");
         else if (!emergencyBrake && wasEmergency)
@@ -409,8 +499,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         set { _clock.SetSpeed(Math.Clamp(value, 1.0, 10.0)); OnPropertyChanged(); OnPropertyChanged(nameof(SpeedMultiplierDisplay)); }
     }
     public string SpeedMultiplierDisplay => $"{SpeedMultiplier:0.#}x";
-    public bool IsRunning => !_clock.IsPaused;
-    public string PlayPauseLabel => _clock.IsPaused ? "Run" : "Pause";
+    public bool IsRunning => UsesSystemClock ? !_systemPaused : !_clock.IsPaused;
+    public string PlayPauseLabel => UsesSystemClock ? (_systemPaused ? "Paused (CTC)" : "Running (CTC)") : (_clock.IsPaused ? "Run" : "Pause");
     public string ElapsedDisplay => _clock.Elapsed.ToString(@"hh\:mm\:ss");
 
     public ICommand PlayPauseCommand { get; }
@@ -553,8 +643,23 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     // ---------------- Refresh ----------------
 
+    /// <summary>Requests a UI refresh; it runs at most every <see cref="RefreshInterval"/>.</summary>
     private void RefreshAll()
     {
+        if (DateTime.UtcNow - _lastRefreshUtc >= RefreshInterval)
+        {
+            RefreshNow();
+        }
+        else
+        {
+            _refreshDirty = true;
+        }
+    }
+
+    private void RefreshNow()
+    {
+        _lastRefreshUtc = DateTime.UtcNow;
+        _refreshDirty = false;
         // roster rows
         foreach (var plant in _fleet.Trains)
         {

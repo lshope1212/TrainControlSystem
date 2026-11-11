@@ -137,7 +137,7 @@ public class SystemClockAndTrainModelLinkTests
         TrainModelStatusMessage State(long tick) => new TrainModelStatusMessage
         {
             TrainId = "TRAIN-001", TickId = tick, IsActive = true, ActualSpeedMetersPerSecond = 0.0,
-            CommandedSpeedMetersPerSecond = 10.0, RemainingAuthorityMeters = 2_000.0, TrackSignalValid = true,
+            CommandedSpeedMetersPerSecond = 10.0, CommandedAuthorityMeters = 2_000.0, TrackSignalValid = true,
         };
 
         await receiver.HandleAsync(MessageSerializer.Deserialize(MessageSerializer.Serialize(State(41))), CancellationToken.None);
@@ -162,5 +162,56 @@ public class SystemClockAndTrainModelLinkTests
             new TrainModelStatusMessage { TrainId = "TRAIN-001", TickId = 7, IsActive = true, TrackSignalValid = true }, CancellationToken.None);
 
         Assert.IsEmpty(sink.Sent);
+    }
+
+    private static TrainModelStatusMessage Canonical(long tick, string id = "001") => new TrainModelStatusMessage
+    {
+        TrainId = id, TickId = tick, IsActive = true, ActualSpeedMetersPerSecond = 5.0,
+        CommandedSpeedMetersPerSecond = 10.0, CommandedAuthorityMeters = 2_000.0, TrackSignalValid = true,
+    };
+
+    [TestMethod]
+    public async Task CanonicalId_IsMappedToTheFleet_AndDuplicateTicksAreIgnored()
+    {
+        var sink = new RecordingTrainModelSink();
+        var subsystem = TrainControllerSubsystem.Create(trainModelSink: sink);
+        var receiver = new TrainControllerPipeReceiver(subsystem);
+
+        await receiver.HandleStatusAsync(Canonical(10), CancellationToken.None);
+        await receiver.HandleStatusAsync(Canonical(10), CancellationToken.None); // duplicate
+        await receiver.HandleStatusAsync(Canonical(13), CancellationToken.None); // 3 steps later
+        await receiver.HandleStatusAsync(Canonical(5, "077"), CancellationToken.None); // not in the fleet
+
+        Assert.HasCount(2, sink.Sent);
+        Assert.AreEqual("TRAIN-001", sink.Sent[1].TrainId);
+        Assert.AreEqual(13L, sink.Sent[1].TickId);
+    }
+
+    [TestMethod]
+    public async Task TickIdGoingBackwards_IsTreatedAsAReset()
+    {
+        var sink = new RecordingTrainModelSink();
+        var subsystem = TrainControllerSubsystem.Create(trainModelSink: sink);
+        var receiver = new TrainControllerPipeReceiver(subsystem);
+        subsystem.Registry.Get("TRAIN-001").Driver.PressEmergencyBrake();
+
+        await receiver.HandleStatusAsync(Canonical(50), CancellationToken.None);
+        Assert.IsTrue(subsystem.Registry.Get("TRAIN-001").LastOutput!.Commands.EmergencyBrakeCommand);
+
+        await receiver.HandleStatusAsync(Canonical(1), CancellationToken.None);
+        Assert.IsFalse(subsystem.Registry.Get("TRAIN-001").LastOutput!.Display.EmergencyBrakeLatched, "Reset clears the latch.");
+    }
+
+    [TestMethod]
+    public async Task TrafficLight_FromTheTrackModel_IsApplied()
+    {
+        var subsystem = TrainControllerSubsystem.Create(trainModelSink: new RecordingTrainModelSink());
+        var receiver = new TrainControllerPipeReceiver(subsystem);
+
+        await receiver.HandleAsync(MessageSerializer.Deserialize(MessageSerializer.Serialize(
+            new TrackModelSignalMessage { TrainId = "001", BlockId = "12", Signal = TrainControl.Contracts.Enums.SignalState.Yellow })), CancellationToken.None);
+        await receiver.HandleStatusAsync(Canonical(1), CancellationToken.None);
+
+        Assert.AreEqual(TrainControl.Contracts.Enums.SignalState.Yellow, subsystem.Registry.Get("TRAIN-001").LastOutput!.Display.TrafficLight);
     }
 }

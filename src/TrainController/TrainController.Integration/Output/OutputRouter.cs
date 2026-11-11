@@ -44,6 +44,16 @@ public sealed class OutputRouter
             _log.Log(TrainControllerLogLevel.Info, "Safety", output.TrainId, "Driver service brake released automatically (service brake failed; emergency brake applied).");
         }
 
+        if (previousFailures.HasFlag(ControllerFailure.Brake) && !output.Display.Failures.HasFlag(ControllerFailure.Brake)
+            && slot.Driver.ServiceBrakeRequested)
+        {
+            // "Reset failures" cleared a Brake Failure: the reset releases BOTH brakes, so a
+            // service-brake request made after the failure (e.g. pressed again while stopped)
+            // does not stay on. The emergency brake is released by the reset itself.
+            slot.Driver.ServiceBrakeRequested = false;
+            _log.Log(TrainControllerLogLevel.Info, "Safety", output.TrainId, "Brake failure reset: driver service brake released too.");
+        }
+
         slot.RecordTickResult(input.Model, output);
 
         if (testMode)

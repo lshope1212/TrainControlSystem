@@ -1,5 +1,8 @@
 using TrainControl.Common.Communication;
+using TrainControl.Common.Identity;
+using TrainController.Abstractions.Fleet;
 using TrainControl.SystemClock;
+using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 using TrainController.Integration.Logging;
 
@@ -24,6 +27,12 @@ public sealed class TrainControllerPipeReceiver
     private readonly Func<string, object, CancellationToken, Task> _send;
     private readonly Dictionary<string, (bool Known, double Authority, bool SignalValid, string Station, double Distance)> _seen =
         new Dictionary<string, (bool, double, bool, string, double)>(StringComparer.Ordinal);
+    /// <summary>A gap of more than this many steps is clamped (e.g. after a long pause of the sender).</summary>
+    public const int MaxStepsPerState = 10;
+
+    private readonly Dictionary<string, long> _lastTick = new Dictionary<string, long>(StringComparer.Ordinal);
+    private readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, SignalState> _trafficLights = new Dictionary<string, SignalState>(StringComparer.Ordinal);
     private CancellationTokenSource? _cts;
     private Task? _loop;
 
@@ -66,6 +75,9 @@ public sealed class TrainControllerPipeReceiver
             case nameof(TrainModelStatusMessage):
                 await HandleStatusAsync(MessageSerializer.DeserializePayload<TrainModelStatusMessage>(envelope), cancellationToken).ConfigureAwait(false);
                 break;
+            case nameof(TrackModelSignalMessage):
+                HandleSignal(MessageSerializer.DeserializePayload<TrackModelSignalMessage>(envelope));
+                break;
             case nameof(TickDoneMessage):
                 _subsystem.SystemClock?.Handle(MessageSerializer.DeserializePayload<TickDoneMessage>(envelope));
                 break;
@@ -79,10 +91,16 @@ public sealed class TrainControllerPipeReceiver
                 var tick = MessageSerializer.DeserializePayload<TickMessage>(envelope);
                 await _send(_participantHostPipe, new TickDoneMessage { TickId = tick.TickId, Participant = NamedPipeNames.TrainController }, cancellationToken).ConfigureAwait(false);
                 break;
-            case nameof(ResetMessage) when _participantHostPipe is not null:
+            case nameof(ResetMessage):
+                // From the clock host (participant mode) or from the Train Model (its reset).
                 var reset = MessageSerializer.DeserializePayload<ResetMessage>(envelope);
                 await ResetLocalAsync(cancellationToken).ConfigureAwait(false);
-                await _send(_participantHostPipe, new ResetDoneMessage { ResetId = reset.ResetId, Participant = NamedPipeNames.TrainController }, cancellationToken).ConfigureAwait(false);
+                _subsystem.Log.Log(TrainControllerLogLevel.Info, "TrainModelLink", null, "Reset received: all trains' controller state cleared.");
+                if (_participantHostPipe is not null)
+                {
+                    await _send(_participantHostPipe, new ResetDoneMessage { ResetId = reset.ResetId, Participant = NamedPipeNames.TrainController }, cancellationToken).ConfigureAwait(false);
+                }
+
                 break;
             case nameof(ClockStateMessage):
                 break; // display only; the hosted clock reports its own state
@@ -96,25 +114,84 @@ public sealed class TrainControllerPipeReceiver
     public async Task HandleStatusAsync(TrainModelStatusMessage status, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(status);
+
+        // Canonical train IDs ("007") cross the pipe; the fleet uses "TRAIN-007" internally.
+        if (!TrainIdConvention.TryNormalize(status.TrainId, out var canonical)
+            || !TrainFleet.IsKnownTrain(TrainIdConvention.ToTrainControllerLabel(canonical)))
+        {
+            WarnOnce(status.TrainId, $"Ignored state for train '{status.TrainId}': not a canonical ID of this controller's fleet ({TrainFleet.AllTrainIds[0]}…{TrainFleet.AllTrainIds[^1]}).");
+            return;
+        }
+
+        status.TrainId = TrainIdConvention.ToTrainControllerLabel(canonical);
+
+        // Elapsed simulation time since this train's previous state (TickId = the Train
+        // Model's step count). A TickId that goes backwards means the Train Model was reset.
+        double dt;
+        lock (_lastTick)
+        {
+            if (_lastTick.TryGetValue(status.TrainId, out var previous) && status.TickId < previous)
+            {
+                _lastTick.Clear();
+                dt = double.NaN;
+            }
+            else
+            {
+                var steps = _lastTick.TryGetValue(status.TrainId, out previous) ? status.TickId - previous : 1;
+                if (steps <= 0)
+                {
+                    return; // duplicate or stale state: already answered
+                }
+
+                dt = Math.Min(steps, MaxStepsPerState) * _subsystem.Engine.DeltaTimeSeconds;
+                _lastTick[status.TrainId] = status.TickId;
+            }
+        }
+
+        if (double.IsNaN(dt))
+        {
+            _subsystem.Log.Log(TrainControllerLogLevel.Warning, "TrainModelLink", status.TrainId, "TickId went backwards: treating it as a Train Model reset.");
+            await ResetLocalAsync(cancellationToken).ConfigureAwait(false);
+            lock (_lastTick)
+            {
+                _lastTick[status.TrainId] = status.TickId;
+            }
+
+            dt = _subsystem.Engine.DeltaTimeSeconds;
+        }
+
+        // Traffic light ahead: sent by the Track Model directly to this controller (the Train
+        // Model leaves it Unknown); the latest aspect for this train is applied to its state.
+        if (status.TrafficLight == SignalState.Unknown)
+        {
+            lock (_trafficLights)
+            {
+                if (_trafficLights.TryGetValue(status.TrainId, out var aspect))
+                {
+                    status.TrafficLight = aspect;
+                }
+            }
+        }
+
         bool authorityUpdated, beaconNew;
         lock (_seen)
         {
             _seen.TryGetValue(status.TrainId, out var last);
             authorityUpdated = status.TrackSignalValid
-                && (!last.Known || !last.Authority.Equals(status.RemainingAuthorityMeters) || !last.SignalValid);
+                && (!last.Known || !last.Authority.Equals(status.CommandedAuthorityMeters) || !last.SignalValid);
             var station = status.NextStationName ?? string.Empty;
             beaconNew = status.BeaconValid && station.Length > 0
                 && (!string.Equals(station, last.Station, StringComparison.Ordinal) || !status.DistanceToNextStationMeters.Equals(last.Distance));
             _seen[status.TrainId] = (
                 last.Known || status.TrackSignalValid,
-                status.TrackSignalValid ? status.RemainingAuthorityMeters : last.Authority,
+                status.TrackSignalValid ? status.CommandedAuthorityMeters : last.Authority,
                 status.TrackSignalValid,
                 status.BeaconValid ? station : last.Station,
                 status.BeaconValid ? status.DistanceToNextStationMeters : last.Distance);
         }
 
         _subsystem.NormalModelInput.Submit(status, beaconNew, authorityUpdated);
-        await _subsystem.Engine.ExecuteTrainAsync(status.TrainId, status.TickId, cancellationToken).ConfigureAwait(false);
+        await _subsystem.Engine.ExecuteTrainAsync(status.TrainId, status.TickId, dt, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Global reset: clears every train's controller runtime and the event inference.</summary>
@@ -125,7 +202,46 @@ public sealed class TrainControllerPipeReceiver
             _seen.Clear();
         }
 
+        lock (_lastTick)
+        {
+            _lastTick.Clear();
+        }
+
+        lock (_trafficLights)
+        {
+            _trafficLights.Clear();
+        }
+
         await _subsystem.Engine.ResetAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Track Model → Train Controller: the signal aspect ahead of one train.</summary>
+    public void HandleSignal(TrackModelSignalMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        if (!TrainIdConvention.TryNormalize(message.TrainId, out var canonical))
+        {
+            WarnOnce("signal:" + message.TrainId, $"Ignored signal for train '{message.TrainId}': not a canonical train ID.");
+            return;
+        }
+
+        lock (_trafficLights)
+        {
+            _trafficLights[TrainIdConvention.ToTrainControllerLabel(canonical)] = message.Signal;
+        }
+    }
+
+    private void WarnOnce(string key, string text)
+    {
+        lock (_warned)
+        {
+            if (!_warned.Add(key ?? string.Empty))
+            {
+                return;
+            }
+        }
+
+        _subsystem.Log.Log(TrainControllerLogLevel.Warning, "TrainModelLink", null, text);
     }
 
     private void OnError(Exception ex) =>

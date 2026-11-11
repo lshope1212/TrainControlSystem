@@ -63,8 +63,10 @@ public class TrainSimulationService : ITrainSimulationService
         // command, not a separate latch. This keeps a single source of truth for the
         // emergency brake (the controller's command) and lets the controller release it
         // by clearing the command. Honored only when a request is actually pending.
+        // No approval handshake any more: the request is acknowledged as soon as the Train
+        // Controller applies the emergency brake (approve/deny flags kept for the TestUI).
         if (Train.PassengerEmergencyBrakePending &&
-            (_inputs.ControllerApproveEmergencyBrake || _inputs.ControllerDenyEmergencyBrake))
+            (_inputs.EmergencyBrakeApplied || _inputs.ControllerApproveEmergencyBrake || _inputs.ControllerDenyEmergencyBrake))
         {
             Train.PassengerEmergencyBrakePending = false;
         }
