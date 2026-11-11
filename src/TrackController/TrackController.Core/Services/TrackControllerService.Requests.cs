@@ -7,13 +7,18 @@ namespace TrackController.Core.Services;
 /// <summary>Evaluates track conditions and rejects movement or equipment commands that violate protection rules.</summary>
 public sealed partial class TrackControllerService
 {
-    /// <summary>Validates the request origin and route before evaluating conservative movement limits.</summary>
-    public void SubmitMovement(MovementSuggestionMessage message)
+    /// <summary>
+    /// Validates the request origin and route before evaluating conservative movement limits. A
+    /// request naming a <see cref="MovementSuggestionMessage.PredecessorRequestId"/> that is not yet
+    /// active here is only validated and staged (<see cref="MovementSubmission.Staged"/>): it grants
+    /// nothing until <see cref="ApplyFeedback"/> observes the train's transition into its target.
+    /// </summary>
+    public MovementSubmission SubmitMovement(MovementSuggestionMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
         lock (_gate)
         {
-            if (string.IsNullOrWhiteSpace(message.TargetBlockId) || string.IsNullOrWhiteSpace(message.RequestId) || message.RequestId.Length > 128 || message.TrainId is null || message.TrainId.Length > 128)
+            if (string.IsNullOrWhiteSpace(message.TargetBlockId) || string.IsNullOrWhiteSpace(message.RequestId) || message.RequestId.Length > 128 || message.TrainId is null || message.TrainId.Length > 128 || message.PredecessorRequestId is { Length: 0 or > 128 })
             {
                 throw new ArgumentException("Provide a target block and request ID (up to 128 characters). The train label is optional.");
             }
@@ -21,14 +26,34 @@ public sealed partial class TrackControllerService
 
             if (!message.IsActive)
             {
+                // A staged successor is cancelled by its own ID (e.g. the route changed). Its ID is
+                // retired so a delayed copy of the staging message can never re-stage it.
+                if (_staged.Remove(message.RequestId))
+                {
+                    _retiredRequests.Add(message.RequestId);
+                    Reevaluate();
+                    return MovementSubmission.Cancelled;
+                }
+
                 if (_requests.TryGetValue(message.TargetBlockId, out var current) && current.Value.RequestId != message.RequestId)
                 {
+                    // A late or repeated cancellation of a request that was already retired (e.g. replaced
+                    // by its successor at a block transition) changes nothing and is not an error.
+                    if (_retiredRequests.Contains(message.RequestId))
+                    {
+                        return MovementSubmission.Cancelled;
+                    }
+
                     throw new ArgumentException("Cancellation must identify the current request ID for this target block.");
                 }
 
-                _requests.Remove(message.TargetBlockId);
+                if (_requests.Remove(message.TargetBlockId))
+                {
+                    DiscardSuccessorsOf(message.RequestId);
+                }
+
                 Reevaluate();
-                return;
+                return MovementSubmission.Cancelled;
             }
 
             if (_retiredRequests.Contains(message.RequestId))
@@ -64,15 +89,37 @@ public sealed partial class TrackControllerService
                 }
             }
 
-            if (_requests.Values.Any(request => request.Value.RequestId == message.RequestId &&
+            if (_requests.Values.Concat(_staged.Values).Any(request => request.Value.RequestId == message.RequestId &&
                 (request.Value.TargetBlockId != message.TargetBlockId || request.Value.EntryBlockId != message.EntryBlockId ||
                  !request.Value.PathBlockIds.SequenceEqual(message.PathBlockIds))))
             {
                 throw new ArgumentException("A pending request ID already identifies a different target or route. Cancel it or use a new ID.");
             }
 
-            _requests[message.TargetBlockId] = (new MovementSuggestionMessage { RequestId = message.RequestId, TrainId = message.TrainId, TargetBlockId = message.TargetBlockId, EntryBlockId = message.EntryBlockId, PathBlockIds = [.. message.PathBlockIds], SuggestedAuthorityMeters = message.SuggestedAuthorityMeters, SuggestedSpeedMetersPerSecond = message.SuggestedSpeedMetersPerSecond }, _clock.GetUtcNow());
+            var active = _requests.Values.FirstOrDefault(request => request.Value.RequestId == message.RequestId);
+            if (message.PredecessorRequestId is { } predecessorId && active.Value is null)
+            {
+                StageSuccessor(message, predecessorId);
+                Reevaluate();
+                return MovementSubmission.Staged;
+            }
+
+            // A request that took over at a block transition inherited its predecessor's end point; a
+            // renewal or resend can never move it further or raise its speed.
+            if (active.Value?.PredecessorRequestId is not null
+                && (message.SuggestedAuthorityMeters > active.Value.SuggestedAuthorityMeters + HandoffTolerance
+                    || message.SuggestedSpeedMetersPerSecond > active.Value.SuggestedSpeedMetersPerSecond + HandoffTolerance))
+            {
+                throw new ArgumentException("This request took over its predecessor's end point at a block transition and cannot be extended. A new movement needs a new request.");
+            }
+
+            // An ordinary request, or a renewal of an active one (including a promoted successor, which
+            // keeps the ID of the request it replaced for diagnostics). A successor CTC now sends as an
+            // ordinary request leaves staging and is evaluated like any other request.
+            _staged.Remove(message.RequestId);
+            _requests[message.TargetBlockId] = (new MovementSuggestionMessage { RequestId = message.RequestId, TrainId = message.TrainId, TargetBlockId = message.TargetBlockId, EntryBlockId = message.EntryBlockId, PathBlockIds = [.. message.PathBlockIds], SuggestedAuthorityMeters = message.SuggestedAuthorityMeters, SuggestedSpeedMetersPerSecond = message.SuggestedSpeedMetersPerSecond, PredecessorRequestId = active.Value?.PredecessorRequestId }, _clock.GetUtcNow());
             Reevaluate();
+            return MovementSubmission.Accepted;
         }
     }
 

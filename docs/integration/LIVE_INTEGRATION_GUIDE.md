@@ -2,7 +2,9 @@
 
 How the real modules exchange track information for the whole course network (the Blue, Red and
 Green Lines, 241 blocks) without their TestUIs, how to demonstrate it, and what is still
-outstanding. Train Model physics and Train Controller normal mode are not involved.
+outstanding. Train Model physics is not involved; how movement authority reaches the Train Model
+and the Train Controller across block boundaries is described in [Movement Authority Continuity and
+Emergency Revocation](#movement-authority-continuity-and-emergency-revocation).
 
 ## Message flow
 
@@ -163,13 +165,213 @@ movement request: target = current block, entry = previous block, path = the rou
 authority covers, and authority measured from the target block's entry. Speeds come from the
 line's own civil speed limits.
 
-On each block change the old request is cancelled and a new one (new ID) re-expresses the same
-fixed authority end from the new block. The end is set only when a movement starts (release,
-departure from a stop, dispatcher re-plan). Renewals every 3 s of wall time keep a still-valid
+On each block change the train's request passes to a new request (new ID) that re-expresses the
+same fixed authority end from the new block. When the Track Controller grants the current request
+into the next block, that successor is prepared in advance and takes over at the boundary without
+an interruption (see [Movement Authority Continuity and Emergency
+Revocation](#movement-authority-continuity-and-emergency-revocation)); otherwise the old request is
+cancelled and a new one issued. The end is set only when a movement starts (release, departure from
+a stop, dispatcher re-plan). Renewals every 3 s of wall time keep a still-valid
 request alive under the Track Controller's 10 s watchdog, with the same ID and limits. They never
 add distance, continue while the simulation is paused, and stop with CTC, so the Track
 Controller then withdraws the authority. A block ahead that becomes occupied, Unknown, stale or
 closed shortens the request; clearing restores it only up to the original end.
+
+## Movement Authority Continuity and Emergency Revocation
+
+A train moving from block A into block B under a valid movement keeps its authority across the
+boundary. A genuine withdrawal of authority reaches it immediately. The two cases are kept apart
+**at the source, not by filtering**: the wayside never produces a zero for a valid handoff, so every
+zero a train receives is authoritative and is acted on at once. No module delays, debounces, holds
+or ignores a zero.
+
+### Why a moving train used to receive a false zero
+
+Before this change every block transition produced roughly 0.5–1.5 s of zero authority, even for a
+train with a valid, protected route:
+
+1. **Track Controller → Track Model.** Speed and authority were coded only onto the request's
+   target block (the train's block); every other block, including the next one, was coded 0. When
+   the train entered B, the code it picked up was already 0.
+2. **Track Controller.** When A cleared, its request was retired at once. B had no request: a
+   request is only granted from an occupied target, and two overlapping requests withhold each
+   other, so the next request could not exist in advance.
+3. **CTC.** CTC learned of the move from the next 500 ms status batch, cancelled the old request,
+   sent a new one, and the Track Controller's grant reached the Track Model on its next 500 ms
+   publication.
+4. **Train Model.** It did not consume `TrackModelTrainEnvironmentMessage` at all, so no live
+   authority reached it (only the TestUI's placeholder `AuthorityMessage`).
+5. **Train Controller.** A changed authority value recalibrates the remaining authority; a moving
+   train recalibrated to 0 is below its emergency stopping distance, so `AuthorityProtection`
+   applies the emergency brake (correctly, for the zero it was given).
+
+Re-ordering the cancellation and the new request would not have helped: the new request could not
+be granted before the train was in B, and while both existed they would have withheld each other.
+
+### Lifecycle: prepare → transfer → retire
+
+```text
+ CTC                      Track Controller                 Track Model          Train Model → Train Controller
+  │ P: target A, path B…    │                                 │                       │
+  │────────────────────────►│ evaluate P: Approved 300 m      │                       │
+  │◄──── status: P granted ─│── A: 300 m (P) ────────────────►│ train in A: 300 m ───►│ remaining 300 m
+  │ S: target B, entry A,   │                                 │                       │
+  │    predecessor P, 250 m │ validate + STAGE S (no grant,   │                       │
+  │────────────────────────►│ no conflict check)              │                       │
+  │◄ ack PreparedAsSuccessor│── B: 250 m (P, from A) ────────►│ B: continuation code  │
+  │                         │                                 │                       │
+  │                         │       train moves A → B ────────│ train in B: 250 m ───►│ recalibrated 250 m
+  │                         │◄── B occupied (fresh) ──────────│ (code applies: it     │ (no zero, no brake)
+  │                         │ ONE STEP: promote S, retire P,  │  entered from A)      │
+  │                         │ evaluate S: Approved 250 m      │                       │
+  │                         │── B: 250 m (S) ── at once ─────►│ train in B: 250 m ───►│ same value: counts on
+  │◄──── status: S granted, │                                 │                       │
+  │      superseded P ──────│                                 │                       │
+  │ adopt S; cancel P       │ (P already retired: no-op)      │                       │
+  │ (idempotent clean-up)   │                                 │                       │
+  │ prepare S2 for C …      │                                 │                       │
+```
+
+**Prepare (Phase A).** When CTC sees its active request P granted (Approved or Restricted) with
+authority reaching past its own block, it sends a successor S for the next route block:
+`MovementSuggestionMessage` with a new `RequestId`, `PredecessorRequestId = P`, target B, entry A,
+path = P's path after B, authority at most P's authority less A's length (the same fixed end point),
+speed at most P's. The Track Controller validates ownership, topology and all of these limits
+(anything that would extend the end point, leave P's route, raise the speed, change the train label
+or name an inactive predecessor is rejected) and stages S. A staged successor:
+
+- is never evaluated, takes part in no route-conflict check, and is never reported as a grant;
+- is acknowledged `PreparedAsSuccessor`, which CTC shows as "handoff to B prepared", never as an
+  authorization;
+- is renewed by CTC like any request and expires under the same 10 s request watchdog;
+- is replaced (and the old ID retired) if CTC prepares a different successor, e.g. after a re-route,
+  and is discarded when P is cancelled, retired or expires.
+
+While S is staged and P's grant actually covers B, the Track Controller codes B with a
+**continuation**: P's own granted authority measured from B's entry (P's granted authority less A's
+length, never more than S asks for), at P's speed, tagged with P's request ID and with
+`AuthorityEntryBlockId = A`. It is P's authority, not a second grant: it exists only while P is
+commanded and disappears in the same evaluation that withholds P.
+
+**Transfer (Phase B).** In the same call that applies a fresh Track Model observation, before any
+other request is retired or evaluated, the Track Controller promotes S and retires P **in one
+locked state transition** when all of the following hold:
+
+- B went from fresh, unfaulted Clear to fresh Occupied in this observation (a stale, Unknown or
+  already-occupied block shows nothing about who entered it);
+- P is still the live, unexpired request of A, and **P's grant in force just before this observation
+  covered B** (so B was clear and protected for this train and no other movement could hold it);
+- A's feedback is fresh and definite (Occupied or Clear, not Unknown or faulted); B is not faulted or
+  closed;
+- no other request holds B or any block of S's route;
+- the occupancy cannot be another train: if any other block a train is permitted to enter B from was
+  not definitely clear, the transfer also requires that A cleared in the same observation (a train
+  cannot vanish). CTC's train labels are never used to decide this;
+- exactly one staged successor targets B.
+
+S is then evaluated exactly like any other request (PLC and the independent checks: switches,
+signals, crossings, freshness, maintenance, conflicts). Its result is published under S's request ID
+and reported to CTC with `SupersededRequestId = P`. If any condition fails, nothing is transferred:
+the train in B has no request and receives zero. Transfers never force a grant.
+
+The transition may arrive in one observation (A clear and B occupied together, which is what the
+Track Model sends) or in two (B occupied first while the train spans the boundary, then A clear). A
+clear of A *before* B is occupied is a loss of detection: P is retired as before and the train
+receives zero.
+
+**Retire (Phase C).** P is retired by the transfer itself; no cancellation is needed. A late renewal
+of P is rejected ("target block cleared"). A late, repeated or clean-up cancellation of a retired ID
+is accepted as a no-op. A replayed staging message for S after promotion is only a renewal of S. A
+promoted request cannot be extended: a renewal with more authority or speed than it inherited is
+rejected. CTC adopts S as the train's active request when it tracks the train into B and S is
+exactly the plan it needs (no new request ID, no cancel-and-reissue), then sends P's cancellation
+as idempotent clean-up (retried until delivered). A dispatcher re-plan never adopts a prepared
+successor: it cancels it and starts a new movement.
+
+### Exactly when authority changes hands
+
+- **At the train:** the moment the Track Model moves the train from A into B, the train receives B's
+  continuation code, which is P's own end point measured from B's entry. Before that it holds P's
+  code in A. There is no instant at which it holds neither.
+- **At the Track Controller:** inside the feedback batch that first shows B occupied. Before it, P is
+  the only request; after it, S is the only request.
+- **At CTC:** on its next synchronization after the status batch that moves the train into B.
+
+### Downstream propagation
+
+| Hop | What ensures continuity | What ensures a zero is never hidden or delayed |
+| --- | --- | --- |
+| Track Controller → Track Model | Continuation code on B for the train entering from A. Each code carries its `MovementRequestId`. | A change of any movement output (grant, decision, request, continuation, pause, maintenance mode) wakes the publisher at once instead of waiting for the 500 ms cycle (measured: 14 ms from a pause to the Train Model). `TrackModelCommandBatchMessage.Sequence` (seeded from the wall clock) lets the Track Model ignore, per block, any older or replayed batch. `AuthorityLeaseSeconds` (the controller's own output validity, ≤ 1.5 s) makes a silent controller's codes lapse to zero. |
+| Track Model | A continuation code applies to the occupant only if it entered from the code's entry block (the Track Model knows the physical previous block); any other occupant, or a train placed there, gets zero. | Train moves, wayside batches that change any train's code, lease expiry and failure inputs publish immediately (the 100 ms debounce is skipped). Train environments have their own ordered sender, so a slow CTC/TestUI pipe never delays them; occupied blocks go first. |
+| Track Model → Train Model | Each `TrackModelTrainEnvironmentMessage` carries the code for its train and `Sequence`. | `TrackCircuitReceiver` (TrainModel.Core) applies only the newest snapshot for each train; a zero is applied like any value. Occupied blocks are re-sent with the 1 s heartbeat, so a restarted Train Model resynchronizes to the current code (never an older one). |
+| Train Model → Train Controller | `CommandedAuthorityMeters` relayed unchanged. A same-value hand-over (continuation → successor) is not a new update, so the estimate keeps counting down (it never jumps back up). | A changed value is an update: the remaining authority is recalibrated on that tick; moving with zero authority engages the emergency brake on that control period. |
+
+### Genuine zero authority
+
+Withdrawal is the wayside's ordinary decision and is never weakened:
+
+- **Unsafe route or equipment** (occupied/Unknown block, fault, closure, stale feedback, switch not
+  confirmed, no proceed aspect, crossing not closed, PLC withholding, pause, maintenance mode,
+  request expiry): the evaluation withholds P (or restricts it). Its continuation is removed in the
+  same evaluation, so a prepared successor can never override it, and the change is published at
+  once.
+- **During a transfer:** the successor is evaluated after promotion with the same checks; an unsafe
+  condition reported in the same observation as the transition withholds it.
+- **CTC stops:** renewals stop; the 10 s watchdog withdraws the request and its staged successor.
+- **Track Controller stops:** the Track Model's lease lapses (≤ 1.5 s) and every code becomes zero.
+- **Train Model unavailable:** nothing upstream waits for it; when it returns it receives the current
+  code. A train with no track data has zero authority.
+- **Final destination:** CTC terminates the movement when the plan completes (existing policy,
+  unchanged): the request and its successor are cancelled and the train receives zero.
+
+**Train Controller review.** `AuthorityTracker` and `AuthorityProtection` are unchanged, and so are
+the emergency-brake thresholds. With a valid track signal every new value, zero included, is applied
+on the tick it arrives. With an invalid track signal received values are not trusted and the train is
+already stopped with the service brake; when the signal returns, the adapter
+(`TrainControllerPipeReceiver`) treats the first valid value as an update even if it did not change,
+so a zero sent during the loss is applied on the first valid period. The only Train Controller change
+is the adapter reading the renamed `TrainModelStatusMessage.CommandedAuthorityMeters` (the build was
+broken by that rename).
+
+### Contract changes
+
+| Message | Field | Meaning |
+| --- | --- | --- |
+| `MovementSuggestionMessage` | `PredecessorRequestId` | Successor to stage behind that active request; null for every existing message. |
+| `RequestAcknowledgementOutcome` | `PreparedAsSuccessor` | Staged; not a grant, not accepted for evaluation. |
+| `MovementAuthorizationReport` | `SupersededRequestId` | The request this one replaced at a block transition (diagnostic). |
+| `TrackModelCommandMessage` | `MovementRequestId`, `AuthorityEntryBlockId` | Which movement the code belongs to; for a continuation, the block the train must enter from. |
+| `TrackModelCommandBatchMessage` | `Sequence`, `AuthorityLeaseSeconds` | Ordering (older batches ignored per block) and code validity. 0 = legacy sender, applied as before. |
+| `TrackModelTrainEnvironmentMessage` | `MovementRequestId`, `Sequence` | Code ownership and snapshot order. |
+| `WaysideBlockStatus` (Track Controller) | `Continuation` | The prepared handoff on the successor's target block. |
+| `WaysideAcknowledgementMessage` (Track Controller) | `IsStagedSuccessor` | Carries "staged" through the Pi runtime and router to the CTC acknowledgement. |
+
+### Remaining limitations
+
+- **Live occupancy.** The Train Model still does not send `TrackModelTrainUpdateMessage`, so outside
+  the tests a train moves only through the harness. The Train Model now consumes environments for
+  trains it simulates (canonical IDs translated with `TrainIdConvention`); the end-to-end tests drive
+  the production Train Model pickup and Train Controller directly rather than TrainModel.Wpf's
+  window and physics.
+- **A train must spend long enough in a block for its successor to be prepared** (one CTC status
+  cycle, about 0.5 s, after the grant). A train that reaches the next block first receives zero and
+  brakes. Continuations are coded one block ahead only.
+- **Obstruction changes still interrupt.** When a block ahead becomes unsafe or clears, CTC still
+  cancels and re-issues the request for the train's current block. The wayside restricts the old
+  request first, so this is never less safe, but a train may see a brief zero before the shorter
+  request is granted.
+- **Mid-block restrictions.** Authority is measured from the block entry and the Train Controller
+  recalibrates as if the train were at the entry, so a restriction received mid-block is optimistic by
+  the distance already travelled in the block (pre-existing contract semantics). A zero is exact.
+- **Arrival at the final destination** while moving still ends in an emergency stop (existing CTC
+  termination policy).
+- **CTC tracking ambiguity.** If CTC cannot attribute the occupancy of B to its train (two trains
+  could explain it), it does not adopt the successor even if the Track Controller transferred
+  authority; its renewal of the retired predecessor is then rejected and it withdraws the
+  successor, so the train brakes. This is the conservative outcome, not a continuity guarantee.
+- **Cross-territory handoff** is not supported (the router rejects routes across territories), and
+  time-based expiries (request watchdog, stale feedback) are still detected on the 500 ms cycle.
+- The Hardware Train Controller (Pi) receives the same relayed values but was not exercised.
 
 ## Demonstration: Blue, Red and Green together
 
@@ -262,9 +464,8 @@ test with all three lines live:
 - with CTC offline, the Track Model → Track Controller feedback stays fresh and commands still reach the Track Model.
 
 **Not batched:** the Track Model still sends the Train Model one `TrackModelTrainEnvironmentMessage`
-per block per snapshot (the Train Model receiver is outside this milestone). It costs one 250 ms
-timeout per snapshot while the Train Model is not running, and does not delay the Track Controller
-path.
+per block per snapshot, occupied blocks first, on its own sender: a Train Model that is not running
+costs that sender one 250 ms timeout per snapshot and delays nothing else.
 
 ## Automated coverage
 
@@ -291,12 +492,24 @@ against each other over isolated pipe names.
     affecting the other two; a Blue-only controller with the three-line Track Model.
   - Data: Track Model data equals the independent CTC fixture; the Track Controller maps equal what
     the layout derives; the combined deployment owns every block once.
+- **Authority continuity** (`AuthorityContinuityIntegrationTests`, with the production Train Model
+  track-circuit pickup and Train Controller): a moving train crosses a boundary with no zero and no
+  emergency brake and keeps its end point; a Track Controller pause reaches the Train Model in
+  milliseconds and the Train Controller brakes on its next period; a fault ahead during preparation
+  withdraws the grant and the successor never takes effect; Blue, Red and Green hand over
+  independently; CTC stopping, the Track Controller stopping and an absent Train Model all fail safe.
 - **Blue Line** (unchanged tests, Blue-only Track Model and controller): layout load and late-CTC
   synchronization, occupancy, equipment and faults, heartbeat freshness, disconnects, maintenance,
   the CTC TestUI workflow, complete movement requests, end-to-end authorization, cross-territory
   rejection, re-targeted and re-routed requests, renewal and expiry, no duplicate requests.
 
-Unit tests cover the XLSX importer reproducing the bundled layout from vF5-format worksheets,
+Unit tests cover the handoff rules in the Track Controller (`AuthorityHandoffTests`, software and
+PLC: staging, atomic transfer in one or two observations, fixed end point, restricted grants, missing,
+rejected, stale, ambiguous and expired successors, revocation before, during and after the transfer,
+switch/signal/crossing protection, replayed and out-of-order messages, two trains), CTC
+(`CtcAuthorityHandoffTests`), the Track Model's codes (`TrackAuthorityCodeTests`), the Train Model
+pickup (`TrackCircuitReceiverTests`) and the Train Controller adapter
+(`AuthorityContinuityAdapterTests`), as well as the XLSX importer reproducing the bundled layout from vF5-format worksheets,
 batch command application, and multi-line deployment validation and routing.
 
 ## Outstanding work and limitations
@@ -305,13 +518,14 @@ batch command application, and multi-line deployment validation and routing.
 | --- | --- |
 | Train Model | **Physical release.** Receive CTC's release intent (`MovementRequestMessage`), acknowledge it with a correlated response, then place the train. Until then CTC infers the train from its start block becoming occupied and never reports a confirmed release. |
 | Train Model | **Real occupancy.** Send `TrackModelTrainUpdateMessage` to the Track Model as trains move (today only the harness does). Use canonical train IDs and the Track Model's block IDs (`RED-n`, `GREEN-n`). |
-| Train Model / Track Model | **Environment volume.** Track Model → Train Model is still one message per block per snapshot (241); batch it, or send only occupied blocks, when the Train Model receiver is integrated. |
+| Train Model / Track Model | **Environment volume.** Track Model → Train Model is still one message per block per snapshot (241, occupied blocks first, on their own sender). The Train Model applies only its own trains' blocks; batching would reduce the connection count. |
 | Track Controller | **Cross-territory handoff.** A request whose route leaves its owner's territory is rejected ("Movement cannot cross a territory boundary…"). The production deployment uses one territory per line, so no movement on the course lines crosses a boundary today. Splitting a line (for example to run part of it on a Raspberry Pi) needs a handoff protocol first: the owner grants authority up to its boundary; the next owner, observing the shared boundary block, is asked for the continuation; both sides' grants are combined and reported against one request ID; and a lost neighbour withdraws the combined authority. The existing neighbour observations provide the shared-block feedback this needs. |
 | Track Controller / Track Model | **CTC reservation feedback.** Switch protection requires `TrackModelBlockStateMessage.IsReservedByCtc`, which the Track Model does not report. With the real Track Model, switch requests are refused ("missing CTC reservation feedback") on every line, and CTC shows that refusal. Trains can still move through a switch in its current position. Decide which module owns reservations. |
 | Track Controller | **Signalled routes (Blue).** With the bundled `wayside.plc`, a request through block 6 or 11 is withheld ("Waiting for proceed signal feedback at block 6"). The PLC needs a proceed aspect before granting, but signals are commanded only for blocks a granted authority covers. Red and Green have no signals in the course data. |
 | Track Controller | Starts in its 12-block demonstration territory; the three-line setup is one selection plus **Load setup**. The Blue map is directional (1→15), so reverse-direction Blue routes are rejected. A switch block lists both legs as exits (the controller's switch model requires it), so on Green a route can end on a one-way leg entered from the wrong side, but can never continue. |
 | Course data | Yard connections, Red/Green signals and transponders, station sides and the Green 16 station name are not in the workbook (see *Data the workbook does not contain*). |
 | CTC | Route planning (schedule builder, re-plan) follows connections without direction of travel. A Green schedule against the arrows is planned, then refused by the Track Controller, and CTC shows the refusal. Authority is not extended automatically when an obstruction ahead clears beyond a movement's original end; the next departure or a dispatcher re-plan recalculates it (pre-existing design). A request the Track Controller rejected is not renewed; it is replaced when the train moves or the dispatcher re-plans. |
-| Train Controller | Translate `TRAIN-nnn` labels with `TrainIdConvention` when consuming system messages. |
+| Train Controller | Translate `TRAIN-nnn` labels with `TrainIdConvention` when consuming system messages (the Train Model now does so for track environments). |
+| CTC / Track Controller | Remaining authority-continuity limitations: see [Remaining limitations](#remaining-limitations). |
 
 Full system integration is not complete until physical train release and movement exist.

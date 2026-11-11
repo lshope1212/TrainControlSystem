@@ -11,4 +11,12 @@ public enum RequestAcknowledgementOutcome
 
     /// <summary>The request was refused and has no effect; the acknowledgement explains why.</summary>
     Rejected,
+
+    /// <summary>
+    /// A successor movement request (<see cref="Messages.MovementSuggestionMessage.PredecessorRequestId"/>)
+    /// was validated and staged behind its predecessor. It is NOT a grant and NOT accepted for
+    /// evaluation: it authorizes nothing until the Track Controller observes the train's transition
+    /// and promotes it, which CTC learns from the movement report carrying the successor's ID.
+    /// </summary>
+    PreparedAsSuccessor,
 }

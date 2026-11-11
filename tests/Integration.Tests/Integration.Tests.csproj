@@ -30,6 +30,9 @@
     <ProjectReference Include="..\..\src\TrackController\TrackController.Wpf\TrackController.Wpf.csproj" />
     <ProjectReference Include="..\..\src\CTC\CTC.Wpf\CTC.Wpf.csproj" />
     <ProjectReference Include="..\..\src\CTC\CTC.TestUI.Wpf\CTC.TestUI.Wpf.csproj" />
+    <!-- The train's side of authority continuity: the Train Model's track-circuit pickup and the production Train Controller. -->
+    <ProjectReference Include="..\..\src\TrainModel\TrainModel.Core\TrainModel.Core.csproj" />
+    <ProjectReference Include="..\..\src\TrainController\TrainController.Integration\TrainController.Integration.csproj" />
     <None Include="..\..\src\TrackController\TrackController.Wpf\Samples\**\*" Link="WaysideSamples\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

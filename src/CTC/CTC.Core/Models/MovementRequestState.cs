@@ -27,15 +27,25 @@ public enum MovementRequestDelivery
 /// </remarks>
 public sealed class MovementRequestState
 {
-    public MovementRequestState(string requestId, MovementRequestPlan plan)
+    public MovementRequestState(string requestId, MovementRequestPlan plan, string? predecessorRequestId = null)
     {
         RequestId = string.IsNullOrWhiteSpace(requestId) ? throw new ArgumentException("A request ID is required.", nameof(requestId)) : requestId;
         Plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        PredecessorRequestId = string.IsNullOrWhiteSpace(predecessorRequestId) ? null : predecessorRequestId;
     }
 
     public string RequestId { get; }
 
     public MovementRequestPlan Plan { get; }
+
+    /// <summary>
+    /// Set while this request is a prepared successor (<see cref="DispatchedTrainState.StagedMovementRequest"/>):
+    /// the active request it is staged behind at the Track Controller. Cleared when CTC adopts it.
+    /// </summary>
+    public string? PredecessorRequestId { get; set; }
+
+    /// <summary>The request the Track Controller reports this one replaced at a block transition; empty otherwise.</summary>
+    public string SupersededRequestId { get; set; } = string.Empty;
 
     public MovementRequestDelivery Delivery { get; set; }
 

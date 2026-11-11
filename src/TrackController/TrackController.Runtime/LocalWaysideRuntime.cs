@@ -33,8 +33,22 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
                 case "GetSnapshot":
                     return Task.FromResult<object>(_controller.GetSnapshot());
                 case nameof(MovementSuggestionMessage):
-                    _controller.SubmitMovement(MessageSerializer.DeserializePayload<MovementSuggestionMessage>(message));
-                    detail = "Movement evaluated; inspect authorized outputs.";
+                    var movement = MessageSerializer.DeserializePayload<MovementSuggestionMessage>(message);
+                    switch (_controller.SubmitMovement(movement))
+                    {
+                        case MovementSubmission.Staged:
+                            // Never a grant: authority changes hands only when the train is observed crossing.
+                            return Task.FromResult<object>(new WaysideAcknowledgementMessage(true,
+                                $"Successor prepared behind request {movement.PredecessorRequestId}; it grants nothing until the train is observed entering block {movement.TargetBlockId}.",
+                                message.MessageType) { IsStagedSuccessor = true });
+                        case MovementSubmission.Cancelled:
+                            detail = "Movement request cancelled.";
+                            break;
+                        default:
+                            detail = "Movement evaluated; inspect authorized outputs.";
+                            break;
+                    }
+
                     break;
                 case nameof(TrackModelBlockStateMessage):
                     _controller.ApplyFeedback([MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(message)]);

@@ -1,4 +1,5 @@
 using CTC.Core.Models;
+using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 
 namespace CTC.Core.Dispatching;
@@ -32,8 +33,10 @@ public sealed record MovementRequestPlan(
             && Math.Abs(AuthorityMeters - other.AuthorityMeters) < Tolerance;
     }
 
-    public MovementSuggestionMessage ToMessage(string requestId) => new MovementSuggestionMessage
+    /// <param name="predecessorRequestId">For a successor: the active request it is staged behind; null for an ordinary request.</param>
+    public MovementSuggestionMessage ToMessage(string requestId, string? predecessorRequestId = null) => new MovementSuggestionMessage
     {
+        PredecessorRequestId = predecessorRequestId,
         RequestId = requestId,
         TrainId = TrainId,
         TargetBlockId = TargetBlockId,
@@ -94,6 +97,51 @@ public static class MovementRequestPlanner
 
         return IsEligible(train, train.Phase)
             ? Plan(line, train.TrainId, train.ActiveRouteBlockIds.ToList(), train.ActiveRouteIndex, train.AuthorityLimitRouteIndex, train.PreviousBlockId, train.SuggestedSpeedMetersPerSecond)
+            : null;
+    }
+
+    /// <summary>
+    /// The successor <paramref name="train"/> should have prepared behind <paramref name="current"/>:
+    /// exactly the request it will need once it enters its next route block, re-expressing the same
+    /// fixed end point from there. Null unless the Track Controller actually grants
+    /// <paramref name="current"/> with authority reaching into that next block (a prepared successor
+    /// must never be a way around a withheld or shortened grant).
+    /// </summary>
+    public static MovementRequestPlan? PlanSuccessor(CtcLineState line, DispatchedTrainState train, MovementRequestState current)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        ArgumentNullException.ThrowIfNull(train);
+        ArgumentNullException.ThrowIfNull(current);
+
+        const double tolerance = 1e-6;
+        if (!IsEligible(train, train.Phase) || current.Plan.PathBlockIds.Count == 0
+            || current.Acknowledgement is null or RequestAcknowledgementOutcome.Rejected || !current.IsMovementAuthorized)
+        {
+            return null;
+        }
+
+        var block = line.Blocks.FirstOrDefault(candidate => candidate.BlockId == current.Plan.TargetBlockId);
+        var route = train.ActiveRouteBlockIds.ToList();
+        int index = train.ActiveRouteIndex;
+        if (block is null || current.AuthorizedAuthorityMeters <= block.LengthMeters + tolerance
+            || index < 0 || index + 1 >= route.Count || route[index] != current.Plan.TargetBlockId || route[index + 1] != current.Plan.PathBlockIds[0])
+        {
+            return null;
+        }
+
+        var successor = Plan(line, train.TrainId, route, index + 1, train.AuthorityLimitRouteIndex, current.Plan.TargetBlockId, train.SuggestedSpeedMetersPerSecond);
+
+        // What the Track Controller accepts as a successor: the next block, entered from this one,
+        // along (never beyond) this route and end point, at no higher speed.
+        var remainder = current.Plan.PathBlockIds.Skip(1).ToList();
+        return successor is not null
+            && successor.TargetBlockId == current.Plan.PathBlockIds[0]
+            && successor.EntryBlockId == current.Plan.TargetBlockId
+            && successor.PathBlockIds.Count <= remainder.Count
+            && successor.PathBlockIds.SequenceEqual(remainder.Take(successor.PathBlockIds.Count))
+            && successor.AuthorityMeters <= current.Plan.AuthorityMeters - block.LengthMeters + tolerance
+            && successor.SpeedMetersPerSecond <= current.Plan.SpeedMetersPerSecond + tolerance
+            ? successor
             : null;
     }
 
