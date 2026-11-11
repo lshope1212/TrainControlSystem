@@ -50,6 +50,11 @@ public sealed class MainWindowViewModel : ViewModelBase
     private DateTime _lastRefreshUtc = DateTime.MinValue;
     private bool _refreshDirty;
 
+    // Trains currently dispatched (on the track). Only these are stepped and reported to the
+    // Train Controller with IsActive = true; a removed train is reported once with IsActive =
+    // false so the controller stops controlling it.
+    private readonly HashSet<string> _activeTrains = new(StringComparer.OrdinalIgnoreCase);
+
     public MainWindowViewModel()
         : this(new TrainFleetService())
     {
@@ -70,7 +75,10 @@ public sealed class MainWindowViewModel : ViewModelBase
         PassengerEmergencyBrakeCommand = new RelayCommand(_ => RequestPassengerEBrake());
         ExchangePassengersCommand = new RelayCommand(_ => ExchangePassengers());
 
-        SeedDemoTrains();
+        // No demo trains and a PAUSED local clock on startup: in the full system trains appear
+        // only when they are dispatched (TrackModelTrainUpdateMessage), and time comes from the
+        // shared system clock. The TestUI can dispatch demo trains for standalone testing.
+        _clock.Pause();
 
         _lastFrameUtc = DateTime.UtcNow;
         _timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(15) };
@@ -165,11 +173,14 @@ public sealed class MainWindowViewModel : ViewModelBase
     /// <summary>One 0.1 s physics step for every train, then one status per train to the controller.</summary>
     private void StepOnce()
     {
+        // Only dispatched (active) trains move.
+        var dt = TimeSpan.FromSeconds(_clock.DtSeconds);
         foreach (var kv in _inputsByTrain)
         {
+            if (!_activeTrains.Contains(kv.Key)) continue;
             _fleet.ApplyInputs(kv.Key, kv.Value);
+            _fleet.GetTrain(kv.Key)?.Step(dt);
         }
-        _fleet.StepAll(TimeSpan.FromSeconds(_clock.DtSeconds));
 
         // One-shot signals consumed after a step: passenger request latches to
         // pending in the service; controller approve/deny are applied once.
@@ -183,6 +194,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _stepCount++;
         foreach (var plant in _fleet.Trains)
         {
+            if (!_activeTrains.Contains(plant.Train.Id)) continue;
             var state = plant.CurrentState;
             // The pending/active passenger request from the train STATE (the input flag is a
             // one-shot cleared every step); it stays on until the controller's e-brake arrives.
@@ -228,6 +240,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         // Track-side messages stay throttled; the controller status goes out every step.
         foreach (var plant in _fleet.Trains)
         {
+            if (!_activeTrains.Contains(plant.Train.Id)) continue;
             _publisher.PublishTrackSide(plant.CurrentState);
         }
     }
@@ -352,7 +365,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         var inputs = new TrainInputs();
         _inputsByTrain[trainId] = inputs;
         Roster.Add(new TrainRosterItemViewModel(trainId));
-        Log("INFO", "Dispatch", $"{trainId} dispatched onto the railway (first message received).");
+        Log("INFO", "Dispatch", $"{trainId} known (first message received); it runs once dispatched.");
         return inputs;
     }
 
@@ -385,6 +398,40 @@ public sealed class MainWindowViewModel : ViewModelBase
             Log("INFO", "Controller", $"{trainId} emergency brake released by controller.");
 
         RefreshAll();
+    }
+
+    /// <summary>
+    /// TrackModelTrainUpdateMessage: a non-empty CurrentBlockId means the train is on the track
+    /// (dispatched: created if needed and marked active); an empty one removes it from the track
+    /// (marked inactive, reported once with IsActive = false, then no longer stepped).
+    /// </summary>
+    public void ApplyTrainPlacement(string trainId, string currentBlockId, double speedMetersPerSecond)
+    {
+        if (string.IsNullOrWhiteSpace(trainId)) return;
+        trainId = trainId.Trim();
+        if (string.IsNullOrWhiteSpace(currentBlockId))
+        {
+            if (_activeTrains.Remove(trainId) && _fleet.GetTrain(trainId) is { } removed)
+            {
+                _publisher.PublishToController(removed.CurrentState, _stepCount, isActive: false, passengerRequested: false);
+                Log("INFO", "Dispatch", $"{trainId} removed from the track (inactive).");
+                RefreshAll();
+            }
+
+            return;
+        }
+
+        EnsureTrain(trainId);
+        if (_activeTrains.Add(trainId))
+        {
+            if (_fleet.GetTrain(trainId) is { } plant && speedMetersPerSecond > 0.0)
+            {
+                plant.Train.VelocityMetersPerSecond = speedMetersPerSecond;
+            }
+
+            Log("INFO", "Dispatch", $"{trainId} dispatched onto block {currentBlockId.Trim()} (active).");
+            RefreshAll();
+        }
     }
 
     public void ApplyCommandedSpeed(string trainId, double metersPerSecond)

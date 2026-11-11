@@ -45,6 +45,25 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Dispatch (stands in for the Track Model placing / removing trains) -->
+                    <GroupBox Header="Dispatch -> Train Model">
+                        <StackPanel>
+                            <TextBlock Text="Train placement (TrackModelTrainUpdateMessage)" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Start block" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBox Width="60" Margin="0,0,6,0" VerticalContentAlignment="Center"
+                                         Text="{Binding Dispatch.StartBlockId, UpdateSourceTrigger=PropertyChanged}"/>
+                                <Button Content="Dispatch target" Command="{Binding Dispatch.SendCommand}" Margin="0,0,6,0"/>
+                                <Button Content="Remove target" Command="{Binding Dispatch.RemoveCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Load demo trains" Command="{Binding Dispatch.LoadDemoCommand}" Margin="0,0,6,0"/>
+                                <ComboBox Width="60" ItemsSource="{Binding Dispatch.DemoCounts}" SelectedItem="{Binding Dispatch.DemoCount}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Dispatch.Result}" Style="{StaticResource ResultTextStyle}"/>
+                        </StackPanel>
+                    </GroupBox>
+
                     <!-- Train Controller -> Train Model -->
                     <GroupBox Header="Train Controller -> Train Model">
                         <StackPanel>

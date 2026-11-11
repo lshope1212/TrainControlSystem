@@ -141,6 +141,7 @@ public class SystemClockAndTrainModelLinkTests
         };
 
         await receiver.HandleAsync(MessageSerializer.Deserialize(MessageSerializer.Serialize(State(41))), CancellationToken.None);
+        await receiver.FlushAsync(); // states from the pipe are computed on the train's worker
         await receiver.HandleStatusAsync(State(42), CancellationToken.None);
 
         Assert.HasCount(2, sink.Sent);

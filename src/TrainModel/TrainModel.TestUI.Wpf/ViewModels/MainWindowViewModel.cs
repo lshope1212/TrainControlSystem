@@ -30,6 +30,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             () => string.Equals(LiveOutputs.TcPassengerEBrake, "Pending", StringComparison.OrdinalIgnoreCase));
         Track = new TrackDataInputViewModel(sender, trainId);
         SystemTime = new SystemTimeInputViewModel(sender, trainId);
+        Dispatch = new TrainDispatchInputViewModel(sender, trainId);
     }
 
     public string Title => "Train Model TestUI";
@@ -37,7 +38,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     /// <summary>Train ids the harness knows about (matches the Train Model's seeded
     /// fleet). The selector is editable, so any id can also be typed in.</summary>
     public ObservableCollection<string> KnownTrainIds { get; } =
-        new() { "001", "002", "003" }; // canonical three-digit train IDs
+        new() { "001", "002", "003", "004", "005", "006", "007", "008", "009", "010" }; // canonical IDs (Train Controller fleet)
 
     private string _selectedTrainId = "001";
     /// <summary>The single target train every input panel sends to.</summary>
@@ -50,6 +51,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public TrainCommandInputViewModel Command { get; }
     public TrackDataInputViewModel Track { get; }
     public SystemTimeInputViewModel SystemTime { get; }
+    public TrainDispatchInputViewModel Dispatch { get; }
 
     public CapturedOutputsViewModel Outputs { get; }
     public LiveOutputsViewModel LiveOutputs { get; }

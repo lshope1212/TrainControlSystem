@@ -56,7 +56,8 @@ public sealed class TrainModelOutputPublisher
     /// </summary>
     public void PublishToController(TrainState s, long tickId, bool isActive, bool passengerRequested)
     {
-        _sender.Enqueue(NamedPipeNames.TrainController, new TrainModelStatusMessage
+        // Latest state per train only: a slow controller gets fresh states, never a backlog.
+        _sender.EnqueueLatest(NamedPipeNames.TrainController, s.TrainId, new TrainModelStatusMessage
         {
             TrainId = s.TrainId,
             TickId = tickId,

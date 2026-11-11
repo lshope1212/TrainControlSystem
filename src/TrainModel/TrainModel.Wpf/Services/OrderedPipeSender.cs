@@ -55,4 +55,80 @@ public sealed class OrderedPipeSender
             }
         }
     }
+
+    // ---- Latest-per-key queue (used for per-train controller states) ----
+    private readonly Dictionary<string, Dictionary<string, object>> _latest = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<string>> _latestOrder = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SemaphoreSlim> _latestSignal = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Keeps only the NEWEST message per key (e.g. per train) for this pipe: if the receiver is
+    /// slower than the step rate, older states of the same train are replaced instead of queued,
+    /// so the receiver always gets fresh data and nothing piles up (no lag after a pause).
+    /// </summary>
+    public void EnqueueLatest(string pipeName, string key, object message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        SemaphoreSlim signal;
+        bool start = false;
+        lock (_gate)
+        {
+            if (!_latest.TryGetValue(pipeName, out var map))
+            {
+                map = new Dictionary<string, object>(StringComparer.Ordinal);
+                _latest[pipeName] = map;
+                _latestOrder[pipeName] = new List<string>();
+                _latestSignal[pipeName] = new SemaphoreSlim(0);
+                start = true;
+            }
+
+            if (!map.ContainsKey(key))
+            {
+                _latestOrder[pipeName].Add(key);
+            }
+
+            map[key] = message;
+            signal = _latestSignal[pipeName];
+        }
+
+        if (start)
+        {
+            _ = Task.Run(() => DrainLatestAsync(pipeName));
+        }
+
+        signal.Release();
+    }
+
+    private async Task DrainLatestAsync(string pipeName)
+    {
+        var signal = _latestSignal[pipeName];
+        while (true)
+        {
+            await signal.WaitAsync().ConfigureAwait(false);
+            while (true)
+            {
+                object? message = null;
+                lock (_gate)
+                {
+                    var order = _latestOrder[pipeName];
+                    if (order.Count > 0)
+                    {
+                        var key = order[0];
+                        order.RemoveAt(0);
+                        _latest[pipeName].Remove(key, out message);
+                    }
+                }
+
+                if (message is null) break;
+                try
+                {
+                    await NamedPipeTransport.SendAsync(pipeName, message, CancellationToken.None, ConnectTimeoutMilliseconds).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Receiver absent / transient: drop; a newer state follows on the next step.
+                }
+            }
+        }
+    }
 }

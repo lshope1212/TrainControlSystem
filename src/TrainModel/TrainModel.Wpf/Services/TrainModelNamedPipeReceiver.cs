@@ -46,6 +46,9 @@ public sealed class TrainModelNamedPipeReceiver
 
             // Shared simulation clock (Launcher / CTC, or the TestUI test clock).
             nameof(SystemTimeMessage) => Bind<SystemTimeMessage>(envelope, m => _vm.ApplySystemTime(m)),
+            // Train placed on / removed from the track (dispatch / retirement).
+            nameof(TrackModelTrainUpdateMessage) => Bind<TrackModelTrainUpdateMessage>(envelope, m =>
+                _vm.ApplyTrainPlacement(m.TrainId, m.CurrentBlockId, m.ActualSpeedMetersPerSecond)),
             nameof(SpeedCommandMessage) => Bind<SpeedCommandMessage>(envelope, m =>
                 _vm.ApplyCommandedSpeed(m.TrainId, m.CommandedSpeedMetersPerSecond)),
 

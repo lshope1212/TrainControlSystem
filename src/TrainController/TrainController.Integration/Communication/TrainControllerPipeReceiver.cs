@@ -27,11 +27,17 @@ public sealed class TrainControllerPipeReceiver
     private readonly Func<string, object, CancellationToken, Task> _send;
     private readonly Dictionary<string, (bool Known, double Authority, bool SignalValid, string Station, double Distance)> _seen =
         new Dictionary<string, (bool, double, bool, string, double)>(StringComparer.Ordinal);
-    /// <summary>A gap of more than this many steps is clamped (e.g. after a long pause of the sender).</summary>
-    public const int MaxStepsPerState = 10;
+    /// <summary>
+    /// A gap of more than this many steps is clamped. Gaps are normal when the controller skips
+    /// stale states under load (latest-state mailbox), so the limit is generous: the Train Model
+    /// itself restarts its count after a jump of more than 10 s.
+    /// </summary>
+    public const int MaxStepsPerState = 100;
 
     private readonly Dictionary<string, long> _lastTick = new Dictionary<string, long>(StringComparer.Ordinal);
     private readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, TrainModelStatusMessage> _mailbox = new Dictionary<string, TrainModelStatusMessage>(StringComparer.Ordinal);
+    private readonly HashSet<string> _busy = new HashSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, SignalState> _trafficLights = new Dictionary<string, SignalState>(StringComparer.Ordinal);
     private CancellationTokenSource? _cts;
     private Task? _loop;
@@ -73,7 +79,9 @@ public sealed class TrainControllerPipeReceiver
         switch (envelope.MessageType)
         {
             case nameof(TrainModelStatusMessage):
-                await HandleStatusAsync(MessageSerializer.DeserializePayload<TrainModelStatusMessage>(envelope), cancellationToken).ConfigureAwait(false);
+                // Do not compute on the pipe thread: hand the state to that train's worker and
+                // accept the next message at once (see Post).
+                Post(MessageSerializer.DeserializePayload<TrainModelStatusMessage>(envelope), cancellationToken);
                 break;
             case nameof(TrackModelSignalMessage):
                 HandleSignal(MessageSerializer.DeserializePayload<TrackModelSignalMessage>(envelope));
@@ -107,6 +115,72 @@ public sealed class TrainControllerPipeReceiver
             default:
                 _subsystem.Log.Log(TrainControllerLogLevel.Warning, "TrainModelLink", null, $"Ignored unexpected message type '{envelope.MessageType}'.");
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Latest-state mailbox per train. Each train has at most one computation in flight; if
+    /// newer states arrive meanwhile, only the newest is kept (the TickId gap gives the elapsed
+    /// time). So the controller never falls behind and answers stale states (e.g. at 10x, or
+    /// while a hardware train waits for the Pi), and trains do not hold each other up.
+    /// </summary>
+    public void Post(TrainModelStatusMessage status, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        var key = status.TrainId ?? string.Empty;
+        lock (_mailbox)
+        {
+            _mailbox[key] = status;
+            if (!_busy.Add(key))
+            {
+                return; // a worker is running for this train; it will pick up the newest state
+            }
+        }
+
+        _ = Task.Run(() => DrainAsync(key, cancellationToken));
+    }
+
+    private async Task DrainAsync(string key, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            TrainModelStatusMessage? next;
+            lock (_mailbox)
+            {
+                if (!_mailbox.Remove(key, out next))
+                {
+                    _busy.Remove(key);
+                    return;
+                }
+            }
+
+            try
+            {
+                await HandleStatusAsync(next, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                lock (_mailbox) { _busy.Remove(key); }
+                return;
+            }
+            catch (Exception ex)
+            {
+                OnError(ex);
+            }
+        }
+    }
+
+    /// <summary>Waits until every train's pending state has been processed (tests).</summary>
+    public async Task FlushAsync()
+    {
+        while (true)
+        {
+            lock (_mailbox)
+            {
+                if (_busy.Count == 0 && _mailbox.Count == 0) return;
+            }
+
+            await Task.Delay(5).ConfigureAwait(false);
         }
     }
 

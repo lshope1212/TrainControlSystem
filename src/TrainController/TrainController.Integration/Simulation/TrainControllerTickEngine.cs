@@ -32,6 +32,8 @@ public sealed record TickReport(long TickId, double SimulationTimeSeconds, IRead
 public sealed class TrainControllerTickEngine
 {
     private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _trainGates =
+        new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
     private readonly TrainStateRegistry _registry;
     private readonly TestModeController _testMode;
     private readonly TrainControllerExecutionService _execution;
@@ -144,7 +146,10 @@ public sealed class TrainControllerTickEngine
     public async Task<bool> ExecuteTrainAsync(string trainId, long tickId, double deltaTimeSeconds, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(trainId);
-        await _gate.WaitAsync(cancellationToken);
+        // Per-train lock (not the global gate): a hardware train waiting for the Pi must not
+        // hold up the software trains.
+        var trainGate = _trainGates.GetOrAdd(trainId, _ => new SemaphoreSlim(1, 1));
+        await trainGate.WaitAsync(cancellationToken);
         try
         {
             var (testMode, provider) = _testMode.Capture();
@@ -155,10 +160,14 @@ public sealed class TrainControllerTickEngine
 
             var slot = _registry.Get(trainId);
             var simulationTime = tickId * _options.SimulationTimeStepSeconds;
-            if (tickId > Interlocked.Read(ref _tickCount))
+            long seen;
+            while (tickId > (seen = Interlocked.Read(ref _tickCount)))
             {
-                Interlocked.Exchange(ref _tickCount, tickId);
-                Volatile.Write(ref _simulationTimeSeconds, simulationTime);
+                if (Interlocked.CompareExchange(ref _tickCount, tickId, seen) == seen)
+                {
+                    Volatile.Write(ref _simulationTimeSeconds, simulationTime);
+                    break;
+                }
             }
 
             var model = provider.TakeForTick(trainId);
@@ -186,7 +195,7 @@ public sealed class TrainControllerTickEngine
         }
         finally
         {
-            _gate.Release();
+            trainGate.Release();
         }
     }
 
@@ -198,8 +207,15 @@ public sealed class TrainControllerTickEngine
     public async Task ResetAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
+        var held = new List<SemaphoreSlim>();
         try
         {
+            foreach (var trainGate in _trainGates.Values)
+            {
+                await trainGate.WaitAsync(cancellationToken);
+                held.Add(trainGate);
+            }
+
             Interlocked.Exchange(ref _tickCount, 0);
             Volatile.Write(ref _simulationTimeSeconds, 0.0);
 
@@ -213,6 +229,11 @@ public sealed class TrainControllerTickEngine
         }
         finally
         {
+            foreach (var trainGate in held)
+            {
+                trainGate.Release();
+            }
+
             _gate.Release();
         }
     }
