@@ -1,6 +1,8 @@
 using MovementResult = (TrainControl.Contracts.Messages.MovementSuggestionMessage Request, double AuthorizedSpeedMetersPerSecond, double AuthorizedAuthorityMeters, string Status, string Reason);
+using System.Diagnostics;
 using TrainControl.Contracts.Messages;
 using TrackController.Contracts.Messages;
+using TrackController.Core.Diagnostics;
 using TrainControl.Contracts.Enums;
 
 namespace TrackController.Core.Services;
@@ -8,7 +10,32 @@ namespace TrackController.Core.Services;
 /// <summary>Evaluates track conditions and rejects movement or equipment commands that violate protection rules.</summary>
 public sealed partial class TrackControllerService
 {
+    /// <summary>
+    /// One complete evaluation of the current inputs. Afterwards it is marked reusable by
+    /// <see cref="GetSnapshot"/> only when it left every carried-over state as it found it (see
+    /// TrackControllerService.EvaluationReuse.cs).
+    /// </summary>
     private void Reevaluate()
+    {
+        long started = Stopwatch.GetTimestamp();
+        _reusable = false;
+        int blockCount = _blocks.Count, stagedCount = _staged.Count;
+        var previousResults = _lastResults;
+        CaptureCarriedState();
+        try
+        {
+            ReevaluateNow();
+            _reusable = stagedCount == _staged.Count && SameResults(previousResults, _lastResults) && CarriedStateUnchanged(blockCount);
+            _reuseUntil = _reusable ? NextTimeDependentChange(_snapshot.EvaluatedAtUtc) : default;
+        }
+        finally
+        {
+            EvaluationCount++;
+            PerformanceMetrics.Evaluations.RecordSince(started);
+        }
+    }
+
+    private void ReevaluateNow()
     {
         var now = _clock.GetUtcNow();
         if (!_paused && !_configuration.AutomaticOperation)
@@ -152,13 +179,15 @@ public sealed partial class TrackControllerService
             };
         }).ToArray();
 
-        var validUntil = now.AddSeconds(1.5);
+        // The evaluation's validity: its own lease, capped by every granted authority's feedback and request
+        // expiries (kept apart so a reused evaluation's validity is computed exactly the same way).
+        var grantExpiry = DateTimeOffset.MaxValue;
         foreach (var authorization in authorizations.Where(authorization => authorization.AuthorizedAuthorityMeters > 0))
         {
             var requestExpiry = _requests[authorization.Request.TargetBlockId].Received.AddSeconds(_configuration.RequestTimeoutSeconds);
-            if (requestExpiry < validUntil)
+            if (requestExpiry < grantExpiry)
             {
-                validUntil = requestExpiry;
+                grantExpiry = requestExpiry;
             }
 
             foreach (string id in GetCoveredBlocks(authorization))
@@ -166,16 +195,23 @@ public sealed partial class TrackControllerService
                 var block = GetBlock(id);
                 var measuredExpiry = block.Feedback!.ObservedAtUtc.AddSeconds(_configuration.FeedbackTimeoutSeconds);
                 var receivedExpiry = block.Received.AddSeconds(_configuration.FeedbackTimeoutSeconds);
-                if (measuredExpiry < validUntil)
+                if (measuredExpiry < grantExpiry)
                 {
-                    validUntil = measuredExpiry;
+                    grantExpiry = measuredExpiry;
                 }
 
-                if (receivedExpiry < validUntil)
+                if (receivedExpiry < grantExpiry)
                 {
-                    validUntil = receivedExpiry;
+                    grantExpiry = receivedExpiry;
                 }
             }
+        }
+
+        _grantExpiry = grantExpiry;
+        var validUntil = now + SnapshotLease;
+        if (grantExpiry < validUntil)
+        {
+            validUntil = grantExpiry;
         }
 
         _snapshot = new WaysideSnapshotMessage(_configuration.WaysideId, _configuration.LineName, now, validUntil, _simulationSeconds, _paused, _multiplier, _hardwareMode, _maintenanceMode, _plcName, _plcStatus, Array.AsReadOnly(blockStatuses.Where(block => _owned.Contains(block.BlockId)).ToArray()))

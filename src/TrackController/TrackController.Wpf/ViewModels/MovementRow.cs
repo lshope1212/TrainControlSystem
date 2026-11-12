@@ -22,4 +22,9 @@ public sealed record MovementRow(WaysideBlockStatus Value)
     public string Status => Value.MovementStatus;
 
     public string Reason => Value.MovementReason;
+
+    /// <summary>Whether <paramref name="other"/> displays exactly the same values (the underlying statuses may be different objects).</summary>
+    public bool ShowsSameAs(MovementRow other) => Train == other.Train && Target == other.Target && Path == other.Path
+        && SuggestedSpeed == other.SuggestedSpeed && RequestedAuthority == other.RequestedAuthority && AuthorizedSpeed == other.AuthorizedSpeed
+        && AuthorizedAuthority == other.AuthorizedAuthority && Status == other.Status && Reason == other.Reason;
 }

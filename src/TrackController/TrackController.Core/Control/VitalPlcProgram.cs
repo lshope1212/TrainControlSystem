@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 
 namespace TrackController.Core.Control;
@@ -31,19 +32,58 @@ public sealed class VitalPlcProgram
     private sealed record Port(string Name, int[] Slots);
     private readonly Port[] _inputs;
     private readonly Port[] _outputs;
-    private readonly (int Slot, Func<bool[], bool> Evaluate)[] _assignments;
+
+    /// <summary>
+    /// Every assignment of the program, in source order, as one compiled method: <c>values[slot] = gate expression</c>.
+    /// The program is translated once, at load, from the same scalar AND/OR/NOT gates (no short-circuiting, no
+    /// other operation), so each scan runs the program's gates directly instead of walking thousands of nested
+    /// delegates.
+    /// </summary>
+    private readonly Action<bool[]> _gates;
     private readonly int _slotCount;
 
-    private VitalPlcProgram(Port[] inputs, Port[] outputs, (int, Func<bool[], bool>)[] assignments, int slotCount)
+    private VitalPlcProgram(Port[] inputs, Port[] outputs, Action<bool[]> gates, int slotCount)
     {
         _inputs = inputs;
         _outputs = outputs;
-        _assignments = assignments;
+        _gates = gates;
         _slotCount = slotCount;
     }
 
+    /// <summary>Recently compiled programs by exact source text. A program is immutable, so waysides loading the same source share it.</summary>
+    private static readonly Dictionary<string, VitalPlcProgram> Compiled = new(StringComparer.Ordinal);
+    private const int CompiledCacheSize = 8;
+
     /// <summary>Accepts only scalar Boolean assignments. Every numeric channel bit must be explicitly assigned.</summary>
     public static VitalPlcProgram Compile(string source)
+    {
+        if (source is not null)
+        {
+            lock (Compiled)
+            {
+                if (Compiled.TryGetValue(source, out var cached))
+                {
+                    return cached;
+                }
+            }
+        }
+
+        // Invalid source throws here and is never cached.
+        var program = CompileUncached(source!);
+        lock (Compiled)
+        {
+            if (Compiled.Count >= CompiledCacheSize)
+            {
+                Compiled.Clear();
+            }
+
+            Compiled[source!] = program;
+        }
+
+        return program;
+    }
+
+    private static VitalPlcProgram CompileUncached(string source)
     {
         if (string.IsNullOrWhiteSpace(source) || System.Text.Encoding.UTF8.GetByteCount(source) > MaximumSourceBytes)
         {
@@ -63,7 +103,8 @@ public sealed class VitalPlcProgram
             }
             inputs.Add(new(name, slots.ToArray()));
         }
-        var assignments = new List<(int, Func<bool[], bool>)>();
+        var values = Expression.Parameter(typeof(bool[]), "values");
+        var assignments = new List<Expression>();
         bool header = false;
         int lineNumber = 0;
         foreach (string raw in source.Replace("\r", "").Split('\n'))
@@ -97,8 +138,8 @@ public sealed class VitalPlcProgram
             {
                 throw new ArgumentException($"PLC line {lineNumber}: duplicate or reserved name '{name}'.");
             }
-            var expression = new Parser(match.Groups[2].Value, known, lineNumber).Parse();
-            assignments.Add((known.Count, expression));
+            var expression = new Parser(match.Groups[2].Value, known, lineNumber, values).Parse();
+            assignments.Add(Expression.Assign(Expression.ArrayAccess(values, Expression.Constant(known.Count)), expression));
             known.Add(name, known.Count);
         }
         var outputs = new List<Port>();
@@ -117,7 +158,10 @@ public sealed class VitalPlcProgram
             }
             outputs.Add(new(name, slots.ToArray()));
         }
-        return new(inputs.ToArray(), outputs.ToArray(), assignments.ToArray(), known.Count);
+        // An empty program has no gates; Block needs at least one expression.
+        assignments.Add(Expression.Empty());
+        var gates = Expression.Lambda<Action<bool[]>>(Expression.Block(assignments), values).Compile();
+        return new(inputs.ToArray(), outputs.ToArray(), gates, known.Count);
     }
 
     /// <summary>Wires I/O bits into scalar Boolean slots, evaluates gates, and collects output bits without arithmetic.</summary>
@@ -135,11 +179,18 @@ public sealed class VitalPlcProgram
                 values[port.Slots[bit]] = bits[bit];
             }
         }
-        foreach (var (slot, evaluate) in _assignments)
+        _gates(values);
+        var outputs = new Dictionary<string, bool[]>(_outputs.Length, StringComparer.Ordinal);
+        foreach (var port in _outputs)
         {
-            values[slot] = evaluate(values);
+            var bits = new bool[port.Slots.Length];
+            for (int bit = 0; bit < bits.Length; bit++)
+            {
+                bits[bit] = values[port.Slots[bit]];
+            }
+            outputs.Add(port.Name, bits);
         }
-        return _outputs.ToDictionary(port => port.Name, port => port.Slots.Select(slot => values[slot]).ToArray(), StringComparer.Ordinal);
+        return outputs;
     }
 
     /// <summary>Encodes a nonnegative external SI value, rounding downward at one-millionth resolution.</summary>
@@ -156,7 +207,12 @@ public sealed class VitalPlcProgram
         {
             units--;
         }
-        return Enumerable.Range(0, Width).Select(bit => (units & (1UL << bit)) != 0).ToArray();
+        var bits = new bool[Width];
+        for (int bit = 0; bit < Width; bit++)
+        {
+            bits[bit] = (units & (1UL << bit)) != 0;
+        }
+        return bits;
     }
 
     /// <summary>Decodes PLC output bits into the existing external SI contract.</summary>
@@ -177,12 +233,13 @@ public sealed class VitalPlcProgram
         return units / Scale;
     }
 
-    private sealed class Parser(string source, Dictionary<string, int> known, int line)
+    /// <summary>Translates one Boolean expression into the same gates over <paramref name="values"/>.</summary>
+    private sealed class Parser(string source, Dictionary<string, int> known, int line, ParameterExpression values)
     {
         private int _position, _depth, _tokens;
         private string _token = "";
 
-        public Func<bool[], bool> Parse()
+        public Expression Parse()
         {
             Next();
             var result = Or();
@@ -217,42 +274,38 @@ public sealed class VitalPlcProgram
             _token = source[start.._position];
         }
 
-        private Func<bool[], bool> Or()
+        // Expression.Or/And on bool operands are the non-short-circuit gates | and &, as before.
+        private Expression Or()
         {
             var left = And();
             while (_token == "or")
             {
                 Next();
-                var previous = left;
-                var right = And();
-                left = values => previous(values) | right(values);
+                left = Expression.Or(left, And());
             }
             return left;
         }
 
-        private Func<bool[], bool> And()
+        private Expression And()
         {
             var left = Atom();
             while (_token == "and")
             {
                 Next();
-                var previous = left;
-                var right = Atom();
-                left = values => previous(values) & right(values);
+                left = Expression.And(left, Atom());
             }
             return left;
         }
 
-        private Func<bool[], bool> Atom()
+        private Expression Atom()
         {
             Require(++_depth <= 32, "expression nesting exceeds 32");
             string name = _token;
             Next();
-            Func<bool[], bool> result;
+            Expression result;
             if (name == "not")
             {
-                var inner = Atom();
-                result = values => !inner(values);
+                result = Expression.Not(Atom());
             }
             else if (name == "(")
             {
@@ -262,12 +315,12 @@ public sealed class VitalPlcProgram
             }
             else if (name is "true" or "false")
             {
-                result = _ => name == "true";
+                result = Expression.Constant(name == "true");
             }
             else
             {
                 Require(known.TryGetValue(name, out int slot), $"unknown Boolean '{name}'");
-                result = values => values[slot];
+                result = Expression.ArrayIndex(values, Expression.Constant(slot));
             }
             _depth--;
             return result;

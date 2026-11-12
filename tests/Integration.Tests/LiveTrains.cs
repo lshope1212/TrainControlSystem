@@ -149,8 +149,26 @@ internal sealed class ClockPump : IAsyncDisposable
 
     public TimeSpan Now => TimeSpan.FromTicks(Interlocked.Read(ref _ticks));
 
+    /// <summary>Development diagnostics (printed with TRACKCONTROLLER_PERF=1): clock delivery per subscriber pipe.</summary>
+    private sealed class Delivery
+    {
+        public int Sent, Missed;
+        public TimeSpan LongestSend, LongestGap, Last;
+    }
+
+    private readonly ConcurrentDictionary<string, Delivery> _deliveries = new();
+    private readonly System.Diagnostics.Stopwatch _wall = System.Diagnostics.Stopwatch.StartNew();
+    private TimeSpan _startTime;
+
+    /// <summary>How each subscriber received the clock: delivered/missed sends, slowest send, longest gap, simulated vs wall rate.</summary>
+    public string DeliveryReport() => $"Clock: {(Now - _startTime).TotalSeconds / Math.Max(0.001, _wall.Elapsed.TotalSeconds):0.00} simulated s per wall s "
+        + $"(nominal {SpeedMultiplier:0.#}) over {_wall.Elapsed.TotalSeconds:0} s; "
+        + string.Join("; ", _deliveries.Select(item => $"{item.Key.Split('.')[^1]}: {item.Value.Sent} delivered, {item.Value.Missed} missed, "
+            + $"slowest send {item.Value.LongestSend.TotalMilliseconds:0} ms, longest gap {item.Value.LongestGap.TotalMilliseconds:0} ms"));
+
     private async Task RunAsync(string[] pipes, CancellationToken stop)
     {
+        _startTime = Now;
         try
         {
             while (!stop.IsCancellationRequested)
@@ -158,12 +176,20 @@ internal sealed class ClockPump : IAsyncDisposable
                 var message = new SystemTimeMessage { SystemTime = Now, SpeedMultiplier = SpeedMultiplier, IsPaused = false };
                 foreach (string pipe in pipes)
                 {
+                    var delivery = _deliveries.GetOrAdd(pipe, _ => new Delivery());
+                    var started = _wall.Elapsed;
                     try
                     {
                         await NamedPipeTransport.SendAsync(pipe, message, stop, connectTimeoutMilliseconds: 100);
+                        var done = _wall.Elapsed;
+                        delivery.Sent++;
+                        if (done - started > delivery.LongestSend) delivery.LongestSend = done - started;
+                        if (delivery.Sent > 1 && done - delivery.Last > delivery.LongestGap) delivery.LongestGap = done - delivery.Last;
+                        delivery.Last = done;
                     }
                     catch (Exception ex) when (ex is TimeoutException or IOException)
                     {
+                        delivery.Missed++;
                     }
                 }
 
@@ -185,6 +211,11 @@ internal sealed class ClockPump : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+        }
+
+        if (Environment.GetEnvironmentVariable("TRACKCONTROLLER_PERF") == "1")
+        {
+            Console.WriteLine(DeliveryReport());
         }
 
         _stop.Dispose();
