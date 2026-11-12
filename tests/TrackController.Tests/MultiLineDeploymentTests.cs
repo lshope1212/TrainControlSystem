@@ -12,15 +12,16 @@ namespace TrackController.Tests;
 [TestClass]
 public sealed class MultiLineDeploymentTests
 {
-    private const string Course = "course-all-pc.deployment.json";
+    private const string Course = "course-territories-all-pc.deployment.json";
 
     [TestMethod]
     public async Task Read_CourseDeployment_OwnsEveryBlockOfEveryLineOnce()
     {
         using var files = new DeploymentFiles();
         var plan = files.Read(Course);
-        CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).ToArray());
-        CollectionAssert.AreEqual(new[] { 15, 76, 150 }, plan.Territories.Select(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration).Count).ToArray());
+        CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).Distinct().ToArray());
+        CollectionAssert.AreEqual(new[] { 15, 76, 150 }, plan.Territories.GroupBy(territory => territory.Configuration.LineName).Select(line => line.Sum(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration).Count)).ToArray());
+        Assert.IsTrue(plan.Territories.GroupBy(territory => territory.Configuration.LineName).All(line => line.Count() == (line.Key == "Blue Line" ? 2 : line.Key == "Red Line" ? 6 : 8)));
         StringAssert.StartsWith(plan.LayoutDescription, "3 lines");
 
         await using var router = plan.CreateRuntime();
@@ -31,18 +32,79 @@ public sealed class MultiLineDeploymentTests
     }
 
     [TestMethod]
+    public void LinePresets_MatchCourseOwnershipAndKeepRedAndGreenTerritoriesConnected()
+    {
+        using var files = new DeploymentFiles();
+        var combined = files.Read(Course);
+        foreach (string line in new[] { "blue", "red", "green" })
+        {
+            var single = files.Read($"{line}-line-all-pc.deployment.json");
+            foreach (var territory in single.Territories)
+            {
+                var match = combined.Territories.Single(item => item.Id == territory.Id);
+                var owned = WaysideConfiguration.GetOwnedIds(territory.Configuration);
+                CollectionAssert.AreEquivalent(WaysideConfiguration.GetOwnedIds(match.Configuration).ToArray(), owned.ToArray());
+                Assert.IsNotEmpty(WaysideConfiguration.GetNeighborIds(territory.Configuration));
+                if (line is "red" or "green")
+                {
+                    var edges = territory.Configuration.Blocks.Where(block => owned.Contains(block.BlockId))
+                        .SelectMany(block => block.NextBlockIds.Where(owned.Contains)
+                            .Select(next => (From: block.BlockId, To: next))).ToArray();
+                    var remaining = owned.ToHashSet();
+                    var pending = new Queue<string>();
+                    pending.Enqueue(owned.First());
+                    remaining.Remove(pending.Peek());
+                    // This checks physical connectivity, regardless of permitted travel direction.
+                    while (pending.TryDequeue(out string? current))
+                    {
+                        foreach (var (from, to) in edges)
+                        {
+                            if (from == current && remaining.Remove(to)) pending.Enqueue(to);
+                            if (to == current && remaining.Remove(from)) pending.Enqueue(from);
+                        }
+                    }
+                    Assert.IsEmpty(remaining, $"{territory.Name} contains disconnected track.");
+                }
+                // Loading enforces complete switch/crossing zones. Verify that the full
+                // physical map is also retained so boundary routes remain traversable.
+                CollectionAssert.AreEquivalent(match.Configuration.Blocks.Select(block => block.BlockId).ToArray(),
+                    territory.Configuration.Blocks.Select(block => block.BlockId).ToArray());
+            }
+        }
+        CollectionAssert.AreEqual(new[] { 7, 8, 17, 13, 11, 14, 9, 12, 20, 28, 18, 22, 28, 13, 13, 8 },
+            combined.Territories.Select(item => WaysideConfiguration.GetOwnedIds(item.Configuration).Count).ToArray());
+    }
+
+    [TestMethod]
+    public void DirectPiAssignments_AllowDifferentDevicesButRejectSharedRuntimeEndpoint()
+    {
+        using var files = new DeploymentFiles();
+        var plan = files.Read(Course);
+        var choices = plan.Territories.Select((item, index) => new TerritoryAssignment
+        {
+            TerritoryId = item.Id, Execution = "Pi", Host = $"192.168.50.{index + 2}", Port = 11405
+        }).ToArray();
+        var prepared = plan.WithExecution(choices);
+        Assert.HasCount(16, prepared.Territories);
+        choices[1].Host = choices[0].Host;
+        Assert.ThrowsExactly<ArgumentException>(() => plan.WithExecution(choices));
+        choices[1].Port = 11406;
+        Assert.HasCount(16, plan.WithExecution(choices).Territories);
+    }
+
+    [TestMethod]
     public void Read_InvalidMultiLineDeployments_AreRejectedBeforeAnyControllerStarts()
     {
         var faults = new Dictionary<string, Action<DeploymentFiles>>
         {
             // The same map twice: a line may appear once.
-            ["line twice"] = files => files.Edit(Course, json => json["lines"]![2] = JsonNode.Parse("""{"trackFile":"blue-line-track-map.json","territoriesFile":"blue-line-territories-single.json"}""")),
+            ["line twice"] = files => files.Edit(Course, json => json["lines"]![2] = JsonNode.Parse("""{"trackFile":"blue-line-track-map.json","territoriesFile":"blue-line-project-territories.json"}""")),
             // A second line reusing Blue's block IDs: IDs must be unique across lines.
             ["colliding block IDs"] = files =>
             {
                 File.Copy(files.PathFor("blue-line-track-map.json"), files.PathFor("copy-track-map.json"));
                 files.Edit("copy-track-map.json", json => json["lineName"] = "Copy Line");
-                File.Copy(files.PathFor("blue-line-territories-single.json"), files.PathFor("copy-territories.json"));
+                File.Copy(files.PathFor("blue-line-project-territories.json"), files.PathFor("copy-territories.json"));
                 files.Edit("copy-territories.json", json => json["territories"]![0]!["id"] = "wayside-copy");
                 files.Edit(Course, json =>
                 {
@@ -50,10 +112,10 @@ public sealed class MultiLineDeploymentTests
                     json["territories"]!.AsArray().Add(JsonNode.Parse("""{"territoryId":"wayside-copy","execution":"Local"}"""));
                 });
             },
-            ["territory ID reused by another line"] = files => files.Edit("red-line-territories-single.json", json => json["territories"]![0]!["id"] = "wayside-blue"),
+            ["territory ID reused by another line"] = files => files.Edit("red-line-project-territories.json", json => json["territories"]![0]!["id"] = "wayside-blue"),
             ["missing assignment"] = files => files.Edit(Course, json => json["territories"]!.AsArray().RemoveAt(2)),
-            ["unowned block"] = files => files.Edit("green-line-territories-single.json", json => json["territories"]![0]!["blockIds"]!.AsArray().RemoveAt(0)),
-            ["block owned on the wrong line"] = files => files.Edit("red-line-territories-single.json", json => json["territories"]![0]!["blockIds"]!.AsArray().Add("GREEN-1")),
+            ["unowned block"] = files => files.Edit("green-line-project-territories.json", json => json["territories"]![0]!["blockIds"]!.AsArray().RemoveAt(0)),
+            ["block owned on the wrong line"] = files => files.Edit("red-line-project-territories.json", json => json["territories"]![0]!["blockIds"]!.AsArray().Add("GREEN-1")),
             ["lines mixed with trackFile"] = files => files.Edit(Course, json => json["trackFile"] = "blue-line-track-map.json"),
         };
 

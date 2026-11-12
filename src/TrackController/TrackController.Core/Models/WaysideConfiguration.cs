@@ -99,6 +99,9 @@ public static class WaysideConfiguration
         return new WaysideConfigurationMessage
         {
             WaysideId = input.WaysideId,
+            CoordinatedRoutes = input.CoordinatedRoutes,
+            AutomaticOperation = input.AutomaticOperation,
+            RequireCtcReservationFeedback = input.RequireCtcReservationFeedback,
             LineName = input.LineName,
             FeedbackTimeoutSeconds = input.FeedbackTimeoutSeconds,
             RequestTimeoutSeconds = input.RequestTimeoutSeconds,

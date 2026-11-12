@@ -9,7 +9,7 @@ namespace TrainControl.Integration.Tests;
 
 /// <summary>
 /// The production Track Model (all three course lines), the Track Controller with the combined
-/// deployment (one territory per line) and CTC, live over real pipes. Every check below runs on
+/// deployment (two Blue, six Red and eight Green waysides) and CTC, live over real pipes. Every check below runs on
 /// Blue, Red and Green; nothing is sent on a module's behalf except what the Train Model or a
 /// dispatcher would send.
 /// </summary>
@@ -384,38 +384,38 @@ public sealed class ThreeLineIntegrationTests
     }
 
     [TestMethod]
-    public async Task GreenSplitIntoTwoTerritories_AllowsMovementInsideEach_AndRejectsCrossingTheBoundary()
+    public async Task GreenSplitIntoTwoTerritories_AllowsMovementInsideEach_AndAcrossTheBoundary()
     {
-        // A test-only split of Green: G-K (blocks 30-65) gets its own territory; production uses one
-        // territory per line. The cut keeps every switch and crossing zone whole, as the loader requires,
+        // A test-only split of Green: G-K (blocks 30-65) gets its own territory; production uses two Blue, six Red and eight Green waysides. The cut keeps every switch and crossing zone whole, as the loader requires,
         // and lies just past the yard entry GREEN-63, where CTC can release a train.
         await using var probe = new LiveSystem();
         string folder = probe.CopySamples(path =>
         {
-            LiveSystem.EditJson(Path.Combine(path, "green-line-territories-single.json"), json =>
+            LiveSystem.EditJson(Path.Combine(path, "green-line-project-territories.json"), json =>
             {
-                var all = json["territories"]![0]!["blockIds"]!.AsArray().Select(node => node!.GetValue<string>()).ToList();
+                var all = json["territories"]!.AsArray().SelectMany(territory => territory!["blockIds"]!.AsArray()).Select(node => node!.GetValue<string>()).ToList();
                 bool InGtoK(string id) => int.Parse(id["GREEN-".Length..]) is >= 30 and <= 65;
                 System.Text.Json.Nodes.JsonArray Ids(IEnumerable<string> ids) => new([.. ids.Select(id => (System.Text.Json.Nodes.JsonNode)id)]);
                 json["territories"] = new System.Text.Json.Nodes.JsonArray(
                     new System.Text.Json.Nodes.JsonObject { ["id"] = "wayside-green-main", ["name"] = "Green main", ["blockIds"] = Ids(all.Where(id => !InGtoK(id))) },
                     new System.Text.Json.Nodes.JsonObject { ["id"] = "wayside-green-gm", ["name"] = "Green G-K", ["blockIds"] = Ids(all.Where(InGtoK)) });
             });
-            LiveSystem.EditJson(Path.Combine(path, "course-all-pc.deployment.json"), json =>
+            LiveSystem.EditJson(Path.Combine(path, "course-territories-all-pc.deployment.json"), json =>
             {
                 var territories = json["territories"]!.AsArray();
-                territories.RemoveAt(2);
+                foreach (var territory in territories.Where(item => item!["territoryId"]!.GetValue<string>().StartsWith("wayside-green-", StringComparison.Ordinal)).ToList())
+                    territories.Remove(territory);
                 territories.Add(new System.Text.Json.Nodes.JsonObject { ["territoryId"] = "wayside-green-main", ["execution"] = "Local" });
                 territories.Add(new System.Text.Json.Nodes.JsonObject { ["territoryId"] = "wayside-green-gm", ["execution"] = "Local" });
             });
         });
 
         // Valid on the track (one-way K), but it leaves G-K at 65 -> 66.
-        await using var crossing = await PlacedTrainAsync("Green", ["GREEN-63", "GREEN-64", "GREEN-65", "GREEN-66", "GREEN-67"], Path.Combine(folder, "course-all-pc.deployment.json"));
-        await LiveSystem.UntilAsync(async () => (await Request(crossing))?.Acknowledgement == RequestAcknowledgementOutcome.Rejected, "a request across the boundary is rejected.");
-        StringAssert.Contains((await Request(crossing))!.AcknowledgementDetail, "territory boundary");
-        Assert.IsFalse((await Request(crossing))!.IsMovementAuthorized);
-        Assert.IsNull(crossing.WaysideBlock("GREEN-63").Request);
+        await using var crossing = await PlacedTrainAsync("Green", ["GREEN-63", "GREEN-64", "GREEN-65", "GREEN-66", "GREEN-67"], Path.Combine(folder, "course-territories-all-pc.deployment.json"));
+        await LiveSystem.UntilAsync(async () => (await Request(crossing))?.Acknowledgement == RequestAcknowledgementOutcome.AcceptedForEvaluation, "a request across the boundary is accepted.");
+        await crossing.ResumeTrackControllerAsync();
+        await LiveSystem.UntilAsync(async () => (await Request(crossing))?.IsMovementAuthorized == true, "both waysides approve the route.");
+        Assert.IsNotNull(crossing.WaysideBlock("GREEN-63").Request);
 
         // Inside one territory the same split accepts movement.
         await crossing.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "inside", CurrentBlockId = "GREEN-60" });
@@ -425,7 +425,7 @@ public sealed class ThreeLineIntegrationTests
             RequestId = "inside", TrainId = "inside", TargetBlockId = "GREEN-60", EntryBlockId = "GREEN-59", PathBlockIds = ["GREEN-61", "GREEN-62"],
             SuggestedSpeedMetersPerSecond = 8, SuggestedAuthorityMeters = 150,
         });
-        await LiveSystem.UntilAsync(() => Task.FromResult(crossing.WaysideReceipts.Any(receipt => receipt.IsAccepted && receipt.MessageType == nameof(MovementSuggestionMessage))), "the G-K territory accepts a request inside it.");
+        await LiveSystem.UntilAsync(() => Task.FromResult(crossing.WaysideBlock("GREEN-60").Request?.RequestId == "inside"), "the G-K territory accepts a request inside it.");
         Assert.AreEqual("inside", crossing.WaysideBlock("GREEN-60").Request!.RequestId);
         StringAssert.Contains(crossing.Wayside!.GetOwnerDescription("GREEN-60"), "Green G-K");
     }

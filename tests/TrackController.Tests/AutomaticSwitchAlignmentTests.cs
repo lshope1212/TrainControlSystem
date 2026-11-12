@@ -40,8 +40,10 @@ public sealed class AutomaticSwitchAlignmentTests
 
         public Line(bool hardware, string territory = "wayside-blue", params string[] occupied)
         {
-            var configuration = WaysideDeployment.Read(Path.Combine(AppContext.BaseDirectory, "PiSamples", "course-all-pc.deployment.json"))
-                .Territories.Single(candidate => candidate.Id == territory).Configuration;
+            var configuration = WaysideDeployment.Read(Path.Combine(AppContext.BaseDirectory, "PiSamples", "course-territories-all-pc.deployment.json"))
+                .Territories.First(candidate => candidate.Id.StartsWith(territory + "-", StringComparison.Ordinal)).Configuration;
+            // The unit fixture simulates the whole line with one controller.
+            configuration.OwnedBlockIds = null;
             Service = new(configuration, Clock);
             if (hardware)
             {

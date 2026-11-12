@@ -32,6 +32,12 @@ internal sealed class UiTestSession : IAsyncDisposable
         _ => throw new ArgumentException("Expected an asynchronous UI command.", nameof(command))
     };
 
+    public static async Task SetMaintenanceAsync(UiTestSession session, bool enabled)
+    {
+        session.Controller.IsMaintenanceMode = enabled;
+        await UntilAsync(() => session.Controller.Snapshot.IsMaintenanceMode == enabled && session.Inputs.Snapshot.IsMaintenanceMode == enabled);
+    }
+
     /// <summary>Waits for asynchronously received output.</summary>
     public static async Task UntilAsync(Func<bool> condition)
     {

@@ -20,6 +20,7 @@ public sealed class ExecutionSetupUiTests
         {
             var controller = session.Controller;
             await controller.LoadDeploymentAsync(files.PathFor("all-pc.deployment.json"));
+            await SetMaintenanceAsync(session, true);
             controller.SelectedPlcTerritory = controller.ExecutionRows.Single(row => row.Id == "wayside-b");
             await controller.LoadSelectedPlcAsync(files.PathFor("junction.plc"));
             await UntilAsync(() => controller.Snapshot.PlcName.Contains("junction.plc"));
@@ -38,7 +39,7 @@ public sealed class ExecutionSetupUiTests
 
     /// <summary>Checks paused placement changes, saving, and resetting an applied PC/Pi deployment.</summary>
     [TestMethod]
-    public async Task ApplyExecution_RunningController_RequiresPauseAndRetainsPlacement()
+    public async Task ApplyExecution_RunningController_RequiresMaintenanceAndRetainsPlacement()
     {
         using var files = new DeploymentFiles();
         await using var server = new PiRuntimeServer(0);
@@ -48,6 +49,7 @@ public sealed class ExecutionSetupUiTests
             var controller = session.Controller;
             var inputs = session.Inputs;
             await controller.LoadDeploymentAsync(files.PathFor("all-pc.deployment.json"));
+            await SetMaintenanceAsync(session, true);
             await UntilAsync(() => inputs.Snapshot.WaysideId == "Shared track demonstration" && inputs.Blocks.Count == 12);
             Assert.HasCount(2, controller.ExecutionRows);
             var junction = controller.ExecutionRows.Single(row => row.Id == "wayside-b");
@@ -64,20 +66,21 @@ public sealed class ExecutionSetupUiTests
             StringAssert.Contains(controller.SelectedExecutionTarget, "Pi 5");
             await ExecuteAsync(controller.SaveExecutionCommand);
             Assert.AreEqual("Pi", files.Read().Territories[1].Execution);
+            await SetMaintenanceAsync(session, false);
             await ExecuteAsync(inputs.LoadScenarioCommand);
             await ExecuteAsync(inputs.ApplyFeedbackCommand);
             await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
-            await ExecuteAsync(controller.PauseResumeCommand);
             await UntilAsync(() => !inputs.Snapshot.IsPaused);
             await ExecuteAsync(inputs.SendMovementCommand);
             await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));
             controller.ExecutionRows.Single(row => row.Id == "wayside-b").Target = "PC";
             await ExecuteAsync(controller.ApplyExecutionCommand);
-            StringAssert.Contains(controller.Status, "Pause the controller");
+            StringAssert.Contains(controller.Status, "Enter maintenance mode");
             Assert.AreEqual("Pi", controller.ExecutionRows.Single(row => row.Id == "wayside-b").AppliedTarget);
             await ExecuteAsync(inputs.ClearInputsCommand);
+            await SetMaintenanceAsync(session, true);
             await ExecuteAsync(controller.ResetControllerCommand);
-            await UntilAsync(() => inputs.Blocks.Count == 12 && inputs.Snapshot.IsPaused && inputs.Snapshot.Authorizations.Count == 0 && inputs.Blocks.All(block => !block.IsFresh));
+            await UntilAsync(() => inputs.Blocks.Count == 12 && inputs.Snapshot.IsMaintenanceMode && inputs.Snapshot.Authorizations.Count == 0 && inputs.Blocks.All(block => !block.IsFresh));
             Assert.AreEqual("Pi", controller.ExecutionRows.Single(row => row.Id == "wayside-b").AppliedTarget);
             Assert.IsFalse(controller.HasExecutionChanges);
             CollectionAssert.Contains(inputs.Blocks.Single(block => block.BlockId == "3").NextBlockIds.ToArray(), "4");

@@ -31,7 +31,7 @@ public sealed class TerritoryDeploymentTests
         Assert.HasCount(12, snapshot.Blocks);
         Assert.HasCount(12, snapshot.Blocks.Select(blockStatus => blockStatus.BlockId).Distinct().ToArray());
         CollectionAssert.Contains(snapshot.Blocks.Single(blockStatus => blockStatus.BlockId == "3").NextBlockIds.ToArray(), "4");
-        Assert.IsFalse((await PiRuntimeTests.Send(router, PiRuntimeTests.Movement("3", "4"))).IsAccepted);
+        Assert.IsTrue((await PiRuntimeTests.Send(router, PiRuntimeTests.Movement("3", "4"))).IsAccepted);
     }
 
     /// <summary>Verifies that invalid ownership and split protection zone are rejected without editing topology.</summary>

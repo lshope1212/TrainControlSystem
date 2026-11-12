@@ -1,8 +1,8 @@
 {
   "territories": [
     {
-      "id": "wayside-green",
-      "name": "Green Line",
+      "id": "wayside-green-a",
+      "name": "GL-A · Pioneer & Edgebrook",
       "blockIds": [
         "GREEN-1",
         "GREEN-2",
@@ -23,7 +23,13 @@
         "GREEN-17",
         "GREEN-18",
         "GREEN-19",
-        "GREEN-20",
+        "GREEN-20"
+      ]
+    },
+    {
+      "id": "wayside-green-b",
+      "name": "GL-B · Whited & South Bank junction",
+      "blockIds": [
         "GREEN-21",
         "GREEN-22",
         "GREEN-23",
@@ -39,6 +45,25 @@
         "GREEN-33",
         "GREEN-34",
         "GREEN-35",
+        "GREEN-138",
+        "GREEN-139",
+        "GREEN-140",
+        "GREEN-141",
+        "GREEN-142",
+        "GREEN-143",
+        "GREEN-144",
+        "GREEN-145",
+        "GREEN-146",
+        "GREEN-147",
+        "GREEN-148",
+        "GREEN-149",
+        "GREEN-150"
+      ]
+    },
+    {
+      "id": "wayside-green-c",
+      "name": "GL-C · Central & Inglewood outbound",
+      "blockIds": [
         "GREEN-36",
         "GREEN-37",
         "GREEN-38",
@@ -56,7 +81,13 @@
         "GREEN-50",
         "GREEN-51",
         "GREEN-52",
-        "GREEN-53",
+        "GREEN-53"
+      ]
+    },
+    {
+      "id": "wayside-green-d",
+      "name": "GL-D · Yard to Dormont",
+      "blockIds": [
         "GREEN-54",
         "GREEN-55",
         "GREEN-56",
@@ -78,41 +109,13 @@
         "GREEN-72",
         "GREEN-73",
         "GREEN-74",
-        "GREEN-75",
-        "GREEN-76",
-        "GREEN-77",
-        "GREEN-78",
-        "GREEN-79",
-        "GREEN-80",
-        "GREEN-81",
-        "GREEN-82",
-        "GREEN-83",
-        "GREEN-84",
-        "GREEN-85",
-        "GREEN-86",
-        "GREEN-87",
-        "GREEN-88",
-        "GREEN-89",
-        "GREEN-90",
-        "GREEN-91",
-        "GREEN-92",
-        "GREEN-93",
-        "GREEN-94",
-        "GREEN-95",
-        "GREEN-96",
-        "GREEN-97",
-        "GREEN-98",
-        "GREEN-99",
-        "GREEN-100",
-        "GREEN-101",
-        "GREEN-102",
-        "GREEN-103",
-        "GREEN-104",
-        "GREEN-105",
-        "GREEN-106",
-        "GREEN-107",
-        "GREEN-108",
-        "GREEN-109",
+        "GREEN-75"
+      ]
+    },
+    {
+      "id": "wayside-green-e",
+      "name": "GL-E · Glenbury to Central return",
+      "blockIds": [
         "GREEN-110",
         "GREEN-111",
         "GREEN-112",
@@ -140,20 +143,59 @@
         "GREEN-134",
         "GREEN-135",
         "GREEN-136",
-        "GREEN-137",
-        "GREEN-138",
-        "GREEN-139",
-        "GREEN-140",
-        "GREEN-141",
-        "GREEN-142",
-        "GREEN-143",
-        "GREEN-144",
-        "GREEN-145",
-        "GREEN-146",
-        "GREEN-147",
-        "GREEN-148",
-        "GREEN-149",
-        "GREEN-150"
+        "GREEN-137"
+      ]
+    },
+    {
+      "id": "wayside-green-f",
+      "name": "GL-F · Mt Lebanon junctions",
+      "blockIds": [
+        "GREEN-76",
+        "GREEN-77",
+        "GREEN-78",
+        "GREEN-79",
+        "GREEN-80",
+        "GREEN-81",
+        "GREEN-82",
+        "GREEN-83",
+        "GREEN-84",
+        "GREEN-85",
+        "GREEN-86",
+        "GREEN-100",
+        "GREEN-101"
+      ]
+    },
+    {
+      "id": "wayside-green-g",
+      "name": "GL-G · Poplar & Castle Shannon",
+      "blockIds": [
+        "GREEN-87",
+        "GREEN-88",
+        "GREEN-89",
+        "GREEN-90",
+        "GREEN-91",
+        "GREEN-92",
+        "GREEN-93",
+        "GREEN-94",
+        "GREEN-95",
+        "GREEN-96",
+        "GREEN-97",
+        "GREEN-98",
+        "GREEN-99"
+      ]
+    },
+    {
+      "id": "wayside-green-h",
+      "name": "GL-H · Dormont return & crossing",
+      "blockIds": [
+        "GREEN-102",
+        "GREEN-103",
+        "GREEN-104",
+        "GREEN-105",
+        "GREEN-106",
+        "GREEN-107",
+        "GREEN-108",
+        "GREEN-109"
       ]
     }
   ]

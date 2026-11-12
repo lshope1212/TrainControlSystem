@@ -1,0 +1,44 @@
+{
+  "name": "Red Line · 2 waysides",
+  "trackFile": "red-line-track-map.json",
+  "territoriesFile": "red-line-project-territories.json",
+  "plcFile": "wayside.plc",
+  "territories": [
+    {
+      "territoryId": "wayside-red-a",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11407
+    },
+    {
+      "territoryId": "wayside-red-b",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11408
+    },
+    {
+      "territoryId": "wayside-red-c",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11409
+    },
+    {
+      "territoryId": "wayside-red-d",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11410
+    },
+    {
+      "territoryId": "wayside-red-e",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11411
+    },
+    {
+      "territoryId": "wayside-red-f",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11412
+    }
+  ]
+}

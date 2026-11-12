@@ -56,14 +56,14 @@ internal sealed class LiveSystem : IAsyncDisposable
 
     public static string SamplesFolder => Path.Combine(AppContext.BaseDirectory, "WaysideSamples");
 
-    /// <summary>The Track Controller deployment for the production three-line network: one territory per line, on this PC.</summary>
-    public static string CourseDeployment => Path.Combine(SamplesFolder, "course-all-pc.deployment.json");
+    /// <summary>The Track Controller deployment for the production three-line network: two Blue, six Red and eight Green waysides, on this PC.</summary>
+    public static string CourseDeployment => Path.Combine(SamplesFolder, "course-territories-all-pc.deployment.json");
 
-    /// <summary>Starts the Track Controller with a deployment (single-territory Blue Line by default). It starts paused, as in production.</summary>
-    public Task StartTrackControllerAsync(string? deploymentPath = null)
+    /// <summary>Starts the Track Controller with a deployment (two-wayside Blue Line by default). Legacy fixtures start paused; automaticOperation selects the production lifecycle.</summary>
+    public Task StartTrackControllerAsync(string? deploymentPath = null, bool automaticOperation = false)
     {
         var plan = WaysideDeployment.Read(deploymentPath ?? Path.Combine(SamplesFolder, "blue-line-all-pc.deployment.json"));
-        Wayside = new WaysidePipeHost(plan.CreateRuntime(), [TrackControllerPipe, CtcPipe, TrackModelPipe, TrackControllerPipe + ".Monitor"]);
+        Wayside = new WaysidePipeHost(plan.CreateRuntime(automaticOperation: automaticOperation), [TrackControllerPipe, CtcPipe, TrackModelPipe, TrackControllerPipe + ".Monitor"]);
         Wayside.AcknowledgementReceived += WaysideReceipts.Enqueue;
         Wayside.Start();
         return Task.CompletedTask;

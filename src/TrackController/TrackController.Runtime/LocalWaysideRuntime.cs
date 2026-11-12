@@ -32,9 +32,10 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
             {
                 case "GetSnapshot":
                     return Task.FromResult<object>(_controller.GetSnapshot());
+                case "CoordinateMovement":
                 case nameof(MovementSuggestionMessage):
                     var movement = MessageSerializer.DeserializePayload<MovementSuggestionMessage>(message);
-                    switch (_controller.SubmitMovement(movement))
+                    switch (message.MessageType == "CoordinateMovement" ? _controller.SubmitCoordinatedMovement(movement) : _controller.SubmitMovement(movement))
                     {
                         case MovementSubmission.Staged:
                             // Never a grant: authority changes hands only when the train is observed crossing.
@@ -89,7 +90,7 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
                         throw new ArgumentException("PLC target does not match this territory.");
                     }
                     _controller.LoadPlc(MessageSerializer.ReadValue<string>(message, "name"), MessageSerializer.ReadValue<string>(message, "source"));
-                    detail = "PLC loaded. Resume explicitly.";
+                    detail = _controller.GetConfiguration().AutomaticOperation ? "PLC loaded. Maintenance state retained." : "PLC loaded. Resume explicitly.";
                     break;
                 case nameof(BlockStatusMessage):
                     var block = MessageSerializer.DeserializePayload<BlockStatusMessage>(message);
@@ -121,10 +122,11 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
         return Task.FromResult(LatestSnapshot);
     }
 
-    /// <summary>Pauses the controller before releasing its runtime wrapper.</summary>
+    /// <summary>Withdraws all authority before releasing its runtime wrapper.</summary>
     public ValueTask DisposeAsync()
     {
-        _controller.SetSimulation(true, LatestSnapshot.SpeedMultiplier);
+        _controller.StopOperation();
+        LatestSnapshot = _controller.GetSnapshot();
         return ValueTask.CompletedTask;
     }
 }

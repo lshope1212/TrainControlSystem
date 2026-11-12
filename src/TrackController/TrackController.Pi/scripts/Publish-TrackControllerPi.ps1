@@ -1,4 +1,4 @@
-param([string]$OutputDirectory)
+param([string]$OutputDirectory, [switch]$Archive)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -6,12 +6,13 @@ $moduleRoot = Split-Path -Parent $projectRoot
 
 if (-not $OutputDirectory)
 {
-    $OutputDirectory = Join-Path $projectRoot 'artifacts\pi5'
+    $repositoryRoot = Split-Path -Parent (Split-Path -Parent $moduleRoot)
+    $OutputDirectory = Join-Path $repositoryRoot 'publish\track-controller-pi'
 }
 
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 $projectPath = Join-Path $projectRoot 'TrackController.Pi.csproj'
-& dotnet publish $projectPath -c Release -r linux-arm64 --self-contained true -o $OutputDirectory --nologo
+& dotnet publish $projectPath -c Release -r linux-arm64 --self-contained true -p:PublishReadyToRun=true -o $OutputDirectory --nologo
 if ($LASTEXITCODE -ne 0)
 {
     throw 'Pi publish failed.'
@@ -29,12 +30,14 @@ $plcDocumentation = Join-Path $documentationRoot 'TrackController.Core\Control'
 New-Item -ItemType Directory -Path $plcDocumentation -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'TrackController.Core\Control\README.md') -Destination (Join-Path $plcDocumentation 'README.md') -Force
 
-$archivePath = Join-Path (Split-Path -Parent $OutputDirectory) 'track-controller-pi5.tar.gz'
-& tar -czf $archivePath -C $OutputDirectory .
-if ($LASTEXITCODE -ne 0)
+if ($Archive)
 {
-    throw 'Pi archive creation failed.'
+    $archivePath = Join-Path (Split-Path -Parent $OutputDirectory) 'track-controller-pi5.tar.gz'
+    & tar -czf $archivePath -C $OutputDirectory .
+    if ($LASTEXITCODE -ne 0) { throw 'Pi archive creation failed.' }
+    Write-Output "Optional archive: $archivePath"
 }
 
-Write-Output "Pi 5 package: $archivePath"
-Write-Output 'See docs/TrackController.Pi/README.md in the package for Ethernet, SSH, startup, and LED setup.'
+Write-Output "Track Controller Pi folder: $OutputDirectory"
+Write-Output 'Copy this folder''s contents into ~/track-controller on the Pi, separate from ~/train-controller.'
+Write-Output 'See docs/TrackController.Pi/README.md in that folder for connection, startup, and LED setup.'

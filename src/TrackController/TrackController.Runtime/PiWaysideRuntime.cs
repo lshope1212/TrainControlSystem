@@ -23,16 +23,16 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
     private TimeSpan _clockOffset;
     private DateTimeOffset _retryAfter;
     private bool _disposed;
+    private bool _maintenanceRequested;
 
     public WaysideSnapshotMessage LatestSnapshot { get; private set; }
 
-    /// <summary>Configures the loopback SSH-tunnel endpoint and the territory used for a new Pi session.</summary>
-    public PiWaysideRuntime(string host, int port, WaysideConfigurationMessage configuration, string programName, string programSource)
+    /// <summary>Configures the direct Pi or optional SSH-tunnel endpoint and the territory used for a new Pi session.</summary>
+    public PiWaysideRuntime(string host, int port, WaysideConfigurationMessage configuration, string programName, string programSource, bool maintenanceMode = false)
     {
-        // The device link is authenticated/encrypted by SSH, not an unauthenticated campus-network socket.
-        if (!IPAddress.TryParse(host, out var address) || !IPAddress.IsLoopback(address) || port is < 1 or > 65535)
+        if (!IPAddress.TryParse(host, out var address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any) || port is < 1 or > 65535)
         {
-            throw new ArgumentException("Pi endpoints must be a loopback IP and port reached through the SSH tunnel.");
+            throw new ArgumentException("Use the Pi IP address and a port from 1 to 65535, or a loopback IP for local testing.");
         }
 
         _host = host;
@@ -40,7 +40,8 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
         _configuration = WaysideConfiguration.ValidateAndCopy(configuration);
         _programName = programName;
         _programSource = programSource;
-        LatestSnapshot = new TrackControllerService(_configuration).GetSnapshot().CreateStopSnapshot("Pi not connected. Start the Pi runtime and SSH tunnel.");
+        _maintenanceRequested = maintenanceMode;
+        LatestSnapshot = new TrackControllerService(_configuration).GetSnapshot().CreateStopSnapshot("Pi not connected. Start the Pi runtime and check its IP address and port.");
     }
 
     /// <summary>Handles an application message through the selected runtime and returns its result.</summary>
@@ -54,10 +55,15 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
                 throw new ObjectDisposedException(nameof(PiWaysideRuntime));
             }
 
+            // Preserve servicing intent even if the connection fails before its acknowledgement.
+            if (message.MessageType == "SetMaintenanceMode")
+                _maintenanceRequested = MessageSerializer.ReadValue<bool>(message, "enabled");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
             timeout.CancelAfter(1500);
             if (message.MessageType == "LoadPlc")
             {
+                if (_configuration.AutomaticOperation && !_maintenanceRequested)
+                    return new WaysideAcknowledgementMessage(false, "Enter maintenance mode before replacing the PLC.", message.MessageType);
                 // Preserve the requested replacement even if receipt is lost or compilation fails.
                 // Reconnection must never silently restore an older, permissive program.
                 string? territoryId = message.Payload.TryGetProperty("territoryId", out var targetId) ? targetId.GetString() : null;
@@ -197,7 +203,7 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
         }
 
         _clockOffset = hello.ServerTimeUtc - (before + (DateTimeOffset.UtcNow - before) / 2);
-        await _protocol.WriteAsync(new PiSessionStart(_configuration, _programName, _programSource), cancellationToken);
+        await _protocol.WriteAsync(new PiSessionStart(_configuration, _programName, _programSource, _maintenanceRequested), cancellationToken);
         var response = await _protocol.ReadAsync(cancellationToken);
         if (response.MessageType != nameof(WaysideAcknowledgementMessage))
         {

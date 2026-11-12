@@ -13,5 +13,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+        // WorkArea is in WPF device-independent units and excludes the taskbar.
+        var work = SystemParameters.WorkArea;
+        Width = Math.Min(1600, work.Width * 0.92);
+        Height = Math.Min(1000, work.Height * 0.92);
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = work.Left + (work.Width - Width) / 2;
+        Top = work.Top + (work.Height - Height) / 2;
     }
 }

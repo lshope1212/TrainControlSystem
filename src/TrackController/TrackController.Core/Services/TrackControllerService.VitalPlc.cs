@@ -54,7 +54,8 @@ public sealed partial class TrackControllerService
     /// </summary>
     private void SetReservationInputs(Dictionary<string, bool[]> inputs, Block zone, string? requesterId)
     {
-        inputs["reserved_known"] = [_owned.Contains(zone.Definition.BlockId)];
+        inputs["reserved_known"] = [_owned.Contains(zone.Definition.BlockId)
+            && (!_configuration.RequireCtcReservationFeedback || zone.Feedback?.IsReservedByCtc is not null)];
         inputs["reserved"] = [ReservationHolder(zone, requesterId) is not null];
     }
 
@@ -211,12 +212,12 @@ public sealed partial class TrackControllerService
             ? $" (commanded {block.CommandedSignal}; Track Model reports {block.Feedback?.Signal ?? SignalState.Unknown})"
             : " (held Red: the route is not safe to clear)";
 
-    private static string PlcRestrictionText(IReadOnlyDictionary<string, bool[]> inputs, Block block, IReadOnlyDictionary<string, bool[]> outputs, string? nextBlock)
+    private string PlcRestrictionText(IReadOnlyDictionary<string, bool[]> inputs, Block block, IReadOnlyDictionary<string, bool[]> outputs, string? nextBlock)
     {
         // Explanations mirror input facts; they do not change the PLC's output values.
         if (!inputs["running"][0])
         {
-            return "Simulation paused.";
+            return _configuration.AutomaticOperation ? "Controller not ready." : "Simulation paused.";
         }
         if (inputs["maintenance"][0])
         {

@@ -11,7 +11,7 @@ public sealed partial class TrackControllerService
     private void Reevaluate()
     {
         var now = _clock.GetUtcNow();
-        if (!_paused)
+        if (!_paused && !_configuration.AutomaticOperation)
         {
             _simulationSeconds += Math.Max(0, (now - _lastPulse).TotalSeconds) * _multiplier;
         }
@@ -20,7 +20,7 @@ public sealed partial class TrackControllerService
         PruneStaged();
         // What the live CTC routes need of each switch, before any switch is commanded.
         var switchDemands = ComputeSwitchDemands();
-        foreach (var block in _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId)))
+        foreach (var block in _blocks.Values.Where(block => _configuration.CoordinatedRoutes || _owned.Contains(block.Definition.BlockId)))
         {
             block.CommandedSignal = SignalState.Red;
             if (block.Definition.HasCrossing)
@@ -46,7 +46,15 @@ public sealed partial class TrackControllerService
 
             if (block.Definition.NormalNextBlockId is not null)
             {
-                CommandSwitch(block, switchDemands.GetValueOrDefault(block.Definition.BlockId), now);
+                if (_owned.Contains(block.Definition.BlockId))
+                {
+                    CommandSwitch(block, switchDemands.GetValueOrDefault(block.Definition.BlockId), now);
+                }
+                else
+                {
+                    // A coordinating peer assesses the reported alignment. Only the owner commands the switch.
+                    block.CommandedSwitch = IsFresh(block) ? block.Feedback!.Switch : SwitchPosition.Unknown;
+                }
             }
         }
 
@@ -84,13 +92,15 @@ public sealed partial class TrackControllerService
                 }
             }
 
-            result = HoldBlockAuthority(result);
+            // Coordinated runtimes return live assessments. The router holds the jointly issued
+            // limit; holding a more permissive private assessment here would create false stops.
+            if (!_configuration.CoordinatedRoutes) result = HoldBlockAuthority(result);
             if (!IsAuthorizationSafe(result))
             {
                 result = Stop(result, "Independent safety check withheld authority.");
             }
 
-            RememberBlockAuthority(result);
+            if (!_configuration.CoordinatedRoutes) RememberBlockAuthority(result);
             authorizations.Add(result);
         }
 
@@ -110,7 +120,7 @@ public sealed partial class TrackControllerService
         _lastResults = authorizations;
         var continuations = ComputeContinuations(authorizations);
         var resultsByBlock = authorizations.ToDictionary(result => result.Request.TargetBlockId);
-        var blockStatuses = _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId) || _neighbors.Contains(block.Definition.BlockId)).Select(block =>
+        var blockStatuses = _blocks.Values.Where(block => _configuration.CoordinatedRoutes || _owned.Contains(block.Definition.BlockId) || _neighbors.Contains(block.Definition.BlockId)).Select(block =>
         {
             var definition = block.Definition;
             var feedback = block.Feedback;
@@ -170,8 +180,10 @@ public sealed partial class TrackControllerService
 
         _snapshot = new WaysideSnapshotMessage(_configuration.WaysideId, _configuration.LineName, now, validUntil, _simulationSeconds, _paused, _multiplier, _hardwareMode, _maintenanceMode, _plcName, _plcStatus, Array.AsReadOnly(blockStatuses.Where(block => _owned.Contains(block.BlockId)).ToArray()))
         {
+            RouteAssessments = _configuration.CoordinatedRoutes ? blockStatuses.Where(block => block.Request is not null || block.Continuation is not null).ToArray() : [],
             NeighborObservations = blockStatuses.Where(block => _neighbors.Contains(block.BlockId)).Select(block => block with
             {
+                Request = null, AuthorizedAuthorityMeters = 0, AuthorizedSpeedMetersPerSecond = 0, Continuation = null,
                 CommandedSwitch = SwitchPosition.Unknown, CommandedSignal = SignalState.Unknown, CommandedCrossing = CrossingState.Unknown,
                 Occupancy = block.IsFresh ? block.Occupancy : OccupancyState.Unknown,
                 ReportedSignal = block.IsFresh ? block.ReportedSignal : SignalState.Unknown,
@@ -188,7 +200,7 @@ public sealed partial class TrackControllerService
         MovementResult output = (request, 0, 0, "Withheld", "");
         if (_paused)
         {
-            return Stop(output, "Simulation paused.");
+            return Stop(output, _configuration.AutomaticOperation ? "Controller not ready." : "Simulation paused.");
         }
 
         if (_maintenanceMode)

@@ -2,13 +2,13 @@
 
 The Windows application owns the UI, test inputs, and routing. Each block has one controller owner. A software territory runs locally on the PC; a hardware territory runs on the Pi. Both execute the same `TrackController.Core` code, Boolean interpreter. Each territory has its own PLC assignment, defaulting to `wayside.plc`. They control different territories; they are not redundant copies voting on one territory.
 
-The original **PLC program** option was only a local preview. To execute on hardware, use **Controller setup → Track and controllers**. One shared track map, named territory ownership lists, and editable PC/Pi placement are explained in the [territory guide](../TrackController.Runtime/README.md). The selected block inspector shows its execution target.
+The original **PLC program** option was only a local preview. To execute on hardware, use **Controller setup → Wayside territories**. One shared track map, named territory ownership lists, and editable PC/Pi placement are explained in the [territory guide](../TrackController.Runtime/README.md). The selected block inspector shows its execution target.
 
 ## What the PLC file means
 
 The Pi executes the assigned `plc boolean_v1` source with the same scalar Boolean interpreter as Windows. The program evaluates the interlocks and calculates commanded speed and authority through explicit AND/OR/NOT equations in the PLC file. C# handles I/O, unit encoding/decoding, clocks, and an independent unsafe-output veto. It does not precompute the normal movement decision for the PLC.
 
-The [PLC language contract](../TrackController.Core/Control/README.md) explains the inputs, output bits, fixed-point representation and scan sequence. Select **PLC territory → Advanced → Replace selected PLC…** while paused to assign a program, then save applied choices to retain it. The source is uploaded when establishing each Pi session. Old permission-only PLC files are rejected. Rebuild/redeploy the Pi package for protocol version 8.
+The [PLC language contract](../TrackController.Core/Control/README.md) explains the inputs, output bits, fixed-point representation and scan sequence. Select **Wayside territories → Advanced → Replace selected PLC…** in maintenance mode to assign a program, then save applied choices to retain it. The source is uploaded when establishing each Pi session. Old permission-only PLC files are rejected. Rebuild/redeploy the Pi package for protocol version 11.
 
 ## Recommended connection at school
 
@@ -48,52 +48,104 @@ ssh yourname@192.168.50.2
 
 Check the host-key fingerprint at first login against the Pi, then accept it. If this fails, fix SSH/Ethernet before trying the controller. If a direct cable is unavailable, both devices can use an approved private router/network; school Wi-Fi may isolate clients, so it should not be assumed to work.
 
-## Build and copy the Pi runtime
+## Publish, copy, run: same workflow as the hardware Train Controller
 
-From the repository root in PowerShell:
+The two controllers run as independent programs on the same Pi. Use the existing private lab connection, with the PC at `192.168.50.1` and Pi at `192.168.50.2`. The direct TCP link has no SSH authentication/encryption. The optional tunnel workflow remains available below.
+
+| | Hardware Train Controller | Track Controller |
+| --- | --- | --- |
+| Project | `src/TrainController/TrainController.Hardware.Pi` | `src/TrackController/TrackController.Pi` |
+| PC publish folder | `publish/pi` | `publish/track-controller-pi` |
+| Pi installation folder | `~/train-controller` | `~/track-controller` |
+| Executable | `TrainController.Hardware.Pi` | `TrackController.Pi` |
+| TCP port | 5050 | 11405 |
+| Windows connection setting | Train Controller host/port | Track Controller territory's Pi IP address/port |
+
+### 1. Publish on Windows
+
+From the repository root, use the same publish command as the Train Controller, substituting the Track Controller project and output folder:
 
 ```powershell
-.\src\TrackController\TrackController.Pi\scripts\Publish-TrackControllerPi.ps1
-scp .\src\TrackController\TrackController.Pi\artifacts\track-controller-pi5.tar.gz yourname@192.168.50.2:~/
+dotnet publish src/TrackController/TrackController.Pi -c Release -r linux-arm64 --self-contained true -p:PublishReadyToRun=true -o publish/track-controller-pi
 ```
 
-The script publishes a **self-contained Linux ARM64** application, including the .NET runtime. The Pi does not need Visual Studio or a .NET SDK. This is Microsoft's supported [ARM deployment approach](https://learn.microsoft.com/en-us/dotnet/iot/deployment). The first publish needs internet access on the PC to download the ARM64 runtime pack.
+Alternatively, `./src/TrackController/TrackController.Pi/scripts/Publish-TrackControllerPi.ps1` runs that command and also copies supporting documentation. The output contains the Pi executable, Track Controller runtime/core and contract libraries, .NET runtime, sample PLC and optional LED script. No Windows UI or Train Controller executable is included. The Pi needs no .NET SDK. `-OutputDirectory PATH` selects another output folder; `-Archive` additionally creates an optional tarball.
 
-In an SSH terminal on the Pi:
+### 2. Copy to the Pi
+
+Replace `<user>` and `<pi-ip>` with the same account/address your teammate uses. This creates the destination if needed and updates its contents without nesting another folder on repeat copies:
+
+```powershell
+ssh <user>@<pi-ip> "mkdir -p ~/track-controller"
+scp -r publish/track-controller-pi/* <user>@<pi-ip>:~/track-controller/
+```
+
+Keep it separate from `~/train-controller`. Stop the old Track Controller process before replacing its files, then restart it after the copy. Publishing on Windows alone never updates the Pi.
+
+### 3. Run on the Pi
+
+In an SSH terminal, just as for her Train Controller:
 
 ```bash
-mkdir -p ~/track-controller
-tar -xzf ~/track-controller-pi5.tar.gz -C ~/track-controller
-cd ~/track-controller
-chmod +x TrackController.Pi
-./TrackController.Pi --port 11405 --status-file status.json
+chmod +x ~/track-controller/TrackController.Pi
+~/track-controller/TrackController.Pi --port 11405
 ```
 
-Keep that terminal open. The runtime reports that it is waiting for the PC router. Its TCP listener is bound to **127.0.0.1 on the Pi**, not exposed to the school network.
+It binds to the lab Pi IP `192.168.50.2` by default. If the Pi address differs, add `--bind <pi-ip>`. The terminal stays open. A separate terminal can run her unchanged `~/train-controller/TrainController.Hardware.Pi --port 5050` at the same time. Status is written beside the Track Controller executable by default; `--status-file PATH` overrides it.
 
-In a second Windows PowerShell terminal, open the encrypted tunnel:
+### 4. Connect from the Windows Track Controller
+
+1. Enable maintenance mode and open **Controller setup → Wayside territories**.
+2. Load the desired course preset. Set the chosen territory's **Run this territory on** to **Pi**, **Pi IP address** to `192.168.50.2`, and **Port** to `11405`.
+3. Select **Apply changes**, then **Save setup** if desired. Windows uploads that territory configuration and its assigned PLC automatically. It does not install the executable.
+4. Send fresh Track Model feedback, then leave maintenance mode when ready. Valid PLCs evaluate automatically; no separate Resume is needed. The territory inspector identifies Pi execution.
+
+Every additional territory on this same Pi needs a separate Track Controller process, port and status file, for example `--port 11406 --status-file ~/track-controller/status-11406.json`. Multiple territories can use the same installed executable; a single runtime process accepts one territory owner. Other territories may continue running on the PC. Coordinated routes may cross PC/Pi boundaries.
+
+The PC keeps its UI and CTC/Track Model named-pipe adapters. The Pi runs the assigned wayside's PLC and independent unsafe-output veto. A broken connection withdraws its authority; it never silently falls back to PC. Reconnecting creates a new session with no old feedback or requests. It preserves the requested maintenance state and otherwise evaluates fresh inputs automatically.
+
+### Local testing without the Pi
+
+As with the hardware Train Controller, run a second process on Windows and use loopback:
 
 ```powershell
-.\src\TrackController\TrackController.Pi\scripts\Connect-TrackControllerPi.ps1 -User yourname -PiAddress 192.168.50.2
+dotnet run --project src/TrackController/TrackController.Pi -- --port 11405 --bind 127.0.0.1
 ```
 
-Keep this terminal open too. It forwards `127.0.0.1:11405` on Windows to the Pi's local runtime. SSH handles authentication/encryption. The deployment JSON intentionally contains `127.0.0.1`, not the Pi's Ethernet address.
+Set the territory's IP to `127.0.0.1`, port `11405`, and apply. This tests the real TCP path; actual shared-Pi timing and physical hardware still need testing on the device.
 
-## Use the separate Test UI with the actual Pi
+### Optional: start at boot
 
-1. Start `TrackController.Wpf` and `TrackController.TestUI.Wpf` as separate startup projects.
-2. In the controller window, stay paused.
-3. In **Controller setup**, choose **Saved setup file…**, select **Load setup**, and open `Samples/pc-and-pi.deployment.json` from the application's output folder. The file dialog starts in that folder. Alternatively, **Load setup** starts both territories on PC; change the junction's **Run on** to **Pi** and select **Apply execution**.
-4. The example assigns **West approach (1–3) to PC** and **Junction and crossing (4–12) to Pi**. Both reference the same track map and load the shared `wayside.plc`; no separate manual PLC transfer is needed. Hardware placement is editable without changing territory ownership.
-5. In the Test UI, load **Clear route**, then **Send feedback**. Wait for 12/12 current blocks. If only the PC blocks are current, inspect the Pi terminal and SSH tunnel.
-6. Select **Resume** in the controller window, then **Send movement request** in the Test UI with target 5, route `6, 7, 8`, 25 mph, and 1,200 ft. The request is routed to the Pi; the returned approval appears in **Controller response**.
-7. Load **Switch mismatch**, then **Send feedback**. The Pi should return zero movement authority.
-8. To demonstrate local execution, use a clear preset, report block 1 occupied in the Blocks editor, send feedback, and submit a request from 1 over `2, 3` with a distinct train label. The PC evaluates it. One request must stay within its assigned territory.
-9. Disconnect the SSH tunnel. The Pi territory becomes unavailable and its last authorizations become zero. The LED monitor treats expired outputs as stopped. Reconnect: the Pi session starts paused, with no old requests or feedback. Send fresh feedback and explicitly resume. If the PC territory is still running, select **Pause**, then **Resume** to resume both together.
+Use the same systemd service workflow as the Train Controller, with a separate service name. Replace `<user>` in the file:
 
-Each Pi runtime permits one owner at a time. The external Test UI talks to the existing PC controller; it does not open a second Pi session. Use a separate runtime and tunnel port for each independent Pi territory. This deployment uses protocol version 8; update the Pi package alongside Windows when replacing an older version.
+```bash
+sudo tee /etc/systemd/system/track-controller.service >/dev/null <<'UNIT'
+[Unit]
+Description=ECE1140 Hardware Track Controller
+After=network-online.target
+Wants=network-online.target
 
-Local testing without a Pi is also possible: run `TrackController.Pi` on Windows as a second application, then load the same deployment with no SSH tunnel. This verifies the network/runtime path, but it is not hardware validation.
+[Service]
+ExecStart=/home/<user>/track-controller/TrackController.Pi --port 11405
+WorkingDirectory=/home/<user>/track-controller
+Restart=on-failure
+User=<user>
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload
+sudo systemctl enable --now track-controller
+journalctl -u track-controller -f
+```
+
+### Optional SSH tunnel
+
+For existing tunneled setups, run the Pi executable with `--bind 127.0.0.1`, start `scripts/Connect-TrackControllerPi.ps1 -User <user> -PiAddress <pi-ip>` on Windows, and keep the territory host at `127.0.0.1`. This is optional; the direct workflow above needs no forwarding terminal.
+
+### Versions and shared hardware
+
+Windows and Pi runtimes must use compatible protocol versions (currently 11). Rebuild, copy and restart after runtime/protocol changes; a current Git branch does not make an old published folder or installed binary current. The optional LED process uses BCM GPIO 17, 27 and 22; reserve these from the Train Controller's hardware if using it. The Track Controller publish script does not modify or start her program.
 
 ## Optional indication LEDs
 
@@ -134,10 +186,10 @@ The LED monitor reads the runtime's atomic status file and checks its output exp
 
 ## Boundaries and remaining integration work
 
-- The shared map retains its 3→4 boundary connection. Territories exchange adjacent feedback as read-only observations, with exactly one command owner per block. No request may span owners yet: coordinated inter-controller handoff remains to be implemented. Every switch/crossing protection zone must stay with its controller. Final territory allocation needs your team's actual topology.
+- The shared map retains boundary connections. Course routes may span owners: the PC router coordinates each participating wayside's independent approval, with exactly one command owner per block. Local and Pi execution use the same path. Every switch/crossing protection zone stays with its controller. See the Runtime README for the 16-way course split.
 - Routing uses block IDs, which must be unique across the deployment; a deployment may span several lines (see the Runtime README).
-- CTC/Track Model continue using the same Windows named-pipe messages. The PC's internal Pi link uses those same JSON envelopes over an ordered request/reply TCP stream protected by SSH. The other modules do not need to know the Pi address.
-- Reconnection creates a new paused controller session rather than replaying old movement commands. A missing Pi never causes its territory to run on a local substitute.
+- CTC/Track Model continue using the same Windows named-pipe messages. The PC's internal Pi link uses those same JSON envelopes over an ordered request/reply TCP stream on the private lab connection (or the optional SSH tunnel). The other modules do not need to know the Pi address.
+- Reconnection creates a new controller session with the requested maintenance state and requires new feedback/requests rather than replaying old movement commands. A missing Pi never causes its territory to run on a local substitute.
 - The transport estimates the PC/Pi clock offset during connection and translates feedback timestamps and output leases. Received leases are also bounded from the local request start so network delay cannot extend permission.
-- CTC must still supply block/route-aware movement requests, and Track Model needs its snapshot/actuator adapter, as described in the [module integration notes](../TrackController.Wpf/README.md#module-integration).
+- CTC supplies block/route-aware movement requests and Track Model supplies measured feedback through the production adapters described in the [module integration notes](../TrackController.Wpf/README.md#module-integration).
 - This is a course prototype. It does not implement redundant vital hardware or certify physical equipment operation.

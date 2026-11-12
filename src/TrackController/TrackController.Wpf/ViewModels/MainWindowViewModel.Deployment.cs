@@ -12,6 +12,7 @@ namespace TrackController.Wpf.ViewModels;
 public sealed partial class MainWindowViewModel
 {
     private PreparedDeployment? _plan;
+    private bool _hasLoadedDeployment;
     private ExecutionRow? _selectedPlcTerritory;
 
     public ExecutionRow? SelectedPlcTerritory
@@ -24,6 +25,7 @@ public sealed partial class MainWindowViewModel
                 var territory = _plan?.Territories.SingleOrDefault(item => item.Id == value?.Id);
                 PlcSource = territory?.ProgramSource ?? _plan?.ProgramSource ?? PlcSource;
                 OnPropertyChanged(nameof(SelectedPlcName));
+                OnPropertyChanged(nameof(PlcSummary));
             }
         }
     }
@@ -37,10 +39,10 @@ public sealed partial class MainWindowViewModel
     /// <summary>Built-in setups by the line name their deployment reports. The first is selected by default.</summary>
     private static readonly Dictionary<string, string> SetupFiles = new()
     {
-        ["Green Line"] = "all-pc.deployment.json",
+        ["Course network · 16 waysides"] = "course-territories-all-pc.deployment.json",
         ["Blue Line"] = "blue-line-all-pc.deployment.json",
-        // The course network the production Track Model publishes: one territory per line, all on this PC.
-        ["Blue Line / Red Line / Green Line"] = "course-all-pc.deployment.json"
+        ["Red Line"] = "red-line-all-pc.deployment.json",
+        ["Green Line"] = "green-line-all-pc.deployment.json"
     };
 
     public static IReadOnlyList<string> SetupChoices { get; } = [.. SetupFiles.Keys, SavedSetupChoice];
@@ -59,49 +61,112 @@ public sealed partial class MainWindowViewModel
 
     public ObservableCollection<ExecutionRow> ExecutionRows { get; } = [];
 
-    /// <summary>Map filter choice that draws every line of the deployment.</summary>
-    public const string AllMapLines = "All lines";
+    private const string AllSetupLines = "All lines";
+    private string _selectedSetupLine = AllSetupLines;
 
-    private Dictionary<string, string> _lineOfBlock = new(StringComparer.Ordinal);
-    private string _selectedMapLine = AllMapLines;
+    public IReadOnlyList<string> SetupLines => [AllSetupLines, .. ExecutionRows.Select(row => row.Line).Distinct()];
+    public IReadOnlyList<ExecutionRow> FilteredExecutionRows => ExecutionRows
+        .Where(row => SelectedSetupLine == AllSetupLines || row.Line == SelectedSetupLine).ToArray();
 
-    /// <summary>"All lines" plus each line of a multi-line deployment.</summary>
-    public IReadOnlyList<string> MapLines { get; private set; } = [AllMapLines];
+    public string SelectedSetupLine
+    {
+        get => _selectedSetupLine;
+        set
+        {
+            if (value is not null && SetupLines.Contains(value) && SetProperty(ref _selectedSetupLine, value))
+                RefreshSetupTerritories(SelectedPlcTerritory?.Id);
+        }
+    }
 
-    public bool HasSeveralMapLines => MapLines.Count > 2;
+    private void RefreshSetupTerritories(string? preferredId)
+    {
+        var rows = FilteredExecutionRows;
+        OnPropertyChanged(nameof(FilteredExecutionRows));
+        SelectedPlcTerritory = rows.FirstOrDefault(row => row.Id == preferredId) ?? rows.FirstOrDefault();
+    }
 
-    /// <summary>The territory overview draws one line at a time when several are loaded (presentation only).</summary>
+    public sealed record MapTerritory(string Id, string Name, string Line, IReadOnlySet<string> Blocks);
+    private IReadOnlyList<MapTerritory> _mapTerritories = [];
+    private string _selectedMapLine = "";
+    private MapTerritory? _selectedMapTerritory;
+    public IReadOnlyList<string> MapLines => _mapTerritories.Select(item => item.Line).Distinct().ToArray();
+    public IReadOnlyList<MapTerritory> MapTerritories => _mapTerritories.Where(item => item.Line == SelectedMapLine).ToArray();
     public string SelectedMapLine
     {
         get => _selectedMapLine;
         set
         {
-            if (SetProperty(ref _selectedMapLine, value ?? AllMapLines))
+            if (SetProperty(ref _selectedMapLine, value))
             {
-                OnPropertyChanged(nameof(MapBlocks));
+                OnPropertyChanged(nameof(MapTerritories));
+                SelectedMapTerritory = MapTerritories.FirstOrDefault();
+                OnPropertyChanged(nameof(LineAccentBrush));
             }
         }
     }
-
-    public IReadOnlyList<WaysideBlockStatus> MapBlocks => SelectedMapLine == AllMapLines
-        ? Blocks
-        : Blocks.Where(block => _lineOfBlock.GetValueOrDefault(block.BlockId) == SelectedMapLine).ToArray();
-
-    /// <summary>Which line owns each block, from the deployment's territories.</summary>
+    public MapTerritory? SelectedMapTerritory
+    {
+        get => _selectedMapTerritory;
+        set
+        {
+            if (SetProperty(ref _selectedMapTerritory, value))
+            {
+                NotifyMap();
+                if (value is not null && !value.Blocks.Contains(ManualTarget))
+                    ManualTarget = MapBlocks.FirstOrDefault(block => block.HasSwitch)?.BlockId ?? value.Blocks.FirstOrDefault() ?? "";
+                if (value is not null && !value.Blocks.Contains(SelectedBlockId))
+                    SelectedBlockId = value.Blocks.FirstOrDefault() ?? "";
+            }
+        }
+    }
+    public IReadOnlyList<WaysideBlockStatus> MapBlocks => Blocks.Where(block => SelectedMapTerritory?.Blocks.Contains(block.BlockId) == true).ToArray();
+    public IReadOnlyList<MovementRow> TerritoryMovements => Movements.Where(row => SelectedMapTerritory?.Blocks.Contains(row.Target) == true).ToArray();
+    public IReadOnlyList<EquipmentRow> TerritoryEquipment => Equipment.Where(row => SelectedMapTerritory?.Blocks.Contains(row.Block) == true).ToArray();
+    public string[] MapBlockIds => MapBlocks.Select(block => block.BlockId).ToArray();
+    public string MapDescription => SelectedMapTerritory is { } territory
+        ? $"{territory.Blocks.Count} owned blocks · {MapBlocks.Sum(block => block.LengthMeters) / 1000:0.0} km · {MapBlocks.Count(block => block.HasSwitch)} switches · {MapBlocks.Count(block => block.HasCrossing)} crossings"
+        : "Load a controller setup.";
+    public string MapHandoffs
+    {
+        get
+        {
+            if (SelectedMapTerritory is not { } territory) return "";
+            var blocks = Blocks.ToDictionary(block => block.BlockId);
+            var links = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var from in Blocks)
+            foreach (string to in from.NextBlockIds)
+            {
+                bool outgoing = territory.Blocks.Contains(from.BlockId);
+                if (outgoing == territory.Blocks.Contains(to)) continue;
+                string inside = outgoing ? from.BlockId : to, outside = outgoing ? to : from.BlockId;
+                if (!seen.Add(inside + ":" + outside)) continue;
+                string peer = _mapTerritories.FirstOrDefault(item => item.Blocks.Contains(outside))?.Name.Split('·')[0].Trim() ?? "Unassigned";
+                string arrow = blocks.TryGetValue(to, out var other) && other.NextBlockIds.Contains(from.BlockId) ? "↔" : outgoing ? "→" : "←";
+                links.Add($"{inside.Split('-')[^1]} {arrow} {outside.Split('-')[^1]} ({peer})");
+            }
+            return links.Count == 0 ? "No territory handoffs." : "Handoffs: " + string.Join("   ·   ", links);
+        }
+    }
+    private void NotifyMap()
+    {
+        foreach (string property in new[] { nameof(MapBlocks), nameof(MapBlockIds), nameof(MapDescription), nameof(MapHandoffs), nameof(TerritoryMovements), nameof(TerritoryEquipment) })
+            OnPropertyChanged(property);
+    }
     private void IndexMapLines(PreparedDeployment? plan)
     {
-        _lineOfBlock = plan?.Territories
-            .SelectMany(territory => TrackController.Core.Models.WaysideConfiguration.GetOwnedIds(territory.Configuration).Select(id => (id, territory.Configuration.LineName)))
-            .ToDictionary(item => item.id, item => item.LineName, StringComparer.Ordinal) ?? new(StringComparer.Ordinal);
-        MapLines = [AllMapLines, .. _lineOfBlock.Values.Distinct()];
-        _selectedMapLine = AllMapLines;
+        _mapTerritories = plan is null
+            ? [new(Snapshot.WaysideId, "Standalone territory", Snapshot.LineName, Blocks.Select(block => block.BlockId).ToHashSet(StringComparer.Ordinal))]
+            : plan.Territories.Select(territory => new MapTerritory(territory.Id, territory.Name, territory.Configuration.LineName,
+                TrackController.Core.Models.WaysideConfiguration.GetOwnedIds(territory.Configuration))).ToArray();
+        var preferred = _mapTerritories.FirstOrDefault(item => item.Blocks.Contains(SelectedBlockId)) ?? _mapTerritories[0];
+        _selectedMapLine = preferred.Line;
         OnPropertyChanged(nameof(MapLines));
-        OnPropertyChanged(nameof(HasSeveralMapLines));
         OnPropertyChanged(nameof(SelectedMapLine));
-        OnPropertyChanged(nameof(MapBlocks));
+        OnPropertyChanged(nameof(MapTerritories));
+        SelectedMapTerritory = preferred;
     }
-
-    public string LayoutDescription => _plan?.LayoutDescription ?? "No line setup loaded. Choose a line above and select Load setup.";
+    public string LayoutDescription => _plan is { } plan ? $"{plan.Name} · {plan.Territories.Count} waysides · {plan.Territories.Sum(item => item.Configuration.OwnedBlockIds?.Count ?? item.Configuration.Blocks.Count)} blocks" : "Standalone test controller. Load the course network for integration.";
 
     public string DeploymentFile => _plan?.SourcePath ?? "";
 
@@ -111,13 +176,23 @@ public sealed partial class MainWindowViewModel
             return row.Target != (applied.Execution == "Pi" ? "Pi" : "PC") || row.Host != applied.Host || row.Port != applied.Port.ToString();
         });
 
-    public bool CanEditExecution => IsRoutedDeployment && Snapshot.IsPaused;
+    public bool CanEditSetup => !_hasLoadedDeployment || Snapshot.IsMaintenanceMode;
+
+    public bool CanEditExecution => IsRoutedDeployment && Snapshot.IsMaintenanceMode;
 
     public bool CanApplyExecution => CanEditExecution && HasExecutionChanges;
 
     public bool CanSaveExecution => IsRoutedDeployment && !HasExecutionChanges;
 
-    public string ExecutionDraftStatus => !IsRoutedDeployment ? "Load a setup to choose where each territory runs." : HasExecutionChanges ? "Unapplied choices · pause, then Apply execution. Controllers still use the applied targets." : "Applied choices · Save applied choices writes placement and PLC assignments to the loaded setup file.";
+    public string ExecutionDraftStatus
+    {
+        get
+        {
+            if (!IsRoutedDeployment) return "Load a layout to assign territories.";
+            int count = ExecutionRows.Count(row => row.HasChanges);
+            return count > 0 ? $"{count} pending assignment{(count == 1 ? "" : "s")} · not applied" : "All assignments applied";
+        }
+    }
 
     private async Task LoadSelectedSetupAsync()
     {
@@ -161,6 +236,7 @@ public sealed partial class MainWindowViewModel
             nameof(DeploymentFile),
             nameof(HasExecutionChanges),
             nameof(CanEditExecution),
+            nameof(CanEditSetup),
             nameof(CanApplyExecution),
             nameof(CanSaveExecution),
             nameof(ExecutionDraftStatus)
@@ -207,18 +283,23 @@ public sealed partial class MainWindowViewModel
 
     private async Task UseDeploymentAsync(PreparedDeployment? plan)
     {
+        if (plan is not null && plan.Territories.GroupBy(territory => territory.Configuration.LineName).Any(line => line.Count() < 2))
+            throw new ArgumentException("Each line needs at least two wayside territories for this assignment. Load a split deployment.");
         var current = await _host.PollForSetupAsync(_lifetime.Token);
-        if (!current.IsPaused)
+        if (_hasLoadedDeployment && !current.IsMaintenanceMode)
         {
-            throw new InvalidOperationException("Pause the controller before changing its deployment or execution.");
+            throw new InvalidOperationException("Enter maintenance mode before changing its deployment or execution.");
         }
-        var routed = plan?.CreateRuntime();
+        var routed = plan?.CreateRuntime(automaticOperation: true, maintenanceMode: current.IsMaintenanceMode);
         try
         {
             await _host.DisposeAsync();
             _controller.ResetTestState();
+            _controller.SetMaintenanceMode(current.IsMaintenanceMode);
             _host = routed is null ? new WaysidePipeHost(_controller, _pipeNames) : new WaysidePipeHost(routed, _pipeNames);
             _plan = plan;
+            _hasLoadedDeployment = true;
+            _snapshot = _host.LatestSnapshot;
             IndexMapLines(plan);
             ObserveHost();
             _host.Start();
@@ -248,25 +329,23 @@ public sealed partial class MainWindowViewModel
                 ExecutionRows.Add(row);
             }
         }
-        SelectedPlcTerritory = ExecutionRows.FirstOrDefault(row => row.Id == selectedPlcId) ?? ExecutionRows.FirstOrDefault();
+        if (!SetupLines.Contains(_selectedSetupLine))
+            _selectedSetupLine = AllSetupLines;
+        OnPropertyChanged(nameof(SetupLines));
+        OnPropertyChanged(nameof(SelectedSetupLine));
+        RefreshSetupTerritories(selectedPlcId);
         OnPropertyChanged(nameof(SelectedPlcName));
         OnPropertyChanged(nameof(IsRoutedDeployment));
         OnPropertyChanged(nameof(CanChooseLogic));
         NotifyExecutionEditor();
-        Status = plan is null ? "Standalone controller selected and paused. Check controller logic and send fresh feedback before resuming." : $"{plan.Name} loaded with {string.Join(" / ", plan.Territories.Select(territory => territory.ProgramName ?? plan.ProgramName).Distinct())}. Paused; send fresh feedback before resuming.";
+        Status = plan is null ? "Standalone controller loaded. Valid logic and fresh feedback are required." : $"{plan.Name} loaded with {string.Join(" / ", plan.Territories.Select(territory => territory.ProgramName ?? plan.ProgramName).Distinct())}. Send fresh feedback. Maintenance remains enabled if selected.";
     }
 
     private async Task ResetControllerAsync()
     {
-        var plan = _plan;
-        await SendAsync(MessageSerializer.CreateEnvelope("SetSimulation", new { paused = true, speedMultiplier = Snapshot.SpeedMultiplier }));
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        deadline.CancelAfter(3000);
-        while (!(await _host.PollForSetupAsync(deadline.Token)).IsPaused)
-        {
-            await Task.Delay(15, deadline.Token);
-        }
-        await UseDeploymentAsync(plan);
+        if (!(await _host.PollForSetupAsync(_lifetime.Token)).IsMaintenanceMode)
+            throw new InvalidOperationException("Enter maintenance mode before resetting controllers.");
+        await UseDeploymentAsync(_plan);
     }
 
 }

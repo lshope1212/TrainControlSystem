@@ -1,8 +1,8 @@
 {
   "territories": [
     {
-      "id": "wayside-red",
-      "name": "Red Line",
+      "id": "wayside-red-a",
+      "name": "RL-A · Shadyside & Herron",
       "blockIds": [
         "RED-1",
         "RED-2",
@@ -20,7 +20,13 @@
         "RED-14",
         "RED-15",
         "RED-16",
-        "RED-17",
+        "RED-17"
+      ]
+    },
+    {
+      "id": "wayside-red-b",
+      "name": "RL-B · Swissville & Penn",
+      "blockIds": [
         "RED-18",
         "RED-19",
         "RED-20",
@@ -32,6 +38,14 @@
         "RED-26",
         "RED-27",
         "RED-28",
+        "RED-75",
+        "RED-76"
+      ]
+    },
+    {
+      "id": "wayside-red-c",
+      "name": "RL-C · Steel Plaza",
+      "blockIds": [
         "RED-29",
         "RED-30",
         "RED-31",
@@ -40,6 +54,15 @@
         "RED-34",
         "RED-35",
         "RED-36",
+        "RED-72",
+        "RED-73",
+        "RED-74"
+      ]
+    },
+    {
+      "id": "wayside-red-d",
+      "name": "RL-D · First Ave junctions",
+      "blockIds": [
         "RED-37",
         "RED-38",
         "RED-39",
@@ -49,6 +72,17 @@
         "RED-43",
         "RED-44",
         "RED-45",
+        "RED-67",
+        "RED-68",
+        "RED-69",
+        "RED-70",
+        "RED-71"
+      ]
+    },
+    {
+      "id": "wayside-red-e",
+      "name": "RL-E · Station Square junction",
+      "blockIds": [
         "RED-46",
         "RED-47",
         "RED-48",
@@ -57,6 +91,13 @@
         "RED-51",
         "RED-52",
         "RED-53",
+        "RED-66"
+      ]
+    },
+    {
+      "id": "wayside-red-f",
+      "name": "RL-F · South Hills loop",
+      "blockIds": [
         "RED-54",
         "RED-55",
         "RED-56",
@@ -68,18 +109,7 @@
         "RED-62",
         "RED-63",
         "RED-64",
-        "RED-65",
-        "RED-66",
-        "RED-67",
-        "RED-68",
-        "RED-69",
-        "RED-70",
-        "RED-71",
-        "RED-72",
-        "RED-73",
-        "RED-74",
-        "RED-75",
-        "RED-76"
+        "RED-65"
       ]
     }
   ]
