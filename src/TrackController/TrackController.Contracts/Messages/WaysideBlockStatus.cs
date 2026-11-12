@@ -36,6 +36,13 @@ public sealed record WaysideBlockStatus(
     public string MovementReason { get; init; } = "";
 
     /// <summary>
+    /// For a switch some live CTC route needs: what that route needs and whether the controller has
+    /// commanded it, is waiting for the Track Model's report, or cannot move it (and why). Empty when
+    /// no route needs the switch. Explanation only; it never changes a command.
+    /// </summary>
+    public string SwitchAlignment { get; init; } = "";
+
+    /// <summary>
     /// Set on the next block of a granted movement whose successor is staged: that movement's own
     /// authority expressed from this block's entry, for a train entering from
     /// <see cref="WaysideContinuation.EntryBlockId"/>. It is not a second grant (see

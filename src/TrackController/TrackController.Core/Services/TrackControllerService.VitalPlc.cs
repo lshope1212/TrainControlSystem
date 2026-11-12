@@ -41,21 +41,38 @@ public sealed partial class TrackControllerService
         inputs["switch_confirmed"] = [feedback?.Switch == block.CommandedSwitch];
         inputs["reported_normal"] = [feedback?.Switch == SwitchPosition.Normal];
         inputs["reported_reverse"] = [feedback?.Switch == SwitchPosition.Reverse];
-        inputs["reserved_known"] = [feedback?.IsReservedByCtc is not null];
-        inputs["reserved"] = [feedback?.IsReservedByCtc == true];
+        // reserved_known / reserved describe CTC reservations against one particular switch movement;
+        // only SwitchPlc sets them (see SetReservationInputs).
+        inputs["reserved_known"] = [false];
+        inputs["reserved"] = [false];
     }
 
-    private IReadOnlyDictionary<string, bool[]> SwitchPlc(Block block, SwitchPosition desired)
+    /// <summary>
+    /// The zone block's CTC reservation facts for moving a switch on behalf of <paramref name="requesterId"/>:
+    /// known only for a block this controller owns (its request table is the reservation record there),
+    /// reserved when another reservation holds it.
+    /// </summary>
+    private void SetReservationInputs(Dictionary<string, bool[]> inputs, Block zone, string? requesterId)
+    {
+        inputs["reserved_known"] = [_owned.Contains(zone.Definition.BlockId)];
+        inputs["reserved"] = [ReservationHolder(zone, requesterId) is not null];
+    }
+
+    /// <param name="requesterId">The movement request whose route needs this position, or null for an explicit switch request.</param>
+    private IReadOnlyDictionary<string, bool[]> SwitchPlc(Block block, SwitchPosition desired, string? requesterId = null)
     {
         var inputs = PlcInputs();
         inputs["zone_ok_in"] = [true];
         inputs["requested_normal"] = [desired == SwitchPosition.Normal];
         inputs["switch_request_known"] = [desired is SwitchPosition.Normal or SwitchPosition.Reverse];
-        inputs["movement_locked"] = [_snapshot?.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any()) == true];
+        // A granted movement through the zone, or approach locking after one was withdrawn.
+        inputs["movement_locked"] = [IsMovementLocked(block) || IsApproachLocked(block)];
         IReadOnlyDictionary<string, bool[]>? outputs = null;
         foreach (string id in block.Definition.SwitchProtectionBlockIds)
         {
-            SetBlockInputs(inputs, GetBlock(id));
+            var zone = GetBlock(id);
+            SetBlockInputs(inputs, zone);
+            SetReservationInputs(inputs, zone, requesterId);
             outputs = _plc!.Execute(inputs);
             inputs["zone_ok_in"] = outputs["zone_ok"];
         }
@@ -231,7 +248,7 @@ public sealed partial class TrackControllerService
         }
         if (inputs["has_switch"][0] && outputs["route_fault"][0])
         {
-            return $"Waiting for switch {block.Definition.BlockId} alignment feedback; this request needs {nextBlock ?? "the current position"} (verify entry and alignment).";
+            return $"Waiting for switch {block.Definition.BlockId} alignment feedback; this request needs {nextBlock ?? "the current position"} ({SwitchWaitDetail(block)}).";
         }
         if (inputs["has_signal"][0] && (!inputs["signal_proceed"][0] || inputs["manual_red"][0]))
         {

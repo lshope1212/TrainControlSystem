@@ -8,6 +8,11 @@ public sealed record TrackModelBlockStateMessage
 {
     /// <summary>Measurement time, preserved through queues and translated for the Pi clock.</summary>
     public DateTimeOffset ObservedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    /// <summary>
+    /// An externally reported CTC reservation of this block; true is honoured as a reservation. The
+    /// Track Model leaves it empty: CTC reservations are the Track Controller's accepted movement
+    /// requests, so the Track Controller does not rely on this field for switch protection.
+    /// </summary>
     public bool? IsReservedByCtc { get; set; }
     public double? ActualSpeedMetersPerSecond { get; set; }
     [JsonIgnore]

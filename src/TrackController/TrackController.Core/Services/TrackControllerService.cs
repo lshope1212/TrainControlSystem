@@ -23,6 +23,15 @@ public sealed partial class TrackControllerService
         public bool ManualRed;
         public bool ManualCrossingClosed;
         public BlockAuthority? Authority;
+
+        /// <summary>When this switch was first commanded to its current <see cref="CommandedSwitch"/> while the Track Model still reported the other position; null once confirmed.</summary>
+        public DateTimeOffset? SwitchThrowStartedAt;
+
+        /// <summary>Approach locking: no throw before this time, because an authority over the protection zone was withdrawn while its train may still be approaching.</summary>
+        public DateTimeOffset? SwitchApproachLockedUntil;
+
+        /// <summary>Operator-readable state of this switch's automatic route alignment in the latest evaluation (empty when no route needs it).</summary>
+        public string SwitchStatus = string.Empty;
     }
 
     private readonly object _gate = new();
@@ -32,6 +41,12 @@ public sealed partial class TrackControllerService
     private HashSet<string> _owned = [], _neighbors = [];
     private readonly Dictionary<string, (MovementSuggestionMessage Value, DateTimeOffset Received)> _requests = [];
     private readonly HashSet<string> _retiredRequests = [];
+
+    /// <summary>
+    /// Active requests CTC cancelled, by ID, with the route each had. A copy of a cancelled route is never
+    /// accepted again (unlike retirement, the train did not move on); the ID may still name a different route.
+    /// </summary>
+    private readonly Dictionary<string, MovementSuggestionMessage> _cancelledRequests = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Staged successor requests, by request ID. Kept apart from <see cref="_requests"/>: a staged
@@ -99,6 +114,8 @@ public sealed partial class TrackControllerService
             _plcName = "No program loaded";
             _plcStatus = "Layout changed. Load a PLC program and resume explicitly.";
             _retiredRequests.Clear();
+            _cancelledRequests.Clear();
+            _lastResults = [];
             InitializeBlocks();
             Reevaluate();
         }
@@ -265,6 +282,8 @@ public sealed partial class TrackControllerService
             _requests.Clear();
             _staged.Clear();
             _retiredRequests.Clear();
+            _cancelledRequests.Clear();
+            _lastResults = [];
             _paused = true;
             _maintenanceMode = false;
             _simulationSeconds = 0;

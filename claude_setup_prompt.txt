@@ -1,311 +1,387 @@
-# Claude Code Prompt — Fix Blue Line Signal/Movement Authority Deadlock
-
-You are working in the `TrainControlSystem` C#/.NET/WPF repository, on the latest `Luke_CTC` branch.
+# Claude Code Prompt — Fix Automatic Switch Alignment and Route Authorization
 
 ## Objective
 
-Fix an existing integration issue in the Track Controller that prevents trains from receiving movement authority when their route includes a signal-controlled block on the Blue Line.
+Investigate and fix the automatic switch alignment problem in our TrainControlSystem repository.
 
-**This must be a permanent architectural fix, not a workaround that bypasses signal safety.**
+The system currently dispatches and moves trains successfully when their route follows the initial positions of the switches. However, when a route requires a switch to change position, the Track Controller accepts the movement request but indefinitely withholds authority.
 
-The system's existing physical train dispatch, train tracking, movement authority handoff, shared clock, and intermodule communication are already implemented. Preserve this functionality.
+**Goal: A train's planned route should automatically cause the necessary switches to be aligned safely, with the Track Controller verifying actual switch feedback before granting authority.**
 
-## 1. Current problem — confirmed during live testing
+Implement this as a proper production integration fix, not a workaround.
 
-I recently performed a live test with all five modules running.
+## 1. Reproduce and understand the problem
 
-The CTC successfully dispatched Train 001 onto Blue Line block 1 (A1), with a destination of block 10 (B10).
+The system uses C#/.NET, WPF, MVVM, named-pipe communication, and separate CTC, Track Controller, Track Model, Train Controller, and Train Model modules.
 
-The following worked correctly:
+We have recently completed much of the physical dispatch and movement integration.
 
-- CTC released Train 001 from the schedule.
-- The Track Controller forwarded the physical dispatch request.
-- The Track Model activated the train through the Train Model.
-- Track Model correctly reported Train 001 occupying block 1.
-- CTC correctly inferred Train 001's position.
-- The Track Controller was running, not paused.
+### Reproduction scenario
 
-However, Train 001 never moved.
+On the Blue Line:
 
-The Train Controller reported:
+- Train 001 starts at block 1.
+- The scheduled destination is Station C at block 15.
+- The route follows blocks 1, 2, 3, 4, 5, 11, 12, 13, 14, 15.
+- Switch 5 initially reports Normal.
+- This route requires switch 5 to be Reverse, connecting the stem at block 4 toward block 11.
 
-- Commanded speed: 0 mph
-- Movement authority: 0 ft
-- Actual speed: 0 mph
-- Service brake applied due to authority protection.
+The train successfully dispatches into the Track Model, and the movement request is delivered to the Track Controller.
 
-CTC's Dispatched Trains tab revealed the exact problem:
+The CTC displays a message similar to:
 
-**`Withheld: Waiting for proceed signal feedback at block 6.`**
+"Train 001 movement request for blocks 1 to 15 (500 m): accepted, but authority withheld: Waiting for switch 5 alignment feedback; this request needs 11 (verify entry and alignment)."
 
-The train's requested route was:
+Consequently, the train receives zero movement authority and remains stopped.
 
-`1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10`
+The reverse scenario also occurs: routes that require Normal alignment may fail when the switch initially lies Reverse.
 
-Block 5 contains the branching switch, and block 6 is a signal-controlled block on the path to Station B.
+### Existing integration test workaround
 
-A similar issue is documented for signal block 11 on the alternate branch.
+Examine:
 
-### Suspected root cause
+`tests/Integration.Tests/SignalledRouteIntegrationTests.cs`
 
-The Track Controller's PLC or movement evaluator requires a signal to report a proceed aspect before granting movement authority.
+The test `Train001_ToStationC_ClearsSignal11_IsAuthorized_AndMoves` currently initializes switch 5 to Reverse before starting the test.
 
-However, the signal receives its proceed command only when movement authority has already been granted.
+The comment explicitly describes the limitation that prevents the Track Controller from throwing the switch live.
 
-This creates a circular dependency:
+**This workaround must no longer be necessary after the fix.**
 
-1. CTC requests movement authority.
-2. Track Controller requires a proceed signal to approve the movement.
-3. The proceed signal is not commanded because the movement has not yet been approved.
-4. The signal remains red.
-5. Track Controller permanently withholds movement authority.
-6. The train stays stopped with zero commanded speed and authority.
+## 2. Investigate the complete switch-control pipeline
 
-This issue is already documented in:
+Before editing, trace how a switch command should move through the system:
 
-`docs/integration/LIVE_INTEGRATION_GUIDE.md`
+1. CTC constructs a train's planned route.
+2. CTC sends the movement request to the Track Controller.
+3. The required switch positions are determined from the route topology.
+4. The Track Controller verifies that each switch's protection zone permits movement.
+5. The Track Controller commands the required switch alignment.
+6. The command reaches the Track Model.
+7. The Track Model applies the physical switch change and reports its actual position.
+8. The Track Controller confirms alignment and grants authority.
+9. The Train Controller receives positive authority and permits the train to move.
 
-Under **Outstanding work and limitations → Signalled routes (Blue)**.
+Identify precisely where the existing implementation fails.
 
-## 2. Investigate the actual implementation
+### Files to investigate
 
-Before making changes, thoroughly inspect the relevant Track Controller and Track Model code.
+CTC:
 
-Pay particular attention to:
+- `src/CTC/CTC.Core/Services/CTCService.cs`
+- `src/CTC/CTC.Core/Dispatching/MovementRequestCoordinator.cs`
+- `src/CTC/CTC.Core/Dispatching/MovementRequestPlan.cs`
+- `src/CTC/CTC.Core/Dispatching/RouteManager.cs`
+- `src/CTC/CTC.Core/Dispatching/TrainDispatchCoordinator.cs`
 
-- The bundled `wayside.plc` program.
-- PLC input and output evaluation.
-- Movement request validation and authorization.
-- Signal command generation.
-- Signal state and feedback handling.
-- Track Model's application of wayside signal commands.
-- Track Model → Track Controller equipment feedback.
-- The signal requirements enforced by the Track Controller.
-- The existing movement authorization lifecycle.
-- The Blue Line track topology and signal definitions.
-- Existing Track Controller and integration tests.
+Track Controller:
 
-Determine precisely why signal block 6 cannot transition to a proceed state before movement authorization is granted.
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.Requests.cs`
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.Evaluation.cs`
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.VitalPlc.cs`
+- `src/TrackController/TrackController.Core/Services/TrackControllerService.Authority.cs`
+- `src/TrackController/TrackController.Wpf/Services/WaysidePipeHost.cs`
+- `src/TrackController/TrackController.Runtime/TerritoryRuntimeRouter.cs`
+- `src/TrackController/TrackController.Wpf/Samples/wayside.plc`
 
-Also establish whether block 11 suffers from the same problem.
+Track Model:
 
-**Do not assume the suspected root cause is the entire problem. Confirm the exact dependency in code before modifying it.**
+- `src/TrackModel/TrackModel.Core/Services/TrackService.cs`
+- `src/TrackModel/TrackModel.Core/Services/TrackTopology.cs`
+- `src/TrackModel/TrackModel.Wpf/Services/TrackModelConnection.cs`
 
-## 3. Implement the permanent fix
+Shared contracts:
 
-Modify the appropriate Track Controller and/or Track Model logic to eliminate the circular dependency.
+- `SwitchPositionRequestMessage`
+- `MovementSuggestionMessage`
+- `TrackModelBlockStateMessage`
+- `TrackModelCommandMessage`
 
-### Desired behavior
+Review the relevant tests and any additional supporting files.
 
-When CTC requests movement along a route containing a signal-controlled block:
+Use the actual current code rather than assuming these files remain unchanged.
 
-1. The Track Controller receives the movement request.
-2. It validates the requested route against current occupancy, maintenance closures, switch position, direction of travel, track conditions, conflicting movements, and other safety requirements.
-3. If the proposed movement is safe, the Track Controller can determine and command the appropriate signal aspect **without requiring that movement authority has already been granted**.
-4. Where confirmed signal feedback is required for authorization, the Track Controller waits for actual feedback from the Track Model.
-5. After the required signal and other safety conditions are satisfied, the movement request becomes authorized.
-6. The authorized speed and authority propagate through the Track Model to the Train Model and Train Controller.
-7. The train can then release its service brake and begin moving under normal controller operation.
+## 3. Known issues to investigate and resolve
 
-### Important architectural requirements
+### Issue A — No automatic switch position selection
 
-Separate the concept of **a route that is safe and eligible for signal clearance** from **a movement that has received final authority**.
+The CTC already supports explicit switch requests through:
 
-If appropriate, introduce a small intermediate route/signal preparation state in the Track Controller.
+`CTCService.SetSwitchPositionAsync()`
 
-For example:
+However, switch requests are separate from movement requests.
 
-- A movement request is received.
-- Its route is provisionally validated.
-- The appropriate proceed signal is requested.
-- Actual signal feedback is verified.
-- Final movement authority is granted.
+The Track Controller's evaluation logic also appears to use the reported switch position whenever no desired switch position has been specified.
 
-However, do not introduce unnecessary new architecture if an existing mechanism can support this safely.
+As a result, the movement request specifies the desired route but does not cause the required switch change.
 
-The exact implementation should follow the repository's established design.
+**Required fix:**
 
-### Safety constraints
+Implement automatic switch alignment as part of normal movement preparation.
 
-The following conditions are mandatory:
+The system must determine which switch positions a route requires based on the actual topology, including:
 
-- Never grant movement authority solely because a signal command was issued.
-- Do not treat a requested green signal as confirmed green feedback.
-- Never force all signals to green.
-- Never remove or bypass the existing PLC safety checks.
-- Never fabricate signal feedback.
-- A signal must remain restrictive whenever its protected route is unsafe.
-- Occupied or unknown blocks must continue preventing unsafe authorization.
-- Maintenance closures and track failures must continue restricting movement.
-- Conflicting movements must not receive incompatible authority.
-- Switch alignment must continue being validated.
-- Stale or missing feedback must fail safely.
-- Pausing the Track Controller must still withdraw movement authority.
-- A loss of signal protection or another safety condition must cause prompt authority reevaluation and revocation.
+- The block from which the train enters the switch.
+- The block through which it must exit.
+- The switch's stem, Normal branch, and Reverse branch.
+- Whether the route is physically valid.
 
-Take care that a prepared signal does not remain permissive after its movement request is cancelled, expires, is superseded, or becomes unsafe.
+For Blue Line block 5, the route 4 → 5 → 11 requires Reverse.
 
-Avoid introducing race conditions between signal commands, asynchronous Track Model feedback, and movement authorization.
+Choose the best architectural solution after inspecting the code. This might involve the CTC proactively requesting switch alignment or the Track Controller deriving required positions from accepted movement requests.
 
-## 4. Preserve existing integration functionality
+Prefer reusing existing interfaces and controls instead of creating a redundant switch-control mechanism.
 
-Do not redesign unrelated modules.
+The Track Controller must remain responsible for enforcing safety and deciding whether switching is actually permitted.
 
-In particular, preserve:
+Do not let the CTC directly manipulate the Track Model's switch position.
 
-- CTC's schedule-based dispatch.
-- Physical train placement through the Track Controller and Track Model.
-- Train ID normalization.
-- Anonymous occupancy feedback and CTC train location inference.
-- Existing Train Model physics.
-- Existing Train Controller safety logic.
-- Movement request renewal and cancellation.
-- Prepared-successor authority handoffs.
-- Zero-authority emergency revocation behavior.
-- All three course lines.
-- Multiple trains operating simultaneously.
-- Existing named-pipe communication contracts unless an additive contract change is genuinely necessary.
+### Issue B — Missing CTC reservation feedback
 
-**Do not change the Train Controller to ignore zero authority or release its brakes without authorization.** The Train Controller is behaving correctly in this scenario.
+Investigate the switch safety logic in:
 
-Prefer the smallest maintainable change that resolves the problem at its source.
+`TrackControllerService.Requests.cs`
 
-This task is specifically about signal/authority sequencing. Do not attempt to redesign cross-territory handoffs, fix the separate missing CTC switch-reservation feedback, or rewrite general route planning.
+Particularly:
 
-## 5. Add automated regression tests
+`GetSwitchProtectionReason()`
 
-Add comprehensive tests using the repository's existing testing framework and established integration-test patterns.
+The current implementation requires each block in the switch's protection zone to have:
 
-### Test A — Blue Line signal 6
+`IsReservedByCtc == false`
 
-Create a movement request for Train 001 from block 1 toward block 10, using the real Blue Line layout and wayside logic.
+However, the Track Model's `CreateBlockState()` does not currently populate `IsReservedByCtc`.
 
-Verify that:
+Therefore, reservation feedback is null and the Track Controller treats the protection zone as unsafe.
 
-1. Train 001 is placed at block 1.
-2. The Track Controller receives the movement request.
-3. The signal at block 6 can be commanded to a proceed aspect when the proposed route is safe.
-4. The required feedback reaches the Track Controller.
-5. The movement becomes authorized.
-6. Authorized speed and authority are both positive.
-7. The resulting commanded values reach the Train Model and Train Controller.
+The PLC similarly uses `reserved_known` and `reserved`.
 
-The test must not manually set the signal to green to bypass the problem.
+**Required fix:**
 
-### Test B — Blue Line signal 11
+Implement a proper, truthful means of determining whether the switch protection zone is reserved by CTC.
 
-Repeat the equivalent test for a valid route from block 1 toward block 15 through signal block 11.
+Investigate whether reservation ownership already exists somewhere in the system before introducing new state or messages.
 
-Verify that the same deadlock does not occur on the alternate branch.
+If it does not exist, implement the minimum complete reservation-tracking integration necessary to support safe automatic switch operation.
 
-Use the correct switch alignment for each route.
+Requirements:
 
-### Test C — Unsafe conditions
+- Do not simply hardcode `IsReservedByCtc = false`.
+- Do not bypass the reservation check.
+- Do not treat unknown reservation state as proof that the zone is unreserved.
+- Clearly define what constitutes a reservation, who owns it, and when it is created or released.
+- Prevent conflicting train movements or switch changes through a protected zone.
+- Ensure that stale or unavailable reservation information results in a safe restriction.
+- Keep the feedback synchronized through the existing communication architecture.
 
-Verify that authority remains withheld when:
+Be careful to distinguish a movement request that is awaiting switch alignment from an already granted movement authority. A pending route must not unnecessarily deadlock itself by being treated as an incompatible reservation.
 
-- The protected signal cannot safely clear.
-- A required block is occupied.
-- Block feedback is Unknown or stale.
-- A relevant track failure is present.
-- The switch alignment is incorrect.
-- The Track Controller is paused.
-- A conflicting movement makes the route unsafe.
+### Issue C — Command and feedback synchronization
 
-Verify that a previously prepared proceed signal cannot authorize an unsafe movement.
+Once the required switch position is selected and approved:
 
-### Test D — Revocation
+- The Track Controller should issue the command through the existing Track Model command pipeline.
+- The Track Model should change the switch only when physically safe.
+- The Track Model must publish the new actual switch position.
+- The Track Controller must verify that the reported position matches the required position.
+- Authority must remain withheld until the switch alignment is confirmed.
 
-After successfully authorizing a movement through a signal-controlled route, introduce an unsafe condition.
+Acknowledging a switch request is not equivalent to confirming that the switch moved.
 
-Verify that:
+If a command is rejected, blocked, or never confirmed, the system must clearly report why and must not grant unsafe authority.
 
-- The Track Controller withdraws or restricts the authority appropriately.
-- Signal state is reevaluated and commanded restrictively when required.
-- The Train Model receives the updated authority.
-- The Train Controller reacts using its existing safety protections.
+Verify that repeated command publication, evaluation cycles, and asynchronous feedback cannot cause the system to oscillate, incorrectly reset switch positions, or generate conflicting commands.
 
-Do not introduce any delay or suppression of genuine zero-authority messages.
+## 4. Support automatic alignment during the entire journey
 
-### Test E — Regression tests
+This functionality must not work only at initial dispatch.
 
-Run the existing relevant tests covering:
+A train may have multiple junctions along its route. A dispatcher may also change the destination after the train has departed.
 
-- Blue Line movement authority.
-- Signal and PLC behavior.
-- Prepared-successor handoffs.
-- Authority continuity.
-- Emergency revocation.
-- Physical dispatch.
-- Live physics and occupancy tracking.
-- Red and Green Line movement authorization.
+The implementation should handle:
 
-Ensure the fix does not alter the expected behavior of lines without signals.
+- An initial route that requires a switch change.
+- Several switches requiring different alignments.
+- A train approaching a switch that is already correctly aligned.
+- A train approaching a switch that needs to change alignment.
+- A route update requiring a different switch position.
+- A switch that cannot currently be moved because its protection zone is occupied, reserved, faulted, or otherwise unsafe.
+- Multiple trains with potentially conflicting movement requests.
 
-## 6. Verify the live demo scenario
+A switch change must happen only when safe.
 
-The intended demonstration scenario is:
+If a switch cannot be aligned, withhold the necessary authority and clearly report the reason. Reevaluate when conditions change so that the train can continue automatically once the route becomes safe.
 
-1. Start all five production modules through the Launcher.
-2. Load the Blue/Red/Green Track Controller setup.
-3. Ensure the Track Controller is running.
-4. Configure Train 001 with working software-controller test gains.
-5. Queue Train 001 for the Blue Line route from block 1 to block 10.
-6. Allow CTC to dispatch the train automatically.
-7. Observe Train 001 appearing on block 1.
-8. Observe the Track Controller successfully clearing the required signal and granting authority.
-9. Observe positive commanded speed and authority at the Train Controller.
-10. Observe Train 001 accelerating and moving into subsequent blocks.
-11. Observe live occupancy transitions in the Track Model, Track Controller, and CTC.
+Do not throw a switch beneath a train or within an unsafe protection zone.
 
-The fix should eliminate the previous indefinite message:
+Preserve authority continuity and the existing movement-request handoff mechanism.
 
-`Withheld: Waiting for proceed signal feedback at block 6.`
+## 5. Preserve the current safety architecture
 
-It is acceptable for this message to appear temporarily while waiting for real feedback, but it must not remain indefinitely when all safety conditions are satisfied.
+This project is intended to realistically simulate railway operations.
 
-If the full trip cannot proceed because of a separate preexisting issue, identify that issue clearly rather than silently expanding the scope of this task.
+Therefore:
 
-## 7. Documentation
+- The CTC requests movement but never grants the final safety authority.
+- The Track Controller remains the final authority for movement and switch control.
+- The Track Model represents the actual physical switch state.
+- Reported switch alignment must be verified, not assumed.
+- Missing or stale feedback must remain fail-safe.
+- An occupied or protected switch must not be thrown.
+- The PLC-based hardware mode must remain supported.
+- Software and PLC modes must enforce equivalent safety requirements.
+- Cancellation, route changes, watchdog expiration, and loss of communication must not leave unsafe switch commands or authorizations active.
 
-Update:
+Do not solve this by removing interlocks, forcing signals Green, granting authority optimistically, or modifying the Train Controller to ignore zero authority.
 
-`docs/integration/LIVE_INTEGRATION_GUIDE.md`
+## 6. Integration tests — required
 
-Explain:
+Add or update tests that validate the actual behavior across module boundaries.
 
-- The actual root cause.
-- The implementation used to eliminate the circular dependency.
-- The new signal/authority evaluation sequence.
-- How actual signal feedback is distinguished from requested signal state.
-- How unsafe conditions continue preventing authorization.
-- How to verify the fix in the production applications.
+### Test A — Blue Line, Normal to Reverse
 
-Update the existing Blue Line signal limitation if it is now resolved.
+**This is the primary acceptance test.**
 
-## 8. Build, test, and final report
+1. Initialize the Blue Line in its normal startup configuration.
+2. Confirm switch 5 initially reports Normal.
+3. Dispatch Train 001 from block 1 toward Station C, block 15.
+4. Confirm the CTC movement request is accepted.
+5. Confirm the system automatically establishes that switch 5 must be Reverse.
+6. Confirm the Track Controller safely commands Reverse.
+7. Confirm the Track Model actually changes the switch.
+8. Confirm the Track Controller receives Reverse feedback.
+9. Confirm movement authority becomes positive.
+10. Confirm Train 001 begins moving through the real Train Model physics and Train Controller.
+11. Confirm the train follows the correct branch, including block 11.
 
-After implementing the changes:
+**No test setup may manually preposition switch 5 to Reverse.**
 
-1. Build the entire solution.
-2. Run the relevant unit tests.
-3. Run the integration tests.
-4. Resolve any regressions introduced by your changes.
-5. Report any existing unrelated failures separately.
+Update the existing `Train001_ToStationC_ClearsSignal11_IsAuthorized_AndMoves` test accordingly.
 
-Do not claim a test passed unless it was actually executed successfully.
+### Test B — Already correctly aligned
 
-### Final report
+Dispatch Train 001 toward Station B, block 10, with switch 5 already Normal.
 
-Provide:
+Verify that the train receives authority and moves without unnecessary switch commands or regressions.
 
-1. **Root cause:** The exact code-level reason for the signal deadlock.
-2. **Changes made:** Files modified and explanation of each meaningful change.
-3. **New behavior:** How the Blue Line signal and movement authority now work.
-4. **Safety verification:** Why the fix does not bypass existing protections.
-5. **Test results:** Build results, tests executed, passed/failed counts, and any failures.
-6. **Remaining limitations:** Any relevant issues still preventing the full Blue Line demonstration.
+### Test C — Reverse to Normal
 
-Finish with a short **manual testing checklist** showing how I can reproduce the original scenario in Visual Studio and confirm that Train 001 now moves from A1 toward Station B.
+Begin with switch 5 Reverse.
 
-**Important:** Implement the fix rather than only recommending it. Do not commit or push any changes; leave them in my working tree for review.
+Request a route through the Normal branch.
+
+Verify that the switch automatically returns to Normal safely, feedback is confirmed, and the train can proceed.
+
+### Test D — Unsafe switch protection zone
+
+Simulate a switch protection zone that is:
+
+- Occupied.
+- Reserved by a conflicting train.
+- Faulted or closed.
+- Missing necessary feedback.
+
+Verify that switch movement is prohibited, authority is withheld when required, and no unsafe command is applied.
+
+When the unsafe condition genuinely clears, verify that the system can retry and recover automatically where appropriate.
+
+### Test E — Route changes
+
+Dispatch a train and then reroute it while it is still safely approaching the junction.
+
+Verify that switch alignment is updated as needed and that stale commands or previous route requests cannot grant authority over the wrong branch.
+
+### Test F — Multiple switches
+
+Add a focused test using an existing suitable multi-switch layout.
+
+Verify that the system determines the required positions independently for each switch and does not rely on a single hardcoded Blue Line switch ID.
+
+Use the existing production-style integration test infrastructure wherever possible.
+
+Do not construct a separate fake switch implementation that bypasses the real modules.
+
+## 7. Scope limitations
+
+Keep this change focused on automatic switch alignment, reservation feedback, and the required integration.
+
+**Do not expand this task into unrelated features.**
+
+In particular:
+
+- Do not redesign the CTC schedule builder.
+- Do not implement the separate Green Line directional-routing improvements.
+- Do not change station dwell-time behavior.
+- Do not redesign train-location inference.
+- Do not modify the existing physics model unless necessary to resolve a directly related defect.
+- Do not change the shared clock implementation.
+- Do not alter unrelated WPF user interfaces.
+
+Small improvements to diagnostics or switch status displays are acceptable if they directly support this fix.
+
+Preserve existing public contracts when practical. If contracts must change, update all affected producers, consumers, and tests together.
+
+## 8. Build and verification
+
+After implementing:
+
+1. Build the complete solution.
+2. Run all relevant CTC, Track Controller, and Track Model unit tests.
+3. Run the relevant integration tests.
+4. Run the existing signal-clearance and authority-handoff regression tests.
+5. Run the new automatic switch-alignment tests.
+6. Investigate any failures caused by the changes.
+7. Fix regressions rather than weakening test assertions.
+8. Run the full test suite if supported in the environment.
+
+Do not report a test as passing unless it was actually executed successfully.
+
+Do not manually modify the initial switch position in an integration test simply to make the test pass.
+
+## 9. Final report
+
+After making the changes, provide a detailed but organized report containing:
+
+**A. Root cause**
+
+Explain exactly why automatic switch alignment previously failed, including the CTC, Track Controller, and Track Model responsibilities.
+
+**B. Changes made**
+
+List the important files changed and what each modification accomplishes.
+
+**C. New switch-control sequence**
+
+Explain how the system now handles a movement request that requires a switch to change alignment.
+
+**D. Safety behavior**
+
+Explain how occupancy, reservations, PLC interlocks, and physical feedback continue to prevent unsafe switch movements.
+
+**E. Test results**
+
+Provide the build results and actual tests executed, identifying failures or tests that could not be run.
+
+**F. Remaining limitations**
+
+Identify any unresolved limitations involving automatic switch operation, especially on Red and Green Lines.
+
+**G. Iteration 3 readiness**
+
+Briefly assess whether this fix allows realistic routes requiring switches to operate, and distinguish that from the separately outstanding full Green Line routing and station-arrival work.
+
+## Important implementation instructions
+
+This is an implementation task, not just a code review.
+
+Inspect the current repository, determine the best architectural approach, implement the changes, add the tests, and verify the results.
+
+Use the existing message contracts, runtime infrastructure, route data, and safety logic wherever possible.
+
+Do not make speculative broad refactors.
+
+Do not introduce shortcuts that make the demonstration appear to work while weakening the correctness of the simulation.
+
+Do not commit or push changes automatically.
+
+**Primary success criterion: Starting with Blue Line switch 5 in Normal, the dispatcher can schedule Train 001 to Station C at block 15, and the system automatically changes the switch to Reverse, confirms the change, grants safe movement authority, and physically moves the train along the correct route without any manual switch intervention.**

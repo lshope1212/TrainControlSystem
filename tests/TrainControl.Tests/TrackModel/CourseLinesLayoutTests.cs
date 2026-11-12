@@ -212,6 +212,25 @@ public class CourseLinesLayoutTests
         Assert.AreEqual(1, notifications, "An unchanged repeat is not a state change.");
     }
 
+    /// <summary>A switch machine without power cannot move its points; a command for its present position still applies.</summary>
+    [TestMethod]
+    public void ApplyCommands_UnpoweredSwitch_IsNotThrown_AndReportsItsActualPosition()
+    {
+        var model = new TrackService();
+        CourseTrackLayout.Load(model);
+        model.FindBlock("5")!.PowerFailure = true;
+
+        var refused = model.ApplyCommands([new TrackModelCommandMessage { BlockId = "5", Switch = SwitchPosition.Reverse, Signal = SignalState.Red, Crossing = CrossingState.Open }]);
+        Assert.HasCount(1, refused);
+        StringAssert.StartsWith(refused[0], "5: A switch without power cannot be thrown");
+        Assert.AreEqual(SwitchPosition.Normal, model.CreateBlockState("5").Switch);
+        Assert.IsEmpty(model.ApplyCommands([new TrackModelCommandMessage { BlockId = "5", Switch = SwitchPosition.Normal, Signal = SignalState.Red, Crossing = CrossingState.Open }]));
+
+        model.FindBlock("5")!.PowerFailure = false;
+        Assert.IsEmpty(model.ApplyCommands([new TrackModelCommandMessage { BlockId = "5", Switch = SwitchPosition.Reverse, Signal = SignalState.Red, Crossing = CrossingState.Open }]));
+        Assert.AreEqual(SwitchPosition.Reverse, model.CreateBlockState("5").Switch, "Thrown once power is restored.");
+    }
+
     /// <summary>Course-format worksheets (row 1 headers, then one row per block) rebuilt from a layout, with the workbook's wording.</summary>
     private static Dictionary<string, List<Dictionary<string, string>>> SheetsFrom(TrackLayout layout)
     {

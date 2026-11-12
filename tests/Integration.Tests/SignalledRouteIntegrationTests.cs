@@ -20,64 +20,13 @@ namespace TrainControl.Integration.Tests;
 [TestClass]
 public sealed class SignalledRouteIntegrationTests
 {
-    private static readonly TimeSpan Departure = new(9, 0, 30);
-    private static readonly string[] ToStationB = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
-    private static readonly string[] ToStationC = ["1", "2", "3", "4", "5", "11", "12", "13", "14", "15"];
+    internal static readonly string[] ToStationB = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+    internal static readonly string[] ToStationC = ["1", "2", "3", "4", "5", "11", "12", "13", "14", "15"];
 
-    private sealed class Run : IAsyncDisposable
-    {
-        public required LiveSystem System { get; init; }
-        public required LiveTrainModel TrainModel { get; init; }
-        public required LiveTrainController TrainController { get; init; }
-        public required ClockPump Clock { get; init; }
-
-        public Task<DispatchedTrainState?> Train() => System.OnCtc(ctc => ctc.State.FindDispatchedTrain("001"));
-
-        public async ValueTask DisposeAsync()
-        {
-            await Clock.DisposeAsync();
-            await TrainController.DisposeAsync();
-            await TrainModel.DisposeAsync();
-            await System.DisposeAsync();
-        }
-    }
-
-    /// <summary>The demonstration set-up: course (Blue/Red/Green) deployment, all five modules, Train 001 queued on <paramref name="route"/>, the Track Controller running.</summary>
-    private static async Task<Run> StartAsync(string[] route, Action<TrackService>? prepareTrack = null)
-    {
-        var system = new LiveSystem();
-        await system.StartTrackControllerAsync(LiveSystem.CourseDeployment);
-        await system.StartCtcAsync();
-        await system.StartTrackModelAsync(allLines: true, prepare: prepareTrack);
-        var trainModel = await LiveTrainModel.StartAsync(system);
-        var trainController = new LiveTrainController(system);
-
-        // The repository's arbitrary software-controller test gains (as in LivePhysicsEndToEndTests).
-        trainController.Subsystem.Registry.Get("TRAIN-001").SetEngineerSettings(kp: 20_000, ki: 0);
-        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindLine("Blue") is { } blue && blue.Blocks.All(block => block.Occupancy == OccupancyState.Clear)), "CTC sees the Blue Line clear.");
-        await system.OnCtc(ctc =>
-        {
-            var scheduled = new ScheduledTrain { TrainId = "001", LineId = "Blue" };
-            for (int i = 0; i < route.Length; i++)
-            {
-                scheduled.Route.Add(new ScheduledRouteBlock { BlockId = route[i], ArrivalTime = i == 0 ? Departure : i == route.Length - 1 ? Departure + TimeSpan.FromSeconds(120) : null });
-            }
-
-            ctc.QueueSchedule([scheduled]);
-            return 0;
-        });
-        await system.ResumeTrackControllerAsync();
-        var clock = new ClockPump(Departure - TimeSpan.FromSeconds(1), 5, system.CtcPipe, system.TrainModelPipe);
-        var run = new Run { System = system, TrainModel = trainModel, TrainController = trainController, Clock = clock };
-        await LiveSystem.UntilAsync(async () => (await run.Train())?.ReleaseStatus == TrainReleaseStatus.DetectedOnTrack,
-            "CTC dispatches Train 001 and detects it in block 1.", TimeSpan.FromSeconds(20));
-        Assert.AreEqual("1", (await run.Train())!.CurrentBlockId);
-        CollectionAssert.AreEqual(new[] { "1" }, await system.OnTrackModel(track => track.Layout.Blocks.Where(block => block.LineId == "Blue" && block.IsOccupied).Select(block => block.Id).ToArray()));
-        return run;
-    }
+    private static Task<DispatchedRun> StartAsync(string[] route, Action<TrackService>? prepareTrack = null) => DispatchedRun.StartAsync("Blue", route, prepareTrack);
 
     /// <summary>Waits for the grant, then checks it end to end: real aspect, positive values at the Train Model and Train Controller, and motion.</summary>
-    private static async Task AssertSignalClearsAndTrainMovesAsync(Run run, string signal, string otherSignal)
+    internal static async Task AssertSignalClearsAndTrainMovesAsync(DispatchedRun run, string signal, string otherSignal)
     {
         var system = run.System;
         var reasons = new List<string>();
@@ -116,7 +65,10 @@ public sealed class SignalledRouteIntegrationTests
         Assert.IsGreaterThan(0.0, (await run.TrainModel.StateAsync("001"))!.PositionMeters);
     }
 
-    /// <summary>Test A: the live demonstration route, A1 toward Station B (block 10) through signal 6.</summary>
+    /// <summary>
+    /// Test A: the live demonstration route, A1 toward Station B (block 10) through signal 6. Switch 5
+    /// already lies Normal, as this route needs: it is neither commanded elsewhere nor moved.
+    /// </summary>
     [TestMethod]
     [Timeout(120_000, CooperativeCancellation = true)]
     public async Task Train001_ToStationB_ClearsSignal6_IsAuthorized_AndMoves()
@@ -136,22 +88,60 @@ public sealed class SignalledRouteIntegrationTests
             "CTC tracks Train 001 past signal 6 into block 7.", TimeSpan.FromSeconds(60));
         Console.WriteLine("CTC location sequence: " + string.Join(" -> ", seen));
         CollectionAssert.AreEqual(ToStationB.Take(7).ToArray(), seen.ToArray(), "Block by block, never skipping one.");
+        // Already aligned: the route needs nothing thrown, and nothing is.
+        Assert.AreEqual(SwitchPosition.Normal, run.InitialSwitches["5"]);
+        CollectionAssert.AreEqual(new[] { SwitchPosition.Normal }, run.Switches.Commanded("5"), "No unnecessary switch command.");
+        CollectionAssert.AreEqual(new[] { SwitchPosition.Normal }, run.Switches.Physical("5"), "Switch 5 never moved.");
         Assert.IsTrue(run.TrainController.Sink.Sent.Where(command => command.TrainId == "001").All(command => !command.EmergencyBrakeCommand),
             "Through the signalled block without a false zero.");
     }
 
     /// <summary>
-    /// Test B: the alternate branch, toward Station C (block 15) through signal 11. Switch 5 must lie
-    /// Reverse. The Track Model starts with it Reverse because the Track Controller cannot throw it live:
-    /// the Track Model does not report CTC reservation feedback (a separate, known limitation).
+    /// Test B (primary acceptance for automatic switch alignment): the alternate branch, toward Station C
+    /// (block 15) through signal 11. The Track Model starts in its normal configuration with switch 5
+    /// Normal; nothing in the test touches the switch. The route alone makes the Track Controller command
+    /// Reverse, the Track Model throws it and reports it, and only then is authority granted. The train
+    /// then takes the Reverse branch into block 11 on real physics.
     /// </summary>
     [TestMethod]
     [Timeout(120_000, CooperativeCancellation = true)]
     public async Task Train001_ToStationC_ClearsSignal11_IsAuthorized_AndMoves()
     {
-        await using var run = await StartAsync(ToStationC, track => track.FindBlock("5")!.Switch = SwitchPosition.Reverse);
+        await using var run = await StartAsync(ToStationC);
+        var system = run.System;
+        Assert.AreEqual(SwitchPosition.Normal, run.InitialSwitches["5"], "Start-up configuration: switch 5 Normal.");
+
+        // The accepted request, not a switch request, makes the controller establish Reverse.
+        await LiveSystem.UntilAsync(async () => (await run.Train())?.MovementRequest?.Acknowledgement is RequestAcknowledgementOutcome.AcceptedForEvaluation or RequestAcknowledgementOutcome.PreparedAsSuccessor,
+            "the Track Controller accepts CTC's movement request.", TimeSpan.FromSeconds(10));
+        await LiveSystem.UntilAsync(() => Task.FromResult(system.WaysideBlock("5").CommandedSwitch == SwitchPosition.Reverse),
+            "the Track Controller commands switch 5 Reverse for the route.", TimeSpan.FromSeconds(10));
+        await LiveSystem.UntilAsync(async () => await system.OnTrackModel(track => track.FindBlock("5")!.Switch) == SwitchPosition.Reverse,
+            "the Track Model throws switch 5 Reverse.", TimeSpan.FromSeconds(10));
+        await LiveSystem.UntilAsync(() => Task.FromResult(system.WaysideBlock("5").ReportedSwitch == SwitchPosition.Reverse),
+            "the Track Controller receives Reverse feedback.", TimeSpan.FromSeconds(10));
+        Assert.IsFalse(system.CtcSent!.Delivered.OfType<SwitchPositionRequestMessage>().Any(), "CTC never asked for the switch: the route did.");
+
         await AssertSignalClearsAndTrainMovesAsync(run, signal: "11", otherSignal: "6");
-        Assert.AreEqual(SwitchPosition.Reverse, run.System.WaysideBlock("5").ReportedSwitch);
+        Assert.AreEqual(SwitchPosition.Reverse, system.WaysideBlock("5").ReportedSwitch);
+
+        // On through the switch: the train takes the Reverse branch, 4 -> 5 -> 11, block by block.
+        var seen = new List<string> { "1", "2" };
+        await LiveSystem.UntilAsync(async () =>
+            {
+                string current = (await run.Train())!.CurrentBlockId;
+                if (seen[^1] != current) seen.Add(current);
+                return current == "12";
+            },
+            "CTC tracks Train 001 through switch 5 onto the Reverse branch (block 12).", TimeSpan.FromSeconds(60));
+        Console.WriteLine("CTC location sequence: " + string.Join(" -> ", seen));
+        CollectionAssert.AreEqual(new[] { "1", "2", "3", "4", "5", "11", "12" }, seen.ToArray(), "Block by block onto the Reverse branch.");
+        Assert.IsFalse(await system.OnTrackModel(track => track.FindBlock("6")!.IsOccupied), "Never onto the Normal branch.");
+        Assert.AreEqual(SwitchPosition.Reverse, await system.OnTrackModel(track => track.FindBlock("5")!.Switch), "Not thrown back behind the train.");
+        CollectionAssert.AreEqual(new[] { SwitchPosition.Normal, SwitchPosition.Reverse }, run.Switches.Commanded("5"), "One command, no oscillation.");
+        CollectionAssert.AreEqual(new[] { SwitchPosition.Normal, SwitchPosition.Reverse }, run.Switches.Physical("5"), "Thrown once.");
+        Assert.IsTrue(run.TrainController.Sink.Sent.Where(command => command.TrainId == "001").All(command => !command.EmergencyBrakeCommand),
+            "Through the junction without a false zero.");
     }
 
     /// <summary>
