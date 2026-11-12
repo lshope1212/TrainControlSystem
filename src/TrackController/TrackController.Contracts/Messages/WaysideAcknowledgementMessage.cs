@@ -14,4 +14,8 @@ public sealed record WaysideAcknowledgementMessage(
     /// </summary>
     [JsonPropertyName("stagedSuccessor")]
     public bool IsStagedSuccessor { get; init; }
+
+    /// <summary>The movement request already ended. It no longer grants authority.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsRetiredMovement { get; init; }
 }

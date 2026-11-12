@@ -142,15 +142,16 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
         SignalIfMovementOutputChanged(_runtime.LatestSnapshot);
 
+        var acknowledgement = CreateCtcAcknowledgement(envelope, result);
         if (result is WaysideAcknowledgementMessage { IsAccepted: false } rejected)
         {
-            InputReceived?.Invoke($"Rejected: {rejected.Detail}");
+            InputReceived?.Invoke(rejected.IsRetiredMovement
+                ? $"Movement request ended for block {acknowledgement?.BlockId ?? "unknown"}."
+                : $"Rejected: {rejected.Detail}");
         }
 
-        // CTC learns whether each of its requests was accepted for evaluation or rejected (and why);
-        // delivery of its bytes alone tells it nothing. Sent by the CTC publisher, never from this
-        // receive loop, so a busy CTC can never stall the controller's input pipe.
-        if (CreateCtcAcknowledgement(envelope, result) is { } acknowledgement)
+        // The CTC publisher sends the response so a busy CTC cannot stall the controller's input pipe.
+        if (acknowledgement is not null)
         {
             EnqueueForCtc(acknowledgement);
         }
@@ -322,6 +323,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                 { IsAccepted: true } => RequestAcknowledgementOutcome.AcceptedForEvaluation,
                 _ => RequestAcknowledgementOutcome.Rejected,
             },
+            IsRetiredMovement = receipt?.IsRetiredMovement == true,
             Detail = receipt?.Detail ?? "The controller runtime returned no acknowledgement.",
             BlockId = request.BlockId ?? "",
             TrainId = request.TrainId ?? "",

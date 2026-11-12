@@ -13,10 +13,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <DefineConstants>$(DefineConstants);TRACK_CONTROLLER_MAP</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <None Update="Samples\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="..\..\CTC\CTC.Wpf\Layout\TerritoryLayoutProvider.cs" Link="Layout\TerritoryLayoutProvider.cs" />
+    <Compile Include="..\..\CTC\CTC.Wpf\Layout\TerritoryBlockPlacement.cs" Link="Layout\TerritoryBlockPlacement.cs" />
+    <EmbeddedResource Include="..\..\TrackModel\SampleLayouts\course-lines.json" LogicalName="TrackController.CourseLines.json" />
   </ItemGroup>
 
 </Project>

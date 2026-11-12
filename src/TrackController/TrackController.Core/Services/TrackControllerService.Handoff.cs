@@ -5,6 +5,13 @@ using MovementResult = (TrainControl.Contracts.Messages.MovementSuggestionMessag
 
 namespace TrackController.Core.Services;
 
+/// <summary>A renewal arrived after the wayside ended the movement request.</summary>
+public sealed class RetiredMovementRequestException() : ArgumentException(RetiredMovementRequestException.Detail)
+{
+    // Protocol 11 Pi builds used this exact reason before the structured receipt flag.
+    public const string Detail = "This request's target block cleared. Submit a new request ID and current target block.";
+}
+
 /// <summary>What <see cref="TrackControllerService.SubmitMovement"/> did with a movement message.</summary>
 public enum MovementSubmission
 {

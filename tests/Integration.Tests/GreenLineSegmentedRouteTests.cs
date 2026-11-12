@@ -168,7 +168,12 @@ public sealed class GreenLineSegmentedRouteTests
 
         private WaysideLoop()
         {
-            var configuration = WaysideDeployment.Read(LiveSystem.CourseDeployment).Territories.Single(territory => territory.Id == "wayside-green").Configuration;
+            // This in-process fixture controls the full line. Each real Green territory carries
+            // the same full topology, with an ownership list for its own equipment.
+            var configuration = WaysideDeployment.Read(LiveSystem.CourseDeployment).Territories
+                .First(territory => territory.Configuration.LineName == "Green Line").Configuration;
+            configuration.OwnedBlockIds = null;
+            configuration.CoordinatedRoutes = false;
             Wayside = new TrackControllerService(configuration, Clock);
             Wayside.LoadPlc("wayside.plc", File.ReadAllText(Path.Combine(LiveSystem.SamplesFolder, "wayside.plc")));
             _lengths = configuration.Blocks.ToDictionary(block => block.BlockId, block => block.LengthMeters);
@@ -295,6 +300,11 @@ public sealed class GreenLineSegmentedRouteTests
                 if (block.HasSwitch && SwitchesRespond && track.Occupancy == OccupancyState.Clear && block.CommandedSwitch is SwitchPosition.Normal or SwitchPosition.Reverse)
                 {
                     _track[block.BlockId] = track = track with { Switch = block.CommandedSwitch };
+                }
+
+                if (block.HasSignal && block.CommandedSignal != SignalState.Unknown)
+                {
+                    _track[block.BlockId] = track = track with { Signal = block.CommandedSignal };
                 }
 
                 if (block.HasCrossing && block.CommandedCrossing is CrossingState.Open or CrossingState.Closed)

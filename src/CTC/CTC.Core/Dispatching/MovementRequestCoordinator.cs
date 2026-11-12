@@ -138,12 +138,15 @@ public sealed class MovementRequestCoordinator
         ArgumentNullException.ThrowIfNull(acknowledgement);
 
         var (train, request) = FindByRequestId(state, acknowledgement.RequestId);
-        if (request is null || (request.Acknowledgement == acknowledgement.Outcome && request.AcknowledgementDetail == acknowledgement.Detail))
+        bool retired = acknowledgement.Outcome == RequestAcknowledgementOutcome.Rejected && acknowledgement.IsRetiredMovement;
+        if (request is null || request.IsRetired
+            || (!retired && request.Acknowledgement == acknowledgement.Outcome && request.AcknowledgementDetail == acknowledgement.Detail))
         {
             return null;
         }
 
         request.Acknowledgement = acknowledgement.Outcome;
+        request.IsRetired = retired;
         request.AcknowledgementDetail = acknowledgement.Detail ?? string.Empty;
         if (acknowledgement.Outcome == RequestAcknowledgementOutcome.Rejected)
         {
@@ -188,7 +191,7 @@ public sealed class MovementRequestCoordinator
         }
 
         var (train, request) = FindByRequestId(state, report.RequestId);
-        if (request is null || request.Plan.TargetBlockId != blockId)
+        if (request is null || request.IsRetired || request.Plan.TargetBlockId != blockId)
         {
             return null;
         }
@@ -227,7 +230,7 @@ public sealed class MovementRequestCoordinator
         string route = request.Plan.PathBlockIds.Count == 0
             ? $"block {request.Plan.TargetBlockId}"
             : $"blocks {request.Plan.TargetBlockId} to {request.Plan.PathBlockIds[^1]}";
-        string state = request.Delivery switch
+        string state = request.IsRetired ? "ended at the Track Controller, waiting for current block authority" : request.Delivery switch
         {
             MovementRequestDelivery.Failed => $"not delivered ({request.DeliveryError})",
             MovementRequestDelivery.NotSent => "not sent yet",
@@ -245,10 +248,10 @@ public sealed class MovementRequestCoordinator
             },
         };
         string handoff = request.SupersededRequestId.Length > 0 && request.IsMovementAuthorized
-            ? " Authority was handed over from the previous block's request without interruption."
+            ? " Authority was handed over from the previous block's request."
             : string.Empty;
         string successor = train.StagedMovementRequest is { } staged
-            ? staged.Acknowledgement switch
+            ? staged.IsRetired ? $" The request for block {staged.Plan.TargetBlockId} ended." : staged.Acknowledgement switch
             {
                 RequestAcknowledgementOutcome.Rejected => $" The successor for block {staged.Plan.TargetBlockId} was rejected: {staged.AcknowledgementDetail}",
                 RequestAcknowledgementOutcome.PreparedAsSuccessor => $" Successor for block {staged.Plan.TargetBlockId} prepared (not a grant; it takes over when the train enters that block).",
@@ -265,17 +268,18 @@ public sealed class MovementRequestCoordinator
         var current = train.MovementRequest;
         var staged = train.StagedMovementRequest;
 
-        // Transfer: the train moved on and the prepared successor is exactly the request it needs now.
-        // The Track Controller already handed authority over to it (or, if it could not, evaluates it as
-        // an ordinary request on its next renewal); the predecessor is cancelled only as clean-up.
+        // Adopt only a successor the Track Controller reports taking over. If it was still staged,
+        // cancelling the predecessor can retire its ID. The ordinary replacement below then needs
+        // a fresh ID so the wayside can evaluate it from the newly occupied block.
         if (allowHandoff && current is not null && desired is not null && staged is not null && !current.Plan.Matches(desired)
-            && staged.Plan.Matches(desired) && staged.Acknowledgement != RequestAcknowledgementOutcome.Rejected)
+            && staged.Plan.Matches(desired) && staged.SupersededRequestId == current.RequestId
+            && staged.Acknowledgement != RequestAcknowledgementOutcome.Rejected)
         {
             train.MovementRequest = staged;
             train.StagedMovementRequest = null;
             staged.PredecessorRequestId = null; // renewed from now on as an ordinary request
             QueueCleanup(train, current);
-            Notify(train, $"{TrainIds.DisplayName(train.TrainId)}'s movement authority passed from block {current.Plan.TargetBlockId} to block {staged.Plan.TargetBlockId} under the prepared request (no cancel-and-reissue gap).");
+            Notify(train, $"{TrainIds.DisplayName(train.TrainId)}'s movement authority passed from block {current.Plan.TargetBlockId} to block {staged.Plan.TargetBlockId} under the prepared request.");
             await RetryCleanupAsync(train, cancellationToken);
             current = staged;
             staged = null;
@@ -285,7 +289,10 @@ public sealed class MovementRequestCoordinator
         {
             if (current.Acknowledgement == RequestAcknowledgementOutcome.Rejected)
             {
-                await WithdrawSuccessorAsync(train, cancellationToken);
+                // The wayside may already have promoted the successor. Keep it until CTC observes
+                // the new block, then adopt it through the normal handoff path above.
+                if (!current.IsRetired)
+                    await WithdrawSuccessorAsync(train, cancellationToken);
                 return;
             }
 
@@ -294,7 +301,7 @@ public sealed class MovementRequestCoordinator
                 await SendAsync(train, current, cancellationToken);
             }
 
-            if (line is not null)
+            if (line is not null && !current.IsRetired)
             {
                 await SynchronizeSuccessorAsync(train, line, current, renewIfDue, cancellationToken);
             }

@@ -72,7 +72,7 @@ public sealed partial class TrackControllerService
 
             if (_retiredRequests.Contains(message.RequestId))
             {
-                throw new ArgumentException("This request's target block cleared. Submit a new request ID and current target block.");
+                throw new RetiredMovementRequestException();
             }
 
             if (_cancelledRequests.TryGetValue(message.RequestId, out var cancelled))

@@ -36,12 +36,13 @@ public class CtcAuthorityHandoffTests
 
     private static List<MovementSuggestionMessage> Sent(FakeMessageSender sender) => sender.SentMessages.OfType<MovementSuggestionMessage>().ToList();
 
-    private static void Acknowledge(CTCService service, MovementRequestState request, RequestAcknowledgementOutcome outcome, string detail = "") =>
+    private static void Acknowledge(CTCService service, MovementRequestState request, RequestAcknowledgementOutcome outcome, string detail = "", bool retired = false) =>
         service.ApplyRequestAcknowledgement(new RequestAcknowledgementMessage
         {
             RequestId = request.RequestId,
             RequestType = nameof(MovementSuggestionMessage),
             Outcome = outcome,
+            IsRetiredMovement = retired,
             Detail = detail,
             BlockId = request.Plan.TargetBlockId,
             TrainId = "001",
@@ -157,6 +158,57 @@ public class CtcAuthorityHandoffTests
     }
 
     [TestMethod]
+    public async Task LateRenewalReceipt_EndsOldRequestWithoutCancellingItsSuccessor()
+    {
+        var (service, sender, clock, active, staged) = await GrantedAsync();
+        int before = Sent(sender).Count;
+
+        Acknowledge(service, active, RequestAcknowledgementOutcome.Rejected, "Old request ended.", retired: true);
+        Acknowledge(service, active, RequestAcknowledgementOutcome.AcceptedForEvaluation);
+        Report(service, "A1", OccupancyState.Occupied, active);
+        clock.Advance(TimeSpan.FromSeconds(4));
+        await service.SynchronizeMovementRequestsAsync();
+
+        Assert.IsFalse(active.IsMovementAuthorized);
+        Assert.Contains("ended at the Track Controller", MovementRequestCoordinator.Describe(Train(service)));
+        Assert.AreSame(staged, Train(service).StagedMovementRequest);
+        Assert.HasCount(before, Sent(sender), "No renewal of the ended request or cancellation of its successor.");
+
+        await EnterAsync(service, "A1", "A2", staged, superseded: active.RequestId);
+        Assert.AreSame(staged, Train(service).MovementRequest);
+        Assert.IsTrue(staged.IsMovementAuthorized);
+    }
+
+    [TestMethod]
+    public async Task OccupiedNextBlockWithoutAPromotionReport_GetsANewOrdinaryRequest()
+    {
+        var (service, sender, clock, active, staged) = await GrantedAsync();
+        int before = Sent(sender).Count;
+
+        await EnterAsync(service, "A1", "A2", promoted: null);
+
+        var request = Train(service).MovementRequest!;
+        Assert.AreEqual("A2", request.Plan.TargetBlockId);
+        Assert.AreNotEqual(staged.RequestId, request.RequestId, "The discarded staged ID cannot become an ordinary request.");
+        var transition = Sent(sender).Skip(before).ToArray();
+        Assert.HasCount(3, transition);
+        Assert.AreEqual(active.RequestId, transition[0].RequestId);
+        Assert.IsFalse(transition[0].IsActive);
+        Assert.AreEqual(staged.RequestId, transition[1].RequestId);
+        Assert.IsFalse(transition[1].IsActive);
+        Assert.AreEqual(request.RequestId, transition[2].RequestId);
+        Assert.IsTrue(transition[2].IsActive);
+        Assert.IsNull(transition[2].PredecessorRequestId);
+        Assert.IsFalse(request.IsMovementAuthorized);
+
+        Acknowledge(service, staged, RequestAcknowledgementOutcome.Rejected, "Old staged ID ended.", retired: true);
+        clock.Advance(MovementRequestCoordinator.DefaultRenewalInterval);
+        await service.SynchronizeMovementRequestsAsync();
+        Assert.AreEqual(request.RequestId, Sent(sender).Last().RequestId);
+        Assert.IsFalse(request.IsRetired);
+    }
+
+    [TestMethod]
     public async Task FixedEndPoint_ShrinksByEachBlock_AndIsNeverExtended()
     {
         var (service, _, _, active, staged) = await GrantedAsync();
@@ -166,7 +218,7 @@ public class CtcAuthorityHandoffTests
         {
             var successor = Train(service).StagedMovementRequest!;
             Acknowledge(service, successor, RequestAcknowledgementOutcome.PreparedAsSuccessor);
-            await EnterAsync(service, route[i - 1], route[i], successor);
+            await EnterAsync(service, route[i - 1], route[i], successor, superseded: successor.PredecessorRequestId!);
             observed.Add(Train(service).MovementRequest!.Plan.AuthorityMeters);
         }
 

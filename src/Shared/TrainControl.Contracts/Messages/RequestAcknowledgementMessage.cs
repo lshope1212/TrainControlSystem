@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using TrainControl.Contracts.Enums;
 
 namespace TrainControl.Contracts.Messages;
@@ -32,6 +33,10 @@ public sealed class RequestAcknowledgementMessage
     public string RequestType { get; set; } = string.Empty;
 
     public RequestAcknowledgementOutcome Outcome { get; set; }
+
+    /// <summary>True when the acknowledged movement request already ended at the wayside.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsRetiredMovement { get; set; }
 
     /// <summary>Readable explanation from the wayside, e.g. the rejection reason.</summary>
     public string Detail { get; set; } = string.Empty;

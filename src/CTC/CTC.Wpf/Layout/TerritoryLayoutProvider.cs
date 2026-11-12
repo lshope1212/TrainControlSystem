@@ -1,6 +1,10 @@
 using System.Windows;
 
+#if TRACK_CONTROLLER_MAP
+namespace TrackController.Wpf.Layout;
+#else
 namespace CTC.Wpf.Layout;
+#endif
 
 /// <summary>
 /// A section's schematic path. Blocks of the section are spread along it in increasing

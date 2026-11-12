@@ -106,7 +106,10 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
         {
-            return Task.FromResult<object>(new WaysideAcknowledgementMessage(false, ex.Message, message.MessageType));
+            return Task.FromResult<object>(new WaysideAcknowledgementMessage(false, ex.Message, message.MessageType)
+            {
+                IsRetiredMovement = ex is RetiredMovementRequestException
+            });
         }
         finally
         {

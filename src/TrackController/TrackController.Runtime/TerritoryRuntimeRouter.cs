@@ -252,8 +252,16 @@ public sealed partial class TerritoryRuntimeRouter : IWaysideRuntime
 
     private static WaysideAcknowledgementMessage Receipt(string type, object[] replies)
     {
-        var errors = replies.OfType<WaysideAcknowledgementMessage>().Where(acknowledgement => !acknowledgement.IsAccepted).Select(acknowledgement => acknowledgement.Detail).ToArray();
-        return new(errors.Length == 0, errors.Length == 0 ? "Delivered to the assigned controller(s). Inspect their outputs." : string.Join("; ", errors), type);
+        var failures = replies.OfType<WaysideAcknowledgementMessage>()
+            .Where(acknowledgement => !acknowledgement.IsAccepted).ToArray();
+        if (failures.Length == 0)
+            return new(true, "Delivered to the assigned controller(s). Inspect their outputs.", type);
+
+        var errors = failures.Select(acknowledgement => acknowledgement.Detail).Distinct(StringComparer.Ordinal);
+        return new(false, string.Join("; ", errors), type)
+        {
+            IsRetiredMovement = failures.All(acknowledgement => acknowledgement.IsRetiredMovement)
+        };
     }
 
     private WaysideSnapshotMessage Combine()

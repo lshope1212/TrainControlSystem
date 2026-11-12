@@ -91,6 +91,9 @@ public class DispatchedTrainViewModel : ViewModelBase
                 return _train.ReleaseStatus == TrainReleaseStatus.AwaitingPlacement ? "No request (awaiting placement)" : "No request";
             }
 
+            if (request.IsRetired)
+                return $"Request for {request.Plan.TargetBlockId} ended. Waiting for current block authority.";
+
             string status = request.Delivery switch
             {
                 MovementRequestDelivery.Failed => $"Not delivered: {request.DeliveryError}",
