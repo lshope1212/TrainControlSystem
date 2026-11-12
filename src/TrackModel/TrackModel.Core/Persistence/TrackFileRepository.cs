@@ -46,6 +46,7 @@ public sealed class TrackFileRepository : ITrackRepository
                 Beacon = S("Beacon"), BeaconTargetBlockId = S("BeaconTargetBlockId"),
                 BeaconDistanceToStopMeters = S("BeaconDistanceToStopMeters").Length == 0 ? null : D("BeaconDistanceToStopMeters"),
                 BeaconPlatformSide = Enum.Parse<TrainControl.Contracts.Enums.PlatformSide>(S("BeaconPlatformSide", "None"), true),
+                StationSide = Enum.Parse<TrainControl.Contracts.Enums.PlatformSide>(S("StationSide", "None"), true),
                 HasSwitch = B("HasSwitch"), HasSignal = B("HasSignal"), HasCrossing = B("HasCrossing"), HasHeater = B("HasHeater"),
                 TravelDirection = S("TravelDirection", "Bidirectional"),
                 ConnectedBlockIds = S("ConnectedBlockIds").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),

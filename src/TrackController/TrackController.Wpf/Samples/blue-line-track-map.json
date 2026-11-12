@@ -46,7 +46,7 @@
       "nextBlockIds": [
         "4"
       ],
-      "hasSignal": false,
+      "hasSignal": true,
       "normalNextBlockId": null,
       "reverseNextBlockId": null,
       "stemBlockId": null,

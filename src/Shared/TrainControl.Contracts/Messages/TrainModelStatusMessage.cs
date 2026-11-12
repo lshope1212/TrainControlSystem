@@ -64,6 +64,13 @@ public class TrainModelStatusMessage
     /// <summary>True when the beacon fields below carry valid data.</summary>
     public bool BeaconValid { get; set; }
 
+    /// <summary>
+    /// Increments each time the train reads a NEW beacon (a new pass, even of the same station);
+    /// the Train Controller recalibrates its station distance when it changes. 0 = not provided
+    /// (the controller then falls back to detecting a changed station name or distance).
+    /// </summary>
+    public long BeaconSequence { get; set; }
+
     public string NextStationName { get; set; } = string.Empty;
 
     /// <summary>Distance from the beacon to the next station, at the moment the beacon was read.</summary>

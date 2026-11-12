@@ -19,6 +19,12 @@ public class TrackBlock
     /// <summary>Optional surveyed distance from this beacon to the stopping point. Null means unknown.</summary>
     public double? BeaconDistanceToStopMeters { get; set; }
     public PlatformSide BeaconPlatformSide { get; set; } = PlatformSide.None;
+    /// <summary>
+    /// Platform side(s) of a station block (workbook "Station Side": Left, Right, Left/Right → Both).
+    /// Delivered in the beacon so the train opens the correct doors. None for non-station blocks.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
+    public PlatformSide StationSide { get; set; } = PlatformSide.None;
     public int InitialWaitingPassengers { get; set; }
     public bool HasSwitch { get; set; }
     public bool HasSignal { get; set; }

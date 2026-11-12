@@ -54,6 +54,8 @@ public sealed class MainWindowViewModel : ViewModelBase
     // Train Controller with IsActive = true; a removed train is reported once with IsActive =
     // false so the controller stops controlling it.
     private readonly HashSet<string> _activeTrains = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _beaconSequence = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _lastBeaconRead = new(StringComparer.OrdinalIgnoreCase);
 
     // The Track Model dispatch each active train runs under (TrainActivationMessage). Its position
     // reports carry it, so the Track Model never applies one dispatch's telemetry to another.
@@ -219,7 +221,8 @@ public sealed class MainWindowViewModel : ViewModelBase
             // The pending/active passenger request from the train STATE (the input flag is a
             // one-shot cleared every step); it stays on until the controller's e-brake arrives.
             bool passengerRequested = state.PassengerEmergencyBrakePending || state.PassengerEmergencyBrakeActive;
-            _publisher.PublishToController(state, _stepCount, isActive: true, passengerRequested);
+            _publisher.PublishToController(state, _stepCount, isActive: true, passengerRequested,
+                _beaconSequence.GetValueOrDefault(plant.Train.Id));
             PublishPosition(plant);
         }
     }
@@ -591,9 +594,26 @@ public sealed class MainWindowViewModel : ViewModelBase
         RefreshAll();
     }
 
-    public void ApplyBeacon(string trainId, string station, double distanceMeters, string side, string announcement)
+    public void ApplyBeacon(string trainId, string station, double distanceMeters, string side, string announcement, long readSequence = 0)
     {
         var inp = EnsureTrain(trainId);
+        // A new beacon READ (new pass, or a changed beacon without a read id) bumps the sequence the
+        // Train Controller uses to recalibrate its station distance; resends of one read do not.
+        if (!string.IsNullOrEmpty(station))
+        {
+            var previous = inp.Beacon;
+            _lastBeaconRead.TryGetValue(trainId, out var lastRead);
+            bool isNewRead = readSequence > 0
+                ? readSequence != lastRead
+                : previous is null || previous.StationName != station || !previous.DistanceToStopMeters.Equals(distanceMeters);
+            if (isNewRead)
+            {
+                _beaconSequence[trainId] = _beaconSequence.GetValueOrDefault(trainId) + 1;
+            }
+
+            _lastBeaconRead[trainId] = readSequence;
+        }
+
         inp.Beacon = new TrainControl.Contracts.Messages.BeaconMessage
         {
             TrainId = trainId,

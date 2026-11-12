@@ -112,6 +112,7 @@ internal static class CourseWorkbookReader
             elevation += grade * length / 100; // Equivalent to workbook I/J formulas, independent of cached formula values.
             var infrastructure = cells.GetValueOrDefault("G", "").Trim();
             var station = infrastructure.StartsWith("Station ", StringComparison.OrdinalIgnoreCase) ? infrastructure : "";
+            // The Blue Line sheet has no station-side column: both sides (documented assumption).
             blocks.Add(new TrackBlock
             {
                 Id = ((int)number).ToString(CultureInfo.InvariantCulture), Number = (int)number, LineId = "Blue",
@@ -119,9 +120,12 @@ internal static class CourseWorkbookReader
                 SpeedLimitMetersPerSecond = Number(cells, "F", "Blue Line") / 3.6, StationName = station,
                 HasCrossing = infrastructure.Contains("RAILWAY CROSSING", StringComparison.OrdinalIgnoreCase),
                 HasSwitch = infrastructure.Contains(" or ", StringComparison.OrdinalIgnoreCase),
-                HasSignal = infrastructure.Contains("Light", StringComparison.OrdinalIgnoreCase),
+                // Traffic lights: where the sheet lists one, and at every railway crossing (project rule).
+                HasSignal = infrastructure.Contains("Light", StringComparison.OrdinalIgnoreCase)
+                    || infrastructure.Contains("RAILWAY CROSSING", StringComparison.OrdinalIgnoreCase),
                 Beacon = infrastructure.Equals("Transponder", StringComparison.OrdinalIgnoreCase) ? "pending" : "",
                 InitialWaitingPassengers = station.Length > 0 ? 24 : 0,
+                StationSide = station.Length > 0 ? TrainControl.Contracts.Enums.PlatformSide.Both : TrainControl.Contracts.Enums.PlatformSide.None,
                 // Workbook has no direction/heater columns: documented simulation configuration.
                 TravelDirection = "Bidirectional", HasHeater = true
             });
@@ -143,6 +147,18 @@ internal static class CourseWorkbookReader
         // The worksheet's drawing runs Yard -> 1 -> 2 ...; the yard is not a block, so block 1 is the entry.
         Block(1).IsYardEntry = true;
         return blocks;
+    }
+
+    /// <summary>Workbook column H "Station Side": Left, Right, or Left/Right (both).</summary>
+    private static TrainControl.Contracts.Enums.PlatformSide ParseStationSide(string text)
+    {
+        var t = text.Trim();
+        bool left = t.Contains("Left", StringComparison.OrdinalIgnoreCase);
+        bool right = t.Contains("Right", StringComparison.OrdinalIgnoreCase);
+        return left && right ? TrainControl.Contracts.Enums.PlatformSide.Both
+            : left ? TrainControl.Contracts.Enums.PlatformSide.Left
+            : right ? TrainControl.Contracts.Enums.PlatformSide.Right
+            : TrainControl.Contracts.Enums.PlatformSide.None;
     }
 
     private static List<TrackBlock> ReadRedOrGreen(List<Dictionary<string, string>> rows, LineSheet line)
@@ -187,7 +203,10 @@ internal static class CourseWorkbookReader
                 Section = cells.GetValueOrDefault("B", "").Trim(), LengthMeters = length, GradePercent = grade, ElevationMeters = elevation,
                 SpeedLimitMetersPerSecond = Number(cells, "F", line.Sheet) / 3.6,
                 StationName = StationName(infrastructure, line.LineId, number),
+                StationSide = ParseStationSide(cells.GetValueOrDefault("H", "")),
                 HasCrossing = infrastructure.Contains("RAILWAY CROSSING", StringComparison.OrdinalIgnoreCase),
+                // Traffic lights only at railway crossings (project rule; the sheet lists no lights).
+                HasSignal = infrastructure.Contains("RAILWAY CROSSING", StringComparison.OrdinalIgnoreCase),
                 // Workbook has no heater column: same documented simulation configuration as the Blue Line.
                 HasHeater = true, TravelDirection = line.Direction(number)
             };

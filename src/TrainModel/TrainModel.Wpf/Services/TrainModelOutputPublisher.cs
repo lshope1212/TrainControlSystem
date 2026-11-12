@@ -71,7 +71,7 @@ public sealed class TrainModelOutputPublisher
     /// the train is dispatched and in service; <paramref name="passengerRequested"/> is the raw passenger
     /// emergency-brake request (the controller decides whether to command the brake).
     /// </summary>
-    public void PublishToController(TrainState s, long tickId, bool isActive, bool passengerRequested)
+    public void PublishToController(TrainState s, long tickId, bool isActive, bool passengerRequested, long beaconSequence = 0)
     {
         // Latest state per train only: a slow controller gets fresh states, never a backlog.
         _sender.EnqueueLatest(_trainControllerPipe, s.TrainId, new TrainModelStatusMessage
@@ -85,6 +85,7 @@ public sealed class TrainModelOutputPublisher
             TrackSignalValid = s.TrackSignal == SignalAvailability.Acquired,
             // TrafficLight intentionally left at SignalState.Unknown (not sourced by Train Model).
             BeaconValid = !string.IsNullOrEmpty(s.BeaconStationName),
+            BeaconSequence = beaconSequence,
             NextStationName = s.BeaconStationName,
             DistanceToNextStationMeters = s.BeaconDistanceToStopMeters,
             PlatformSide = ParsePlatformSide(s.BeaconPlatformSide),
