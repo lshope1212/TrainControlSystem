@@ -18,7 +18,7 @@ public class CtcMovementRequestTests
     private static readonly TimeSpan Noon = new TimeSpan(12, 0, 0);
 
     /// <summary>
-    /// Train 000 released on branch B (only A1 and B10 timed, so no intermediate stops) and placed in
+    /// Train 001 released on branch B (only A1 and B10 timed, so no intermediate stops) and placed in
     /// A1: it holds its first request. <paramref name="setup"/> runs before release.
     /// </summary>
     private static async Task<(CTCService Service, FakeMessageSender Sender, ManualClock Clock)> PlacedTrainAsync(Action<CTCService>? setup = null, string[]? route = null)
@@ -30,7 +30,7 @@ public class CtcMovementRequestTests
         BlueLine.ReportAllClear(service);
         setup?.Invoke(service);
         route ??= BlueLine.BranchB;
-        service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 4, route: route, timedBlocks: [route[0], route[^1]])]);
+        service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 4, route: route, timedBlocks: [route[0], route[^1]])]);
         await service.SetSystemTimeAsync(Noon);
         await BlueLine.PlaceTrainAsync(service, route[0]);
         return (service, sender, clock);
@@ -55,7 +55,7 @@ public class CtcMovementRequestTests
         Outcome = outcome,
         Detail = detail,
         BlockId = "A1",
-        TrainId = "000",
+        TrainId = "001",
     };
 
     [TestMethod]
@@ -77,7 +77,7 @@ public class CtcMovementRequestTests
 
         Assert.IsTrue(second.IsActive);
         Assert.AreNotEqual(first.RequestId, second.RequestId, "A new target needs a new request identity.");
-        Assert.AreEqual("000", second.TrainId);
+        Assert.AreEqual("001", second.TrainId);
         Assert.AreEqual("A2", second.TargetBlockId);
         Assert.AreEqual("A1", second.EntryBlockId);
         Assert.AreEqual(MovementSuggestionMessage.BlockEntryReference, second.AuthorityReference);
@@ -100,7 +100,7 @@ public class CtcMovementRequestTests
         foreach (var request in Sent(sender).Where(request => request.IsActive))
         {
             Assert.IsFalse(string.IsNullOrWhiteSpace(request.RequestId));
-            Assert.AreEqual("000", request.TrainId);
+            Assert.AreEqual("001", request.TrainId);
             Assert.IsFalse(string.IsNullOrWhiteSpace(request.TargetBlockId));
             Assert.AreEqual(MovementSuggestionMessage.BlockEntryReference, request.AuthorityReference);
             Assert.IsNotNull(request.PathBlockIds);
@@ -317,7 +317,7 @@ public class CtcMovementRequestTests
     {
         var sender = new FakeMessageSender();
         var service = BlueLine.CreateService(sender);
-        service.QueueSchedule([BlueLine.Train("000", Noon)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon)]);
         await service.SetSystemTimeAsync(Noon);
 
         await service.SynchronizeMovementRequestsAsync();

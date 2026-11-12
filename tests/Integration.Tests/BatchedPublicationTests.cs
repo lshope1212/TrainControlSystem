@@ -23,7 +23,8 @@ public sealed class BatchedPublicationTests
         var listener = NamedPipeTransport.ListenAsync(system.TrackControllerPipe, envelope => { received.Enqueue((DateTime.UtcNow, envelope)); return Task.CompletedTask; }, _ => { }, stop.Token);
         try
         {
-            await system.StartTrackModelAsync(allLines: true);
+            // The demonstration train makes Blue block 1 occupied, so the batch content is checked too.
+            await system.StartTrackModelAsync(allLines: true, demonstrationTrain: true);
             await Task.Delay(TimeSpan.FromSeconds(3.5));
 
             var envelopes = received.Select(item => item.Envelope).ToList();
@@ -62,10 +63,10 @@ public sealed class BatchedPublicationTests
         var clock = Stopwatch.StartNew();
         for (int i = 1; i <= 20; i++)
         {
-            await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "07", CurrentBlockId = "GREEN-" + (62 + i) });
+            await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "007", CurrentBlockId = "GREEN-" + (62 + i) });
         }
 
-        await LiveSystem.UntilAsync(async () => await system.OnTrackModel(track => track.FindBlock("GREEN-82")!.TrainId) == "07", "the last move is applied.");
+        await LiveSystem.UntilAsync(async () => await system.OnTrackModel(track => track.FindBlock("GREEN-82")!.TrainId) == "007", "the last move is applied.");
         Assert.IsLessThan(1.5, clock.Elapsed.TotalSeconds, $"20 inputs took {clock.Elapsed.TotalSeconds:0.00} s.");
     }
 

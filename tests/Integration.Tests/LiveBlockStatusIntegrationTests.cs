@@ -24,10 +24,10 @@ public sealed class LiveBlockStatusIntegrationTests
         var system = new LiveSystem();
         await system.StartTrackControllerAsync();
         await system.StartCtcAsync();
-        await system.StartTrackModelAsync();
+        await system.StartTrackModelAsync(demonstrationTrain: true);
         await LiveSystem.UntilAsync(() => CtcHasBlueLine(system), "CTC loads the Track Model's Blue Line layout.");
 
-        // The demonstration places train 01 in block 1; everything else is clear.
+        // The demonstration places train 001 in block 1; everything else is clear.
         await LiveSystem.UntilAsync(async () => await CtcOccupancy(system, "1") == OccupancyState.Occupied && await CtcOccupancy(system, "15") == OccupancyState.Clear,
             "the Track Model's measured occupancy reaches CTC through the Track Controller.");
         return system;
@@ -58,7 +58,7 @@ public sealed class LiveBlockStatusIntegrationTests
     {
         await using var system = new LiveSystem();
         await system.StartTrackControllerAsync();
-        await system.StartTrackModelAsync();
+        await system.StartTrackModelAsync(demonstrationTrain: true);
 
         // The Track Model's initial layout delivery to CTC fails: CTC is not running yet.
         await Task.Delay(TimeSpan.FromSeconds(1.5));
@@ -73,8 +73,8 @@ public sealed class LiveBlockStatusIntegrationTests
     {
         await using var system = await StartAllAsync();
 
-        // A Train Model telemetry input to the production Track Model moves train 01 from block 1 to block 2.
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "2" });
+        // A Train Model telemetry input to the production Track Model moves train 001 from block 1 to block 2.
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "2" });
 
         await LiveSystem.UntilAsync(() => Task.FromResult(system.WaysideBlock("2").Occupancy == OccupancyState.Occupied && system.WaysideBlock("2").IsFresh),
             "the Track Controller receives the Track Model's measurement.");
@@ -82,7 +82,7 @@ public sealed class LiveBlockStatusIntegrationTests
             "CTC shows block 2 occupied and block 1 clear.");
 
         // Removing the train clears the block everywhere.
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "" });
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "" });
         await LiveSystem.UntilAsync(async () => await CtcOccupancy(system, "2") == OccupancyState.Clear, "CTC shows block 2 clear again.");
     }
 
@@ -93,7 +93,7 @@ public sealed class LiveBlockStatusIntegrationTests
 
         // A train in the crossing's zone: the Track Controller commands the crossing closed, the Track
         // Model applies it, and CTC shows what the Track Model measures.
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "3" });
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "3" });
         await LiveSystem.UntilAsync(async () => await system.OnTrackModel(track => track.FindBlock("3")!.Crossing) == CrossingState.Closed,
             "the Track Controller closes the crossing in the Track Model.");
         await LiveSystem.UntilAsync(async () => await system.OnCtc(ctc => ctc.State.FindBlock("3")!.Crossing) == CrossingState.Closed,

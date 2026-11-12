@@ -69,10 +69,10 @@ public class BlueLineLayoutTests
         var model=new TrackService(); model.LoadLayout(BlueLineTrackLayout.Create());
         model.ApplyCommand(new(){BlockId="5",Switch=SwitchPosition.Reverse});
         Assert.AreEqual("11",model.CreateTrainEnvironment("5").NextBlockId);
-        model.ApplyTrainUpdate(new(){TrainId="01",CurrentBlockId="5"});
+        model.ApplyTrainUpdate(new(){TrainId="001",CurrentBlockId="5"});
         Assert.Throws<InvalidOperationException>(()=>model.ApplyCommand(new(){BlockId="5",Switch=SwitchPosition.Normal}));
         Assert.AreEqual("11",model.CreateTrainEnvironment("5").NextBlockId);
-        model.ApplyTrainUpdate(new(){TrainId="01",CurrentBlockId="4"});
+        model.ApplyTrainUpdate(new(){TrainId="001",CurrentBlockId="4"});
         model.ApplyCommand(new(){BlockId="5",Switch=SwitchPosition.Normal});
         Assert.AreEqual("6",model.CreateTrainEnvironment("5").NextBlockId);
     }

@@ -123,7 +123,8 @@ public class MainWindowViewModel : ViewModelBase
 
     private void LoadDemo()
     {
-        if (_track is TrackService service) { CourseTrackLayout.LoadDemonstration(service); Status = "Course Blue, Red and Green Lines restored"; }
+        // Restores the production start-up state (no trains), never a demonstration train.
+        if (_track is TrackService service) { CourseTrackLayout.Load(service); Status = "Course Blue, Red and Green Lines restored (no trains)"; }
     }
 
 }

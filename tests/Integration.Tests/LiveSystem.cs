@@ -86,11 +86,14 @@ internal sealed class LiveSystem : IAsyncDisposable
 
     /// <summary>
     /// Starts the production Track Model connection. With <paramref name="allLines"/> it loads
-    /// exactly what TrackModel.Wpf's App loads (the Blue, Red and Green course lines); otherwise the
-    /// Blue Line demonstration on its own, the single-line setup the Blue Line tests were written for.
-    /// Either way train 01 starts in block 1.
+    /// exactly what TrackModel.Wpf's App loads (the Blue, Red and Green course lines, no trains);
+    /// otherwise the Blue Line on its own, the single-line setup the Blue Line tests were written for.
     /// </summary>
-    public async Task StartTrackModelAsync(bool allLines = false)
+    /// <param name="demonstrationTrain">
+    /// Also seed the standalone demonstration's stopped train 001 in Blue block 1, for tests about
+    /// live occupancy. Off by default, as in production, where CTC allocates train 001 itself.
+    /// </param>
+    public async Task StartTrackModelAsync(bool allLines = false, bool demonstrationTrain = false)
     {
         _trackModelThread = new DispatcherThread("Track Model UI");
         _trackModelStop = new CancellationTokenSource();
@@ -98,13 +101,12 @@ internal sealed class LiveSystem : IAsyncDisposable
         Track = await _trackModelThread.GetAsync(() =>
         {
             var track = new TrackService();
-            if (allLines)
+            switch (allLines, demonstrationTrain)
             {
-                CourseTrackLayout.LoadDemonstration(track);
-            }
-            else
-            {
-                BlueLineTrackLayout.LoadDemonstration(track);
+                case (true, false): CourseTrackLayout.Load(track); break;
+                case (true, true): CourseTrackLayout.LoadDemonstration(track); break;
+                case (false, false): BlueLineTrackLayout.Load(track); break;
+                case (false, true): BlueLineTrackLayout.LoadDemonstration(track); break;
             }
 
             return track;

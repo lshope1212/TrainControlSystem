@@ -32,12 +32,13 @@ public sealed class ThreeLineIntegrationTests
         && ctc.State.Lines.SelectMany(line => line.Blocks).All(block => !block.IsStatusStale && block.LiveStatusReceivedAtUtc is not null && block.Occupancy != OccupancyState.Unknown));
 
     /// <summary>All three modules started in the usual order; waits until every block of every line has a live status in CTC.</summary>
-    private static async Task<LiveSystem> StartAllAsync(string? deployment = null)
+    /// <param name="demonstrationTrain">Seed the standalone demonstration's train 001 in Blue block 1 (production start-up has no trains).</param>
+    private static async Task<LiveSystem> StartAllAsync(string? deployment = null, bool demonstrationTrain = false)
     {
         var system = new LiveSystem();
         await system.StartTrackControllerAsync(deployment ?? LiveSystem.CourseDeployment);
         await system.StartCtcAsync();
-        await system.StartTrackModelAsync(allLines: true);
+        await system.StartTrackModelAsync(allLines: true, demonstrationTrain);
         await LiveSystem.UntilAsync(() => CtcHasLiveStatusForEveryBlock(system), "CTC shows a live wayside status for all 241 blocks.", TimeSpan.FromSeconds(20));
         return system;
     }
@@ -56,8 +57,10 @@ public sealed class ThreeLineIntegrationTests
         CollectionAssert.AreEqual(trackIds, system.Wayside!.LatestSnapshot.Blocks.Select(block => block.BlockId).Order().ToArray());
         Assert.IsTrue(system.Wayside.LatestSnapshot.Blocks.All(block => block.IsFresh), "Track Model feedback reaches the controller for every block.");
 
-        // Only the Blue demonstration train is on the track.
-        CollectionAssert.AreEqual(new[] { "1" }, await CtcOccupied(system));
+        // The production Track Model starts with no trains: nothing is occupied, so no fleet ID
+        // (Train 001 in particular) is taken before CTC dispatches it.
+        CollectionAssert.AreEqual(Array.Empty<string>(), await CtcOccupied(system));
+        Assert.IsFalse(await system.OnTrackModel(track => track.Layout.Blocks.Any(block => block.IsOccupied)));
 
         // The layout is not resent with live updates.
         int layouts = system.CtcStatuses.Count(status => status.StartsWith("Received Track layout", StringComparison.Ordinal));
@@ -68,7 +71,8 @@ public sealed class ThreeLineIntegrationTests
     [TestMethod]
     public async Task Occupancy_OnEachLine_PropagatesToTheRightBlockOnly_AndClears()
     {
-        await using var system = await StartAllAsync();
+        // The Blue demonstration train in block 1 must stay untouched by changes on the other lines.
+        await using var system = await StartAllAsync(demonstrationTrain: true);
 
         foreach (string line in Lines)
         {
@@ -131,7 +135,8 @@ public sealed class ThreeLineIntegrationTests
     [TestMethod]
     public async Task UnknownBlockIds_AreRejected_NeverMapped()
     {
-        await using var system = await StartAllAsync();
+        // The Blue demonstration train in block 1 is the only occupancy; nothing unknown adds to it.
+        await using var system = await StartAllAsync(demonstrationTrain: true);
 
         // CTC: a status for a block no line has.
         await system.SendToCtcAsync(new BlockStatusMessage { BlockId = "RED-77", Occupancy = OccupancyState.Occupied });
@@ -252,10 +257,11 @@ public sealed class ThreeLineIntegrationTests
     {
         var departure = new TimeSpan(9, 0, 30);
         var system = await StartAllAsync(deployment);
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "" });
         await LiveSystem.UntilAsync(async () => (await CtcOccupied(system)).Length == 0, "every line reports clear.");
 
-        var train = new ScheduledTrain { TrainId = "000", LineId = line };
+        // On a fresh system CTC's first train is 001, the ID used below.
+        Assert.AreEqual("001", await system.OnCtc(ctc => TrainIds.Allocate(ctc.State, 1)[0]));
+        var train = new ScheduledTrain { TrainId = "001", LineId = line };
         for (int i = 0; i < route.Length; i++)
         {
             train.Route.Add(new ScheduledRouteBlock { BlockId = route[i], ArrivalTime = i == 0 || i == route.Length - 1 ? departure + TimeSpan.FromSeconds(30 * i) : null });
@@ -267,13 +273,13 @@ public sealed class ThreeLineIntegrationTests
             return 0;
         });
         await system.SendToCtcAsync(new SystemTimeMessage { SystemTime = departure, SpeedMultiplier = 1, IsPaused = true });
-        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")?.ReleaseStatus == TrainReleaseStatus.AwaitingPlacement), "the train is released, awaiting placement.");
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "000", CurrentBlockId = route[0] });
-        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")!.MovementRequest is { Delivery: MovementRequestDelivery.Delivered }), "CTC detects the train and sends its request.");
+        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")?.ReleaseStatus == TrainReleaseStatus.AwaitingPlacement), "the train is released, awaiting placement.");
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = route[0] });
+        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")!.MovementRequest is { Delivery: MovementRequestDelivery.Delivered }), "CTC detects the train and sends its request.");
         return system;
     }
 
-    private static Task<MovementRequestState?> Request(LiveSystem system) => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")!.MovementRequest);
+    private static Task<MovementRequestState?> Request(LiveSystem system) => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")!.MovementRequest);
 
     [TestMethod]
     [DataRow("Red", new[] { "RED-20", "RED-21", "RED-22", "RED-23", "RED-24", "RED-25" })]
@@ -305,10 +311,30 @@ public sealed class ThreeLineIntegrationTests
             "CTC reports exactly the authority commanded to the track.");
 
         // The train moves on: a new request from the next block, on the same line.
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "000", CurrentBlockId = route[1] });
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = route[1] });
         await LiveSystem.UntilAsync(async () => (await Request(system))?.Plan.TargetBlockId == route[1], "CTC re-targets the request.");
         await LiveSystem.UntilAsync(async () => (await Request(system))?.Acknowledgement == RequestAcknowledgementOutcome.AcceptedForEvaluation, "the new request is accepted.");
         Assert.AreEqual(route[0], (await Request(system))!.Plan.EntryBlockId);
+    }
+
+    /// <summary>
+    /// Regression for the seeded-demonstration conflict: the Track Model used to start with a Blue
+    /// demonstration train, so CTC's first train dispatched on Green under the same ID "moved" it
+    /// off Blue. Production start-up now holds no train: 001's Green placement is a clean first
+    /// entry, Blue stays clear, and CTC's next train is 002.
+    /// </summary>
+    [TestMethod]
+    public async Task FirstCtcTrain_Is001_AndItsGreenPlacementDoesNotDisturbBlue()
+    {
+        await using var system = await PlacedTrainAsync("Green", ["GREEN-63", "GREEN-64", "GREEN-65", "GREEN-66", "GREEN-67", "GREEN-68"]);
+
+        Assert.AreEqual("001", await system.OnCtc(ctc => ctc.State.DispatchedTrains.Single().TrainId));
+        Assert.AreEqual("001", await system.OnTrackModel(track => track.FindBlock("GREEN-63")!.TrainId));
+        Assert.AreEqual(string.Empty, await system.OnTrackModel(track => track.FindBlock("GREEN-63")!.TrainEntryBlockId), "001 entered the track at GREEN-63, not from Blue.");
+        Assert.AreEqual(1, await system.OnTrackModel(track => track.Layout.Blocks.Count(block => block.TrainId == "001")));
+        Assert.IsFalse(await system.OnTrackModel(track => track.Layout.Blocks.Any(block => block.LineId == "Blue" && block.IsOccupied)));
+        CollectionAssert.AreEqual(new[] { "GREEN-63" }, await CtcOccupied(system));
+        Assert.AreEqual("002", await system.OnCtc(ctc => TrainIds.Allocate(ctc.State, 1)[0]));
     }
 
     [TestMethod]
@@ -332,7 +358,7 @@ public sealed class ThreeLineIntegrationTests
 
         MovementSuggestionMessage Movement(string id, string target, params string[] path) => new()
         {
-            RequestId = id, TrainId = "000", TargetBlockId = target, PathBlockIds = [.. path],
+            RequestId = id, TrainId = "001", TargetBlockId = target, PathBlockIds = [.. path],
             SuggestedSpeedMetersPerSecond = 10, SuggestedAuthorityMeters = 200,
         };
 

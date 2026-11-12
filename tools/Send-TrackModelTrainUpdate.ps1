@@ -13,8 +13,8 @@
     Track Model -> Track Controller -> CTC.
 
 .PARAMETER TrainId
-    Train label. The Track Model demonstration starts with train "01" in block 1; CTC-dispatched
-    trains use the canonical three-digit IDs ("000", "001", ...).
+    Train ID. Use the canonical three-digit fleet IDs "001"-"010" that CTC dispatches; the
+    production Track Model starts with no trains.
 
 .PARAMETER Block
     Block the train is now in, as the Track Model names it: Blue Line "1"-"15", Red Line
@@ -31,16 +31,16 @@
     Track Model inbound pipe; the production name by default.
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 01 -Block 2
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 001 -Block 2
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 07 -Block RED-30
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 007 -Block RED-30
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 08 -Block GREEN-65
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 008 -Block GREEN-65
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 01 -Remove
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 001 -Remove
 #>
 [CmdletBinding(DefaultParameterSetName = 'Move')]
 param(

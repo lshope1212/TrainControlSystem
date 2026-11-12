@@ -18,7 +18,7 @@ public sealed class LiveMovementIntegrationTests
 
     private static ScheduledTrain BlueTrain(params string[] route)
     {
-        var train = new ScheduledTrain { TrainId = "000", LineId = "Blue" };
+        var train = new ScheduledTrain { TrainId = "001", LineId = "Blue" };
         for (int i = 0; i < route.Length; i++)
         {
             train.Route.Add(new ScheduledRouteBlock { BlockId = route[i], ArrivalTime = i == 0 || i == route.Length - 1 ? Departure + TimeSpan.FromSeconds(30 * i) : null });
@@ -28,7 +28,7 @@ public sealed class LiveMovementIntegrationTests
     }
 
     /// <summary>
-    /// All modules up, the demonstration train removed, train 000 scheduled on <paramref name="route"/>,
+    /// All modules up (the production Track Model starts with no trains), train 001 scheduled on <paramref name="route"/>,
     /// released by the shared clock's time, and placed in its start block via the Track Model.
     /// </summary>
     /// <param name="deployment">Prepares the Track Controller deployment (e.g. an edited copy of the samples); the single-territory Blue Line by default.</param>
@@ -40,7 +40,6 @@ public sealed class LiveMovementIntegrationTests
         await system.StartTrackModelAsync();
         await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindLine("Blue") is not null), "CTC loads the layout.");
 
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "" });
         await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.Lines.SelectMany(line => line.Blocks).All(block => block.Occupancy == OccupancyState.Clear)),
             "the line reports clear.");
 
@@ -50,20 +49,20 @@ public sealed class LiveMovementIntegrationTests
             return 0;
         });
         await system.SendToCtcAsync(new SystemTimeMessage { SystemTime = Departure, SpeedMultiplier = 1, IsPaused = true });
-        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")?.ReleaseStatus == TrainReleaseStatus.AwaitingPlacement),
+        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")?.ReleaseStatus == TrainReleaseStatus.AwaitingPlacement),
             "the shared clock's time releases the train, awaiting placement.");
         Assert.IsEmpty(system.CtcSent!.Delivered.OfType<MovementSuggestionMessage>(), "Nothing is requested before the train is on the track.");
         Assert.IsEmpty(system.CtcSent.Delivered.OfType<MovementRequestMessage>(), "The unreceived release request is never sent.");
 
         // Physical placement is the Train Model's job; its telemetry input to the Track Model stands in for it.
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "000", CurrentBlockId = route[0] });
-        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")!.MovementRequest is { Delivery: MovementRequestDelivery.Delivered }),
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = route[0] });
+        await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")!.MovementRequest is { Delivery: MovementRequestDelivery.Delivered }),
             "CTC detects the train and issues its first movement request.");
         return system;
     }
 
     private static Task<MovementRequestState?> Request(LiveSystem system) =>
-        system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")!.MovementRequest);
+        system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")!.MovementRequest);
 
     private static async Task<bool> AcknowledgedAs(LiveSystem system, RequestAcknowledgementOutcome outcome) =>
         (await Request(system))?.Acknowledgement == outcome;
@@ -80,7 +79,7 @@ public sealed class LiveMovementIntegrationTests
         // The controller holds exactly CTC's route context.
         var held = system.WaysideBlock("1").Request!;
         Assert.AreEqual(request.RequestId, held.RequestId);
-        Assert.AreEqual("000", held.TrainId);
+        Assert.AreEqual("001", held.TrainId);
         CollectionAssert.AreEqual(new[] { "2", "3", "4", "5", "6", "7", "8", "9", "10" }, held.PathBlockIds.ToArray());
         Assert.AreEqual(request.Plan.AuthorityMeters, held.SuggestedAuthorityMeters);
 
@@ -88,7 +87,7 @@ public sealed class LiveMovementIntegrationTests
         var paused = (await Request(system))!;
         Assert.AreEqual(MovementAuthorizationState.Withheld, paused.Authorization);
         Assert.IsFalse(paused.IsMovementAuthorized);
-        Assert.AreEqual(TrainReleaseStatus.DetectedOnTrack, await system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")!.ReleaseStatus));
+        Assert.AreEqual(TrainReleaseStatus.DetectedOnTrack, await system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")!.ReleaseStatus));
 
         // Resumed: the controller re-evaluates. Whatever it decides, CTC reports exactly the authority
         // the controller actually commanded to the track (the Track Model's block 1), nothing more.
@@ -140,7 +139,7 @@ public sealed class LiveMovementIntegrationTests
         var request = (await Request(live))!;
         Assert.Contains("territory boundary", request.AcknowledgementDetail);
         Assert.IsFalse(request.IsMovementAuthorized);
-        Assert.Contains("rejected by the Track Controller", await live.OnCtc(ctc => MovementRequestCoordinator.Describe(ctc.State.FindDispatchedTrain("000")!)));
+        Assert.Contains("rejected by the Track Controller", await live.OnCtc(ctc => MovementRequestCoordinator.Describe(ctc.State.FindDispatchedTrain("001")!)));
         Assert.IsNull(live.WaysideBlock("1").Request, "Nothing was registered at the controller.");
     }
 
@@ -152,7 +151,7 @@ public sealed class LiveMovementIntegrationTests
         string firstId = (await Request(system))!.RequestId;
 
         // The train moves into block 2.
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "000", CurrentBlockId = "2" });
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "2" });
         await LiveSystem.UntilAsync(async () => (await Request(system))?.Plan.TargetBlockId == "2", "CTC re-targets the request at the train's new block.");
         await LiveSystem.UntilAsync(() => AcknowledgedAs(system, RequestAcknowledgementOutcome.AcceptedForEvaluation), "the Track Controller accepts the new request.");
         var second = (await Request(system))!;
@@ -162,7 +161,7 @@ public sealed class LiveMovementIntegrationTests
         Assert.IsTrue(system.CtcSent!.Delivered.OfType<MovementSuggestionMessage>().Any(message => !message.IsActive && message.RequestId == firstId), "The old request was cancelled.");
 
         // The dispatcher re-routes the train to Station C (block 15).
-        await system.OnCtcAsync(ctc => ctc.UpdateDispatchedTrainPlanAsync("000", "15", Departure + TimeSpan.FromMinutes(5)));
+        await system.OnCtcAsync(ctc => ctc.UpdateDispatchedTrainPlanAsync("001", "15", Departure + TimeSpan.FromMinutes(5)));
         await LiveSystem.UntilAsync(async () => (await Request(system))!.RequestId != second.RequestId, "the re-route gets a new request.");
         await LiveSystem.UntilAsync(() => AcknowledgedAs(system, RequestAcknowledgementOutcome.AcceptedForEvaluation), "the Track Controller accepts the re-routed request.");
         var rerouted = (await Request(system))!;
@@ -205,7 +204,7 @@ public sealed class LiveMovementIntegrationTests
 
         for (int i = 0; i < 3; i++)
         {
-            await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "000", CurrentBlockId = "2" });
+            await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "2" });
         }
 
         await LiveSystem.UntilAsync(async () => (await Request(system))?.Plan.TargetBlockId == "2", "CTC follows the train to block 2.");
@@ -213,6 +212,6 @@ public sealed class LiveMovementIntegrationTests
 
         var forBlock2 = system.CtcSent!.Delivered.OfType<MovementSuggestionMessage>().Where(message => message.IsActive && message.TargetBlockId == "2").Select(message => message.RequestId).Distinct().ToList();
         Assert.HasCount(1, forBlock2, "One movement into block 2, one request identity, however often the same state is reported.");
-        Assert.AreEqual("2", await system.OnCtc(ctc => ctc.State.FindDispatchedTrain("000")!.CurrentBlockId));
+        Assert.AreEqual("2", await system.OnCtc(ctc => ctc.State.FindDispatchedTrain("001")!.CurrentBlockId));
     }
 }

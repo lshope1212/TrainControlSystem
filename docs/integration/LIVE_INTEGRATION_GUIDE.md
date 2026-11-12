@@ -117,12 +117,17 @@ displays them as its block labels (e.g. `H40` for `RED-40`, `K65` for `GREEN-65`
   fixture with its own IDs. If the real Track Model starts later, its layout replaces the sample
   lines, as long as no train is released on them.
 
-**Train IDs.** The canonical train ID on the wire is CTC's three-digit dispatch ID (`000` to `999`),
-assigned when the schedule is built. Module labels are presentation only and are translated at
-that module's own boundary with `TrainControl.Common.Identity.TrainIdConvention`. For example, the
-Train Controller fleet label `TRAIN-007` is canonical `007` (same number), and CTC's
-`Train 007` is `007`. Anything else, such as the Track Model demonstration's `01`, is not
-canonical and is rejected rather than guessed.
+**Train IDs.** The canonical train ID on the wire is CTC's three-digit dispatch ID, assigned when
+the schedule is built. Only the ten fleet trains `001` to `010` can be scheduled and dispatched
+(`TrainIdConvention.IsDispatchable`): they are the Train Controller's `TRAIN-001` to `TRAIN-010`
+(odd Software, even Hardware). IDs are unique across all three lines. CTC gives a new schedule the
+lowest IDs no scheduled, queued or dispatched train uses (a fresh system starts at `001`), and
+refuses a schedule (generated, imported from CSV or passed to `QueueSchedule` directly) with an
+unsupported ID such as `000` or `011`, an ID another line already uses, or more trains than free
+IDs. Module labels are presentation only and are translated at that module's own boundary with
+`TrainControl.Common.Identity.TrainIdConvention`. For example, the Train Controller fleet label
+`TRAIN-007` is canonical `007` (same number), and CTC's `Train 007` is `007`. Anything else, such
+as a two-digit `01`, is not canonical and is rejected rather than guessed.
 
 ## Track Controller deployment
 
@@ -390,15 +395,15 @@ hosts the Track Controller, Train Model and CTC pipes.
 4. **CTC.** Within a few seconds the line selector lists **Blue Line**, **Red Line** and
    **Green Line**, with no *Send Sample Layout*. *Inbound status* reads
    `Received Track layout. Track layout: added Blue, Red, Green.` Select each line: its territory
-   overview draws the course schematic, and every block shows a live status (only Blue block 1 is
-   occupied, by the Track Model's demonstration train 01). Use **Fit**, **+** and **-** or
+   overview draws the course schematic, and every block shows a live status (every block is
+   clear: the production Track Model starts with no trains). Use **Fit**, **+** and **-** or
    Ctrl+wheel to zoom the larger lines.
 5. **Track Model.** Its line selector shows the three lines. The delivery line reads
    `Track Controller: delivered … CTC: delivered`.
 6. **Change occupancy on Red or Green** with the development harness. It is send-only and hosts no pipe:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File tools\Send-TrackModelTrainUpdate.ps1 -TrainId 07 -Block RED-30
+   powershell -ExecutionPolicy Bypass -File tools\Send-TrackModelTrainUpdate.ps1 -TrainId 007 -Block RED-30
    ```
 
    - **Track Model:** select Red Line; on **All blocks**, `RED-30` is occupied. The *Schematic*
@@ -407,8 +412,8 @@ hosts the Track Controller, Train Model and CTC pipes.
      occupied (red) within about a second.
    - **CTC:** select Red Line. `H30` is occupied; nothing changed on Blue or Green.
 
-   Move the train (`-Block RED-31`) or remove it (`-TrainId 07 -Remove`) and watch it clear. The
-   same works on Green, e.g. `-TrainId 08 -Block GREEN-65` (CTC label `K65`, Glenbury). The Track
+   Move the train (`-Block RED-31`) or remove it (`-TrainId 007 -Remove`) and watch it clear. The
+   same works on Green, e.g. `-TrainId 008 -Block GREEN-65` (CTC label `K65`, Glenbury). The Track
    Model refuses a move into an occupied, closed or unknown block.
 7. **Close and reopen a block on each line through CTC.** CTC → **Maintenance Mode: ON**. Select
    the line and a clear block, then **Close Block**: for example Blue `C12` (block `12`), Red `H40`
@@ -417,7 +422,7 @@ hosts the Track Controller, Train Model and CTC pipes.
      `Track Controller accepted the request to close Block RED-40 (Block RED-40: Closed.)`.
    - The block turns Closed only when the controller's status confirms it. The Track Controller's
      equipment and map show the same closure.
-   - Closing an occupied block (e.g. `RED-30` while train 07 is there) is accepted but stays
+   - Closing an occupied block (e.g. `RED-30` while train 007 is there) is accepted but stays
      *Pending closure* until the block clears.
    - **Reopen Block** works the same way. Closures on one line never change another line.
 8. **Freshness.** Close the Track Model: within about 5 s the Track Controller shows
@@ -426,9 +431,10 @@ hosts the Track Controller, Train Model and CTC pipes.
 9. *(Optional) movement on Red or Green.*
    1. Resume the Launcher clock from CTC and queue a schedule on Red (e.g. a route through
       `RED-20`…`RED-25`) or on Green in its direction of travel (e.g. `GREEN-63`…`GREEN-68`).
-   2. Remove train 01 if the schedule is on Blue.
+   2. Remove any train left on the schedule's start block by step 6.
    3. At the departure time CTC shows *Awaiting placement*. Place the train with the harness,
-      using its dispatch ID: `-TrainId 000 -Block RED-20`.
+      using its dispatch ID: on a fresh system the first scheduled train is `001`, so
+      `-TrainId 001 -Block RED-20`.
    4. CTC shows *Detected on track (inferred)*. The *Track Controller* column shows the
       acknowledgement and, while the controller is paused, *Withheld: Track Controller is paused.*
    5. Resume the Track Controller to see its real evaluation (Approved/Restricted with the granted

@@ -79,7 +79,7 @@ public class CtcTrackLayoutSyncTests
         var service = new CTCService(new FakeMessageSender());
         service.ApplyTrackLayout(ProductionBlueLayout());
         BlueLine.ReportAllClear(service);
-        var train = new ScheduledTrain { TrainId = "000", LineId = "Blue" };
+        var train = new ScheduledTrain { TrainId = "001", LineId = "Blue" };
         string[] route = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
         for (int i = 0; i < route.Length; i++)
         {
@@ -96,7 +96,7 @@ public class CtcTrackLayoutSyncTests
     {
         var sender = new FakeMessageSender();
         var service = BlueLine.CreateService(sender);
-        service.QueueSchedule([BlueLine.Train("000", Noon), BlueLine.Train("001", Noon + TimeSpan.FromMinutes(5))]);
+        service.QueueSchedule([BlueLine.Train("001", Noon), BlueLine.Train("002", Noon + TimeSpan.FromMinutes(5))]);
         service.ApplyBlockStatus(new BlockStatusMessage { BlockId = "A4", Occupancy = OccupancyState.Occupied });
         service.State.Lines[0].TicketSalesPerHour = 12;
         var blockBefore = service.State.FindBlock("A4");
@@ -119,7 +119,7 @@ public class CtcTrackLayoutSyncTests
     public async Task EquivalentRepeatedLayout_KeepsReleasedTrainsAndTheirTracking()
     {
         var service = BlueLine.CreateService();
-        service.QueueSchedule([BlueLine.Train("000", Noon)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon)]);
         await service.SetSystemTimeAsync(Noon);
         await BlueLine.PlaceTrainAsync(service, "A1");
         var train = service.State.DispatchedTrains.Single();
@@ -173,7 +173,7 @@ public class CtcTrackLayoutSyncTests
     public void IncompatibleRevision_NoReleasedTrains_RebuildsLineAndDropsSchedulesThatNoLongerFit()
     {
         var service = BlueLine.CreateService();
-        service.QueueSchedule([BlueLine.Train("000", Noon, route: BlueLine.BranchB), BlueLine.Train("001", Noon, route: BlueLine.BranchC)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon, route: BlueLine.BranchB), BlueLine.Train("002", Noon, route: BlueLine.BranchC)]);
         var changes = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => changes.Add(e);
 
@@ -184,19 +184,19 @@ public class CtcTrackLayoutSyncTests
         var result = service.ApplyTrackLayout(revised);
 
         CollectionAssert.AreEqual(new[] { BlueLine.LineId }, result.ReplacedLineIds);
-        CollectionAssert.AreEqual(new[] { "001" }, result.DroppedScheduledTrainIds);
-        Assert.AreEqual("000", service.State.ScheduledTrains.Single().TrainId);
-        Assert.AreEqual("000", service.State.DispatchQueue.Single().TrainId);
+        CollectionAssert.AreEqual(new[] { "002" }, result.DroppedScheduledTrainIds);
+        Assert.AreEqual("001", service.State.ScheduledTrains.Single().TrainId);
+        Assert.AreEqual("001", service.State.DispatchQueue.Single().TrainId);
         Assert.AreEqual(OccupancyState.Unknown, service.State.FindBlock("A1")!.Occupancy, "A rebuilt line starts with unknown status.");
         Assert.IsTrue(changes.Any(change => change.Kind == CtcStateChangeKind.TrackLayout));
-        Assert.IsTrue(changes.Any(change => change.Kind == CtcStateChangeKind.Schedule && change.Message!.Contains("Train 001")));
+        Assert.IsTrue(changes.Any(change => change.Kind == CtcStateChangeKind.Schedule && change.Message!.Contains("Train 002")));
     }
 
     [TestMethod]
     public async Task IncompatibleRevision_WithReleasedTrain_IsRefusedForThatLine()
     {
         var service = BlueLine.CreateService();
-        service.QueueSchedule([BlueLine.Train("000", Noon)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon)]);
         await service.SetSystemTimeAsync(Noon);
         var a1 = service.State.FindBlock("A1");
         var changes = new List<CtcStateChangedEventArgs>();
@@ -219,7 +219,7 @@ public class CtcTrackLayoutSyncTests
     public void LineMissingFromLayout_IsRemovedWithItsSchedule()
     {
         var service = BlueLine.CreateService();
-        service.QueueSchedule([BlueLine.Train("000", Noon)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon)]);
         var layout = new TrackLayoutMessage { Lines = { GreenLine() } };
 
         var result = service.ApplyTrackLayout(layout);
@@ -267,7 +267,7 @@ public class CtcTrackLayoutSyncTests
         // BLUE has a released train, so it is kept even though the layout omits it; a new line may
         // then not reuse one of its block IDs.
         var service = BlueLine.CreateService();
-        service.QueueSchedule([BlueLine.Train("000", Noon)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon)]);
         await service.SetSystemTimeAsync(Noon);
         var layout = new TrackLayoutMessage
         {

@@ -19,7 +19,7 @@ public sealed class AuthorityContinuityIntegrationTests
     private sealed record TrainRun(string TrainId, string Line, string[] Route);
 
     /// <summary>
-    /// All modules up, the demonstration train removed, <paramref name="trains"/> scheduled, released,
+    /// All modules up (the production Track Model starts with no trains), <paramref name="trains"/> scheduled, released,
     /// placed in their start blocks through the Track Model, and the Track Controller resumed.
     /// </summary>
     private static async Task<LiveSystem> StartAsync(bool allLines, Func<LiveSystem, string>? deployment = null, params TrainRun[] trains)
@@ -30,7 +30,6 @@ public sealed class AuthorityContinuityIntegrationTests
         await system.StartTrackModelAsync(allLines);
         await LiveSystem.UntilAsync(() => system.OnCtc(ctc => trains.All(train => ctc.State.FindLine(train.Line) is not null)), "CTC loads the layout.");
 
-        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "" });
         await LiveSystem.UntilAsync(() => system.OnCtc(ctc => trains.SelectMany(train => ctc.State.FindLine(train.Line)!.Blocks).All(block => block.Occupancy == OccupancyState.Clear)), "the lines report clear.");
 
         await system.OnCtc(ctc =>

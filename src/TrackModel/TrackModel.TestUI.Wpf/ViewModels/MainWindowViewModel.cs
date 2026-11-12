@@ -29,7 +29,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private bool _clockBusy;
     private readonly Stopwatch _elapsed = new();
     private TimeSpan? _clockValue;
-    private string _blockId = "104", _currentBlock = "104", _trainId = "01";
+    private string _blockId = "104", _currentBlock = "104", _trainId = "001";
     private CapturedBlockViewModel? _selectedOutput;
     private string _status = "Disconnected";
     private string _speed = "25", _authority = "1200", _actualSpeed = "22", _boarding = "0", _disembarking = "0";

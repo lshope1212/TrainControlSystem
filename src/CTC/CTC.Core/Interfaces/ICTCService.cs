@@ -80,7 +80,9 @@ public interface ICTCService
     /// Replaces the schedule for every line in <paramref name="scheduledTrains"/> and
     /// rebuilds the pending dispatch queue from it, ordered by departure time. Trains that
     /// have already been dispatched are never queued again. Does not dispatch by itself.
-    /// A schedule that needs more than the permitted speed on any segment is rejected.
+    /// A schedule that needs more than the permitted speed on any segment is rejected, as is
+    /// one with a train ID outside the supported fleet ("001" to "010") or an ID another line
+    /// already uses: train IDs are unique across the whole system.
     /// </summary>
     void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains);
 

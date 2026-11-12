@@ -56,7 +56,7 @@ public class CtcSharedClockTests
     {
         var sender = new FakeMessageSender();
         var ctc = BlueLine.CreateService(sender);
-        ctc.QueueSchedule([BlueLine.Train("000", At(12, 0, 5), secondsPerBlock: 4)]);
+        ctc.QueueSchedule([BlueLine.Train("001", At(12, 0, 5), secondsPerBlock: 4)]);
 
         // 7x: each update is +0.7 s, so 12:00:05 itself is skipped (12:00:04.9 -> 12:00:05.6).
         var clock = RunningClock(7.0);
@@ -74,7 +74,7 @@ public class CtcSharedClockTests
         Assert.AreEqual(At(12, 0, 5) + TimeSpan.FromMilliseconds(600), message.SystemTime);
         Assert.AreEqual(7.0, message.SpeedMultiplier);
         Assert.IsFalse(message.IsPaused);
-        Assert.AreEqual("000", ctc.State.DispatchedTrains.Single().TrainId);
+        Assert.AreEqual("001", ctc.State.DispatchedTrains.Single().TrainId);
         Assert.IsEmpty(sender.SentMessages, "Releasing sends nothing until the train is placed on the track.");
     }
 
@@ -83,7 +83,7 @@ public class CtcSharedClockTests
     {
         var sender = new FakeMessageSender();
         var ctc = BlueLine.CreateService(sender);
-        ctc.QueueSchedule([BlueLine.Train("000", At(12, 0, 1), secondsPerBlock: 4)]);
+        ctc.QueueSchedule([BlueLine.Train("001", At(12, 0, 1), secondsPerBlock: 4)]);
         var clock = new SimulationClockService();
 
         for (int i = 0; i < 100; i++)
@@ -141,7 +141,7 @@ public class CtcSharedClockTests
     {
         var sender = new FakeMessageSender();
         var ctc = BlueLine.CreateService(sender);
-        ctc.QueueSchedule([BlueLine.Train("000", At(12, 0, 1), secondsPerBlock: 4), BlueLine.Train("001", At(12, 30, 0), secondsPerBlock: 4)]);
+        ctc.QueueSchedule([BlueLine.Train("001", At(12, 0, 1), secondsPerBlock: 4), BlueLine.Train("002", At(12, 30, 0), secondsPerBlock: 4)]);
         var clock = RunningClock(10.0);
         for (int i = 0; i < 3; i++)
         {
@@ -152,15 +152,15 @@ public class CtcSharedClockTests
         await DeliverAsync(clock, ctc);
 
         Assert.AreEqual(At(11, 0, 0), ctc.State.SystemTime);
-        Assert.AreEqual("000", ctc.State.DispatchedTrains.Single().TrainId);
-        Assert.AreEqual("001", ctc.State.DispatchQueue.Single().TrainId);
+        Assert.AreEqual("001", ctc.State.DispatchedTrains.Single().TrainId);
+        Assert.AreEqual("002", ctc.State.DispatchQueue.Single().TrainId);
         Assert.IsEmpty(sender.SentMessages, "Releasing sends nothing until the train is placed on the track.");
     }
 
-    /// <summary>Train 000: A1 at 12:00:00, station A3 at 12:01:00 (45 s dwell), A5 at 12:05:00, B10 at 12:10:00.</summary>
+    /// <summary>Train 001: A1 at 12:00:00, station A3 at 12:01:00 (45 s dwell), A5 at 12:05:00, B10 at 12:10:00.</summary>
     private static ScheduledTrain DwellSchedule()
     {
-        var train = new ScheduledTrain { TrainId = "000", LineId = BlueLine.LineId };
+        var train = new ScheduledTrain { TrainId = "001", LineId = BlueLine.LineId };
         foreach (var blockId in BlueLine.BranchB)
         {
             train.Route.Add(new ScheduledRouteBlock

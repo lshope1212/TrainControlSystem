@@ -107,11 +107,11 @@ public class ScheduleBuilderViewModel : ViewModelBase
             return;
         }
 
-        // Number after every train CTC already knows, so a new template never reuses a train ID.
-        int firstTrainNumber = TrainIds.NextAvailableNumber(_ctc.State);
+        // Supported IDs (001-010) no scheduled, queued or dispatched train uses on any line, so a
+        // new template never reuses a train ID. Too few left is reported, never thrown.
         try
         {
-            ShowTemplate(ScheduleTemplateFactory.Create(Line, trainCount, firstTrainNumber));
+            ShowTemplate(ScheduleTemplateFactory.Create(Line, TrainIds.Allocate(_ctc.State, trainCount)));
         }
         catch (InvalidOperationException ex)
         {
@@ -196,9 +196,8 @@ public class ScheduleBuilderViewModel : ViewModelBase
             return;
         }
 
-        // Number after every train CTC already knows, so an imported schedule never reuses a train ID.
-        int firstTrainNumber = TrainIds.NextAvailableNumber(_ctc.State);
-        var result = ScheduleCsvImporter.Import(Line, csv, firstTrainNumber);
+        // The same IDs a generated template would get, so an imported schedule never reuses a train ID.
+        var result = ScheduleCsvImporter.Import(Line, csv, TrainIds.AvailableIds(_ctc.State));
         if (!result.IsSuccess)
         {
             StatusMessage = $"Schedule upload failed: {result.ErrorMessage}";

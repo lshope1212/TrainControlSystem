@@ -834,8 +834,10 @@ public class CTCService : ICTCService
     /// Everything is checked before any state changes, so a bad schedule is never partially queued.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// A train is blank, duplicated, on an unknown line, has fewer than two route blocks or a
-    /// block not on its line, or its schedule needs a speed above the permitted maximum
+    /// A train is blank, not a supported train (only "001" to "010" can be dispatched),
+    /// duplicated, uses an ID a train on another line already has (scheduled, queued or
+    /// dispatched), is on an unknown line, has fewer than two route blocks or a block not on its
+    /// line, or its schedule needs a speed above the permitted maximum
     /// (see <see cref="SpeedPlanner.ValidateFeasibility"/>).
     /// </exception>
     public void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains)
@@ -844,6 +846,7 @@ public class CTCService : ICTCService
 
         var trains = scheduledTrains.ToList();
         var trainIds = new HashSet<string>();
+        var replacedLineIds = trains.Where(train => train is not null).Select(train => train.LineId).ToHashSet();
         foreach (var train in trains)
         {
             if (train is null || string.IsNullOrWhiteSpace(train.TrainId))
@@ -851,9 +854,25 @@ public class CTCService : ICTCService
                 throw new ArgumentException("Every scheduled train needs a train ID.", nameof(scheduledTrains));
             }
 
+            // Only the ten fleet trains (001-010) exist downstream; anything else would be
+            // accepted here and then rejected by the Train Controller. Dispatcher-readable, so no parameter name.
+            if (!TrainIds.IsSupported(train.TrainId))
+            {
+                throw new ArgumentException(TrainIds.UnsupportedMessage(train.TrainId));
+            }
+
             if (!trainIds.Add(train.TrainId))
             {
                 throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} is scheduled more than once.", nameof(scheduledTrains));
+            }
+
+            // Train IDs are unique across the whole system, not per line.
+            string? otherLineId = FindOtherLineUsingTrainId(train, replacedLineIds);
+            if (otherLineId is not null)
+            {
+                string otherLine = State.FindLine(otherLineId)?.Name ?? otherLineId;
+                throw new ArgumentException(
+                    $"{TrainIds.DisplayName(train.TrainId)} is already scheduled, queued or dispatched on {otherLine}. Train IDs must be unique across all lines.");
             }
 
             var line = State.FindLine(train.LineId)
@@ -918,6 +937,29 @@ public class CTCService : ICTCService
 
         OnStateChanged(CtcStateChangeKind.Schedule);
         OnStateChanged(CtcStateChangeKind.DispatchQueue);
+    }
+
+    /// <summary>
+    /// The line of another train that already uses <paramref name="train"/>'s ID and will still
+    /// exist once this schedule is queued, or null. Scheduled and pending trains on
+    /// <paramref name="replacedLineIds"/> are about to be replaced, so they do not count; trains
+    /// already dispatched or being released are never replaced, so they always do.
+    /// </summary>
+    private string? FindOtherLineUsingTrainId(ScheduledTrain train, IReadOnlySet<string> replacedLineIds)
+    {
+        bool OtherLine(string lineId) => lineId != train.LineId;
+
+        return State.DispatchedTrains
+                .Where(dispatched => dispatched.TrainId == train.TrainId && OtherLine(dispatched.LineId))
+                .Select(dispatched => dispatched.LineId)
+            .Concat(State.DispatchQueue
+                .Where(entry => entry.TrainId == train.TrainId && OtherLine(entry.LineId)
+                    && (entry.QueueStatus == DispatchQueueStatus.Dispatching || !replacedLineIds.Contains(entry.LineId)))
+                .Select(entry => entry.LineId))
+            .Concat(State.ScheduledTrains
+                .Where(scheduled => scheduled.TrainId == train.TrainId && OtherLine(scheduled.LineId) && !replacedLineIds.Contains(scheduled.LineId))
+                .Select(scheduled => scheduled.LineId))
+            .FirstOrDefault();
     }
 
     /// <summary>

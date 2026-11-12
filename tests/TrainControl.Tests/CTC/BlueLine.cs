@@ -117,6 +117,38 @@ internal static class BlueLine
         return train;
     }
 
+    /// <summary>Line ID of the second line in <see cref="CreateTwoLineService"/>.</summary>
+    public const string GreenLineId = "GREEN";
+
+    /// <summary>
+    /// The Blue Line plus an identical "Green Line" whose block IDs carry a "G-" prefix (block IDs
+    /// are unique across the whole layout), for tests about IDs shared between lines.
+    /// </summary>
+    public static CTCService CreateTwoLineService(IMessageSender? sender = null)
+    {
+        var layout = CreateLayout();
+        var green = new TrackLineDefinition { LineId = GreenLineId, Name = "Green Line" };
+        foreach (var block in layout.Lines[0].Blocks)
+        {
+            green.Blocks.Add(Block("G-" + block.BlockId, block.BlockNumber, block.Section, block.SpeedLimitKilometersPerHour,
+                block.ConnectedBlockIds.Select(id => "G-" + id).ToArray()));
+        }
+
+        layout.Lines.Add(green);
+        var service = new CTCService(sender ?? new FakeMessageSender());
+        service.ApplyTrackLayout(layout);
+        ReportAllClear(service);
+        return service;
+    }
+
+    /// <summary>Like <see cref="Train"/>, on the Green Line of <see cref="CreateTwoLineService"/> (branch B).</summary>
+    public static ScheduledTrain GreenTrain(string trainId, TimeSpan departure)
+    {
+        var train = Train(trainId, departure, route: BranchB.Select(id => "G-" + id).ToArray());
+        train.LineId = GreenLineId;
+        return train;
+    }
+
     private static TrackBlockDefinition Block(string blockId, int number, string section, double speedLimitKph, params string[] connectedTo) => new TrackBlockDefinition
     {
         BlockId = blockId,

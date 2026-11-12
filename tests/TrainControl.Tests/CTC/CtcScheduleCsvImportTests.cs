@@ -19,7 +19,7 @@ public class CtcScheduleCsvImportTests
     private static CtcLineState BlueLineState(CTCService? service = null) =>
         (service ?? BlueLine.CreateService()).State.FindLine(BlueLine.LineId)!;
 
-    private static ScheduleCsvImportResult Import(string csv, int firstTrainNumber = 0) =>
+    private static ScheduleCsvImportResult Import(string csv, int firstTrainNumber = TrainIds.FirstNumber) =>
         ScheduleCsvImporter.Import(BlueLineState(), csv, firstTrainNumber);
 
     private static ScheduleTemplateRow Row(ScheduleTemplate template, string blockId) =>
@@ -60,7 +60,7 @@ public class CtcScheduleCsvImportTests
     {
         var template = Import(SampleCsv).Template!;
 
-        CollectionAssert.AreEqual(new[] { "000", "001", "002", "003" }, template.TrainIds.ToArray());
+        CollectionAssert.AreEqual(new[] { "001", "002", "003", "004" }, template.TrainIds.ToArray());
     }
 
     [TestMethod]
@@ -69,14 +69,60 @@ public class CtcScheduleCsvImportTests
         var service = BlueLine.CreateService();
         service.QueueSchedule(
         [
-            BlueLine.Train("000", new TimeSpan(11, 0, 0)),
-            BlueLine.Train("001", new TimeSpan(11, 0, 10)),
+            BlueLine.Train("001", new TimeSpan(11, 0, 0)),
+            BlueLine.Train("002", new TimeSpan(11, 0, 10)),
         ]);
 
-        var result = ScheduleCsvImporter.Import(BlueLineState(service), SampleCsv, TrainIds.NextAvailableNumber(service.State));
+        var result = ScheduleCsvImporter.Import(BlueLineState(service), SampleCsv, TrainIds.AvailableIds(service.State));
 
         Assert.IsTrue(result.IsSuccess, result.ErrorMessage);
-        CollectionAssert.AreEqual(new[] { "002", "003", "004", "005" }, result.Template!.TrainIds.ToArray());
+        CollectionAssert.AreEqual(new[] { "003", "004", "005", "006" }, result.Template!.TrainIds.ToArray());
+    }
+
+    [TestMethod]
+    public void Import_TrainIdsUsedOnAnotherLine_AreSkipped()
+    {
+        var service = BlueLine.CreateTwoLineService();
+        service.QueueSchedule([BlueLine.GreenTrain("001", new TimeSpan(11, 0, 0)), BlueLine.GreenTrain("002", new TimeSpan(11, 0, 10))]);
+
+        var result = ScheduleCsvImporter.Import(BlueLineState(service), SampleCsv, TrainIds.AvailableIds(service.State));
+
+        Assert.IsTrue(result.IsSuccess, result.ErrorMessage);
+        CollectionAssert.AreEqual(new[] { "003", "004", "005", "006" }, result.Template!.TrainIds.ToArray());
+    }
+
+    [TestMethod]
+    public void Import_MoreTrainColumnsThanFreeIds_FailsWithSameMessageAsBuilder()
+    {
+        var service = BlueLine.CreateService();
+        service.QueueSchedule(Enumerable.Range(1, 7).Select(n => BlueLine.Train(TrainIds.Format(n), new TimeSpan(11, 0, 10 * n))));
+
+        var result = ScheduleCsvImporter.Import(BlueLineState(service), SampleCsv, TrainIds.AvailableIds(service.State));
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(TrainIds.NotEnoughIdsMessage(4, 3), result.ErrorMessage);
+        Assert.HasCount(7, service.State.ScheduledTrains, "A rejected import changes nothing.");
+    }
+
+    [TestMethod]
+    public void Import_UnsupportedAvailableIds_AreRejected()
+    {
+        var result = ScheduleCsvImporter.Import(BlueLineState(), SampleCsv, ["000", "001", "002", "003"]);
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.ErrorMessage, "Train 000 is not a supported train");
+    }
+
+    [TestMethod]
+    public void Import_ImportedTrainsQueueWithSupportedIds()
+    {
+        var service = BlueLine.CreateService();
+        var conversion = ScheduleTemplateConverter.Convert(
+            ScheduleCsvImporter.Import(BlueLineState(service), SampleCsv, TrainIds.AvailableIds(service.State)).Template!);
+
+        service.QueueSchedule(conversion.Trains);
+
+        CollectionAssert.AreEqual(new[] { "001", "002", "003", "004" }, service.State.ScheduledTrains.Select(train => train.TrainId).ToArray());
     }
 
     [TestMethod]
@@ -256,9 +302,10 @@ public class CtcScheduleCsvImportTests
     [TestMethod]
     public void Import_TooManyTrainsForRemainingIds_Fails()
     {
-        var result = Import(SampleCsv, firstTrainNumber: TrainIds.MaxNumber - 1);
+        // Four train columns from 008 would need 008-011; only 008-010 are supported.
+        var result = Import(SampleCsv, firstTrainNumber: TrainIds.LastNumber - 2);
 
         Assert.IsFalse(result.IsSuccess);
-        StringAssert.Contains(result.ErrorMessage, "more train ID(s) are available");
+        Assert.AreEqual(TrainIds.NotEnoughIdsMessage(4, 3), result.ErrorMessage);
     }
 }

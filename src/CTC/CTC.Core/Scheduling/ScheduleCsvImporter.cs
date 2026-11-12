@@ -55,11 +55,29 @@ public static class ScheduleCsvImporter
 
     /// <param name="line">The line the schedule is for; the CSV must name this line.</param>
     /// <param name="csv">The file contents.</param>
-    /// <param name="firstTrainNumber">First train number to use (see <see cref="TrainIds.NextAvailableNumber"/>).</param>
-    public static ScheduleCsvImportResult Import(CtcLineState line, string csv, int firstTrainNumber = 0)
+    /// <param name="firstTrainNumber">
+    /// First train number to use ("001" by default); the train columns get consecutive IDs up to
+    /// "010". The Schedule Builder passes <see cref="TrainIds.AvailableIds"/> instead.
+    /// </param>
+    public static ScheduleCsvImportResult Import(CtcLineState line, string csv, int firstTrainNumber = TrainIds.FirstNumber)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(firstTrainNumber, TrainIds.FirstNumber);
+
+        return Import(line, csv, ScheduleTemplateFactory.SupportedIdsFrom(firstTrainNumber));
+    }
+
+    /// <param name="line">The line the schedule is for; the CSV must name this line.</param>
+    /// <param name="csv">The file contents.</param>
+    /// <param name="availableTrainIds">
+    /// The train IDs the schedule may use, lowest first (see <see cref="TrainIds.AvailableIds"/>);
+    /// the train columns take the first ones. A file with more train columns than available IDs
+    /// is rejected with the same message the Schedule Builder shows.
+    /// </param>
+    public static ScheduleCsvImportResult Import(CtcLineState line, string csv, IReadOnlyList<string> availableTrainIds)
     {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(csv);
+        ArgumentNullException.ThrowIfNull(availableTrainIds);
 
         string? parseError = TryParseCsv(csv, out var records);
         if (parseError is not null)
@@ -105,10 +123,15 @@ public static class ScheduleCsvImporter
         ScheduleTemplate template;
         try
         {
-            template = ScheduleTemplateFactory.Create(line, trainCount, firstTrainNumber);
+            template = ScheduleTemplateFactory.Create(line, TrainIds.Take(availableTrainIds, trainCount));
         }
         catch (InvalidOperationException ex)
         {
+            return ScheduleCsvImportResult.Failure(ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            // An unsupported or repeated ID in availableTrainIds; the message is dispatcher-readable.
             return ScheduleCsvImportResult.Failure(ex.Message);
         }
 

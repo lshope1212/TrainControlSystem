@@ -52,12 +52,12 @@ public class CtcDwellTimeTests
         template.Rows.Single(row => row.BlockId == blockId);
 
     /// <summary>
-    /// Train 000: A1 at 12:00:00, A3 (station) at 12:01:00 with <paramref name="a3Dwell"/>, A5 at
+    /// Train 001: A1 at 12:00:00, A3 (station) at 12:01:00 with <paramref name="a3Dwell"/>, A5 at
     /// <paramref name="a5Arrival"/>, routed along branch B to B10 at 12:10:00.
     /// </summary>
     private static ScheduledTrain Schedule(TimeSpan a3Dwell, TimeSpan a5Arrival)
     {
-        var train = new ScheduledTrain { TrainId = "000", LineId = BlueLine.LineId };
+        var train = new ScheduledTrain { TrainId = "001", LineId = BlueLine.LineId };
         foreach (var blockId in BlueLine.BranchB)
         {
             train.Route.Add(new ScheduledRouteBlock
@@ -205,7 +205,7 @@ public class CtcDwellTimeTests
     {
         var (service, _) = await DispatchAsync();
 
-        await service.UpdateMovementPlanStopAsync("000", 0, StationBlockId, At(12, 1, 0), Seconds(60));
+        await service.UpdateMovementPlanStopAsync("001", 0, StationBlockId, At(12, 1, 0), Seconds(60));
 
         Assert.AreEqual(Seconds(60), Train(service).Stops[0].DwellTime);
         Assert.AreEqual(At(12, 2, 0), Train(service).Stops[0].DepartureTime);
@@ -241,10 +241,10 @@ public class CtcDwellTimeTests
     {
         var (service, _) = await DispatchAsync(a3Dwell: Seconds(60));
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "A4", At(12, 1, 30));
+        await service.UpdateDispatchedTrainPlanAsync("001", "A4", At(12, 1, 30));
         Assert.AreEqual(TimeSpan.Zero, Train(service).Stops[0].DwellTime);
 
-        await service.UpdateDispatchedTrainPlanAsync("000", StationBlockId, At(12, 1, 30));
+        await service.UpdateDispatchedTrainPlanAsync("001", StationBlockId, At(12, 1, 30));
         Assert.AreEqual(StationDwell, Train(service).Stops[0].DwellTime);
     }
 
@@ -253,7 +253,7 @@ public class CtcDwellTimeTests
     {
         var (service, _) = await DispatchAsync(a3Dwell: Seconds(60));
 
-        await service.UpdateDispatchedTrainPlanAsync("000", StationBlockId, At(12, 1, 30));
+        await service.UpdateDispatchedTrainPlanAsync("001", StationBlockId, At(12, 1, 30));
 
         Assert.AreEqual(Seconds(60), Train(service).Stops[0].DwellTime);
     }
@@ -296,7 +296,7 @@ public class CtcDwellTimeTests
         var (service, sender) = await DispatchAsync();
 
         var ex = await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateMovementPlanStopAsync("000", 0, StationBlockId, At(12, 1, 0), Seconds(-1)));
+            () => service.UpdateMovementPlanStopAsync("001", 0, StationBlockId, At(12, 1, 0), Seconds(-1)));
 
         Assert.Contains("cannot be negative", ex.Message);
         Assert.AreEqual(StationDwell, Train(service).Stops[0].DwellTime);
@@ -345,12 +345,12 @@ public class CtcDwellTimeTests
     {
         var (service, _) = await DispatchAsync();
 
-        await service.UpdateMovementPlanStopAsync("000", 0, StationBlockId, At(12, 1, 0), Seconds(120));
+        await service.UpdateMovementPlanStopAsync("001", 0, StationBlockId, At(12, 1, 0), Seconds(120));
 
         // 100 m in 240 - 120 = 120 s.
         Assert.AreEqual(100.0 / 120.0, Train(service).Stops[1].PlannedSpeedMetersPerSecond, 1e-9);
 
-        await service.UpdateMovementPlanStopAsync("000", 0, StationBlockId, At(12, 1, 0), TimeSpan.Zero);
+        await service.UpdateMovementPlanStopAsync("001", 0, StationBlockId, At(12, 1, 0), TimeSpan.Zero);
 
         Assert.AreEqual(100.0 / 240.0, Train(service).Stops[1].PlannedSpeedMetersPerSecond, 1e-9);
     }
@@ -366,7 +366,7 @@ public class CtcDwellTimeTests
         var events = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => events.Add(e);
 
-        string? warning = await service.UpdateMovementPlanStopAsync("000", 0, StationBlockId, At(12, 1, 0), Seconds(60));
+        string? warning = await service.UpdateMovementPlanStopAsync("001", 0, StationBlockId, At(12, 1, 0), Seconds(60));
 
         Assert.IsNull(warning);
         Assert.AreEqual(Seconds(60), train.Stops[0].DwellTime);
@@ -386,7 +386,7 @@ public class CtcDwellTimeTests
         var (service, _) = await DispatchAsync();
         double a5Speed = Train(service).Stops[1].PlannedSpeedMetersPerSecond;
 
-        await service.UpdateMovementPlanStopAsync("000", 1, "A5", At(12, 5, 0), Seconds(60));
+        await service.UpdateMovementPlanStopAsync("001", 1, "A5", At(12, 5, 0), Seconds(60));
 
         var stops = Train(service).Stops;
         Assert.AreEqual(a5Speed, stops[1].PlannedSpeedMetersPerSecond, 1e-9);
@@ -402,10 +402,10 @@ public class CtcDwellTimeTests
         var (service, sender) = await DispatchAsync();
 
         var ex = await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateMovementPlanStopAsync("000", 0, StationBlockId, At(12, 1, 0), TimeSpan.FromMinutes(5)));
+            () => service.UpdateMovementPlanStopAsync("001", 0, StationBlockId, At(12, 1, 0), TimeSpan.FromMinutes(5)));
 
         Assert.AreEqual(
-            "Train 000 dwells 300 s at A3 and does not depart until 12:06:00, so it cannot enter A5 at 12:05:00. Shorten the dwell or make the arrival later.",
+            "Train 001 dwells 300 s at A3 and does not depart until 12:06:00, so it cannot enter A5 at 12:05:00. Shorten the dwell or make the arrival later.",
             ex.Message);
         Assert.AreEqual(StationDwell, Train(service).Stops[0].DwellTime);
         Assert.HasCount(1, sender.SentMessages);
@@ -528,7 +528,7 @@ public class CtcDwellTimeTests
         await service.SetSystemTimeAsync(At(12, 1, 0));
         Occupy(service, "A3");
 
-        await service.UpdateMovementPlanStopAsync("000", 0, StationBlockId, At(12, 1, 0), Seconds(90));
+        await service.UpdateMovementPlanStopAsync("001", 0, StationBlockId, At(12, 1, 0), Seconds(90));
         await service.SetSystemTimeAsync(At(12, 1, 45));
 
         Assert.AreEqual(TrainMovementPhase.Dwelling, Train(service).Phase);
@@ -560,7 +560,7 @@ public class CtcDwellTimeTests
     {
         var (service, _) = await DispatchAsync();
         var train = Train(service);
-        await service.UpdateMovementPlanStopAsync("000", 2, "B10", At(12, 10, 0), Seconds(30));
+        await service.UpdateMovementPlanStopAsync("001", 2, "B10", At(12, 10, 0), Seconds(30));
         Occupy(service, "A1", "A2", "A3");
         await service.SetSystemTimeAsync(At(12, 2, 0));
         Occupy(service, "A4", "A5");

@@ -20,7 +20,7 @@ public class CtcTrainPlanUpdateTests
     private static TimeSpan At(int hours, int minutes, int seconds) => new TimeSpan(hours, minutes, seconds);
 
     /// <summary>
-    /// Train 000 on branch B, released at 12:00:00 from A1 and then placed there (A1 reports
+    /// Train 001 on branch B, released at 12:00:00 from A1 and then placed there (A1 reports
     /// occupied), so it holds its first movement request. Its next timed block is A3 at 12:10:00
     /// (100 m ahead), so that is its initial movement target.
     /// </summary>
@@ -31,7 +31,7 @@ public class CtcTrainPlanUpdateTests
         service.ApplyTrackLayout(layout ?? BlueLine.CreateLayout());
         BlueLine.ReportAllClear(service);
 
-        var train = new ScheduledTrain { TrainId = "000", LineId = BlueLine.LineId };
+        var train = new ScheduledTrain { TrainId = "001", LineId = BlueLine.LineId };
         foreach (var blockId in BlueLine.BranchB)
         {
             train.Route.Add(new ScheduledRouteBlock
@@ -99,7 +99,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
         double initialSpeed = service.State.DispatchedTrains.Single().SuggestedSpeedMetersPerSecond;
 
-        string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 15, 0));
+        string? warning = await service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 15, 0));
 
         Assert.IsNull(warning);
 
@@ -115,7 +115,7 @@ public class CtcTrainPlanUpdateTests
 
         // 100 m (A1, A2) in 900 s. Only the time changed, so the route (and the later stop
         // B10) is kept and the authority still covers the whole remaining A1..B10 route.
-        Assert.AreEqual("000", suggestion.TrainId);
+        Assert.AreEqual("001", suggestion.TrainId);
         Assert.AreEqual(100.0 / 900.0, suggestion.SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.IsLessThan(initialSpeed, suggestion.SuggestedSpeedMetersPerSecond);
         Assert.AreEqual(500.0, suggestion.SuggestedAuthorityMeters);
@@ -132,10 +132,10 @@ public class CtcTrainPlanUpdateTests
     public async Task EarlierArrival_RaisesSpeedWithinPermittedMaximum()
     {
         var (service, sender) = await DispatchTrainAsync();
-        await service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 15, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 15, 0));
         double slowerSpeed = Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond;
 
-        string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 8, 0));
+        string? warning = await service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 8, 0));
 
         double fasterSpeed = Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond;
         Assert.IsNull(warning);
@@ -152,7 +152,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
         await service.SetSystemTimeAsync(At(12, 5, 0));
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 15, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 15, 0));
 
         Assert.AreEqual(100.0 / 600.0, Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond, 1e-9);
     }
@@ -167,17 +167,17 @@ public class CtcTrainPlanUpdateTests
         var events = new List<CtcStateChangedEventArgs>();
         service.StateChanged += (_, e) => events.Add(e);
 
-        string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 0, 5));
+        string? warning = await service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 0, 5));
 
         Assert.IsNotNull(warning);
         Assert.AreEqual(
-            "For Train 000, the requested arrival at A3 (12:00:05) cannot be met. Required: 72.0 km/h. Maximum allowed: 50.0 km/h. Suggested the maximum permitted speed.",
+            "For Train 001, the requested arrival at A3 (12:00:05) cannot be met. Required: 72.0 km/h. Maximum allowed: 50.0 km/h. Suggested the maximum permitted speed.",
             warning);
         Assert.AreEqual(MaxBlueSpeed, Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond, 1e-9);
         Assert.IsTrue(Suggestions(sender).All(suggestion => suggestion.SuggestedSpeedMetersPerSecond <= MaxBlueSpeed + 1e-9));
 
         var updated = events.Single(e => e.Kind == CtcStateChangeKind.TrainMovementPlanUpdated);
-        Assert.AreEqual("000", updated.TrainId);
+        Assert.AreEqual("001", updated.TrainId);
         Assert.AreEqual(warning, updated.Message);
 
         // The dispatcher's requested time is still the active target.
@@ -190,10 +190,10 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
         await service.SetSystemTimeAsync(At(12, 20, 0));
 
-        string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 15, 0));
+        string? warning = await service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 15, 0));
 
         Assert.AreEqual(
-            "For Train 000, the requested arrival at A3 (12:15:00) has already passed; suggested the maximum permitted speed (50.0 km/h).",
+            "For Train 001, the requested arrival at A3 (12:15:00) has already passed; suggested the maximum permitted speed (50.0 km/h).",
             warning);
         Assert.AreEqual(MaxBlueSpeed, Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond, 1e-9);
     }
@@ -203,7 +203,7 @@ public class CtcTrainPlanUpdateTests
     {
         var (service, sender) = await DispatchTrainAsync(BlueLine.CreateLayout(speedLimitKph: 100));
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 0, 1));
+        await service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 0, 1));
 
         Assert.AreEqual(TrainPerformance.MaxSpeedMetersPerSecond, Suggestions(sender)[^1].SuggestedSpeedMetersPerSecond, 1e-9);
     }
@@ -215,7 +215,7 @@ public class CtcTrainPlanUpdateTests
     {
         var (service, sender) = await DispatchTrainAsync();
 
-        string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "C13", At(12, 10, 0));
+        string? warning = await service.UpdateDispatchedTrainPlanAsync("001", "C13", At(12, 10, 0));
 
         // A1 A2 A3 A4 A5 C11 C12 C13: 350 m to the start of C13 in 600 s; authority is all 8 blocks.
         Assert.IsNull(warning);
@@ -234,7 +234,7 @@ public class CtcTrainPlanUpdateTests
     {
         var (service, sender) = await DispatchTrainAsync();
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "B7", At(12, 20, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "B7", At(12, 20, 0));
 
         // A1..B7 is 7 blocks: 300 m to the start of B7 in 1200 s.
         var train = service.State.DispatchedTrains.Single();
@@ -250,7 +250,7 @@ public class CtcTrainPlanUpdateTests
     {
         var (service, _) = await DispatchTrainAsync();
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "C13", At(12, 10, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "C13", At(12, 10, 0));
 
         var scheduled = service.State.ScheduledTrains.Single();
         CollectionAssert.AreEqual(BlueLine.BranchB, scheduled.Route.Select(block => block.BlockId).ToArray());
@@ -266,7 +266,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
         service.State.FindBlock("A3")!.Occupancy = OccupancyState.Occupied;
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "A5", At(12, 10, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "A5", At(12, 10, 0));
 
         Assert.AreEqual(100.0, Suggestions(sender)[^1].SuggestedAuthorityMeters);
     }
@@ -277,7 +277,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
         service.State.FindBlock("C12")!.ConfirmedMaintenanceState = MaintenanceState.Closed;
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "C13", At(12, 10, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "C13", At(12, 10, 0));
 
         // A1..C11 = 6 blocks.
         Assert.AreEqual(300.0, Suggestions(sender)[^1].SuggestedAuthorityMeters);
@@ -290,7 +290,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
         service.State.FindBlock("A1")!.Occupancy = OccupancyState.Occupied;
 
-        string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "A5", At(12, 10, 0));
+        string? warning = await service.UpdateDispatchedTrainPlanAsync("001", "A5", At(12, 10, 0));
 
         Assert.IsNull(warning);
         Assert.AreEqual(250.0, Suggestions(sender)[^1].SuggestedAuthorityMeters);
@@ -302,7 +302,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
         service.State.FindBlock("A1")!.RequestedMaintenanceState = MaintenanceState.Closed;
 
-        string? warning = await service.UpdateDispatchedTrainPlanAsync("000", "A5", At(12, 10, 0));
+        string? warning = await service.UpdateDispatchedTrainPlanAsync("001", "A5", At(12, 10, 0));
 
         // No safe authority at all: the old request is cancelled and none replaces it.
         Assert.IsFalse(((MovementSuggestionMessage)sender.SentMessages[^1]).IsActive);
@@ -336,9 +336,9 @@ public class CtcTrainPlanUpdateTests
         service.StateChanged += (_, e) => events.Add(e.Kind);
 
         var ex = await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateDispatchedTrainPlanAsync("000", "D16", At(12, 10, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("001", "D16", At(12, 10, 0)));
 
-        Assert.AreEqual("No route on Blue Line connects Train 000's current block A1 to D16.", ex.Message);
+        Assert.AreEqual("No route on Blue Line connects Train 001's current block A1 to D16.", ex.Message);
         Assert.HasCount(1, sender.SentMessages);
         Assert.IsEmpty(events);
         AssertPlanUnchanged(service.State.DispatchedTrains.Single());
@@ -353,7 +353,7 @@ public class CtcTrainPlanUpdateTests
         service.StateChanged += (_, e) => events.Add(e.Kind);
 
         await Assert.ThrowsExactlyAsync<MessageSendException>(
-            () => service.UpdateDispatchedTrainPlanAsync("000", "C13", At(12, 20, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("001", "C13", At(12, 20, 0)));
 
         Assert.IsEmpty(events);
         var train = service.State.DispatchedTrains.Single();
@@ -367,9 +367,9 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
 
         var ex = await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateDispatchedTrainPlanAsync("007", "A3", At(12, 10, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("008", "A3", At(12, 10, 0)));
 
-        Assert.AreEqual("Train 007 has not been dispatched.", ex.Message);
+        Assert.AreEqual("Train 008 has not been dispatched.", ex.Message);
         Assert.HasCount(1, sender.SentMessages);
     }
 
@@ -378,10 +378,10 @@ public class CtcTrainPlanUpdateTests
     {
         var sender = new FakeMessageSender();
         var service = BlueLine.CreateService(sender);
-        service.QueueSchedule([BlueLine.Train("000", At(12, 0, 0))]);
+        service.QueueSchedule([BlueLine.Train("001", At(12, 0, 0))]);
 
         await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateDispatchedTrainPlanAsync("000", "A3", At(12, 10, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("001", "A3", At(12, 10, 0)));
 
         Assert.IsEmpty(sender.SentMessages);
         Assert.HasCount(1, service.State.DispatchQueue);
@@ -393,7 +393,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
 
         var ex = await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateDispatchedTrainPlanAsync("000", "Z99", At(12, 10, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("001", "Z99", At(12, 10, 0)));
 
         Assert.AreEqual("Block Z99 is not on Blue Line.", ex.Message);
         Assert.HasCount(1, sender.SentMessages);
@@ -406,7 +406,7 @@ public class CtcTrainPlanUpdateTests
         var (service, sender) = await DispatchTrainAsync();
 
         await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateDispatchedTrainPlanAsync("000", "A1", At(12, 10, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("001", "A1", At(12, 10, 0)));
 
         Assert.HasCount(1, sender.SentMessages);
         AssertPlanUnchanged(service.State.DispatchedTrains.Single());
@@ -419,7 +419,7 @@ public class CtcTrainPlanUpdateTests
         service.State.FindBlock("A4")!.SpeedLimitKilometersPerHour = 0;
 
         var ex = await Assert.ThrowsExactlyAsync<DispatchException>(
-            () => service.UpdateDispatchedTrainPlanAsync("000", "A5", At(12, 10, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("001", "A5", At(12, 10, 0)));
 
         Assert.Contains("A4", ex.Message);
         Assert.HasCount(1, sender.SentMessages);

@@ -26,7 +26,7 @@ public class CtcAuthorityHandoffTests
         service.ApplyTrackLayout(BlueLine.CreateLayout());
         BlueLine.ReportAllClear(service);
         route ??= BlueLine.BranchB;
-        service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 4, route: route, timedBlocks: [route[0], route[^1]])]);
+        service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 4, route: route, timedBlocks: [route[0], route[^1]])]);
         await service.SetSystemTimeAsync(Noon);
         await BlueLine.PlaceTrainAsync(service, route[0]);
         return (service, sender, clock);
@@ -44,7 +44,7 @@ public class CtcAuthorityHandoffTests
             Outcome = outcome,
             Detail = detail,
             BlockId = request.Plan.TargetBlockId,
-            TrainId = "000",
+            TrainId = "001",
         });
 
     /// <summary>The wayside's status of <paramref name="blockId"/> with its decision on <paramref name="request"/>.</summary>
@@ -56,7 +56,7 @@ public class CtcAuthorityHandoffTests
             Movement = request is null ? null : new MovementAuthorizationReport
             {
                 RequestId = request.RequestId,
-                TrainId = "000",
+                TrainId = "001",
                 State = state,
                 AuthorizedSpeedMetersPerSecond = state == MovementAuthorizationState.Withheld ? 0 : request.Plan.SpeedMetersPerSecond,
                 AuthorizedAuthorityMeters = state == MovementAuthorizationState.Withheld ? 0 : authority ?? request.Plan.AuthorityMeters,
@@ -263,7 +263,7 @@ public class CtcAuthorityHandoffTests
     {
         var (service, sender, _, active, staged) = await GrantedAsync();
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "C15", Noon + TimeSpan.FromMinutes(5));
+        await service.UpdateDispatchedTrainPlanAsync("001", "C15", Noon + TimeSpan.FromMinutes(5));
 
         var train = Train(service);
         Assert.AreNotEqual(active.RequestId, train.MovementRequest!.RequestId, "A re-plan is a new movement with a new request.");

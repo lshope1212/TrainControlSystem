@@ -367,6 +367,14 @@ public sealed class MainWindowViewModel : ViewModelBase
         _inputsByTrain[trainId] = inputs;
         Roster.Add(new TrainRosterItemViewModel(trainId));
         Log("INFO", "Dispatch", $"{trainId} known (first message received); it runs once dispatched.");
+        if (!TrainControl.Common.Identity.TrainIdConvention.TryNormalize(trainId, out var canonical)
+            || !TrainControl.Common.Identity.TrainIdConvention.IsDispatchable(canonical))
+        {
+            // Diagnostic only: the train is still simulated, but no Train Controller drives it.
+            Log("WARN", "Dispatch",
+                $"{trainId} is not a supported fleet train ID ({TrainControl.Common.Identity.TrainIdConvention.DispatchableRangeText}); the Train Controller will ignore it.");
+        }
+
         return inputs;
     }
 

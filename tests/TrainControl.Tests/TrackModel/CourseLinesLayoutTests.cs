@@ -6,6 +6,7 @@ using System.Text.Json;
 using TrackModel.Core.Models;
 using TrackModel.Core.Persistence;
 using TrackModel.Core.Services;
+using TrainControl.Common.Identity;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
 
@@ -36,11 +37,71 @@ public class CourseLinesLayoutTests
 
         var model = new TrackService();
         CourseTrackLayout.LoadDemonstration(model);
-        Assert.AreEqual("01", model.FindBlock("1")!.TrainId, "The Blue demonstration train starts where it always did.");
-        Assert.IsFalse(model.Layout.Blocks.Any(b => b.LineId != "Blue" && b.IsOccupied));
+        Assert.AreEqual("001", model.FindBlock("1")!.TrainId, "The Blue demonstration train starts where it always did, with its canonical ID.");
+        Assert.AreEqual(BlueLineTrackLayout.DemonstrationTrainId, model.FindBlock("1")!.TrainId);
+        Assert.IsTrue(TrainIdConvention.IsCanonical(model.FindBlock("1")!.TrainId));
+        Assert.IsFalse(model.Layout.Blocks.Any(b => b.Id != "1" && b.IsOccupied));
         CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, model.CreateLayoutMessage().Lines.Select(line => line.Name).ToArray());
         Assert.AreEqual("GREEN-12", model.CreateTrainEnvironment("GREEN-13").NextBlockId, "Switch 13 starts Normal, toward block 12.");
         Assert.AreEqual("Reverse", model.CreateTrainEnvironment("GREEN-5").TravelDirection);
+    }
+
+    /// <summary>
+    /// Production start-up (TrackModel.Wpf's App and Restore course lines) loads all three lines
+    /// with no trains, so no fleet ID is occupied before CTC dispatches that train.
+    /// </summary>
+    [TestMethod]
+    public void ProductionLoad_HasAllThreeLinesAndNoTrains()
+    {
+        var model = new TrackService();
+        CourseTrackLayout.Load(model);
+
+        CollectionAssert.AreEqual(new[] { 15, 76, 150 }, model.Layout.Blocks.GroupBy(b => b.LineId).Select(line => line.Count()).ToArray());
+        Assert.IsFalse(model.Layout.Blocks.Any(b => b.IsOccupied || b.TrainId.Length > 0), "No block is occupied at start-up.");
+        Assert.AreEqual(new TimeSpan(9, 0, 0), model.SystemTime);
+        Assert.IsFalse(model.Layout.Blocks.Any(b => b.TrainId == "001"), "Train 001 is not pre-occupied.");
+    }
+
+    [TestMethod]
+    public void BlueLineProductionLoad_HasNoTrains_AndDemonstrationSeedsCanonical001()
+    {
+        var production = new TrackService();
+        BlueLineTrackLayout.Load(production);
+        Assert.IsFalse(production.Layout.Blocks.Any(b => b.IsOccupied));
+
+        var demonstration = new TrackService();
+        BlueLineTrackLayout.LoadDemonstration(demonstration);
+        Assert.AreEqual("001", demonstration.FindBlock("1")!.TrainId);
+        Assert.IsTrue(TrainIdConvention.IsDispatchable(demonstration.FindBlock("1")!.TrainId));
+        Assert.AreEqual(1, demonstration.Layout.Blocks.Count(b => b.IsOccupied));
+    }
+
+    /// <summary>
+    /// Regression: when the Track Model seeded train 001 on Blue block 1 at start-up, CTC's first
+    /// dispatched train (also 001) placed on Green "moved" the seeded train from Blue to Green:
+    /// Blue block 1 silently cleared and Green recorded a train entry from a Blue block. The
+    /// production start-up seeds nothing, so 001's placement on Green is a clean first entry.
+    /// </summary>
+    [TestMethod]
+    public void ProductionLoad_CtcDispatchedTrain001OnGreen_IsAFirstPlacement()
+    {
+        var model = new TrackService();
+        CourseTrackLayout.Load(model);
+
+        model.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "GREEN-63" });
+
+        var green = model.FindBlock("GREEN-63")!;
+        Assert.AreEqual("001", green.TrainId);
+        Assert.AreEqual(string.Empty, green.TrainEntryBlockId, "001 enters the track at GREEN-63; it did not come from another line.");
+        Assert.AreEqual(1, model.Layout.Blocks.Count(b => b.TrainId == "001"));
+        Assert.IsFalse(model.Layout.Blocks.Any(b => b.LineId == "Blue" && b.IsOccupied));
+
+        // The conflict the production path avoids: with the demonstration seed, the same placement
+        // is applied as a cross-line move of the seeded train.
+        var seeded = new TrackService();
+        CourseTrackLayout.LoadDemonstration(seeded);
+        seeded.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "GREEN-63" });
+        Assert.AreEqual("1", seeded.FindBlock("GREEN-63")!.TrainEntryBlockId, "Why the demonstration seed must stay out of production.");
     }
 
     /// <summary>
@@ -76,7 +137,7 @@ public class CourseLinesLayoutTests
     {
         var model = new TrackService();
         CourseTrackLayout.LoadDemonstration(model);
-        model.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "02", CurrentBlockId = "RED-16" });
+        model.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "002", CurrentBlockId = "RED-16" });
         int notifications = 0;
         model.StateChanged += (_, _) => notifications++;
 

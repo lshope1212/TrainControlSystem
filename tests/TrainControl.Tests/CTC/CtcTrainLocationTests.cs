@@ -26,7 +26,7 @@ public class CtcTrainLocationTests
         service.ApplyTrackLayout(layout ?? BlueLine.CreateLayout());
         BlueLine.ReportAllClear(service);
 
-        service.QueueSchedule(trains.Length > 0 ? trains : [BlueLine.Train("000", At(12, 0, 0))]);
+        service.QueueSchedule(trains.Length > 0 ? trains : [BlueLine.Train("001", At(12, 0, 0))]);
         await service.SetSystemTimeAsync(At(12, 0, 0));
         Assert.HasCount(trains.Length > 0 ? trains.Length : 1, service.State.DispatchedTrains, "Setup: every train should have been dispatched.");
 
@@ -57,9 +57,9 @@ public class CtcTrainLocationTests
         }
     }
 
-    private static DispatchedTrainState Train(CTCService service, string trainId = "000") => service.State.FindDispatchedTrain(trainId)!;
+    private static DispatchedTrainState Train(CTCService service, string trainId = "001") => service.State.FindDispatchedTrain(trainId)!;
 
-    private static string Current(CTCService service, string trainId = "000") => Train(service, trainId).CurrentBlockId;
+    private static string Current(CTCService service, string trainId = "001") => Train(service, trainId).CurrentBlockId;
 
     private static List<CtcStateChangedEventArgs> LocationUpdates(List<CtcStateChangedEventArgs> changes) =>
         changes.Where(e => e.Kind == CtcStateChangeKind.TrainLocationUpdated).ToList();
@@ -110,7 +110,7 @@ public class CtcTrainLocationTests
         Assert.HasCount(3, changes);
         Assert.AreEqual(CtcStateChangeKind.BlockStatus, changes[0].Kind);
         Assert.AreEqual(CtcStateChangeKind.TrainLocationUpdated, changes[1].Kind);
-        Assert.AreEqual("000", changes[1].TrainId);
+        Assert.AreEqual("001", changes[1].TrainId);
         Assert.AreEqual("A2", changes[1].BlockId);
         Assert.AreEqual(CtcStateChangeKind.TrainMovementPhaseChanged, changes[2].Kind);
     }
@@ -255,19 +255,19 @@ public class CtcTrainLocationTests
     public async Task TwoTrainsOnDifferentBranches_TrackedIndependently()
     {
         var (service, _, _) = await DispatchAsync(
-            BlueLine.Train("000", At(12, 0, 0), route: BlueLine.BranchB),
-            BlueLine.Train("001", At(12, 0, 0), route: ["C11", "C12", "C13", "C14", "C15"]));
+            BlueLine.Train("001", At(12, 0, 0), route: BlueLine.BranchB),
+            BlueLine.Train("002", At(12, 0, 0), route: ["C11", "C12", "C13", "C14", "C15"]));
 
         Occupy(service, "A1", "C11", "A2");
-        Assert.AreEqual("A2", Current(service, "000"));
-        Assert.AreEqual("C11", Current(service, "001"));
+        Assert.AreEqual("A2", Current(service, "001"));
+        Assert.AreEqual("C11", Current(service, "002"));
 
         Occupy(service, "C12");
         Clear(service, "A1", "C11");
         Occupy(service, "A3");
 
-        Assert.AreEqual("A3", Current(service, "000"));
-        Assert.AreEqual("C12", Current(service, "001"));
+        Assert.AreEqual("A3", Current(service, "001"));
+        Assert.AreEqual("C12", Current(service, "002"));
     }
 
     [TestMethod]
@@ -275,38 +275,38 @@ public class CtcTrainLocationTests
     {
         // Both trains' next block is A5 (one from A4, the other from B6).
         var (service, _, changes) = await DispatchAsync(
-            BlueLine.Train("000", At(12, 0, 0), route: ["A4", "A5", "C11", "C12"]),
-            BlueLine.Train("001", At(12, 0, 0), route: ["B6", "A5", "C11", "C12"]));
+            BlueLine.Train("001", At(12, 0, 0), route: ["A4", "A5", "C11", "C12"]),
+            BlueLine.Train("002", At(12, 0, 0), route: ["B6", "A5", "C11", "C12"]));
         Occupy(service, "A4", "B6");
         changes.Clear();
 
         Occupy(service, "A5");
 
-        Assert.AreEqual("A4", Current(service, "000"));
-        Assert.AreEqual("B6", Current(service, "001"));
+        Assert.AreEqual("A4", Current(service, "001"));
+        Assert.AreEqual("B6", Current(service, "002"));
         Assert.AreEqual(OccupancyState.Occupied, service.State.FindBlock("A5")!.Occupancy);
         Assert.IsEmpty(LocationUpdates(changes));
 
         var ambiguous = changes.Single(e => e.Kind == CtcStateChangeKind.TrainLocationAmbiguous);
         Assert.AreEqual("A5", ambiguous.BlockId);
-        Assert.AreEqual("Block A5 became occupied, but it could be Train 000 or Train 001; no train location was changed.", ambiguous.Message);
+        Assert.AreEqual("Block A5 became occupied, but it could be Train 001 or Train 002; no train location was changed.", ambiguous.Message);
     }
 
     [TestMethod]
     public async Task OccupancyOfAnotherTrainsUnseenStartBlock_IsAmbiguous()
     {
-        // Train 001 was released at A2 but not yet seen there; A2 becoming occupied could be
-        // Train 001 appearing or Train 000 moving forward from A1.
+        // Train 002 was released at A2 but not yet seen there; A2 becoming occupied could be
+        // Train 002 appearing or Train 001 moving forward from A1.
         var (service, _, changes) = await DispatchAsync(
-            BlueLine.Train("000", At(12, 0, 0), route: BlueLine.BranchB),
-            BlueLine.Train("001", At(12, 0, 0), route: ["A2", "A3", "A4", "A5"]));
+            BlueLine.Train("001", At(12, 0, 0), route: BlueLine.BranchB),
+            BlueLine.Train("002", At(12, 0, 0), route: ["A2", "A3", "A4", "A5"]));
         Occupy(service, "A1");
 
         Occupy(service, "A2");
 
-        Assert.AreEqual("A1", Current(service, "000"));
-        Assert.AreEqual("A2", Current(service, "001"));
-        Assert.IsFalse(Train(service, "001").CurrentBlockOccupancyObserved);
+        Assert.AreEqual("A1", Current(service, "001"));
+        Assert.AreEqual("A2", Current(service, "002"));
+        Assert.IsFalse(Train(service, "002").CurrentBlockOccupancyObserved);
         Assert.HasCount(1, changes.Where(e => e.Kind == CtcStateChangeKind.TrainLocationAmbiguous));
     }
 
@@ -342,7 +342,7 @@ public class CtcTrainLocationTests
         Occupy(service, "A1", "A2", "A3", "A4", "A5");
         Assert.AreEqual("A5", Current(service));
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "C13", At(12, 10, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "C13", At(12, 10, 0));
 
         var train = Train(service);
         Assert.AreEqual("A5", train.CurrentBlockId);
@@ -366,7 +366,7 @@ public class CtcTrainLocationTests
         Occupy(service, "A1", "A2", "A3");
         Clear(service, "A1", "A2");
 
-        await service.UpdateDispatchedTrainPlanAsync("000", "A5", At(12, 10, 0));
+        await service.UpdateDispatchedTrainPlanAsync("001", "A5", At(12, 10, 0));
 
         // A3 A4 A5: authority covers the three blocks from the current block (occupied by this train).
         Assert.AreEqual(150.0, sender.SentMessages.OfType<MovementSuggestionMessage>().Last().SuggestedAuthorityMeters);
@@ -381,7 +381,7 @@ public class CtcTrainLocationTests
         sender.ExceptionToThrow = new MessageSendException("Track Controller is not connected.");
 
         await Assert.ThrowsExactlyAsync<MessageSendException>(
-            () => service.UpdateDispatchedTrainPlanAsync("000", "C13", At(12, 10, 0)));
+            () => service.UpdateDispatchedTrainPlanAsync("001", "C13", At(12, 10, 0)));
 
         var train = Train(service);
         CollectionAssert.AreEqual(BlueLine.BranchB, train.ActiveRouteBlockIds.ToArray());
