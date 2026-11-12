@@ -20,12 +20,12 @@ public sealed class AuthorityContinuityIntegrationTests
 
     /// <summary>
     /// All modules up (the production Track Model starts with no trains), <paramref name="trains"/> scheduled, released,
-    /// placed in their start blocks through the Track Model, and the Track Controller resumed.
+    /// placed in their start blocks through the Track Model, and the Track Controller evaluating automatically.
     /// </summary>
     private static async Task<LiveSystem> StartAsync(bool allLines, Func<LiveSystem, string>? deployment = null, params TrainRun[] trains)
     {
         var system = new LiveSystem();
-        await system.StartTrackControllerAsync(deployment?.Invoke(system) ?? (allLines ? LiveSystem.CourseDeployment : null));
+        await system.StartTrackControllerAsync(deployment?.Invoke(system) ?? (allLines ? LiveSystem.CourseDeployment : null), automaticOperation: true);
         await system.StartCtcAsync();
         await system.StartTrackModelAsync(allLines);
         await LiveSystem.UntilAsync(() => system.OnCtc(ctc => trains.All(train => ctc.State.FindLine(train.Line) is not null)), "CTC loads the layout.");
@@ -54,7 +54,7 @@ public sealed class AuthorityContinuityIntegrationTests
             await LiveSystem.UntilAsync(() => system.OnCtc(ctc => ctc.State.FindDispatchedTrain(run.TrainId)!.MovementRequest is { Delivery: MovementRequestDelivery.Delivered }), $"CTC detects {run.TrainId} and requests its movement.");
         }
 
-        await system.ResumeTrackControllerAsync();
+        Assert.IsFalse(system.Wayside!.LatestSnapshot.IsPaused, "Production waysides operate without a local Resume command.");
         return system;
     }
 
@@ -176,9 +176,9 @@ public sealed class AuthorityContinuityIntegrationTests
         Assert.IsNull(system.WaysideBlock("1").Request, "The predecessor was retired by the transfer.");
         Assert.HasCount(1, system.Wayside!.LatestSnapshot.Authorizations.Where(block => block.AuthorizedAuthorityMeters > 0).ToList(), "One grant, never two.");
 
-        // A genuine revocation: the Track Controller withholds all authority.
+        // A genuine revocation: entering maintenance withholds all authority.
         var revokedAt = DateTime.UtcNow;
-        await system.SendToTrackControllerAsync(MessageSerializer.CreateEnvelope("SetSimulation", new { paused = true, speedMultiplier = 1 }));
+        await system.SendToTrackControllerAsync(MessageSerializer.CreateEnvelope("SetMaintenanceMode", new { enabled = true }));
         await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority == 0), "the revocation reaches the train.", TimeSpan.FromSeconds(3));
         var zero = train.Received.ToArray().First(pickup => pickup.At >= revokedAt && pickup.Authority == 0);
         var latency = zero.At - revokedAt;

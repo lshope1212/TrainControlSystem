@@ -22,6 +22,9 @@ public sealed class WaysideConfigurationMessage
     /// <summary>Private routed-runtime mode: evaluate shared routes; publish commands only for owned blocks.</summary>
     public bool CoordinatedRoutes { get; set; }
 
+    /// <summary>Production lifecycle: evaluate automatically with valid PLC; CTC owns simulation time. False retains isolated test-harness controls.</summary>
+    public bool AutomaticOperation { get; set; }
+
     /// <summary>Legacy external reservation service. Course CTC uses wayside-owned movement locks instead.</summary>
     public bool RequireCtcReservationFeedback { get; set; } = true;
 }

@@ -19,8 +19,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 160
+      "mapX": 155.5,
+      "mapY": 213.0
     },
     {
       "blockId": "2",
@@ -36,8 +36,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 160
+      "mapX": 246.5,
+      "mapY": 213.0
     },
     {
       "blockId": "3",
@@ -57,8 +57,8 @@
         "3",
         "4"
       ],
-      "mapX": 242,
-      "mapY": 160
+      "mapX": 337.5,
+      "mapY": 213.0
     },
     {
       "blockId": "4",
@@ -74,8 +74,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 160
+      "mapX": 428.5,
+      "mapY": 213.0
     },
     {
       "blockId": "5",
@@ -97,8 +97,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 160
+      "mapX": 519.5,
+      "mapY": 213.0
     },
     {
       "blockId": "6",
@@ -114,8 +114,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 60
+      "mapX": 627.8,
+      "mapY": 186.7
     },
     {
       "blockId": "7",
@@ -131,8 +131,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 60
+      "mapX": 699.4,
+      "mapY": 154.1
     },
     {
       "blockId": "8",
@@ -148,8 +148,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 60
+      "mapX": 771.0,
+      "mapY": 121.5
     },
     {
       "blockId": "9",
@@ -165,8 +165,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 60
+      "mapX": 842.6,
+      "mapY": 88.9
     },
     {
       "blockId": "10",
@@ -180,8 +180,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 60,
+      "mapX": 914.2,
+      "mapY": 56.3,
       "stationName": "Station B"
     },
     {
@@ -198,8 +198,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 260
+      "mapX": 639.2,
+      "mapY": 241.6
     },
     {
       "blockId": "12",
@@ -215,8 +215,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 260
+      "mapX": 741.6,
+      "mapY": 276.8
     },
     {
       "blockId": "13",
@@ -232,8 +232,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 260
+      "mapX": 844.0,
+      "mapY": 312.0
     },
     {
       "blockId": "14",
@@ -249,8 +249,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 260
+      "mapX": 946.4,
+      "mapY": 347.2
     },
     {
       "blockId": "15",
@@ -264,8 +264,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 260,
+      "mapX": 1048.8,
+      "mapY": 382.4,
       "stationName": "Station C"
     }
   ]

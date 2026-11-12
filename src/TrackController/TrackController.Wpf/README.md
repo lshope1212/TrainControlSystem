@@ -13,24 +13,21 @@ dotnet run --project src/TrackController/TrackController.Wpf
 ```
 
 The window sizes itself to 92% of the desktop working area (capped at 1600 × 1000
-WPF units) and centers on that screen. It opens the course network, paused, with
-six waysides: two for Blue, two for Red, and two for Green.
+WPF units) and centers on that screen. It opens the course network with automatic PLC evaluation and
+16 waysides: two for Blue, six for Red, and eight for Green.
 All start on the PC; **Controller setup** can assign any territory to its own Pi
-runtime. The clock and simulation speed belong to CTC. **Hold movement / Enable
-movement** controls wayside permission, not the shared simulation clock.
+runtime. CTC owns simulation time, speed and pause. There is no local Hold/Enable movement toggle. Valid PLCs evaluate automatically; missing or unsafe inputs still withhold authority. Use **Maintenance mode** for setup changes and manual equipment control.
 
 Select a **Line** and named **Territory** above the tabs. **Territory map** shows
-only that owner's blocks at readable scale, with scrolling and block selection.
+only that owner's blocks. Course-shaped schematics fit the viewport; scroll to zoom, drag to pan, or select **Fit territory** to reset. Purple boundary stubs and the handoff list identify neighboring controllers without displaying their blocks. Select a block for station and equipment details.
 Movement permissions, equipment rows and manual targets use the same territory.
-The setup view shows all deployment assignments. Actual train speed is omitted
+Controller setup lists all territories with one settings panel for the selected territory. Pi address fields appear only for Pi assignments; **Advanced** contains PLC replacement/source, the complete block list and reset. **Apply changes** and **Save setup** stay visible below the list. The map's line/territory filters are hidden here because setup covers every territory. Actual train speed is omitted
 from the operator detail panel because production block feedback does not supply it.
 
-For the separate Test UI demonstration, load **Demonstration track (12 blocks)**
-or **Blue Line**, send fresh feedback, then enable movement. These remain explicit
-test setups; the small demonstration is no longer mislabeled as the course Green Line.
-Choose **Saved setup file…** in the same selector and select **Load setup** to
+The built-in presets are **Course network · 16 waysides**, **Blue Line**, **Red Line**, and **Green Line**. Individual lines use exactly the same boundaries as the combined course network. For the separate Test UI demonstration, load **Blue Line**, send fresh feedback and a movement request. The older 12-block fixture is available only as a saved setup file for regression tests, not as a project preset.
+Choose **Saved setup file…** in the same selector and select **Load layout** to
 open a `.deployment.json` file. A setup includes its track, territory ownership,
-PC/Pi assignments, and PLC program. Loading requires pause and fresh feedback
+PC/Pi assignments, and PLC program. After initial startup, loading requires maintenance mode and fresh feedback
 afterward. Choosing an item alone does not replace the active setup. Saved setups must also split every line between at least two waysides.
 
 The collapsed **Advanced** section contains **Replace selected PLC…** to change only the
@@ -59,12 +56,13 @@ Model's `blue-line.json`: fifteen 50 m blocks at 50 km/h, with the same block ID
 
 | Deployment file | Territories |
 | --- | --- |
-| `blue-line-all-pc.deployment.json` | Two waysides: yard/junction/Station B (1–11) and Station C approach (12–15), both on PC. |
-| `blue-line-pc-and-pi.deployment.json` | `wayside-a` (blocks 12–15, PC) and `wayside-b` (blocks 1–11, Pi). |
+| `blue-line-all-pc.deployment.json` | BL-A yard/junction (1–6, 11) and BL-B station branches (7–10, 12–15), both on PC. |
+| `blue-line-pc-and-pi.deployment.json` | `wayside-a` (blocks 7–10, 12–15, PC) and `wayside-b` (blocks 1–6, 11, Pi). |
 
 The switch zone (4, 5, 6, 11) and crossing zone (2, 3, 4) overlap at block 4, so
-blocks 2–6 and 11 must share an owner. The split keeps the yard, junction and
-Station B on one territory; routes to Station C can cross into the other owner
+blocks 2–6 and 11 must share an owner. The split keeps the yard and protected
+junction together; both station branches share the second controller to avoid
+an extra controller for a short branch. Routes to either station cross owners
 using coordinated route approval and block-entry handoff (see the
 [territory guide](../TrackController.Runtime/README.md#change-territory-boundaries)).
 
@@ -78,23 +76,22 @@ request for block 5 as Reverse and report the switch Reverse, then occupy block 
 and request `5, 11, 12`.
 
 PLC loading, controller logic, maintenance mode, manual equipment commands,
-Hold/Enable movement, and PC/Pi placement belong to the operator window. The Test UI
+and PC/Pi placement belong to the operator window. The Test UI
 contains simulated measurements, CTC requests, and captured controller outputs.
 There is no Test/Live switch: either the real modules or their test replacements
 connect to the same controller interface.
 
 Manual command acceptance or rejection stays visible beside the manual controls
 in **Wayside equipment**. Switch rejection identifies the occupied, unavailable,
-faulted, reserved, or authority-protected block. A paused CTC switch request
-requires Resume or maintenance mode; PLC mode also requires a valid program.
+faulted, reserved, or authority-protected block. Normal CTC switch requests use the valid PLC and vital interlocks; there is no separate local Resume requirement.
 For a sample switch demonstration, send the Test UI's **All blocks clear** preset
 first. A successful command changes **Command**; **Reported** changes only when
 Track Model or the Test UI sends the actual position.
 
-**Reset controller** pauses and clears feedback and movement requests. It retains
+**Reset all controllers** requires maintenance mode and clears feedback and movement requests, preserving maintenance mode. It retains
 the applied deployment and PLC. Stop Test UI repeats before resetting; otherwise
 the external simulator will continue sending measurements. Send fresh feedback
-and resume explicitly afterward.
+and leave maintenance mode when ready.
 
 ## Project organization
 
@@ -124,14 +121,14 @@ Automated tests remain in the existing repository `tests` directory:
 - At a block crossing, the prepared successor takes over and the predecessor is retired atomically. The new authority is the actual previously granted authority minus the previous block's full length, capped by the successor's request. A restriction clearing at the crossing must not extend that endpoint. Retired requests do not block the new movement while CTC sends its cleanup cancellation.
 - CTC owns departure and replanning. Its existing cancel/reissue flow, replacement request IDs, explicit authority-limit updates and release from zero commanded speed start a new movement evaluation, including within the current block. Cancellation still withdraws authority immediately; the replacement must pass every route, occupancy, fault, freshness and PLC check. This compatibility behavior permits CTC-directed mid-block reissues; deferring every replan to the next boundary requires a coordinated CTC interface change.
 - Station dwell may use both speed and authority zero. The departure request includes the **full current block length plus the onward blocks**, with no inferred position offset. Track Model does not currently populate optional actual-speed feedback, so a measured zero speed is not required to accept CTC's departure or replacement request.
-- Missing/unknown/stale feedback on the evaluated route withholds authority. Fresh safe feedback can restore the existing CTC permission, up to its issued limit; there is no separate stopped-speed latch. Maintenance, faults, pause and request expiry remain vetoes. Out-of-order/replayed feedback cannot refresh the watchdog.
+- Missing/unknown/stale feedback on the evaluated route withholds authority. Fresh safe feedback can restore the existing CTC permission, up to its issued limit; there is no separate stopped-speed latch. Maintenance, faults, controller readiness and request expiry remain vetoes. Out-of-order/replayed feedback cannot refresh the watchdog.
 - Before the first grant, an occupied or closed block ahead can restrict authority to end before that block. After a grant, a new restriction that shortens it withdraws authority to zero. Closing an occupied or unknown block enters **Pending closure**: new entry is denied; an existing occupant may leave. Fresh clear feedback completes closure. Only an explicit reopen clears it.
 - Switch movement requires its entire configured protection zone to be fresh, clear, fault-free, explicitly unreserved, and outside active positive authority. Movement through the switch waits for matching reported alignment. `IsReservedByCtc = null` is unknown and blocks switch movement.
 - Crossings close for occupied, unknown, stale, or faulted protection blocks, an active request across the crossing, or a protective manual command. They open only after all those conditions clear. The zone must include approaches in the supplied configuration. Crossing closed feedback is required before movement across it, and signals stay red while waiting.
 - Signals default red. A protected route requests a proceed aspect; red/unknown reported signals withhold movement. Super Green is available as reported feedback and adds no signal speed cap, as with Green. Track speed limits, CTC requested speed, granted authority, and all protection checks still apply. A Yellow command or feedback caps speed at 5 m/s. That is a documented prototype default, not a braking-distance model.
 - Manual commands require maintenance mode, which withholds automatic movement. Switch protection still applies. A manual signal may be set to Red; a proceed aspect requires automatic route protection. A crossing cannot be manually opened over an active protection condition.
 - A separate guard rechecks every positive authorization against the resulting block/equipment snapshot and topology. This is a simulation safety implementation, not a certified vital controller, redundant hardware platform, or formal safety proof.
-- Watchdogs use wall time, independent of pause and the 1×–10× simulation clock. Defaults: feedback 5 s, request 10 s. Configuration accepts feedback 1–60 s and request 1–120 s.
+- Watchdogs use wall time, independent of CTC simulation pause and speed. Defaults: feedback 5 s, request 10 s. Configuration accepts feedback 1–60 s and request 1–120 s.
 
 ## Boolean PLC files
 
@@ -151,7 +148,7 @@ Use `MessageSerializer.Serialize` for shared contracts. Small UI controls use `M
 
 | Operation | Payload fields |
 | --- | --- |
-| `SetSimulation` | `paused`, `speedMultiplier` |
+| `SetSimulation` (isolated legacy tests only; rejected in production) | `paused`, `speedMultiplier` |
 | `SetControllerMode` | `hardwareMode` |
 | `SetMaintenanceMode` | `enabled` |
 | `LoadPlc` | `name`, `source`, optional `territoryId` |
@@ -194,7 +191,7 @@ Tests cover positive and restricted movement, software/PLC modes, unsafe PLC out
 
 ## Per-territory PLC assignment
 
-Pause, then open Controller setup and select a **PLC territory** under Controller logic. The source viewer shows that assignment. Under Advanced, choose **Replace selected PLC…**. The replacement is validated before sending and targets only that territory on PC or Pi; inspect the reported PLC status before explicitly resuming. Reset and Apply execution retain the individual assignments. **Save applied choices** saves portable PLC copies and assignment references next to the loaded deployment file.
+Enter maintenance mode, then open Controller setup and select a **territory** in the wayside list. The source viewer shows that assignment. Under Advanced, choose **Replace selected PLC…**. The replacement is validated before sending and targets only that territory on PC or Pi; inspect the reported PLC status before leaving maintenance mode. Reset and Apply changes retain the individual assignments. **Save setup** saves portable PLC copies and assignment references next to the loaded deployment file.
 
 The deployment-level `plcFile` remains the default. Each entry in `territories` may override it with its own relative `plcFile`. Every referenced PLC is validated before runtimes are created. Paths must remain inside the deployment folder. Existing deployments need no changes. A PLC message with `territoryId` targets that owner; omitting it retains the legacy broadcast behavior.
 
@@ -202,4 +199,4 @@ The deployment-level `plcFile` remains the default. Each entry in `territories` 
 
 The assigned PLC now owns route interlocking, numeric speed/authority selection using explicit Boolean gates, signals, switch interlocking, crossings, and closure completion. C# supplies individual facts and encoded input words, decodes the PLC output words, and independently vetoes unsafe results. It no longer supplies precomputed route permission or normal numeric movement limits to the PLC. See the [language and execution contract](../TrackController.Core/Control/README.md).
 
-Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 10. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.
+Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 11. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.

@@ -21,7 +21,7 @@ public sealed class MultiLineDeploymentTests
         var plan = files.Read(Course);
         CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).Distinct().ToArray());
         CollectionAssert.AreEqual(new[] { 15, 76, 150 }, plan.Territories.GroupBy(territory => territory.Configuration.LineName).Select(line => line.Sum(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration).Count)).ToArray());
-        Assert.IsTrue(plan.Territories.GroupBy(territory => territory.Configuration.LineName).All(line => line.Count() == 2));
+        Assert.IsTrue(plan.Territories.GroupBy(territory => territory.Configuration.LineName).All(line => line.Count() == (line.Key == "Blue Line" ? 2 : line.Key == "Red Line" ? 6 : 8)));
         StringAssert.StartsWith(plan.LayoutDescription, "3 lines");
 
         await using var router = plan.CreateRuntime();
@@ -29,6 +29,67 @@ public sealed class MultiLineDeploymentTests
         Assert.HasCount(241, snapshot.Blocks);
         Assert.HasCount(241, snapshot.Blocks.Select(block => block.BlockId).Distinct().ToArray());
         Assert.AreEqual("Blue Line / Red Line / Green Line", snapshot.LineName);
+    }
+
+    [TestMethod]
+    public void LinePresets_MatchCourseOwnershipAndKeepRedAndGreenTerritoriesConnected()
+    {
+        using var files = new DeploymentFiles();
+        var combined = files.Read(Course);
+        foreach (string line in new[] { "blue", "red", "green" })
+        {
+            var single = files.Read($"{line}-line-all-pc.deployment.json");
+            foreach (var territory in single.Territories)
+            {
+                var match = combined.Territories.Single(item => item.Id == territory.Id);
+                var owned = WaysideConfiguration.GetOwnedIds(territory.Configuration);
+                CollectionAssert.AreEquivalent(WaysideConfiguration.GetOwnedIds(match.Configuration).ToArray(), owned.ToArray());
+                Assert.IsNotEmpty(WaysideConfiguration.GetNeighborIds(territory.Configuration));
+                if (line is "red" or "green")
+                {
+                    var edges = territory.Configuration.Blocks.Where(block => owned.Contains(block.BlockId))
+                        .SelectMany(block => block.NextBlockIds.Where(owned.Contains)
+                            .Select(next => (From: block.BlockId, To: next))).ToArray();
+                    var remaining = owned.ToHashSet();
+                    var pending = new Queue<string>();
+                    pending.Enqueue(owned.First());
+                    remaining.Remove(pending.Peek());
+                    // This checks physical connectivity, regardless of permitted travel direction.
+                    while (pending.TryDequeue(out string? current))
+                    {
+                        foreach (var (from, to) in edges)
+                        {
+                            if (from == current && remaining.Remove(to)) pending.Enqueue(to);
+                            if (to == current && remaining.Remove(from)) pending.Enqueue(from);
+                        }
+                    }
+                    Assert.IsEmpty(remaining, $"{territory.Name} contains disconnected track.");
+                }
+                // Loading enforces complete switch/crossing zones. Verify that the full
+                // physical map is also retained so boundary routes remain traversable.
+                CollectionAssert.AreEquivalent(match.Configuration.Blocks.Select(block => block.BlockId).ToArray(),
+                    territory.Configuration.Blocks.Select(block => block.BlockId).ToArray());
+            }
+        }
+        CollectionAssert.AreEqual(new[] { 7, 8, 17, 13, 11, 14, 9, 12, 20, 28, 18, 22, 28, 13, 13, 8 },
+            combined.Territories.Select(item => WaysideConfiguration.GetOwnedIds(item.Configuration).Count).ToArray());
+    }
+
+    [TestMethod]
+    public void DirectPiAssignments_AllowDifferentDevicesButRejectSharedRuntimeEndpoint()
+    {
+        using var files = new DeploymentFiles();
+        var plan = files.Read(Course);
+        var choices = plan.Territories.Select((item, index) => new TerritoryAssignment
+        {
+            TerritoryId = item.Id, Execution = "Pi", Host = $"192.168.50.{index + 2}", Port = 11405
+        }).ToArray();
+        var prepared = plan.WithExecution(choices);
+        Assert.HasCount(16, prepared.Territories);
+        choices[1].Host = choices[0].Host;
+        Assert.ThrowsExactly<ArgumentException>(() => plan.WithExecution(choices));
+        choices[1].Port = 11406;
+        Assert.HasCount(16, plan.WithExecution(choices).Territories);
     }
 
     [TestMethod]

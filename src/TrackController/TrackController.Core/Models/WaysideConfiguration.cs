@@ -100,6 +100,7 @@ public static class WaysideConfiguration
         {
             WaysideId = input.WaysideId,
             CoordinatedRoutes = input.CoordinatedRoutes,
+            AutomaticOperation = input.AutomaticOperation,
             RequireCtcReservationFeedback = input.RequireCtcReservationFeedback,
             LineName = input.LineName,
             FeedbackTimeoutSeconds = input.FeedbackTimeoutSeconds,

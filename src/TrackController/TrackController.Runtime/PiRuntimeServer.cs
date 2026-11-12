@@ -22,8 +22,8 @@ public sealed class PiRuntimeServer : IAsyncDisposable
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
-    /// <summary>Creates a loopback listener for one active controller owner at a time.</summary>
-    public PiRuntimeServer(int port = 11405) => _listener = new(IPAddress.Loopback, port);
+    /// <summary>Creates a listener for one active territory owner. Tests default to loopback; the Pi executable supplies its bind address.</summary>
+    public PiRuntimeServer(int port = 11405, IPAddress? bindAddress = null) => _listener = new(bindAddress ?? IPAddress.Loopback, port);
 
     /// <summary>Starts accepting Pi sessions while retaining exclusive territory ownership.</summary>
     public void Start()
@@ -90,9 +90,10 @@ public sealed class PiRuntimeServer : IAsyncDisposable
 
                     var setup = MessageSerializer.DeserializePayload<PiSessionStart>(start);
                     var controller = new TrackControllerService(setup.Configuration);
+                    controller.SetMaintenanceMode(setup.MaintenanceMode);
                     controller.LoadPlc(setup.ProgramName, setup.ProgramSource);
                     runtime = new(controller);
-                    await protocol.WriteAsync(new WaysideAcknowledgementMessage(true, "Pi controller initialized and paused. Send fresh feedback and resume explicitly.", nameof(PiSessionStart)), first.Token);
+                    await protocol.WriteAsync(new WaysideAcknowledgementMessage(true, "Pi initialized. Automatic sessions require fresh inputs; maintenance remains in effect when requested.", nameof(PiSessionStart)), first.Token);
                     StatusChanged?.Invoke($"Connected: {setup.Configuration.WaysideId}, {TrackController.Core.Models.WaysideConfiguration.GetOwnedIds(setup.Configuration).Count} owned blocks, PLC {setup.ProgramName}");
                     SnapshotProduced?.Invoke(runtime.LatestSnapshot);
                     while (!_stop.IsCancellationRequested)

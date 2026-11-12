@@ -138,7 +138,7 @@ public sealed class BlueLineTests
     public void Read_InvalidBlueLineOwnership_RejectsDeployment()
     {
         using var missing = new DeploymentFiles();
-        missing.Edit("blue-line-territories.json", json => json["territories"]![1]!["blockIds"]!.AsArray().RemoveAt(10));
+        missing.Edit("blue-line-territories.json", json => json["territories"]![1]!["blockIds"]!.AsArray().RemoveAt(0));
         Assert.Throws<ArgumentException>(() => missing.Read("blue-line-pc-and-pi.deployment.json"));
 
         using var duplicate = new DeploymentFiles();

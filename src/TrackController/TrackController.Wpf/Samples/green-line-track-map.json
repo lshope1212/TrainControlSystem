@@ -16,8 +16,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 950
+      "mapX": 691.89,
+      "mapY": 54.03
     },
     {
       "blockId": "GREEN-2",
@@ -30,8 +30,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 950,
+      "mapX": 743.67,
+      "mapY": 86.08,
       "stationName": "Pioneer"
     },
     {
@@ -45,8 +45,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 950
+      "mapX": 784.4,
+      "mapY": 124.4
     },
     {
       "blockId": "GREEN-4",
@@ -59,8 +59,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 950
+      "mapX": 842.9,
+      "mapY": 159.69
     },
     {
       "blockId": "GREEN-5",
@@ -73,8 +73,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 950
+      "mapX": 896.7,
+      "mapY": 175.06
     },
     {
       "blockId": "GREEN-6",
@@ -87,8 +87,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 950
+      "mapX": 954.81,
+      "mapY": 178.61
     },
     {
       "blockId": "GREEN-7",
@@ -101,8 +101,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 950
+      "mapX": 1050.1,
+      "mapY": 165.07
     },
     {
       "blockId": "GREEN-8",
@@ -115,8 +115,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 950
+      "mapX": 1134.69,
+      "mapY": 120.72
     },
     {
       "blockId": "GREEN-9",
@@ -129,8 +129,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 950,
+      "mapX": 1067.59,
+      "mapY": 67.93,
       "stationName": "Edgebrook"
     },
     {
@@ -144,8 +144,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 950
+      "mapX": 957.9,
+      "mapY": 49.65
     },
     {
       "blockId": "GREEN-11",
@@ -158,8 +158,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 950
+      "mapX": 846.85,
+      "mapY": 36.65
     },
     {
       "blockId": "GREEN-12",
@@ -172,8 +172,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 950
+      "mapX": 734.28,
+      "mapY": 29.55
     },
     {
       "blockId": "GREEN-13",
@@ -196,8 +196,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 950
+      "mapX": 628.5,
+      "mapY": 30.5
     },
     {
       "blockId": "GREEN-14",
@@ -211,8 +211,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 950
+      "mapX": 577.5,
+      "mapY": 31.5
     },
     {
       "blockId": "GREEN-15",
@@ -226,8 +226,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 950
+      "mapX": 526.5,
+      "mapY": 32.5
     },
     {
       "blockId": "GREEN-16",
@@ -241,8 +241,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 950,
+      "mapX": 475.5,
+      "mapY": 33.5,
       "stationName": "Green 16 (unnamed station)"
     },
     {
@@ -257,8 +257,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 950
+      "mapX": 403.61,
+      "mapY": 34.74
     },
     {
       "blockId": "GREEN-18",
@@ -272,8 +272,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 950
+      "mapX": 336.52,
+      "mapY": 39.77
     },
     {
       "blockId": "GREEN-19",
@@ -291,8 +291,8 @@
         "GREEN-19",
         "GREEN-20"
       ],
-      "mapX": 1938,
-      "mapY": 950
+      "mapX": 292.97,
+      "mapY": 71.94
     },
     {
       "blockId": "GREEN-20",
@@ -306,8 +306,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 950
+      "mapX": 285.0,
+      "mapY": 117.06
     },
     {
       "blockId": "GREEN-21",
@@ -321,8 +321,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 161.25
     },
     {
       "blockId": "GREEN-22",
@@ -336,8 +336,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 1060,
+      "mapX": 285.0,
+      "mapY": 183.75,
       "stationName": "Whited"
     },
     {
@@ -352,8 +352,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 206.25
     },
     {
       "blockId": "GREEN-24",
@@ -367,8 +367,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 228.75
     },
     {
       "blockId": "GREEN-25",
@@ -382,8 +382,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 251.25
     },
     {
       "blockId": "GREEN-26",
@@ -397,8 +397,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 273.75
     },
     {
       "blockId": "GREEN-27",
@@ -412,8 +412,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 296.25
     },
     {
       "blockId": "GREEN-28",
@@ -436,8 +436,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 318.75
     },
     {
       "blockId": "GREEN-29",
@@ -450,8 +450,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 352.0
     },
     {
       "blockId": "GREEN-30",
@@ -464,8 +464,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 376.0
     },
     {
       "blockId": "GREEN-31",
@@ -478,8 +478,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 1060,
+      "mapX": 285.0,
+      "mapY": 400.0,
       "stationName": "South Bank"
     },
     {
@@ -493,8 +493,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 1060
+      "mapX": 285.0,
+      "mapY": 424.0
     },
     {
       "blockId": "GREEN-33",
@@ -507,8 +507,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 1060
+      "mapX": 291.03,
+      "mapY": 466.51
     },
     {
       "blockId": "GREEN-34",
@@ -521,8 +521,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 1060
+      "mapX": 312.43,
+      "mapY": 508.29
     },
     {
       "blockId": "GREEN-35",
@@ -535,8 +535,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 1060
+      "mapX": 370.98,
+      "mapY": 527.04
     },
     {
       "blockId": "GREEN-36",
@@ -549,8 +549,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 1060
+      "mapX": 434.66,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-37",
@@ -563,8 +563,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 1060
+      "mapX": 463.98,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-38",
@@ -577,8 +577,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 1060
+      "mapX": 493.3,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-39",
@@ -591,8 +591,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 1060,
+      "mapX": 522.61,
+      "mapY": 530.0,
       "stationName": "Central"
     },
     {
@@ -606,8 +606,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 1060
+      "mapX": 551.93,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-41",
@@ -620,8 +620,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 1170
+      "mapX": 581.25,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-42",
@@ -634,8 +634,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 1170
+      "mapX": 610.57,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-43",
@@ -648,8 +648,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 1170
+      "mapX": 639.89,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-44",
@@ -662,8 +662,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 1170
+      "mapX": 669.2,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-45",
@@ -676,8 +676,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 1170
+      "mapX": 698.52,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-46",
@@ -690,8 +690,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 1170
+      "mapX": 727.84,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-47",
@@ -704,8 +704,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 1170
+      "mapX": 757.16,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-48",
@@ -718,8 +718,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 1170,
+      "mapX": 786.48,
+      "mapY": 530.0,
       "stationName": "Inglewood"
     },
     {
@@ -733,8 +733,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 1170
+      "mapX": 815.8,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-50",
@@ -747,8 +747,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 1170
+      "mapX": 845.11,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-51",
@@ -761,8 +761,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 1170
+      "mapX": 874.43,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-52",
@@ -775,8 +775,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 1170
+      "mapX": 903.75,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-53",
@@ -789,8 +789,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 1170
+      "mapX": 933.07,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-54",
@@ -803,8 +803,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 1170
+      "mapX": 962.39,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-55",
@@ -817,8 +817,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 1170
+      "mapX": 991.7,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-56",
@@ -831,8 +831,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 1170
+      "mapX": 1021.02,
+      "mapY": 530.0
     },
     {
       "blockId": "GREEN-57",
@@ -845,8 +845,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 1170,
+      "mapX": 1050.34,
+      "mapY": 530.0,
       "stationName": "Overbrook"
     },
     {
@@ -860,8 +860,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 1170
+      "mapX": 1116.9,
+      "mapY": 542.5
     },
     {
       "blockId": "GREEN-59",
@@ -874,8 +874,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 1170
+      "mapX": 1178.69,
+      "mapY": 555.51
     },
     {
       "blockId": "GREEN-60",
@@ -888,8 +888,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 1170
+      "mapX": 1237.97,
+      "mapY": 572.66
     },
     {
       "blockId": "GREEN-61",
@@ -902,8 +902,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 1280
+      "mapX": 1295.93,
+      "mapY": 591.98
     },
     {
       "blockId": "GREEN-62",
@@ -916,8 +916,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 1280
+      "mapX": 1344.26,
+      "mapY": 619.41
     },
     {
       "blockId": "GREEN-63",
@@ -930,8 +930,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 1280
+      "mapX": 1365.0,
+      "mapY": 674.5
     },
     {
       "blockId": "GREEN-64",
@@ -944,8 +944,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 1280
+      "mapX": 1365.0,
+      "mapY": 735.5
     },
     {
       "blockId": "GREEN-65",
@@ -958,8 +958,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 1280,
+      "mapX": 1365.0,
+      "mapY": 796.5,
       "stationName": "Glenbury"
     },
     {
@@ -973,8 +973,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 1280
+      "mapX": 1365.0,
+      "mapY": 857.5
     },
     {
       "blockId": "GREEN-67",
@@ -987,8 +987,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 1280
+      "mapX": 1365.0,
+      "mapY": 918.5
     },
     {
       "blockId": "GREEN-68",
@@ -1001,8 +1001,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 1280
+      "mapX": 1365.0,
+      "mapY": 979.5
     },
     {
       "blockId": "GREEN-69",
@@ -1015,8 +1015,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 1280
+      "mapX": 1361.71,
+      "mapY": 1041.93
     },
     {
       "blockId": "GREEN-70",
@@ -1029,8 +1029,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 1280
+      "mapX": 1355.13,
+      "mapY": 1085.79
     },
     {
       "blockId": "GREEN-71",
@@ -1043,8 +1043,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 1280
+      "mapX": 1342.3,
+      "mapY": 1128.22
     },
     {
       "blockId": "GREEN-72",
@@ -1057,8 +1057,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 1280
+      "mapX": 1307.26,
+      "mapY": 1165.59
     },
     {
       "blockId": "GREEN-73",
@@ -1071,8 +1071,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 1280,
+      "mapX": 1262.8,
+      "mapY": 1197.1,
       "stationName": "Dormont"
     },
     {
@@ -1086,8 +1086,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 1280
+      "mapX": 1151.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-75",
@@ -1100,8 +1100,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 1280
+      "mapX": 1005.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-76",
@@ -1114,8 +1114,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 1280
+      "mapX": 859.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-77",
@@ -1138,8 +1138,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 1280,
+      "mapX": 747.0,
+      "mapY": 1210.0,
       "stationName": "Mt Lebanon"
     },
     {
@@ -1154,8 +1154,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 1280
+      "mapX": 711.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-79",
@@ -1169,8 +1169,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 1280
+      "mapX": 675.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-80",
@@ -1184,8 +1184,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 1280
+      "mapX": 639.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-81",
@@ -1199,8 +1199,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 1390
+      "mapX": 603.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-82",
@@ -1214,8 +1214,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 1390
+      "mapX": 567.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-83",
@@ -1229,8 +1229,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 1390
+      "mapX": 531.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-84",
@@ -1244,8 +1244,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 1390
+      "mapX": 495.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-85",
@@ -1268,8 +1268,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 1390
+      "mapX": 459.0,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-86",
@@ -1282,8 +1282,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 1390
+      "mapX": 392.5,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-87",
@@ -1296,8 +1296,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 1390
+      "mapX": 325.5,
+      "mapY": 1210.0
     },
     {
       "blockId": "GREEN-88",
@@ -1310,8 +1310,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 1390,
+      "mapX": 258.5,
+      "mapY": 1210.0,
       "stationName": "Poplar"
     },
     {
@@ -1325,8 +1325,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 1390
+      "mapX": 188.09,
+      "mapY": 1190.73
     },
     {
       "blockId": "GREEN-90",
@@ -1339,8 +1339,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 1390
+      "mapX": 144.26,
+      "mapY": 1160.18
     },
     {
       "blockId": "GREEN-91",
@@ -1353,8 +1353,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 1390
+      "mapX": 133.35,
+      "mapY": 1118.58
     },
     {
       "blockId": "GREEN-92",
@@ -1367,8 +1367,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 1390
+      "mapX": 132.91,
+      "mapY": 1077.56
     },
     {
       "blockId": "GREEN-93",
@@ -1381,8 +1381,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 1390
+      "mapX": 154.93,
+      "mapY": 1037.92
     },
     {
       "blockId": "GREEN-94",
@@ -1395,8 +1395,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 1390
+      "mapX": 212.02,
+      "mapY": 1021.06
     },
     {
       "blockId": "GREEN-95",
@@ -1409,8 +1409,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 1390
+      "mapX": 266.69,
+      "mapY": 1040.28
     },
     {
       "blockId": "GREEN-96",
@@ -1423,8 +1423,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 1390,
+      "mapX": 290.44,
+      "mapY": 1077.69,
       "stationName": "Castle Shannon"
     },
     {
@@ -1438,8 +1438,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 1390
+      "mapX": 302.85,
+      "mapY": 1118.97
     },
     {
       "blockId": "GREEN-98",
@@ -1452,8 +1452,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 1390
+      "mapX": 326.44,
+      "mapY": 1161.69
     },
     {
       "blockId": "GREEN-99",
@@ -1466,8 +1466,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 1390
+      "mapX": 355.95,
+      "mapY": 1184.47
     },
     {
       "blockId": "GREEN-100",
@@ -1480,8 +1480,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 1390
+      "mapX": 398.65,
+      "mapY": 1194.82
     },
     {
       "blockId": "GREEN-101",
@@ -1494,8 +1494,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 1500
+      "mapX": 817.5,
+      "mapY": 1172.0
     },
     {
       "blockId": "GREEN-102",
@@ -1508,8 +1508,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 1500
+      "mapX": 897.5,
+      "mapY": 1140.67
     },
     {
       "blockId": "GREEN-103",
@@ -1522,8 +1522,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 1500
+      "mapX": 952.5,
+      "mapY": 1142.0
     },
     {
       "blockId": "GREEN-104",
@@ -1536,8 +1536,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 1500
+      "mapX": 1007.5,
+      "mapY": 1143.33
     },
     {
       "blockId": "GREEN-105",
@@ -1550,8 +1550,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 1500,
+      "mapX": 1085.79,
+      "mapY": 1136.84,
       "stationName": "Dormont"
     },
     {
@@ -1565,8 +1565,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 1500
+      "mapX": 1157.38,
+      "mapY": 1122.52
     },
     {
       "blockId": "GREEN-107",
@@ -1579,8 +1579,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 1500
+      "mapX": 1212.0,
+      "mapY": 1090.0
     },
     {
       "blockId": "GREEN-108",
@@ -1597,8 +1597,8 @@
         "GREEN-108",
         "GREEN-109"
       ],
-      "mapX": 772,
-      "mapY": 1500
+      "mapX": 1257.79,
+      "mapY": 1051.58
     },
     {
       "blockId": "GREEN-109",
@@ -1611,8 +1611,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 1500
+      "mapX": 1279.26,
+      "mapY": 1003.86
     },
     {
       "blockId": "GREEN-110",
@@ -1625,8 +1625,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 1500
+      "mapX": 1290.0,
+      "mapY": 955.0
     },
     {
       "blockId": "GREEN-111",
@@ -1639,8 +1639,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 1500
+      "mapX": 1290.0,
+      "mapY": 925.0
     },
     {
       "blockId": "GREEN-112",
@@ -1653,8 +1653,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 1500
+      "mapX": 1290.0,
+      "mapY": 895.0
     },
     {
       "blockId": "GREEN-113",
@@ -1667,8 +1667,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 1500
+      "mapX": 1290.0,
+      "mapY": 865.0
     },
     {
       "blockId": "GREEN-114",
@@ -1681,8 +1681,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 1500,
+      "mapX": 1290.0,
+      "mapY": 835.0,
       "stationName": "Glenbury"
     },
     {
@@ -1696,8 +1696,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 1500
+      "mapX": 1290.0,
+      "mapY": 805.0
     },
     {
       "blockId": "GREEN-116",
@@ -1710,8 +1710,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 1500
+      "mapX": 1290.0,
+      "mapY": 775.0
     },
     {
       "blockId": "GREEN-117",
@@ -1724,8 +1724,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 1500
+      "mapX": 1283.21,
+      "mapY": 722.85
     },
     {
       "blockId": "GREEN-118",
@@ -1738,8 +1738,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 1500
+      "mapX": 1254.12,
+      "mapY": 673.3
     },
     {
       "blockId": "GREEN-119",
@@ -1752,8 +1752,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 1500
+      "mapX": 1201.27,
+      "mapY": 631.01
     },
     {
       "blockId": "GREEN-120",
@@ -1766,8 +1766,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 1500
+      "mapX": 1125.93,
+      "mapY": 608.84
     },
     {
       "blockId": "GREEN-121",
@@ -1780,8 +1780,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 1610
+      "mapX": 1046.19,
+      "mapY": 597.83
     },
     {
       "blockId": "GREEN-122",
@@ -1794,8 +1794,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 1610
+      "mapX": 975.34,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-123",
@@ -1808,8 +1808,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 1610,
+      "mapX": 946.02,
+      "mapY": 596.0,
       "stationName": "Overbrook"
     },
     {
@@ -1823,8 +1823,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 1610
+      "mapX": 916.7,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-125",
@@ -1837,8 +1837,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 1610
+      "mapX": 887.39,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-126",
@@ -1851,8 +1851,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 1610
+      "mapX": 858.07,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-127",
@@ -1865,8 +1865,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 1610
+      "mapX": 828.75,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-128",
@@ -1879,8 +1879,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 1610
+      "mapX": 799.43,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-129",
@@ -1893,8 +1893,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 1610
+      "mapX": 770.11,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-130",
@@ -1907,8 +1907,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 1610
+      "mapX": 740.8,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-131",
@@ -1921,8 +1921,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 1610
+      "mapX": 711.48,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-132",
@@ -1935,8 +1935,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 1610,
+      "mapX": 682.16,
+      "mapY": 596.0,
       "stationName": "Inglewood"
     },
     {
@@ -1950,8 +1950,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 1610
+      "mapX": 652.84,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-134",
@@ -1964,8 +1964,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 1610
+      "mapX": 623.52,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-135",
@@ -1978,8 +1978,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 1610
+      "mapX": 594.2,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-136",
@@ -1992,8 +1992,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 1610
+      "mapX": 564.89,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-137",
@@ -2006,8 +2006,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 1610
+      "mapX": 535.57,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-138",
@@ -2020,8 +2020,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 1610
+      "mapX": 506.25,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-139",
@@ -2034,8 +2034,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 1610
+      "mapX": 476.93,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-140",
@@ -2048,8 +2048,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 1610
+      "mapX": 447.61,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-141",
@@ -2062,8 +2062,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 1720,
+      "mapX": 418.3,
+      "mapY": 596.0,
       "stationName": "Central"
     },
     {
@@ -2077,8 +2077,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 1720
+      "mapX": 388.98,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-143",
@@ -2091,8 +2091,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 1720
+      "mapX": 359.66,
+      "mapY": 596.0
     },
     {
       "blockId": "GREEN-144",
@@ -2105,8 +2105,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 1720
+      "mapX": 304.74,
+      "mapY": 591.96
     },
     {
       "blockId": "GREEN-145",
@@ -2119,8 +2119,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 1720
+      "mapX": 254.48,
+      "mapY": 583.59
     },
     {
       "blockId": "GREEN-146",
@@ -2133,8 +2133,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 1720
+      "mapX": 220.83,
+      "mapY": 557.2
     },
     {
       "blockId": "GREEN-147",
@@ -2147,8 +2147,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 1720
+      "mapX": 195.0,
+      "mapY": 510.0
     },
     {
       "blockId": "GREEN-148",
@@ -2161,8 +2161,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 1720
+      "mapX": 195.0,
+      "mapY": 470.0
     },
     {
       "blockId": "GREEN-149",
@@ -2175,8 +2175,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 1720
+      "mapX": 195.0,
+      "mapY": 430.0
     },
     {
       "blockId": "GREEN-150",
@@ -2189,8 +2189,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 1720
+      "mapX": 240.0,
+      "mapY": 370.0
     }
   ]
 }

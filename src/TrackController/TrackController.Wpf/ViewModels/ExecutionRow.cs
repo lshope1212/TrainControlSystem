@@ -7,14 +7,30 @@ namespace TrackController.Wpf.ViewModels;
 public sealed class ExecutionRow : ViewModelBase
 {
     private string _target, _host, _port;
+    private readonly string _appliedHost, _appliedPort;
 
     public string Id { get; }
 
     public string Name { get; }
+    public string Line { get; }
 
     public string Blocks { get; }
 
     public string AppliedTarget { get; }
+
+    public string BlockSummary { get; }
+
+    public bool HasChanges => Target != AppliedTarget || Host != _appliedHost || Port != _appliedPort;
+
+    public string AssignmentSummary => HasChanges ? $"{Target} · edited" : Target;
+
+    public string AppliedDescription => AppliedTarget == "Pi" ? $"Currently: Pi · {_appliedHost}:{_appliedPort}" : "Currently: PC";
+
+    private void NotifyAssignment()
+    {
+        OnPropertyChanged(nameof(HasChanges));
+        OnPropertyChanged(nameof(AssignmentSummary));
+    }
 
     public string[] Targets { get; } = ["PC", "Pi"];
 
@@ -26,6 +42,7 @@ public sealed class ExecutionRow : ViewModelBase
             if (value is not null && SetProperty(ref _target, value))
             {
                 OnPropertyChanged(nameof(IsPi));
+                NotifyAssignment();
             }
         }
     }
@@ -35,13 +52,13 @@ public sealed class ExecutionRow : ViewModelBase
     public string Host
     {
         get => _host;
-        set => SetProperty(ref _host, value);
+        set { if (SetProperty(ref _host, value)) NotifyAssignment(); }
     }
 
     public string Port
     {
         get => _port;
-        set => SetProperty(ref _port, value);
+        set { if (SetProperty(ref _port, value)) NotifyAssignment(); }
     }
 
     /// <summary>Copies applied placement into independently editable UI fields.</summary>
@@ -49,10 +66,13 @@ public sealed class ExecutionRow : ViewModelBase
     {
         Id = territory.Id;
         Name = territory.Name;
-        Blocks = string.Join(", ", WaysideConfiguration.GetOwnedIds(territory.Configuration));
+        Line = territory.Configuration.LineName;
+        var blocks = WaysideConfiguration.GetOwnedIds(territory.Configuration);
+        Blocks = string.Join(", ", blocks);
+        BlockSummary = $"{Line} · {blocks.Count} blocks";
         _target = AppliedTarget = territory.Execution == "Pi" ? "Pi" : "PC";
-        _host = territory.Host;
-        _port = territory.Port.ToString();
+        _host = _appliedHost = territory.Host;
+        _port = _appliedPort = territory.Port.ToString();
     }
 
     /// <summary>Validates draft connection fields and creates an execution assignment.</summary>
@@ -60,7 +80,7 @@ public sealed class ExecutionRow : ViewModelBase
     {
         if (Target is not ("PC" or "Pi") || !int.TryParse(Port, out int port))
         {
-            throw new ArgumentException($"{Name}: choose PC/Pi and a numeric tunnel port.");
+            throw new ArgumentException($"{Name}: choose PC/Pi and a numeric TCP port.");
         }
 
         return new()

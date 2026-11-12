@@ -7,13 +7,13 @@
     {
       "territoryId": "wayside-a",
       "execution": "Local",
-      "host": "127.0.0.1",
+      "host": "192.168.50.2",
       "port": 11406
     },
     {
       "territoryId": "wayside-b",
       "execution": "Pi",
-      "host": "127.0.0.1",
+      "host": "192.168.50.2",
       "port": 11405
     }
   ]

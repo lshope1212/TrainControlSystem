@@ -194,12 +194,12 @@ public sealed partial class TrackControllerService
             ? $" (commanded {block.CommandedSignal}; Track Model reports {block.Feedback?.Signal ?? SignalState.Unknown})"
             : " (held Red: the route is not safe to clear)";
 
-    private static string PlcRestrictionText(IReadOnlyDictionary<string, bool[]> inputs, Block block, IReadOnlyDictionary<string, bool[]> outputs, string? nextBlock)
+    private string PlcRestrictionText(IReadOnlyDictionary<string, bool[]> inputs, Block block, IReadOnlyDictionary<string, bool[]> outputs, string? nextBlock)
     {
         // Explanations mirror input facts; they do not change the PLC's output values.
         if (!inputs["running"][0])
         {
-            return "Simulation paused.";
+            return _configuration.AutomaticOperation ? "Controller not ready." : "Simulation paused.";
         }
         if (inputs["maintenance"][0])
         {

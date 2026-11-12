@@ -9,7 +9,7 @@ namespace TrainControl.Integration.Tests;
 
 /// <summary>
 /// The production Track Model (all three course lines), the Track Controller with the combined
-/// deployment (two waysides per line) and CTC, live over real pipes. Every check below runs on
+/// deployment (two Blue, six Red and eight Green waysides) and CTC, live over real pipes. Every check below runs on
 /// Blue, Red and Green; nothing is sent on a module's behalf except what the Train Model or a
 /// dispatcher would send.
 /// </summary>
@@ -386,7 +386,7 @@ public sealed class ThreeLineIntegrationTests
     [TestMethod]
     public async Task GreenSplitIntoTwoTerritories_AllowsMovementInsideEach_AndAcrossTheBoundary()
     {
-        // A test-only split of Green: G-K (blocks 30-65) gets its own territory; production uses two waysides per line. The cut keeps every switch and crossing zone whole, as the loader requires,
+        // A test-only split of Green: G-K (blocks 30-65) gets its own territory; production uses two Blue, six Red and eight Green waysides. The cut keeps every switch and crossing zone whole, as the loader requires,
         // and lies just past the yard entry GREEN-63, where CTC can release a train.
         await using var probe = new LiveSystem();
         string folder = probe.CopySamples(path =>

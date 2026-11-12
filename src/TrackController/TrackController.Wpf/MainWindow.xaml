@@ -14,6 +14,13 @@
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
+        <Style x:Key="TerritoryScope" TargetType="StackPanel">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding TabIndex}" Value="3">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="Label" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#6B7280"/>
             <Setter Property="FontSize" Value="12"/>
@@ -128,7 +135,21 @@
                     <TextBlock Text="TRACK CONTROLLER" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
                     <TextBlock Text="Wayside control &amp; monitoring" Foreground="#D1D5DB" FontSize="11"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding TabIndex}" Value="3">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="Controller setup" Foreground="White" FontWeight="SemiBold"/>
+                    <TextBlock Text="All wayside territories" Foreground="#D1D5DB" FontSize="11" Margin="0,3,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource TerritoryScope}">
                     <Border Background="{Binding LineAccentBrush}"
                             CornerRadius="3"
                             Padding="7,1"
@@ -162,10 +183,9 @@
                            TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding DataStatus}" Style="{StaticResource Hint}" Margin="0,4,12,0"/>
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="{Binding SimulationStatus}" VerticalAlignment="Center" Margin="12,0"/>
-                <Button Content="{Binding PauseResumeLabel}" Command="{Binding PauseResumeCommand}" MinWidth="82"/>
-            </StackPanel>
+            <CheckBox Grid.Column="1" Content="Maintenance mode" IsChecked="{Binding IsMaintenanceMode}"
+                      VerticalAlignment="Center" Margin="12,0"
+                      ToolTip="Allows setup changes and manual equipment commands; withholds automatic movement authority."/>
         </Grid>
         <Border DockPanel.Dock="Top"
                 Background="White"
@@ -176,7 +196,7 @@
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12"/>
         </Border>
         <DockPanel Margin="8,0,8,8">
-                        <StackPanel DockPanel.Dock="Top" Background="#F9FAFB">
+                        <StackPanel DockPanel.Dock="Top" Background="#F9FAFB" Style="{StaticResource TerritoryScope}">
                             <WrapPanel Margin="10,8">
                                 <TextBlock Text="Line" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <ComboBox ItemsSource="{Binding MapLines}" SelectedItem="{Binding SelectedMapLine}" MinWidth="120" Margin="0,0,14,0"/>
@@ -202,12 +222,21 @@
                             <TextBlock Text="● Clear" Foreground="#368653" Margin="0,0,12,0"/>
                             <TextBlock Text="● Occupied" Foreground="#C84036" Margin="0,0,12,0"/>
                             <TextBlock Text="● Unknown" Foreground="#6B7280" Margin="0,0,12,0"/>
-                            <TextBlock Text="□ Maintenance" Foreground="#BB721F"/>
+                            <TextBlock Text="□ Maintenance" Foreground="#BB721F" Margin="0,0,12,0"/>
+                                                        <TextBlock Text="╲ Crossing" Foreground="#344256" Margin="0,0,12,0"/>
+                            <TextBlock Text="◇ Switch · ○ Station · ⇢ Handoff" Foreground="#6D28D9"/>
                         </WrapPanel>
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                            <controls:TerritoryMap Blocks="{Binding MapBlocks}"
-                                                   SelectedBlockId="{Binding SelectedBlockId}" Margin="8"/>
-                        </ScrollViewer>
+                        <StackPanel DockPanel.Dock="Top" Margin="10,8">
+                            <WrapPanel>
+                                <Button Content="Fit territory" Command="{x:Static controls:TerritoryMap.FitCommand}" CommandTarget="{Binding ElementName=TrackMap}" Padding="10,4"/>
+                                <Button Content="−" Command="{x:Static controls:TerritoryMap.ZoomOutCommand}" CommandTarget="{Binding ElementName=TrackMap}" Padding="12,4" Margin="6,0,0,0"/>
+                                <Button Content="+" Command="{x:Static controls:TerritoryMap.ZoomInCommand}" CommandTarget="{Binding ElementName=TrackMap}" Padding="12,4" Margin="4,0,10,0"/>
+                                <TextBlock Text="Scroll to zoom · drag to pan · click a block" VerticalAlignment="Center" FontSize="11" Foreground="#64748B"/>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding MapHandoffs}" TextWrapping="Wrap" FontSize="11" Foreground="#6D28D9" Margin="0,6,0,0"/>
+                        </StackPanel>
+                        <controls:TerritoryMap x:Name="TrackMap" Blocks="{Binding MapBlocks}" NetworkBlocks="{Binding Blocks}"
+                                               SelectedBlockId="{Binding SelectedBlockId}" Margin="6" MinHeight="160"/>
 </DockPanel>
                 </Border>
                 <Border Grid.Column="1" Style="{StaticResource Panel}">
@@ -217,13 +246,12 @@
                                    Style="{StaticResource PanelTitle}"/>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="14,10">
-                                <DockPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                                           Margin="0,0,0,8">
-                                    <TextBlock Text="Execution" Foreground="#6B7280"/>
+                                <TextBlock Text="{Binding SelectedBlock.StationName}" TextWrapping="Wrap" Foreground="#6D28D9" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <StackPanel Margin="0,0,0,8">
+                                    <TextBlock Text="Controller" Foreground="#6B7280"/>
                                     <TextBlock Text="{Binding SelectedExecutionTarget}"
-                                               TextAlignment="Right"
-                                               FontWeight="SemiBold"/>
-                                </DockPanel>
+                                               TextWrapping="Wrap" FontWeight="SemiBold"/>
+                                </StackPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock Text="Occupancy" Foreground="#6B7280"/>
                                     <TextBlock Text="{Binding SelectedBlock.Occupancy}"
@@ -319,9 +347,7 @@
                             <StackPanel>
                                 <TextBlock Text="Manual equipment controls" Style="{StaticResource SectionHeading}"/>
                                 <StackPanel>
-                                    <CheckBox Content="Enable maintenance mode"
-                                              IsChecked="{Binding IsMaintenanceMode}"
-                                              Margin="0,0,0,8"/>
+
                                     <TextBlock Text="Maintenance mode holds movement on every territory. Switch protection blocks must be clear, current and unreserved. Track Model reports the actual equipment position separately."
                                                Style="{StaticResource Hint}"
                                                Margin="0,0,0,10"/>
@@ -348,162 +374,149 @@
                     </Grid>
                 </TabItem>
                 <TabItem Header="Controller setup">
-                    <DockPanel>
-                        <Border DockPanel.Dock="Top" Style="{StaticResource Inset}" Margin="0,0,0,12">
-                            <StackPanel>
-                                <DockPanel Margin="0,0,0,8">
-                                    <WrapPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
-                                        <TextBlock Text="Setup" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <ComboBox ItemsSource="{Binding SetupChoices}"
-                                                  SelectedItem="{Binding SelectedSetup}"
-                                                  MinWidth="210"
-                                                  VerticalAlignment="Center"
-                                                  Margin="0,0,8,0"
-                                                  ToolTip="Choose the six-wayside course network, an explicit test setup, or a saved deployment."/>
-                                        <Button Content="Load setup"
-                                                Command="{Binding LoadSetupCommand}"
-                                                IsEnabled="{Binding Snapshot.IsPaused}"
-                                                ToolTip="Loads the selected track, territory assignments and PLC together. Saved setup file opens a file picker. Starts paused."/>
-                                        <Button Content="Reset controller"
-                                                Command="{Binding ResetControllerCommand}"
-                                                ToolTip="Pauses and clears controller feedback and requests, retaining the applied deployment and PLC. Stop Test UI repeats first."/>
-                                    </WrapPanel>
-                                    <TextBlock Text="Track and controllers"
-                                               FontSize="16"
-                                               FontWeight="SemiBold"
-                                               VerticalAlignment="Center"/>
-                                </DockPanel>
-                                <TextBlock Text="The course network starts with six waysides. Hold movement before changing the setup or PC/Pi assignments."
-                                           Style="{StaticResource Hint}"
-                                           Margin="0,0,0,8"/>
-                                <TextBlock Text="{Binding LayoutDescription}"
-                                           Style="{StaticResource Hint}"
-                                           Margin="0,0,0,6"
-                                           ToolTip="{Binding DeploymentFile}"/>
-                                <DataGrid ItemsSource="{Binding ExecutionRows}"
-                                          AutoGenerateColumns="False"
-                                          MinHeight="95"
-                                          MaxHeight="200"
-                                          CanUserAddRows="False"
-                                          CanUserDeleteRows="False"
-                                          IsReadOnly="True"
-                                          IsEnabled="{Binding CanEditExecution}"
-                                          HeadersVisibility="Column"
-                                          RowHeight="42">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Territory" Binding="{Binding Name}" Width="250"/>
-                                        <DataGridTextColumn Header="Owned blocks"
-                                                            Binding="{Binding Blocks}"
-                                                            Width="300"/>
-                                        <DataGridTemplateColumn Header="Run on" Width="85">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <ComboBox ItemsSource="{Binding Targets}"
-                                                              SelectedItem="{Binding Target, UpdateSourceTrigger=PropertyChanged}"
-                                                              Padding="4,1"
-                                                              MinHeight="26"
-                                                              Margin="3"/>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                        <DataGridTextColumn Header="Applied"
-                                                            Binding="{Binding AppliedTarget}"
-                                                            Width="70"/>
-                                        <DataGridTemplateColumn Header="Tunnel address" Width="140">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"
-                                                             IsEnabled="{Binding IsPi}"
-                                                             Padding="4,1"
-                                                             MinHeight="26"
-                                                             Margin="3"
-                                                             ToolTip="Windows loopback address for the SSH tunnel, usually 127.0.0.1."/>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Header="Port" Width="80">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBox Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}"
-                                                             IsEnabled="{Binding IsPi}"
-                                                             Padding="4,1"
-                                                             MinHeight="26"
-                                                             Margin="3"/>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                                <DockPanel Margin="0,8,0,0">
-                                    <WrapPanel DockPanel.Dock="Right">
-                                        <Button Content="Apply execution"
-                                                Command="{Binding ApplyExecutionCommand}"
-                                                IsEnabled="{Binding CanApplyExecution}"
-                                                ToolTip="Requires pause. Restarts controllers with these targets; fresh feedback and explicit resume are required."/>
-                                        <Button Content="Save applied choices"
-                                                Command="{Binding SaveExecutionCommand}"
-                                                IsEnabled="{Binding CanSaveExecution}"
-                                                ToolTip="Saves applied placement and PLC assignments to the loaded deployment JSON. Track map and territory ownership are separate files."/>
-                                    </WrapPanel>
-                                    <TextBlock Text="{Binding ExecutionDraftStatus}"
-                                               Style="{StaticResource Hint}"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,10,0"/>
-                                </DockPanel>
-                                <TextBlock Text="Each territory runs its assigned PLC on PC or Pi. Cross-territory routes require current approval from every wayside on the line."
-                                           Style="{StaticResource Hint}"
-                                           Margin="0,6,0,0"/>
-                            </StackPanel>
-                        </Border>
-                        <Grid>
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                            <TextBlock Text="Layout" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <ComboBox ItemsSource="{Binding SetupChoices}" SelectedItem="{Binding SelectedSetup}"
+                                      IsEnabled="{Binding CanEditSetup}" Width="280"
+                                      ToolTip="Choose a course layout or open a saved setup."/>
+                            <Button Content="Load layout" Command="{Binding LoadSetupCommand}"
+                                    IsEnabled="{Binding CanEditSetup}" Margin="10,0,0,0"
+                                    ToolTip="Loads the selected layout, territory assignments and PLC. Requires maintenance mode after initial startup."/>
+                        </StackPanel>
+                        <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="300"/>
-                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="2*" MinWidth="250"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="3*" MinWidth="300"/>
                             </Grid.ColumnDefinitions>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,20,0">
-                                <StackPanel>
-                                    <TextBlock Text="Controller logic" Style="{StaticResource SectionHeading}"/>
-                                    <TextBlock Text="{Binding ControllerMode}" Margin="0,0,0,8"/>
-                                    <TextBlock Text="PLC territory" Style="{StaticResource Label}"/>
-                                    <ComboBox ItemsSource="{Binding ExecutionRows}"
-                                              SelectedItem="{Binding SelectedPlcTerritory}"
-                                              DisplayMemberPath="Name"
-                                              IsEnabled="{Binding IsRoutedDeployment}"
-                                              Margin="0,0,0,8"/>
-                                    <TextBlock Text="Loading a setup loads each territory's assigned PLC."
-                                               Style="{StaticResource Hint}" Margin="0,0,0,8"/>
-                                    <TextBlock Text="{Binding SelectedPlcName}"
-                                               FontWeight="SemiBold"
-                                               Margin="0,8,0,8"/>
-                                    <TextBlock Text="{Binding PlcSummary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                    <Expander Header="Advanced" Margin="0,12,0,0">
-                                        <StackPanel Margin="0,10,0,0">
-                                            <TextBlock Text="Custom PLC" Style="{StaticResource SectionHeading}"/>
-                                            <TextBlock Text="Hold movement, then replace the selected territory’s PLC. It stays paused; check status before resuming. Save applied choices to retain the assignment."
-                                                       Style="{StaticResource Hint}" Margin="0,0,0,8"/>
-                                            <Button Content="Replace selected PLC…" Command="{Binding LoadPlcCommand}" IsEnabled="{Binding Snapshot.IsPaused}"
-                                                    HorizontalAlignment="Left" Margin="0,0,0,16"/>
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Wayside territories" Style="{StaticResource SectionHeading}"/>
+                                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                    <Label Content="Line" Target="{Binding ElementName=SetupLineFilter}" VerticalAlignment="Center" Padding="0,0,8,0"/>
+                                    <ComboBox x:Name="SetupLineFilter" ItemsSource="{Binding SetupLines}"
+                                              SelectedItem="{Binding SelectedSetupLine}" MinWidth="130" HorizontalAlignment="Left"/>
+                                </DockPanel>
+                                <ListBox x:Name="SetupTerritories" ItemsSource="{Binding FilteredExecutionRows}"
+                                         SelectedItem="{Binding SelectedPlcTerritory}" BorderBrush="#E5E7EB"
+                                         Background="#F9FAFB" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Padding" Value="10,7"/>
+                                            <Setter Property="ToolTip" Value="{Binding Blocks}"/>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding AssignmentSummary}" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#64748B"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasChanges}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#9A5B06"/>
+                                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding BlockSummary}" FontSize="11" Foreground="#64748B" Margin="0,2,0,0"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel Margin="0,0,10,0">
+                                    <TextBlock Text="{Binding SelectedPlcTerritory.Name, TargetNullValue=Select a territory}" Style="{StaticResource SectionHeading}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding SelectedPlcTerritory.AppliedDescription}" Style="{StaticResource Hint}" Margin="0,0,0,16"/>
+                                    <StackPanel IsEnabled="{Binding CanEditExecution}">
+                                        <TextBlock Text="Run this territory on" Style="{StaticResource Label}"/>
+                                        <ComboBox x:Name="SetupTarget" ItemsSource="{Binding SelectedPlcTerritory.Targets}"
+                                                  SelectedItem="{Binding SelectedPlcTerritory.Target, UpdateSourceTrigger=PropertyChanged}"
+                                                  Width="160" HorizontalAlignment="Left"/>
+                                        <Grid x:Name="SetupPiEndpoint" Margin="0,14,0,0"
+                                              Visibility="{Binding SelectedPlcTerritory.IsPi, Converter={StaticResource VisibleWhenTrue}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="12"/>
+                                                <ColumnDefinition Width="90"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Pi IP address" Style="{StaticResource Label}"/>
+                                                <TextBox Text="{Binding SelectedPlcTerritory.Host, UpdateSourceTrigger=PropertyChanged}"
+                                                         ToolTip="Use the Pi IP, or 127.0.0.1 for local testing."/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Port" Style="{StaticResource Label}"/>
+                                                <TextBox Text="{Binding SelectedPlcTerritory.Port, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                    <TextBlock Text="Enter maintenance mode to edit assignments." Foreground="#9A5B06" Margin="0,10,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CanEditExecution}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <Expander x:Name="SetupAdvanced" Header="Advanced" Margin="0,22,0,0">
+                                        <StackPanel Margin="0,12,0,0">
+                                            <TextBlock Text="PLC program" Style="{StaticResource Label}"/>
+                                            <TextBlock Text="{Binding SelectedPlcName}" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                            <TextBlock x:Name="SetupPlcStatus" Text="{Binding PlcSummary}" Style="{StaticResource Hint}" Margin="0,0,0,8"/>
+                                            <Button Content="Replace selected PLC…" Command="{Binding LoadPlcCommand}"
+                                                    IsEnabled="{Binding CanEditSetup}" HorizontalAlignment="Left"
+                                                    ToolTip="Replace this territory's PLC in maintenance mode. Save setup to retain the assignment."/>
+                                            <Expander Header="View PLC source" Margin="0,10,0,16">
+                                                <TextBox Text="{Binding PlcSource, Mode=OneWay}" IsReadOnly="True"
+                                                         FontFamily="Consolas" FontSize="12" Height="180" Margin="0,8,0,0"
+                                                         VerticalContentAlignment="Top" TextWrapping="NoWrap"
+                                                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+                                            </Expander>
+                                            <Expander Header="Owned blocks" Margin="0,0,0,16">
+                                                <TextBlock Text="{Binding SelectedPlcTerritory.Blocks}" TextWrapping="Wrap" Margin="0,8,0,0" Style="{StaticResource Hint}"/>
+                                            </Expander>
+                                            <Separator Background="#E5E7EB"/>
+                                            <Button Content="Reset all controllers" Command="{Binding ResetControllerCommand}" IsEnabled="{Binding Snapshot.IsMaintenanceMode}"
+                                                    HorizontalAlignment="Left" Margin="0,12,0,0"
+                                                    ToolTip="Requires maintenance mode; clears feedback and requests for all territories. Keeps the applied layout and PLC. Stop Test UI repeats first."/>
                                         </StackPanel>
                                     </Expander>
                                 </StackPanel>
                             </ScrollViewer>
-                            <DockPanel Grid.Column="1">
-                                <TextBlock DockPanel.Dock="Top"
-                                           Text="PLC source · read only"
-                                           Style="{StaticResource SectionHeading}"/>
-                                <TextBox Text="{Binding PlcSource, Mode=OneWay}"
-                                         IsReadOnly="True"
-                                         FontFamily="Consolas"
-                                         FontSize="13"
-                                         Background="#F9FAFB"
-                                         Padding="12"
-                                         VerticalContentAlignment="Top"
-                                         TextWrapping="NoWrap"
-                                         VerticalScrollBarVisibility="Auto"
-                                         HorizontalScrollBarVisibility="Auto"/>
-                            </DockPanel>
                         </Grid>
-                    </DockPanel>
+                        <Border Grid.Row="2" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0" Margin="0,14,0,0" Padding="0,12,0,0">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button x:Name="SetupApply" Content="Apply changes" Style="{StaticResource PrimaryButton}"
+                                            Command="{Binding ApplyExecutionCommand}" IsEnabled="{Binding CanApplyExecution}"
+                                            ToolTip="Apply all edited assignments. Controllers remain in maintenance and require fresh feedback."/>
+                                    <Button x:Name="SetupSave" Content="Save setup" Command="{Binding SaveExecutionCommand}"
+                                            IsEnabled="{Binding CanSaveExecution}" Margin="0"
+                                            ToolTip="Save the applied assignments and PLC choices to the loaded setup file."/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding ExecutionDraftStatus}" Style="{StaticResource Hint}"
+                                           VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
                 </TabItem>
             </TabControl>
         </DockPanel>

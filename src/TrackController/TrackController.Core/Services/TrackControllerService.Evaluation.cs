@@ -11,7 +11,7 @@ public sealed partial class TrackControllerService
     private void Reevaluate()
     {
         var now = _clock.GetUtcNow();
-        if (!_paused)
+        if (!_paused && !_configuration.AutomaticOperation)
         {
             _simulationSeconds += Math.Max(0, (now - _lastPulse).TotalSeconds) * _multiplier;
         }
@@ -199,7 +199,7 @@ public sealed partial class TrackControllerService
         MovementResult output = (request, 0, 0, "Withheld", "");
         if (_paused)
         {
-            return Stop(output, "Simulation paused.");
+            return Stop(output, _configuration.AutomaticOperation ? "Controller not ready." : "Simulation paused.");
         }
 
         if (_maintenanceMode)

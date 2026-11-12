@@ -63,6 +63,31 @@ public sealed partial class TrackControllerService
         Reevaluate();
     }
 
+    /// <summary>Starts the production lifecycle without exposing a local simulation clock or pause control.</summary>
+    public void EnableAutomaticOperation()
+    {
+        lock (_gate)
+        {
+            _configuration.AutomaticOperation = true;
+            _paused = _hardwareMode && _plc is null;
+            _multiplier = 1;
+            _simulationSeconds = 0;
+            Reevaluate();
+        }
+    }
+
+    /// <summary>Withdraws all output when the owning runtime shuts down; not an operator time control.</summary>
+    public void StopOperation()
+    {
+        lock (_gate)
+        {
+            _paused = true;
+            _requests.Clear();
+            _staged.Clear();
+            Reevaluate();
+        }
+    }
+
     /// <summary>Returns a defensive copy so callers cannot alter the configured topology.</summary>
     public WaysideConfigurationMessage GetConfiguration()
     {
@@ -93,11 +118,14 @@ public sealed partial class TrackControllerService
                 throw new InvalidOperationException("Cancel requests, confirm clear track, and reopen maintenance blocks before replacing the layout.");
             }
 
+            if (_configuration.AutomaticOperation && _plc is not null && !_maintenanceMode)
+                throw new InvalidOperationException("Enter maintenance mode before replacing the layout.");
+            copy.AutomaticOperation |= _configuration.AutomaticOperation;
             _configuration = copy;
             _paused = true;
             _plc = null;
             _plcName = "No program loaded";
-            _plcStatus = "Layout changed. Load a PLC program and resume explicitly.";
+            _plcStatus = "Layout changed. Load a valid PLC program.";
             _retiredRequests.Clear();
             InitializeBlocks();
             Reevaluate();
@@ -109,6 +137,8 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            if (_configuration.AutomaticOperation && _plc is not null && !_maintenanceMode)
+                throw new InvalidOperationException("Enter maintenance mode before replacing the PLC.");
             _paused = true;
             _plc = null;
             _plcName = "No program loaded";
@@ -116,7 +146,8 @@ public sealed partial class TrackControllerService
             {
                 _plc = VitalPlcProgram.Compile(source);
                 _plcName = name;
-                _plcStatus = "Program loaded. Resume explicitly when ready.";
+                _paused = !_configuration.AutomaticOperation;
+                _plcStatus = _configuration.AutomaticOperation ? "Program loaded. Automatic evaluation active." : "Program loaded. Resume explicitly when ready.";
             }
             catch (ArgumentException ex)
             {
@@ -134,8 +165,10 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            if (_configuration.AutomaticOperation && _plc is not null && !_maintenanceMode)
+                throw new InvalidOperationException("Enter maintenance mode before changing controller logic.");
             _hardwareMode = hardware;
-            _paused = true;
+            _paused = !_configuration.AutomaticOperation || (hardware && _plc is null);
             Reevaluate();
         }
     }
@@ -169,6 +202,8 @@ public sealed partial class TrackControllerService
 
         lock (_gate)
         {
+            if (_configuration.AutomaticOperation)
+                throw new InvalidOperationException("Simulation time and pause belong to CTC. Use maintenance mode for wayside servicing.");
             Reevaluate();
             if (!paused && _hardwareMode && _plc is null)
             {
@@ -265,7 +300,7 @@ public sealed partial class TrackControllerService
             _requests.Clear();
             _staged.Clear();
             _retiredRequests.Clear();
-            _paused = true;
+            _paused = !_configuration.AutomaticOperation || (_hardwareMode && _plc is null);
             _maintenanceMode = false;
             _simulationSeconds = 0;
             InitializeBlocks();

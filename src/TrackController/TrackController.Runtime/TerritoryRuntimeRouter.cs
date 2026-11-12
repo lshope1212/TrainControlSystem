@@ -17,7 +17,20 @@ public sealed partial class TerritoryRuntimeRouter : IWaysideRuntime
     public WaysideSnapshotMessage LatestSnapshot { get; private set; }
 
     /// <summary>Returns the applied controller and execution target for a block.</summary>
-    public string GetOwnerDescription(string blockId) => _owners.TryGetValue(blockId, out int owner) ? $"{_entries[owner].Name ?? _entries[owner].Configuration.WaysideId} · {(_entries[owner].Execution == "Pi" ? "Pi 5" : "Local PC")}" : "Unassigned";
+    public string GetOwnerDescription(string blockId) => _owners.TryGetValue(blockId, out int owner) ? $"{_entries[owner].Configuration.LineName} · {_entries[owner].Name ?? _entries[owner].Configuration.WaysideId} · {(_entries[owner].Execution == "Pi" ? "Pi 5" : "Local PC")}" : "Unassigned";
+
+    /// <summary>Returns the selected territory's live PLC diagnostic without combining other territories' messages.</summary>
+    public string GetTerritoryPlcStatus(string territoryId)
+    {
+        foreach (var entry in _entries)
+        {
+            if (entry.Configuration.WaysideId != territoryId) continue;
+            var snapshot = entry.Runtime.LatestSnapshot;
+            return snapshot.ValidUntilUtc > DateTimeOffset.UtcNow ? snapshot.PlcStatus : "PLC status expired. Waiting for the controller.";
+        }
+
+        return "PLC status unavailable.";
+    }
 
     /// <summary>Validates unique ownership and connects each territory to its assigned runtime.</summary>
     public TerritoryRuntimeRouter(string name, IEnumerable<(WaysideConfigurationMessage Configuration, string Execution, IWaysideRuntime Runtime, string? Name)> entries)

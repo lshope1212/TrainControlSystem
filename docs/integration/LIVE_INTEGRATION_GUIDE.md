@@ -171,7 +171,7 @@ as a two-digit `01`, is not canonical and is rejected rather than guessed.
 ## Track Controller deployment
 
 `src/TrackController/TrackController.Wpf/Samples/course-territories-all-pc.deployment.json` is the
-default: six waysides (two Blue, two Red, two Green), running locally with `wayside.plc`.
+default: 16 waysides (two Blue, six Red, eight Green), running locally with `wayside.plc`.
 Every one of the 241 blocks has exactly one owner. Whole-line single-wayside setups have been removed.
 The deployment lists one map and one ownership file per line (`lines: [...]`, see the
 [Runtime README](../../src/TrackController/TrackController.Runtime/README.md#several-lines-in-one-deployment)).
@@ -564,7 +564,7 @@ broken by that rename).
   could explain it), it does not adopt the successor even if the Track Controller transferred
   authority; its renewal of the retired predecessor is then rejected and it withdraws the
   successor, so the train brakes. This is the conservative outcome, not a continuity guarantee.
-- **Cross-territory handoff** now uses joint wayside approval; the six-wayside project setup exercises it. Time-based expiries (request watchdog, stale feedback) are still detected on the 500 ms cycle.
+- **Cross-territory handoff** now uses joint wayside approval; the 16-wayside project setup exercises it. Time-based expiries (request watchdog, stale feedback) are still detected on the 500 ms cycle.
 - The Hardware Train Controller (Pi) receives the same relayed values but was not exercised.
 
 ## Signalled routes: signal clearance before authority
@@ -699,9 +699,9 @@ hosts the Track Controller, Train Model and CTC pipes.
    `dotnet build TrainControlSystem.sln`).
 2. **Launcher.** Start `TrainControlSystem.Launcher.Wpf`. From it, launch **Track Controller**,
    **CTC Office** and **Track Model**, in any order.
-3. **Track Controller.** It opens the six-wayside course network automatically, with 241 blocks
+3. **Track Controller.** It opens the 16-wayside course network automatically, with 241 blocks
    and the bundled PLC. Leave movement held for the status and maintenance steps. To reload,
-   choose **Course network · six waysides** in **Controller setup** and select **Load setup**.
+   choose **Course network · 16 waysides** in **Controller setup** and select **Load setup**.
 4. **CTC.** Within a few seconds the line selector lists **Blue Line**, **Red Line** and
    **Green Line**, with no *Send Sample Layout*. *Inbound status* reads
    `Received Track layout. Track layout: added Blue, Red, Green.` Select each line: its territory
@@ -747,8 +747,8 @@ hosts the Track Controller, Train Model and CTC pipes.
       using its dispatch ID: on a fresh system the first scheduled train is `001`, so
       `-TrainId 001 -Block RED-20` (a manual placement takes over the pending dispatch).
    4. CTC shows *Detected on track (inferred)*. The *Track Controller* column shows the
-      acknowledgement and, while the controller is paused, *Withheld: Track Controller is paused.*
-   5. Resume the Track Controller to see its real evaluation (Approved/Restricted with the granted
+      acknowledgement and the current vital movement decision; maintenance mode withholds movement.
+   5. Leave Track Controller maintenance mode to see its automatic evaluation (Approved/Restricted with the granted
       authority). Move the train with the harness to see the request re-targeted.
    6. A Green route against its arrows is rejected (`No permitted connection from GREEN-68 to GREEN-67`).
 
@@ -883,10 +883,10 @@ batch command application, and multi-line deployment validation and routing.
 | Track Model | **Direction of travel** is not checked at dispatch (the Track Controller enforces it for authority): a route against the arrows is placed, then gets no authority. |
 | Train Model | `PassengerExchangeMessage` now goes to the Track Model once per exchange, which logs it; station counts still change only through `TrackModelTrainUpdateMessage` exchanges. |
 | Train Model / Track Model | **Environment volume.** Track Model → Train Model is still one message per block per snapshot (241, occupied blocks first, on their own sender). The Train Model applies only its own trains' blocks; batching would reduce the connection count. |
-| Track Controller | **Cross-territory handoff implemented.** The default `course-territories-all-pc.deployment.json` uses six waysides (Blue 2, Red 2, Green 2). Current joint approvals preserve the endpoint at owner boundaries; lost peers withdraw authority. See the [runtime guide](../../src/TrackController/TrackController.Runtime/README.md#project-territory-split-and-cross-wayside-movement) and `ProjectSplit_CrossesWaysidesWithoutFalseZero_ThroughAllProductionModules`. Physical Pi testing is still required. |
+| Track Controller | **Cross-territory handoff implemented.** The default `course-territories-all-pc.deployment.json` uses 16 waysides (Blue 2, Red 6, Green 8). Current joint approvals preserve the endpoint at owner boundaries; lost peers withdraw authority. See the [runtime guide](../../src/TrackController/TrackController.Runtime/README.md#project-territory-split-and-cross-wayside-movement) and `ProjectSplit_CrossesWaysidesWithoutFalseZero_ThroughAllProductionModules`. Physical Pi testing is still required. |
 | Track Controller | **CTC switch commands: resolved for course deployments.** The course maps use wayside-owned movement locks (`requireCtcReservationFeedback: false`) because CTC has no separate reservation service. PLC and independent checks still require fresh clear protection-zone occupancy, no faults or closures, and no active movement through the zone. Explicit CTC reservations still veto movement; legacy configurations continue requiring reservation feedback. |
 | Track Controller | **Signalled routes (Blue): resolved.** Routes through signals 6 and 11 are now prepared, cleared on a safe route and granted on the Track Model's reported aspect (see [Signalled routes](#signalled-routes-signal-clearance-before-authority)). A custom PLC must use the `signal_clearance` input to benefit; one that does not keeps withholding (fail-safe). Station C additionally needs switch 5 reported Reverse, subject to the switch protection checks above. Red and Green have no signals in the course data. |
-| Track Controller | Starts in the six-wayside course setup; the 12-block demonstration is an explicit test selection. The Blue map is directional (1→15), so reverse-direction Blue routes are rejected. A switch block lists both legs as exits (the controller's switch model requires it), so on Green a route can end on a one-way leg entered from the wrong side, but can never continue. |
+| Track Controller | Starts in the 16-wayside course setup; the 12-block demonstration is available only as a saved regression fixture. The Blue map is directional (1→15), so reverse-direction Blue routes are rejected. A switch block lists both legs as exits (the controller's switch model requires it), so on Green a route can end on a one-way leg entered from the wrong side, but can never continue. |
 | Course data | Yard connections, Red/Green signals and transponders, station sides and the Green 16 station name are not in the workbook (see *Data the workbook does not contain*). |
 | CTC | Route planning (schedule builder, re-plan) follows connections without direction of travel. A Green schedule against the arrows is planned, then refused by the Track Controller, and CTC shows the refusal. Authority is not extended automatically when an obstruction ahead clears beyond a movement's original end; the next departure or a dispatcher re-plan recalculates it (pre-existing design). A request the Track Controller rejected is not renewed; it is replaced when the train moves or the dispatcher re-plans. |
 | Train Controller | Translate `TRAIN-nnn` labels with `TrainIdConvention` when consuming system messages (the Train Model now does so for track environments). |

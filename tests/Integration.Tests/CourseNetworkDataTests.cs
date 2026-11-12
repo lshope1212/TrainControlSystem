@@ -95,14 +95,27 @@ public sealed class CourseNetworkDataTests
         bool regenerate = Environment.GetEnvironmentVariable("TRAINCONTROL_REGENERATE_TRACK_MAPS") == "1";
         foreach (string line in new[] { "Red", "Green" })
         {
-            string map = JsonSerializer.Serialize(CourseTrackMaps.BuildMap(Course, line), CourseTrackMaps.Json);
             if (regenerate)
             {
-                File.WriteAllText(Path.Combine(CourseTrackMaps.SourceSamplesFolder(), CourseTrackMaps.MapFile(line)), map + Environment.NewLine);
+                string path = Path.Combine(CourseTrackMaps.SourceSamplesFolder(), CourseTrackMaps.MapFile(line));
+                var previous = JsonSerializer.Deserialize<WaysideConfigurationMessage>(File.ReadAllText(path), CourseTrackMaps.Json)!;
+                var rebuilt = CourseTrackMaps.BuildMap(Course, line);
+                rebuilt.RequireCtcReservationFeedback = previous.RequireCtcReservationFeedback;
+                foreach (var block in rebuilt.Blocks)
+                {
+                    var coordinates = previous.Blocks.SingleOrDefault(item => item.BlockId == block.BlockId);
+                    if (coordinates is not null) { block.MapX = coordinates.MapX; block.MapY = coordinates.MapY; }
+                }
+                File.WriteAllText(path, JsonSerializer.Serialize(rebuilt, CourseTrackMaps.Json) + Environment.NewLine);
                 continue;
             }
 
-            Assert.AreEqual(map, CourseTrackMaps.Canonical<WaysideConfigurationMessage>(File.ReadAllText(Path.Combine(LiveSystem.SamplesFolder, CourseTrackMaps.MapFile(line)))),
+            var actual = JsonSerializer.Deserialize<WaysideConfigurationMessage>(File.ReadAllText(Path.Combine(LiveSystem.SamplesFolder, CourseTrackMaps.MapFile(line))), CourseTrackMaps.Json)!;
+            var expected = CourseTrackMaps.BuildMap(Course, line);
+            foreach (var block in actual.Blocks) { block.MapX = 0; block.MapY = 0; }
+            foreach (var block in expected.Blocks) { block.MapX = 0; block.MapY = 0; }
+            expected.RequireCtcReservationFeedback = false;
+            Assert.AreEqual(JsonSerializer.Serialize(expected, CourseTrackMaps.Json), JsonSerializer.Serialize(actual, CourseTrackMaps.Json),
                 $"{CourseTrackMaps.MapFile(line)} no longer matches the Track Model layout; regenerate it (see CourseTrackMaps).");
         }
 
@@ -153,7 +166,7 @@ public sealed class CourseNetworkDataTests
     public async Task CombinedDeployment_OwnsEveryTrackModelBlockExactlyOnce()
     {
         var plan = WaysideDeployment.Read(CourseDeployment);
-        CollectionAssert.AreEqual(new[] { "wayside-blue-a", "wayside-blue-b", "wayside-red-a", "wayside-red-b", "wayside-green-a", "wayside-green-b" }, plan.Territories.Select(territory => territory.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { "wayside-blue-a", "wayside-blue-b", "wayside-red-a", "wayside-red-b", "wayside-red-c", "wayside-red-d", "wayside-red-e", "wayside-red-f", "wayside-green-a", "wayside-green-b", "wayside-green-c", "wayside-green-d", "wayside-green-e", "wayside-green-f", "wayside-green-g", "wayside-green-h" }, plan.Territories.Select(territory => territory.Id).ToArray());
         CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).Distinct().ToArray());
         var owned = plan.Territories.SelectMany(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration)).ToArray();
         Assert.HasCount(241, owned);
