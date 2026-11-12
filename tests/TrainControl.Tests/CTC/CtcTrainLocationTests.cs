@@ -254,7 +254,10 @@ public class CtcTrainLocationTests
     [TestMethod]
     public async Task TwoTrainsOnDifferentBranches_TrackedIndependently()
     {
-        var (service, _, _) = await DispatchAsync(
+        // Test fixture only: a second yard entry at C11, so two trains can enter on different branches.
+        // The production Blue Line has one yard entry (block 1); CTC accepts only starts its layout marks.
+        var (service, _, _) = await DispatchOnLayoutAsync(
+            BlueLine.CreateLayout(yardEntries: ["A1", "C11"]),
             BlueLine.Train("001", At(12, 0, 0), route: BlueLine.BranchB),
             BlueLine.Train("002", At(12, 0, 0), route: ["C11", "C12", "C13", "C14", "C15"]));
 
@@ -273,8 +276,10 @@ public class CtcTrainLocationTests
     [TestMethod]
     public async Task OccupancyMatchingTwoTrainsNextBlock_IsAmbiguousAndMovesNeither()
     {
-        // Both trains' next block is A5 (one from A4, the other from B6).
-        var (service, _, changes) = await DispatchAsync(
+        // Both trains' next block is A5 (one from A4, the other from B6). Test fixture only: A4 and B6
+        // are made yard entries so the two trains can be released there; production starts only at the layout's entries.
+        var (service, _, changes) = await DispatchOnLayoutAsync(
+            BlueLine.CreateLayout(yardEntries: ["A4", "B6"]),
             BlueLine.Train("001", At(12, 0, 0), route: ["A4", "A5", "C11", "C12"]),
             BlueLine.Train("002", At(12, 0, 0), route: ["B6", "A5", "C11", "C12"]));
         Occupy(service, "A4", "B6");
@@ -296,8 +301,9 @@ public class CtcTrainLocationTests
     public async Task OccupancyOfAnotherTrainsUnseenStartBlock_IsAmbiguous()
     {
         // Train 002 was released at A2 but not yet seen there; A2 becoming occupied could be
-        // Train 002 appearing or Train 001 moving forward from A1.
-        var (service, _, changes) = await DispatchAsync(
+        // Train 002 appearing or Train 001 moving forward from A1. Test fixture only: A2 is made a second yard entry.
+        var (service, _, changes) = await DispatchOnLayoutAsync(
+            BlueLine.CreateLayout(yardEntries: ["A1", "A2"]),
             BlueLine.Train("001", At(12, 0, 0), route: BlueLine.BranchB),
             BlueLine.Train("002", At(12, 0, 0), route: ["A2", "A3", "A4", "A5"]));
         Occupy(service, "A1");

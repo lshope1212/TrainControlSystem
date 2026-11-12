@@ -50,7 +50,7 @@ public class CtcScheduleCsvImportTests
         var template = Import(SampleCsv).Template!;
 
         Assert.AreEqual(BlueLine.LineId, template.LineId);
-        Assert.IsTrue(Row(template, "A1").IsRouteStart);
+        Assert.IsTrue(Row(template, "A1").IsRouteStartFor(0));
         Assert.AreEqual(BlueLine.BlockLengthMeters, Row(template, "B10").LengthMeters);
         CollectionAssert.AreEqual(new[] { "A4", "B6", "C11" }, Row(template, "A5").ConnectedBlockIds.ToArray());
     }
@@ -296,7 +296,7 @@ public class CtcScheduleCsvImportTests
 
         var conversion = ScheduleTemplateConverter.Convert(result.Template!);
         Assert.IsFalse(conversion.IsSuccess);
-        StringAssert.Contains(conversion.ErrorMessage, "invalid route start time '12:8'");
+        StringAssert.Contains(conversion.ErrorMessage, "invalid departure time '12:8' at its starting block A1");
     }
 
     [TestMethod]

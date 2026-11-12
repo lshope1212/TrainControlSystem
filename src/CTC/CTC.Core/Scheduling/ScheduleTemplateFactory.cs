@@ -4,7 +4,8 @@ namespace CTC.Core.Scheduling;
 
 /// <summary>
 /// Builds blank <see cref="ScheduleTemplate"/>s from a line's track layout, so the
-/// layout received from the Track Model stays the single source of block data.
+/// layout received from the Track Model stays the single source of block data, including which
+/// blocks are yard entries (the only permitted starting blocks; see <see cref="YardEntries"/>).
 /// </summary>
 public static class ScheduleTemplateFactory
 {
@@ -65,7 +66,6 @@ public static class ScheduleTemplateFactory
         }
 
         int trainCount = trainIds.Count;
-        var startBlock = GetRouteStartBlock(line);
 
         var rows = line.Blocks.Select(block => new ScheduleTemplateRow(trainCount)
         {
@@ -78,11 +78,24 @@ public static class ScheduleTemplateFactory
             LengthMeters = block.LengthMeters,
             SpeedLimitKilometersPerHour = block.SpeedLimitKilometersPerHour,
             ConnectedBlockIds = block.ConnectedBlockIds.ToList(),
-            IsRouteStart = block == startBlock,
             DefaultDwellTime = DwellTimePolicy.GetDefaultDwellTime(block),
         });
 
-        return new ScheduleTemplate(line.LineId, trainIds, rows);
+        var yardEntries = YardEntries.For(line).Select(block => block.BlockId).ToList();
+        var template = new ScheduleTemplate(line.LineId, trainIds, rows, yardEntries, line.Name);
+
+        // Each train chooses its own starting block. With a single yard entry there is no choice to
+        // make, so it is preselected; with several, the dispatcher must pick one per train; with none,
+        // the template can be viewed but not converted (YardEntries.NoneConfiguredMessage).
+        if (yardEntries.Count == 1)
+        {
+            for (int column = 0; column < trainCount; column++)
+            {
+                template.InitializeStartBlock(column, yardEntries[0]);
+            }
+        }
+
+        return template;
     }
 
     /// <summary>Supported train IDs from <paramref name="firstTrainNumber"/> to "010", in order.</summary>
@@ -90,18 +103,6 @@ public static class ScheduleTemplateFactory
         firstTrainNumber > TrainIds.LastNumber
             ? []
             : Enumerable.Range(firstTrainNumber, TrainIds.LastNumber - firstTrainNumber + 1).Select(TrainIds.Format).ToArray();
-
-    /// <summary>
-    /// The block every train on <paramref name="line"/> starts its route from.
-    /// ASSUMPTION: the lowest-numbered block. Replace this once routing/yard logic
-    /// exists; nothing else should rely on that rule.
-    /// </summary>
-    public static CtcBlockState? GetRouteStartBlock(CtcLineState line)
-    {
-        ArgumentNullException.ThrowIfNull(line);
-
-        return line.Blocks.MinBy(block => block.BlockNumber);
-    }
 
     /// <summary>Readable summary of a block's features, e.g. "Station B; Signal".</summary>
     public static string DescribeInfrastructure(CtcBlockState block)
@@ -117,6 +118,11 @@ public static class ScheduleTemplateFactory
         if (block.HasSwitch)
         {
             parts.Add("Switch");
+        }
+
+        if (block.IsYardEntry)
+        {
+            parts.Add("Yard Entry");
         }
 
         if (block.HasSignal)

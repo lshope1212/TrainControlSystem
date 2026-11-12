@@ -508,6 +508,7 @@ public class MainWindowViewModel : ViewModelBase
                 // Lines or blocks may have been added, rebuilt or removed, so the adapters are rebuilt.
                 RebuildTerritory();
                 RebuildDestinationBlocks();
+                ScheduleBuilder.OnTrackLayoutChanged();
                 MarkTerritoryUpdated();
                 break;
 

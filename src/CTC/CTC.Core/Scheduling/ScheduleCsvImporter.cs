@@ -7,10 +7,11 @@ namespace CTC.Core.Scheduling;
 /// <summary>Outcome of <see cref="ScheduleCsvImporter.Import"/>.</summary>
 public sealed class ScheduleCsvImportResult
 {
-    private ScheduleCsvImportResult(ScheduleTemplate? template, string? errorMessage)
+    private ScheduleCsvImportResult(ScheduleTemplate? template, string? errorMessage, IReadOnlyList<string>? trainsNeedingStart = null)
     {
         Template = template;
         ErrorMessage = errorMessage;
+        TrainsNeedingStartSelection = trainsNeedingStart ?? Array.Empty<string>();
     }
 
     public bool IsSuccess => ErrorMessage is null;
@@ -21,7 +22,13 @@ public sealed class ScheduleCsvImportResult
     /// <summary>The filled template on success; null on failure.</summary>
     public ScheduleTemplate? Template { get; }
 
-    internal static ScheduleCsvImportResult Success(ScheduleTemplate template) => new(template, null);
+    /// <summary>
+    /// Train IDs whose starting block the file does not determine unambiguously; the dispatcher must
+    /// select it before queueing. Empty when every train's start is known.
+    /// </summary>
+    public IReadOnlyList<string> TrainsNeedingStartSelection { get; }
+
+    internal static ScheduleCsvImportResult Success(ScheduleTemplate template, IReadOnlyList<string> trainsNeedingStart) => new(template, null, trainsNeedingStart);
 
     internal static ScheduleCsvImportResult Failure(string errorMessage) => new(null, errorMessage);
 }
@@ -44,6 +51,15 @@ public sealed class ScheduleCsvImportResult
 /// whole seconds, for every train timed at that row's block. When the column or a value is
 /// missing, each stop gets its block's default from <see cref="DwellTimePolicy"/> (45 s at a
 /// station, otherwise 0 s), so files written before dwell times existed import unchanged.
+/// </para>
+/// <para>
+/// Starting blocks. The file has no starting-block column; each train's start is taken from the
+/// line's yard entries (<see cref="YardEntries"/>), never from whichever block happens to be timed
+/// first. A train timed at exactly one yard entry starts there (that time is its departure); on a
+/// line with a single yard entry a train starts there regardless. Otherwise (several entries timed,
+/// or none timed on a line with several) the start is left unselected and the dispatcher must choose
+/// it in the Schedule Builder (<see cref="ScheduleCsvImportResult.TrainsNeedingStartSelection"/>)
+/// before the schedule can be queued. Files written for a single-entry line therefore import as before.
 /// </para>
 /// </remarks>
 public static class ScheduleCsvImporter
@@ -135,8 +151,15 @@ public static class ScheduleCsvImporter
             return ScheduleCsvImportResult.Failure(ex.Message);
         }
 
+        // The same restriction as a generated template: without yard entries no train can start anywhere.
+        if (template.YardEntryBlockIds.Count == 0)
+        {
+            return ScheduleCsvImportResult.Failure(YardEntries.NoneConfiguredMessage(line));
+        }
+
         string lineName = DisplayLineName(line);
         var timedBlockIds = new HashSet<string>();
+        var parsed = new List<(CsvRecord Record, ScheduleTemplateRow Row)>();
         foreach (var record in records.Skip(1))
         {
             var fields = record.Fields;
@@ -172,6 +195,32 @@ public static class ScheduleCsvImporter
                 return ScheduleCsvImportResult.Failure($"Block {row.BlockId} appears more than once.");
             }
 
+            parsed.Add((record, row));
+        }
+
+        // Starts first, so a start block's time is read as the departure (no dwell) from the outset.
+        var needingStart = new List<string>();
+        for (int column = 0; column < trainCount; column++)
+        {
+            int field = trainFieldIndexes[column];
+            var timedEntries = parsed
+                .Where(item => item.Row.IsYardEntry && !string.IsNullOrWhiteSpace(item.Record.Fields[field]))
+                .Select(item => item.Row.BlockId)
+                .ToList();
+            if (timedEntries.Count == 1)
+            {
+                template.InitializeStartBlock(column, timedEntries[0]);
+            }
+            else if (template.YardEntryBlockIds.Count != 1)
+            {
+                // Several timed entries, or none on a line with several: ambiguous, so the dispatcher chooses.
+                needingStart.Add(template.TrainIds[column]);
+            }
+        }
+
+        foreach (var (record, row) in parsed)
+        {
+            var fields = record.Fields;
             string dwellText = dwellColumn is { } index ? fields[index].Trim() : string.Empty;
             for (int column = 0; column < trainCount; column++)
             {
@@ -190,7 +239,7 @@ public static class ScheduleCsvImporter
             }
         }
 
-        return ScheduleCsvImportResult.Success(template);
+        return ScheduleCsvImportResult.Success(template, needingStart);
     }
 
     /// <summary>Header match ignoring case and spaces, so "Block Number" and "BlockNumber" both work.</summary>

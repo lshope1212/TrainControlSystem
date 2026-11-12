@@ -23,7 +23,9 @@ public class CtcPhysicalDispatchTests
         var sender = new FakeMessageSender();
         var clock = new ManualClock();
         var service = new CTCService(sender, clock);
-        service.ApplyTrackLayout(BlueLine.CreateLayout());
+        // Test fixture only: a second yard entry at C11, so two trains can enter on different branches.
+        // The production Blue Line has one yard entry (block 1); CTC accepts only starts its layout marks.
+        service.ApplyTrackLayout(BlueLine.CreateLayout(yardEntries: ["A1", "C11"]));
         BlueLine.ReportAllClear(service);
         // 002 (when scheduled) starts on branch C, so the two trains never share a start block.
         service.QueueSchedule(trains.Select(train => BlueLine.Train(train.TrainId, train.Departure, secondsPerBlock: 4, route: train.TrainId == "002" ? SecondTrainRoute : null)));

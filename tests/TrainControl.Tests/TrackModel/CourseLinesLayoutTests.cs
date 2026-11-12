@@ -120,6 +120,56 @@ public class CourseLinesLayoutTests
         });
     }
 
+    /// <summary>
+    /// Yard entries are explicit layout data: Blue 1 (the worksheet drawing's Yard -> 1), Red 9 (its
+    /// TO/FROM yard switch row) and Green 63 ("FROM YARD (Yard-63)"). Not Green 57 ("TO YARD
+    /// (57-yard)" leads into the yard), not the switch rows 58/62, not Green 1 or 14.
+    /// </summary>
+    [TestMethod]
+    public void YardEntries_AreStatedByTheCourseData_AndPublishedToCtc()
+    {
+        string[] expected = ["1", "RED-9", "GREEN-63"];
+        CollectionAssert.AreEqual(expected, CourseTrackLayout.Create().Blocks.Where(b => b.IsYardEntry).Select(b => b.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { "1" }, BlueLineTrackLayout.Create().Blocks.Where(b => b.IsYardEntry).Select(b => b.Id).ToArray());
+
+        var model = new TrackService();
+        CourseTrackLayout.Load(model);
+        var published = model.CreateLayoutMessage().Lines.SelectMany(line => line.Blocks).Where(block => block.IsYardEntry).Select(block => block.BlockId).ToArray();
+        CollectionAssert.AreEqual(expected, published);
+    }
+
+    [TestMethod]
+    public void WorkbookImport_RejectsYardTextThatDoesNotStateTheYardEntry_AndAcceptsACorrectedRedLeg()
+    {
+        var sheets = SheetsFrom(CourseTrackLayout.Create());
+        sheets["Green Line"][62]["G"] = "SWITCH FROM YARD (Yard-64)";
+        WithWorkbook(sheets, path => StringAssert.Contains(Assert.Throws<InvalidDataException>(() => new TrackFileRepository().Load(path)).Message, "yard entry"));
+
+        // Red 9's leg text "75-yard" contradicts its row; a corrected "9-yard" states the same entry.
+        sheets = SheetsFrom(CourseTrackLayout.Create());
+        sheets["Red Line"][9]["G"] = "SWITCH TO/FROM YARD (9-yard)";
+        WithWorkbook(sheets, path => CollectionAssert.AreEqual(new[] { "RED-9" },
+            new TrackFileRepository().Load(path).Blocks.Where(b => b.LineId == "Red" && b.IsYardEntry).Select(b => b.Id).ToArray()));
+    }
+
+    [TestMethod]
+    public void CsvLayout_WithoutAnIsYardEntryColumn_StatesNoYardEntries_AndWithOneKeepsThem()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".csv");
+        try
+        {
+            File.WriteAllText(path, "Id,LineId,Number,LengthMeters,ConnectedBlockIds\nB1,Blue,1,100,B2\nB2,Blue,2,100,B1\n");
+            Assert.IsFalse(new TrackFileRepository().Load(path).Blocks.Any(b => b.IsYardEntry), "Nothing is invented, not even for block 1.");
+
+            File.WriteAllText(path, "Id,LineId,Number,LengthMeters,ConnectedBlockIds,IsYardEntry\nB1,Blue,1,100,B2,false\nB2,Blue,2,100,B1,true\n");
+            CollectionAssert.AreEqual(new[] { "B2" }, new TrackFileRepository().Load(path).Blocks.Where(b => b.IsYardEntry).Select(b => b.Id).ToArray());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [TestMethod]
     public void WorkbookImport_RejectsAWorkbookThatDoesNotMatchTheVf5Topology()
     {

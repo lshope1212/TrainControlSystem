@@ -25,6 +25,12 @@ public class TrackBlock
     public List<string> ConnectedBlockIds { get; set; } = [];
     public string NormalNextBlockId { get; set; } = string.Empty;
     public string ReverseNextBlockId { get; set; } = string.Empty;
+    /// <summary>
+    /// A train leaving the yard enters the main line here (published to CTC as
+    /// <c>TrackBlockDefinition.IsYardEntry</c>). Explicit layout data only: false unless the layout
+    /// file says otherwise, so an imported layout never gains a yard entry it does not state.
+    /// </summary>
+    public bool IsYardEntry { get; set; }
 
     /// <summary>
     /// Physically occupied by <see cref="TrainId"/>: any part of that train is in this block. A train

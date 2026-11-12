@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 using CTC.Core.Models;
 
 namespace CTC.Wpf.Behaviors;
@@ -9,7 +10,8 @@ namespace CTC.Wpf.Behaviors;
 /// <summary>
 /// Attached behavior that appends an Arrival Time and a Dwell (sec) column per train to a
 /// schedule DataGrid, since the number of trains is only known at run time. Train N's columns
-/// bind to <c>TrainTimes[N].TimeText</c> and <c>TrainTimes[N].DwellText</c> on each row.
+/// bind to <c>TrainTimes[N].TimeText</c> and <c>TrainTimes[N].DwellText</c> on each row; the time
+/// cell in the train's starting block (its departure time) is highlighted.
 /// Presentation only: no schedule logic here.
 /// </summary>
 /// <example>
@@ -50,7 +52,12 @@ public static class DataGridTrainColumns
         state.Attach(e.NewValue as IEnumerable<string>);
     }
 
-    // Every block row accepts a time, so all cells are editable.
+    private static readonly Brush StartBrush = Freeze(new SolidColorBrush(Color.FromRgb(0xDC, 0xFC, 0xE7)));
+    private static readonly Brush ReconsiderBrush = Freeze(new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)));
+
+    // Every block row accepts a time, so all cells are editable. The train's starting block is
+    // highlighted (its time there is the departure time); a time a starting-block change affected
+    // is highlighted until it is edited.
     private static DataGridColumn CreateTrainColumn(string trainId, int column) => new DataGridTextColumn
     {
         Header = $"{TrainIds.DisplayName(trainId)} Arrival Time",
@@ -60,7 +67,31 @@ public static class DataGridTrainColumns
             Mode = BindingMode.TwoWay,
             UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
         },
+        CellStyle = CreateTimeCellStyle(column),
     };
+
+    private static Style CreateTimeCellStyle(int column)
+    {
+        var style = new Style(typeof(DataGridCell));
+        style.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding($"TrainTimes[{column}].CellToolTip")));
+
+        var start = new DataTrigger { Binding = new Binding($"TrainTimes[{column}].IsStartBlock"), Value = true };
+        start.Setters.Add(new Setter(Control.BackgroundProperty, StartBrush));
+        start.Setters.Add(new Setter(Control.FontWeightProperty, FontWeights.SemiBold));
+        style.Triggers.Add(start);
+
+        // Added after the start trigger, so a start cell that needs reconsidering shows the warning.
+        var reconsider = new DataTrigger { Binding = new Binding($"TrainTimes[{column}].NeedsReconsidering"), Value = true };
+        reconsider.Setters.Add(new Setter(Control.BackgroundProperty, ReconsiderBrush));
+        style.Triggers.Add(reconsider);
+        return style;
+    }
+
+    private static Brush Freeze(Brush brush)
+    {
+        brush.Freeze();
+        return brush;
+    }
 
     // Filled with the block's default when the train is given a time there; committed when the
     // cell is left, so a value is validated whole rather than keystroke by keystroke.

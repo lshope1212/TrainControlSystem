@@ -1,418 +1,277 @@
+# TrainControlSystem — Implement Yard-Restricted Route Starting Blocks
 
-You are working in the TrainControlSystem C#/.NET/WPF repository.
+You are working in the TrainControlSystem C#/.NET/WPF repository, on the latest `Luke_CTC` branch.
 
-TASK: Implement the two remaining major integration blockers:
+## Objective
 
-1. CTC dispatch must physically create and activate a train through the existing module communication architecture.
-2. Train Model cumulative position must be translated into real block occupancy by the Track Model, including trains spanning multiple blocks.
+Modify the CTC Schedule Builder so that the dispatcher can **select the starting block for each train's route**, rather than automatically using the lowest-numbered block on the selected line.
 
-First inspect the current repository and its tests. The branch may contain teammates' latest changes. Do not assume the repository still matches an earlier review.
+However, for realistic train dispatching, **only legitimate yard-entry blocks should be available as starting locations**.
 
-IMPORTANT: Train ID normalization has already been addressed separately. Preserve that work. Do not independently redesign train IDs.
+This is a focused change to the existing scheduling workflow. All five modules are already connected, and the existing solution build and integration tests have passed. Preserve that working integration.
 
-ARCHITECTURE — NONNEGOTIABLE
+## 1. Inspect the current implementation
 
-CTC must not communicate directly with Train Model or Train Controller.
+Before modifying code, examine:
 
-The intended relationships are:
+- `ScheduleTemplateFactory.cs`
+- `ScheduleTemplate.cs` and `ScheduleTemplateConverter.cs`
+- `ScheduleBuilderViewModel.cs`
+- `ScheduleTemplateRowViewModel.cs`
+- `ScheduleCsvImporter.cs`
+- `ScheduledTrain.cs` and `CTCService.QueueSchedule()`
+- The CTC Schedule Builder XAML
+- Track Model's course layout, importer and layout message contracts
+- `TrackLayoutReconciler.cs`
+- Existing CTC scheduling and integration tests
 
-CTC -> Track Controller: dispatch requests, movement suggestions, switch and maintenance requests.
+Currently, `ScheduleTemplateFactory.GetRouteStartBlock()` assumes that the route starts at the lowest-numbered block.
 
-Track Controller -> Track Model: dispatch coordination and wayside commands.
+Remove that assumption from production schedule creation.
 
-Track Model -> Train Model: train activation/retirement, track environment, commanded speed and authority.
+## 2. Determine legitimate yard-entry blocks
 
-Train Model -> Track Model: cumulative train position, speed, train length, and passenger information.
+The actual track layout is authoritative.
 
-Track Model -> Track Controller: block occupancy and equipment feedback.
+The current course network contains the following yard information:
 
-Track Controller -> CTC: block status and movement feedback.
+- Blue Line: yard entrance at the beginning of the line, near Block `1`.
+- Red Line: yard switch associated with `RED-9`.
+- Green Line: yard connections associated with `GREEN-58` and `GREEN-62`, described as `57-yard` and `yard-63`.
 
-Train Model <-> Train Controller: existing train status and controller commands.
+**Important:** These references identify yard connections or switches, not necessarily the precise mainline block where a dispatched train should first appear.
 
-Track Model -> CTC: existing layout and ticket sales only.
+Investigate the course track layout and existing documentation to establish the valid mainline starting blocks.
 
-Do not add a CTC -> Train Model or CTC -> Train Controller connection.
+In particular, examine whether `GREEN-57` and `GREEN-63` are the appropriate Green Line yard-entry blocks, rather than simply assuming that switch blocks 58 and 62 must be selected.
 
-Do not put physical train placement or occupancy computation inside the Track Controller's PLC. The Track Controller is an intermediary for dispatch coordination and remains responsible for its existing safety and authority functions.
+Do not arbitrarily classify a block as yard-adjacent merely because it is the first block, contains a switch, or is close to a station.
 
-PART A — UNDERSTAND AND PRESERVE THE CURRENT IMPLEMENTATION
+`GREEN-14` must not be treated as a yard entrance without supporting layout evidence.
 
-Inspect at least:
+### Represent yard-entry information explicitly
 
-- CTCService.ReleaseTrain and SetSystemTimeAsync
-- CTC's queue, release status, schedule routes, and TrainLocationTracker
-- MovementRequestMessage and MovementSuggestionMessage
-- WaysidePipeHost, TerritoryRuntimeRouter, and LocalWaysideRuntime
-- TrackModelConnection and TrackService
-- TrackModelTrainUpdateMessage
-- TrainStateMessage
-- TrainModelOutputPublisher
-- TrainModelNamedPipeReceiver
-- Train Model MainWindowViewModel.ApplyTrainPlacement
-- TrainFleetService, TrainState, TrainSpecs, and physics integration
-- TrackModel's CaptureTrainCodes
-- TrainControllerSignalPublisher
-- Existing integration tests
+Introduce a small, maintainable way for CTC to identify valid yard-entry blocks.
 
-Identify existing functionality before modifying it.
+Prefer placing explicit yard-entry metadata alongside the Track Model's authoritative course layout and exposing it through the existing layout message when practical.
 
-Preserve existing working CTC/Track Controller movement authority logic, zero-authority fixes, prepared-successor handoffs, simulation clock synchronization, software/hardware Train Controller integration, and three-line support.
+A field such as `IsYardEntry` on a block definition is acceptable, as is another clean solution that preserves the existing architecture.
 
-PART B — IMPLEMENT REAL DISPATCH
+Requirements:
 
-Currently CTC ReleaseTrain() marks a scheduled train as AwaitingPlacement without sending a physical placement request.
+- Preserve the current track geometry and block IDs.
+- Do not create fictitious yard blocks.
+- Do not modify PLC switch behavior.
+- Do not add a direct CTC connection to the Train Model.
+- Do not modify existing train physics.
+- Preserve compatibility with the three-line layout.
+- Ensure imported or revised layouts do not silently invent yard-entry locations.
+- If the evidence cannot establish an exact yard-entry block, explicitly report that uncertainty rather than guessing.
 
-Implement the missing dispatch handshake.
+The CTC must derive its available starting blocks from the selected line's validated yard-entry information.
 
-1. Introduce an explicit, strongly typed dispatch/placement request contract.
+If none are defined, show a clear explanation and prevent scheduling until the information is configured.
 
-It should contain at least:
-- Unique request ID
-- Canonical train ID
-- Line ID
-- Starting block ID
-- Ordered route block IDs
+## 3. Add starting-block selection to the Schedule Builder
 
-Use the existing shared contracts and serialization conventions.
+Modify the existing CTC Schedule Builder UI.
 
-Do not reuse MovementSuggestionMessage for dispatch, because movement authorization is separate from physical train placement.
+When the dispatcher creates a schedule template:
 
-Do not send the existing incomplete MovementRequestMessage directly to a wayside and expect it to authorize a train. Update misleading comments/contracts as needed.
+1. Select a line (Blue, Red, or Green), as currently supported.
+2. Enter the number of trains and generate the schedule template.
+3. For each train, choose a starting block from a dropdown containing ONLY that line's valid yard-entry blocks.
+4. Enter the departure time for the selected starting block.
+5. Enter arrival times at the desired later blocks as before.
+6. Queue the schedule using the existing workflow.
 
-2. CTC sends the dispatch request to the Track Controller when a queued departure becomes due.
+### UI requirements
 
-Preserve the existing checks that prevent releasing into an occupied, unknown, or closed starting block.
+- Provide one starting-block selection per train, not one global selection for every train.
+- The dropdown should use readable block labels and actual block IDs.
+- If the line has exactly one valid yard entry, selecting it automatically is acceptable.
+- If multiple yard entries exist, the dispatcher should be able to choose independently for each train.
+- Clearly indicate each train's selected starting block in the schedule grid.
+- Only the selected starting block's time should be interpreted as that train's departure time.
+- The dispatcher must not be able to select an arbitrary track block as a starting location.
+- Preserve the existing spreadsheet-style schedule builder, destination times and dwell-time editing.
 
-The CTC should maintain a pending-placement state until actual placement is confirmed. Do not report physical dispatch merely because a message was sent.
+Keep the UI relatively simple. A compact starting-block selector associated with each train is preferable to a major Schedule Builder redesign.
 
-3. The Track Controller receives and forwards the dispatch request to the Track Model.
+## 4. Update schedule conversion and route generation
 
-Implement this at an appropriate application/integration layer rather than inside PLC movement evaluation.
+Currently, the schedule template has a single `IsRouteStart` flag on a block row.
 
-It must function with the existing routed multi-wayside configuration. Do not require the dispatcher to know which wayside owns the starting block.
+That assumption must be revised to support different starting blocks for different trains.
 
-Dispatch acceptance must not grant train movement authority.
+The new model must:
 
-4. The Track Model owns the physical placement process.
+- Store the selected starting block separately for each train.
+- Identify that train's departure time at its selected start block.
+- Build that train's route beginning at the correct block.
+- Continue using the existing schedule waypoint and route construction system.
+- Preserve timed destinations, intermediate untimed blocks and dwell settings.
+- Never add unrelated blocks before the selected starting block.
+- Preserve the order in which blocks are actually traveled.
 
-When a dispatch arrives:
-- Validate the train ID, line, starting block, and ordered route.
-- Check that the route matches known track topology.
-- Reject unsafe initial placement, including conflicting occupancy or maintenance closure.
-- Register a per-train route/position context.
-- Send an activation/placement message to the Train Model.
+The final `ScheduledTrain.Route[0]` must contain the selected start block.
 
-Prefer reusing existing placement contracts where their semantics fit. Introduce a new typed message if necessary to avoid confusing commands with telemetry.
+Consequently, `ScheduledTrain.StartBlockId` and the existing `TrainDispatchRequestMessage` should automatically carry the correct starting block without needing a new dispatch protocol.
 
-5. The Train Model receives the placement message and activates the correct train.
+### Changing an existing selection
 
-- Create the train if it does not exist.
-- Initialize its cumulative PositionMeters to 0.
-- Initialize actual speed to 0.
-- Assign its correct line for roster/display purposes.
-- Mark it active.
-- Preserve its physical TrainSpecs, including length.
-- Do not attempt to calculate an absolute track-map coordinate.
-- Publish an initial position report immediately so block occupancy is established even while the simulation clock is paused.
+If the dispatcher changes the selected starting block after entering schedule times:
 
-Repeated identical placement requests must be idempotent. A retry must not create or reset an already operating train.
+- Do not silently misinterpret the old departure time as a destination time.
+- Preserve valid user-entered information where practical.
+- Clearly identify any schedule times that must be reconsidered.
+- Revalidate the resulting route before allowing it to be queued.
 
-6. Once the Track Model observes the initial position report, establish the starting block's occupancy and publish it through the existing Track Controller feedback path.
+### CSV schedules
 
-The CTC's existing sequential-occupancy TrainLocationTracker should detect the initial occupied block and establish that the train has physically appeared.
+Ensure the existing CSV schedule import remains usable.
 
-After this, the existing CTC movement-request and wayside authorization process should begin.
+The imported template must support the same yard-entry restrictions and starting-block selections as manually generated templates.
 
-7. Add reliable failure handling and correlation.
+You may add optional starting-block metadata or allow the dispatcher to select the starting block after import.
 
-- Acknowledge or report rejected placements using the existing communication patterns.
-- Distinguish request delivery/acceptance from confirmed physical placement.
-- Handle Track Model or Train Model being temporarily unavailable.
-- Prevent repeated clock ticks from creating duplicate trains.
-- Do not permanently lose a queued dispatch because an endpoint was down.
-- Do not silently swallow important dispatch failures.
+Do not silently treat an arbitrary first timed block as a valid yard entry.
 
-PART C — DEFINE TRAIN POSITION SEMANTICS
+Preserve backward compatibility where the starting block can be determined unambiguously from the valid yard entries. Otherwise require explicit selection.
 
-The Train Model owns physical motion, not the route geometry.
+## 5. Validate the selected starting block
 
-PositionMeters is:
-- A cumulative distance traveled since dispatch.
-- Initialized to 0 when activated.
-- Integrated from velocity by the existing simulation physics.
-- Independent of line or block numbering.
-- Measured in meters.
-- Representing the FRONT of the train, consistent with the current Train model.
+Add appropriate checks in CTC.Core, not only in the WPF UI.
 
-This is NOT:
-- The current block number.
-- An absolute map coordinate.
-- A distance within the current block.
-- A position value reset at each block boundary.
+A schedule should be rejected if:
 
-The Train Model should not know block lengths, switch topology, or route-to-block calculations.
+- The starting block is missing.
+- The starting block is on a different line.
+- The starting block is not an approved yard entry.
+- The route does not begin at the selected starting block.
+- The route contains disconnected blocks.
+- A timed destination is unreachable through the existing route planner.
+- A departure time is missing or invalid.
 
-PART D — UPDATE TRAIN MODEL POSITION OUTPUT
+Use dispatcher-readable error messages.
 
-The current TrainModelOutputPublisher.PublishTrackSide sends TrainStateMessage to NamedPipeNames.TrackController, even though the Track Controller does not process it.
+Continue using the existing live occupancy, maintenance and safety checks when the train is actually released.
 
-Correct this so position telemetry reaches the Track Model directly.
+Do not reserve or occupy the selected starting block merely because it appears in a schedule. Physical placement must still happen through the existing dispatch integration.
 
-Use or extend TrainStateMessage with:
-- TrainId
-- PositionMeters
-- TrainLengthMeters
-- SpeedMetersPerSecond
-- AccelerationMetersPerSecondSquared, if useful
-- A monotonically increasing tick/sequence identifier
+### Routing limitations
 
-The Train Model already stores TrainLengthMeters in TrainState, derived from TrainSpecs. Use that source; do not invent a separate hardcoded length.
+The existing CTC shortest-path logic does not account for every one-way travel restriction or physical switch constraint.
 
-Train length is required to calculate the train's occupied footprint.
+Do not unnecessarily redesign the entire routing algorithm in this task.
 
-Publish position telemetry at each simulation physics tick (0.1 simulated seconds), including an initial report at dispatch. Use efficient ordered messaging and ensure the system can handle the existing simulation speed multipliers without UI blocking or unbounded queues.
+However, inspect the generated route and make sure the change does not conceal those limitations.
 
-If transport coalescing is necessary, the Track Model must still reconstruct all crossed block boundaries in order. Never skip intermediate occupancy transitions.
+If a route is connected in the CTC layout but would be rejected by the Track Controller or Track Model because of direction or switch geometry, report that limitation accurately.
 
-Do not replace the existing Train Model <-> Train Controller messages. Keep that communication functioning.
+Do not claim a route to Edgebrook is executable merely because selecting a yard starting block made it possible to generate a schedule.
 
-PART E — TRACK MODEL POSITION-TO-BLOCK MAPPING
+## 6. Preserve all existing system integration
 
-The Track Model must translate cumulative position into occupancy using the per-train route recorded at placement.
+The current dispatch integration is:
 
-Example:
+CTC → Track Controller → Track Model → Train Model
 
-Block A: 100 meters
-Block B: 75 meters
-Block C: 120 meters
+Train Model position → Track Model occupancy → Track Controller → CTC
 
-A train dispatched at the beginning of Block A reports:
+Do not change this architecture.
 
-PositionMeters = 115
+Existing behavior to preserve:
 
-The train's FRONT has traveled 115 meters.
+- Canonical train IDs `001`–`010`
+- Simulation-clock-controlled schedule release
+- Dispatch request retries and acknowledgements
+- Automatic Train Model activation
+- Cumulative position reporting
+- Multi-block occupancy
+- CTC's anonymous occupancy-based location inference
+- Movement suggestions and authority handoffs
+- Dispatcher rerouting after a train has been released
+- Three-line operation
+- Default station dwell times and editable dwell times
 
-Therefore its front is 15 meters into Block B.
+The new starting-block selection should affect the **initial planned route and physical placement location**, not how the system subsequently tracks or controls the train.
 
-For a 32.2-meter train:
+## 7. Testing requirements
 
-Front = 115
-Rear = 115 - 32.2 = 82.8 meters.
+Add or update tests for:
 
-The train occupies both Block A and Block B.
+**Starting-block selection**
+- A line with one valid yard entry selects it correctly.
+- A line with multiple yard entries permits choosing any eligible entry.
+- A non-yard block cannot be selected or queued as a starting block.
+- Each train in a multi-train schedule can have a different starting block.
+- A selected block on another line is rejected.
+- Missing yard-entry metadata produces a clear failure.
 
-Required implementation:
+**Scheduling**
+- Departure time is read from the selected start block.
+- Intermediate route blocks are generated correctly.
+- The route begins at the selected block.
+- Existing arrival and dwell times continue working.
+- Changing the start block does not silently corrupt a schedule.
+- CSV imports use the same validation.
+- A changed layout invalidates an obsolete start selection.
 
-1. Maintain per-train tracking state in TrackModel.Core:
-- Train ID
-- Line ID
-- Starting block ID
-- Ordered traversed/assigned route
-- Latest cumulative front position
-- Train length
-- Current head block / route index
-- All currently occupied blocks
-- Latest processed telemetry tick
+**Integration**
+- CTC sends the selected `StartBlockId` in `TrainDispatchRequestMessage`.
+- Track Controller forwards the existing request correctly.
+- Track Model and Train Model activate the train at the selected start block.
+- Position zero causes the selected starting block to become occupied.
+- CTC detects the new occupancy and begins normal movement authorization.
 
-2. Calculate the cumulative route boundaries using actual block lengths from the loaded layout.
+Preserve all existing tests, including the recently added `PhysicalDispatchIntegrationTests` and `LivePhysicsEndToEndTests`.
 
-Use the ordered route, not numerical block IDs.
+If old test fixtures deliberately dispatch from arbitrary non-yard blocks, distinguish those isolated testing fixtures from the actual production yard-entry policy. Update affected tests appropriately without creating a production bypass that allows unrestricted dispatching.
 
-3. Calculate train footprint:
-Front = PositionMeters
-Rear = PositionMeters - TrainLengthMeters
+## 8. Explicitly out of scope
 
-Determine every block intersected by the train's physical footprint.
+Do NOT implement changes for these issues:
 
-At dispatch, PositionMeters = 0 should occupy the starting block. The initially negative rear position represents the portion still in the yard/outside the modeled route; do not incorrectly mark a preceding line block occupied.
+- Automatic station braking or stopping at Edgebrook
+- Arrival-time prediction or accuracy improvements
+- Changes to CTC's train location inference
+- PLC reservation feedback or switch-control fixes
+- Train Controller engineer gain tuning
+- Hardware Raspberry Pi integration
+- Unrelated train physics or authority changes
 
-4. Update occupancy atomically.
+These will be addressed separately.
 
-A block becomes occupied when the train's front enters.
+## 9. Special attention: Edgebrook use case
 
-A trailing block remains occupied until the train's rear fully leaves it.
+Iteration 3 requires the dispatcher to dispatch a train to Edgebrook Station (`GREEN-9`) for arrival at 3:00 PM.
 
-A train may occupy two or more blocks, especially if a train is longer than an individual block.
+This feature must allow the dispatcher to begin the schedule from a legitimate Green Line yard entry rather than the automatically chosen `GREEN-1`.
 
-Only clear a block when the train no longer physically occupies it.
+After implementing the change:
 
-5. Support multiple trains on a line.
+1. Identify the verified Green Line yard-entry blocks.
+2. Attempt to generate a schedule from an eligible yard entry to `GREEN-9`.
+3. Inspect the resulting route, including Green Line travel direction and switch geometry.
+4. Determine whether the route can be accepted by the current Track Controller and Track Model.
+5. If it cannot, explain the exact route blocker and the smallest follow-up change needed.
 
-Maintain occupancy ownership internally so one train cannot incorrectly clear a block belonging to another.
+Do not introduce fake yard connections or override wayside safety logic just to make the Edgebrook route work.
 
-Reject conflicting placements and unsafe occupancy claims.
+## 10. Final deliverables
 
-6. Reject invalid position telemetry.
+After implementing:
 
-Handle:
-- NaN/infinity
-- Negative distance
-- Nonpositive or invalid train length
-- Unknown train ID
-- Telemetry received before placement
-- Stale or out-of-order tick IDs
-- Impossible backward jumps
-- Position exceeding the valid route
-- Unexpected discontinuities and reset conditions
+1. List all files modified, grouped by module.
+2. Explain how valid yard-entry blocks are defined and verified.
+3. State the selectable start blocks for Blue, Red and Green.
+4. Explain how the dispatcher selects a starting block for each train.
+5. Explain how the chosen block becomes the first block in the schedule and dispatch request.
+6. Confirm that the existing module communication architecture remains unchanged.
+7. Report actual build and test results, including any failures.
+8. Give me exact steps for testing the feature in the CTC UI.
+9. State whether a yard-origin Green Line train can now be routed to Edgebrook using the current topology and wayside constraints.
+10. Identify anything that still prevents the complete Edgebrook demonstration.
 
-Invalid telemetry must not silently move a train or clear occupied blocks.
-
-7. Handle route topology and switches correctly.
-
-Do not assume GREEN-1, GREEN-2, GREEN-3 is necessarily a valid route.
-
-A train's path must use valid track connections and valid switch branches.
-
-Physical occupancy must reflect the path actually traversed. The current switch alignment must not be silently ignored in favor of a desired route.
-
-If a switch or route cannot be reconciled safely, report an error and fail safely rather than inventing movement.
-
-Keep this compatible with CTC's existing route-replanning feature. If a future path changes while the train is moving, previously traveled distance must remain valid; never reset PositionMeters or reinterpret already traversed blocks.
-
-Implement the necessary route-update coordination or explicitly handle such changes safely without silently continuing along a stale route.
-
-PART F — PRESERVE THE EXISTING AUTHORITY HANDOFF SYSTEM
-
-THIS IS CRITICAL.
-
-The Track Model currently assumes one block per train in several places. Multi-block occupancy must not break the existing CTC -> Track Controller -> Track Model authority pipeline.
-
-In particular:
-
-1. The Track Model must distinguish between:
-- All blocks physically occupied by a train.
-- The HEAD block containing the front of the train.
-
-2. Keep all occupied blocks marked occupied for track circuits and wayside safety.
-
-3. Select the head block for the train's current track environment, speed code, authority, signal and beacon.
-
-Do not send multiple competing train-environment messages for the same train because it spans multiple blocks.
-
-4. Review and correct:
-- TrackService.CaptureTrainCodes()
-- TrackService.CreateTrainEnvironment()
-- TrackModelConnection snapshot/environment publication
-- TrainControllerSignalPublisher
-- TrainEntryBlockId and continuation-code handling
-
-CaptureTrainCodes currently uses a dictionary keyed by train ID, which will fail if the same train appears in multiple occupied blocks. Ensure one authoritative entry per train, based on its head block.
-
-TrainControllerSignalPublisher must not interpret normal multi-block occupancy as conflicting train aliases and produce an Unknown signal.
-
-5. Preserve correct predecessor/successor handoffs.
-
-When the front enters the next block while the rear still occupies the previous block, the Track Controller must still receive the new block's occupancy transition.
-
-The predecessor's occupancy may remain occupied; this is physically correct.
-
-Ensure the prepared-successor handoff can recognize the front entering the new block, while trailing-block occupancy continues to protect the previous block.
-
-Do not falsely report a block Clear merely to get the authority system to work.
-
-6. CTC must continue receiving anonymous block occupancy.
-
-Do not add TrainId to CTC block-status reports or make the CTC trust identity from the Track Model.
-
-Its TrainLocationTracker should continue inferring train location from the dispatched route and sequential occupancy transitions.
-
-Review its behavior during prolonged overlap and repeated snapshots. Do not allow repeated Occupied messages to move a train more than once.
-
-7. Preserve fail-safe behavior.
-
-Do not weaken PLC checks, permit conflicting movement, bypass maintenance protection, or create positive movement authority merely because the train's front entered a block.
-
-PART G — TESTING
-
-Add comprehensive unit and integration tests.
-
-At minimum, verify:
-
-Dispatch:
-- CTC release goes to Track Controller only.
-- Track Controller forwards the request to Track Model.
-- Track Model requests Train Model activation.
-- Train Model creates one train with position 0 and correct line.
-- Starting block becomes occupied without TestUI injection.
-- CTC detects the starting occupancy and starts normal movement authorization.
-- Repeated requests do not duplicate trains.
-- Failure/retry when Track Model or Train Model is unavailable.
-- Two trains dispatch independently.
-
-Position mapping:
-- Position 0 occupies the starting block.
-- Movement inside one block changes no occupancy.
-- Front crossing into another block occupies both.
-- Rear fully clearing the first block clears only that block.
-- A train spanning three short blocks occupies all three.
-- Multiple trains cannot occupy the same block.
-- Invalid or stale telemetry does not corrupt occupancy.
-- Position messages never need to contain a block ID.
-- Track Model never calculates distance from Train Controller commands instead of actual Train Model telemetry.
-
-Safety/compatibility:
-- Exactly one authoritative train environment per train.
-- No duplicate-key exception in CaptureTrainCodes.
-- Signals are selected from the head block.
-- Front crossing triggers a prepared-successor handoff.
-- Previous block can remain occupied during that handoff.
-- CTC location advances only once on a new occupancy transition.
-- Existing zero-authority and command-withdrawal tests still pass.
-- Switch alignment and route connectivity are respected.
-- Reset/retirement clears the correct train footprint.
-- All three lines still work.
-
-Integration:
-Create or extend a live integration test demonstrating:
-
-CTC dispatches Train 001 on the Green Line.
-The Train Model is automatically activated.
-Its position starts at 0.
-The Track Model automatically occupies the starting block.
-The Track Controller reports occupancy to CTC.
-CTC submits a movement suggestion.
-The Track Controller grants authority if safe.
-The Train Controller commands traction/braking.
-Train Model position increases through real physics ticks.
-Track Model advances occupancy based on the received cumulative distance.
-CTC tracks the train through the route.
-
-Avoid simulated/manual block transitions in this final end-to-end test. Its purpose is to prove that real train-position telemetry produces occupancy changes.
-
-Do not treat a mocked physics component as proof that the complete WPF application runs.
-
-PART H — IMPLEMENTATION CONSTRAINTS
-
-- Modify only what is needed for these two integration issues.
-- Do not replace the established message architecture.
-- Do not introduce direct CTC -> Train Model communication.
-- Do not move track geometry into TrainModel.Core.
-- Do not put simulation physics into TrackModel.Core.
-- Keep conversions and physical calculations in SI units.
-- Preserve Train ID conventions and the teammate's recent changes.
-- Avoid TestUI-only solutions.
-- Keep compatibility with existing standalone TestUIs where possible.
-- Do not make unrelated UI redesigns.
-- Add logging for meaningful dispatch/placement and occupancy transitions.
-- Keep asynchronous pipe communication responsive and bounded.
-- Update misleading comments and relevant integration documentation.
-
-DELIVERABLES
-
-Implement the code changes, not just a proposal.
-
-When complete, provide:
-
-1. Summary of files changed, grouped by module.
-2. New or changed message contracts and their fields.
-3. Exact CTC -> Track Controller -> Track Model -> Train Model dispatch flow.
-4. Exact Train Model -> Track Model -> Track Controller -> CTC occupancy feedback flow.
-5. Explanation of how cumulative position and train length map to blocks.
-6. Explanation of how multi-block occupancy interacts with authority and train signals.
-7. Tests added and their actual results.
-8. Build/test commands executed.
-9. Any remaining blockers or behaviors not successfully verified.
-10. Step-by-step instructions for testing dispatch and live movement in the WPF applications.
-
-Do not claim the system is fully integrated merely because unit tests pass. Clearly distinguish verified runtime behavior from implementation that still requires a live demonstration.
+Implement the changes directly. Keep them focused, maintainable and compatible with the already working system integration.

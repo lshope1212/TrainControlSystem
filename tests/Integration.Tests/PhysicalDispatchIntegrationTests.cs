@@ -1,4 +1,5 @@
 using CTC.Core.Models;
+using CTC.Core.Scheduling;
 using TrackModel.Core.Models;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
@@ -18,8 +19,8 @@ public sealed class PhysicalDispatchIntegrationTests
     /// <summary>Green Line, in its direction of travel, no switches or crossings: 100, 100, 200, 200, 100, 100 m.</summary>
     internal static readonly string[] GreenRoute = ["GREEN-63", "GREEN-64", "GREEN-65", "GREEN-66", "GREEN-67", "GREEN-68"];
 
-    /// <summary>Red Line (bidirectional), no switches or crossings.</summary>
-    internal static readonly string[] RedRoute = ["RED-20", "RED-21", "RED-22", "RED-23", "RED-24", "RED-25"];
+    /// <summary>Red Line (bidirectional) from its yard entry RED-9 toward block 1, no switches or crossings.</summary>
+    internal static readonly string[] RedRoute = ["RED-9", "RED-8", "RED-7", "RED-6", "RED-5", "RED-4"];
 
     /// <summary>Blue Line from its yard end, before its switch.</summary>
     internal static readonly string[] BlueRoute = ["1", "2", "3", "4"];
@@ -110,6 +111,52 @@ public sealed class PhysicalDispatchIntegrationTests
         Assert.IsNull(train.MovementRequest.Plan.EntryBlockId);
     }
 
+    /// <summary>
+    /// The Schedule Builder path end to end: the template is generated from the layout CTC received
+    /// from the production Track Model, the Green Line's only yard entry (GREEN-63) is the train's
+    /// starting block, and that block is where every module places the train, through the existing
+    /// dispatch contracts only.
+    /// </summary>
+    [TestMethod]
+    public async Task ScheduleBuilderTemplate_StartsAtTheYardEntry_AndEveryModulePlacesTheTrainThere()
+    {
+        await using var system = await StartAsync(null, "Green");
+        await using var trainModel = await LiveTrainModel.StartAsync(system);
+        var (start, route) = await system.OnCtc(ctc =>
+        {
+            var template = ScheduleTemplateFactory.Create(ctc.State.FindLine("Green")!, TrainIds.Allocate(ctc.State, 1));
+            template.Rows.Single(row => row.BlockId == "GREEN-63").SetTrainTime(0, "09:00:30");
+            template.Rows.Single(row => row.BlockId == "GREEN-68").SetTrainTime(0, "09:02:30");
+            var result = ScheduleTemplateConverter.Convert(template);
+            Assert.IsTrue(result.IsSuccess, result.ErrorMessage);
+            ctc.QueueSchedule(result.Trains);
+            return (template.GetStartBlockId(0), result.Trains[0].Route.Select(block => block.BlockId).ToArray());
+        });
+        Assert.AreEqual("GREEN-63", start, "The only Green yard entry is preselected; not GREEN-1.");
+        CollectionAssert.AreEqual(GreenRoute, route);
+        Assert.IsTrue(await system.OnTrackModel(track => !track.Layout.Blocks.Any(b => b.IsOccupied)), "Scheduling occupies nothing.");
+
+        await Release(system);
+        await LiveSystem.UntilAsync(() => DetectedAsync(system, "001"), "CTC detects train 001 at its starting block and requests its first movement.", TimeSpan.FromSeconds(15));
+
+        // CTC -> Track Controller: the existing request, its start the selected block.
+        var dispatch = system.CtcSent!.Delivered.OfType<TrainDispatchRequestMessage>().First();
+        Assert.AreEqual("GREEN-63", dispatch.StartBlockId);
+        Assert.AreEqual("GREEN-63", dispatch.RouteBlockIds[0]);
+
+        // Track Controller -> Track Model -> Train Model: activated at position 0, which occupies the start block.
+        var state = await trainModel.StateAsync("001");
+        Assert.AreEqual(0d, state!.PositionMeters);
+        Assert.AreEqual("Green Line", state.LineName);
+        CollectionAssert.AreEqual(new[] { "GREEN-63" }, await system.OnTrackModel(track => track.Layout.Blocks.Where(b => b.IsOccupied).Select(b => b.Id).ToArray()));
+
+        // Occupancy -> Track Controller -> CTC: normal movement authorization begins at the start block.
+        var train = (await Dispatched(system, "001"))!;
+        Assert.AreEqual("GREEN-63", train.CurrentBlockId);
+        Assert.AreEqual("GREEN-63", train.MovementRequest!.Plan.TargetBlockId);
+        CollectionAssert.AreEqual(GreenRoute.Skip(1).Take(train.MovementRequest.Plan.PathBlockIds.Count).ToArray(), train.MovementRequest.Plan.PathBlockIds.ToArray());
+    }
+
     [TestMethod]
     public async Task RepeatedDispatchRequests_NeverDuplicateOrResetTheTrain()
     {
@@ -192,8 +239,8 @@ public sealed class PhysicalDispatchIntegrationTests
         Assert.AreEqual("Green Line", (await trainModel.StateAsync("001"))!.LineName);
         Assert.AreEqual("Red Line", (await trainModel.StateAsync("002"))!.LineName);
         Assert.AreEqual("Blue Line", (await trainModel.StateAsync("003"))!.LineName);
-        CollectionAssert.AreEquivalent(new[] { "GREEN-63", "RED-20", "1" }, await system.OnTrackModel(track => track.Layout.Blocks.Where(b => b.IsOccupied).Select(b => b.Id).ToArray()));
-        Assert.AreEqual("002", await system.OnTrackModel(track => track.FindBlock("RED-20")!.TrainId));
+        CollectionAssert.AreEquivalent(new[] { "GREEN-63", "RED-9", "1" }, await system.OnTrackModel(track => track.Layout.Blocks.Where(b => b.IsOccupied).Select(b => b.Id).ToArray()));
+        Assert.AreEqual("002", await system.OnTrackModel(track => track.FindBlock("RED-9")!.TrainId));
         Assert.AreEqual("003", await system.OnTrackModel(track => track.FindBlock("1")!.TrainId));
         Assert.HasCount(3, system.CtcSent!.Delivered.OfType<TrainDispatchRequestMessage>().Select(m => m.RequestId).Distinct().ToList());
     }

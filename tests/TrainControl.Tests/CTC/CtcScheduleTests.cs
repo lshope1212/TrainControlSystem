@@ -38,9 +38,10 @@ public class CtcScheduleTests
     }
 
     [TestMethod]
-    public void Create_MarksLowestBlockAsStartAndCopiesTrackData()
+    public void Create_StartsAtTheLayoutsYardEntry_NotTheLowestBlock_AndCopiesTrackData()
     {
-        // Blocks deliberately out of number order to check the start block is not just "first row".
+        // The yard entry is B2, not the lowest-numbered (B1) nor the first row: the start comes from
+        // the layout's yard-entry data only.
         var service = new CTCService(new FakeMessageSender());
         service.ApplyTrackLayout(new TrackLayoutMessage
         {
@@ -51,7 +52,7 @@ public class CtcScheduleTests
                     LineId = "BLUE",
                     Blocks =
                     {
-                        new TrackBlockDefinition { BlockId = "B2", BlockNumber = 2, HasCrossing = true, ConnectedBlockIds = { "B1" } },
+                        new TrackBlockDefinition { BlockId = "B2", BlockNumber = 2, HasCrossing = true, ConnectedBlockIds = { "B1" }, IsYardEntry = true },
                         new TrackBlockDefinition { BlockId = "B1", BlockNumber = 1, LengthMeters = 50, SpeedLimitKilometersPerHour = 50, ConnectedBlockIds = { "B2" } },
                         new TrackBlockDefinition { BlockId = "B10", BlockNumber = 10, StationName = "Station B", HasSignal = true },
                     },
@@ -61,13 +62,15 @@ public class CtcScheduleTests
 
         var template = ScheduleTemplateFactory.Create(service.State.FindLine("BLUE")!, 1);
 
-        Assert.IsTrue(Row(template, "B1").IsRouteStart);
-        Assert.IsFalse(Row(template, "B2").IsRouteStart);
+        CollectionAssert.AreEqual(new[] { "B2" }, template.YardEntryBlockIds.ToArray());
+        Assert.AreEqual("B2", template.GetStartBlockId(0), "The only yard entry is preselected.");
+        Assert.IsTrue(Row(template, "B2").IsRouteStartFor(0));
+        Assert.IsFalse(Row(template, "B1").IsRouteStartFor(0), "The lowest-numbered block is not assumed to be the start.");
         Assert.AreEqual(50.0, Row(template, "B1").LengthMeters);
         Assert.AreEqual(50.0, Row(template, "B1").SpeedLimitKilometersPerHour);
         CollectionAssert.AreEqual(new[] { "B2" }, Row(template, "B1").ConnectedBlockIds.ToArray());
         Assert.AreEqual("Station B; Signal", Row(template, "B10").Infrastructure);
-        Assert.AreEqual("Railway Crossing", Row(template, "B2").Infrastructure);
+        Assert.AreEqual("Yard Entry; Railway Crossing", Row(template, "B2").Infrastructure);
     }
 
     [TestMethod]
@@ -251,7 +254,7 @@ public class CtcScheduleTests
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.AreEqual("Train 002 is missing a route start time.", result.ErrorMessage);
+        Assert.AreEqual("Train 002 is missing its departure time at its starting block A1.", result.ErrorMessage);
         Assert.IsEmpty(result.Trains);
     }
 
@@ -277,7 +280,7 @@ public class CtcScheduleTests
         var result = ScheduleTemplateConverter.Convert(template);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.Contains("only a route start time", result.ErrorMessage!);
+        Assert.Contains("only a departure time", result.ErrorMessage!);
     }
 
     [TestMethod]

@@ -74,7 +74,11 @@ internal static class TrackLayoutReconciler
                 else
                 {
                     result.UpdatedLineIds.Add(existing.LineId);
-                    changes.Add(() => UpdateInPlace(existing, definition));
+                    changes.Add(() =>
+                    {
+                        UpdateInPlace(existing, definition);
+                        DropObsoleteStarts(state, existing, result);
+                    });
                 }
 
                 Claim(owners, definition.LineId, definition.Blocks.Select(block => block.BlockId));
@@ -212,7 +216,11 @@ internal static class TrackLayoutReconciler
                 && block.StationName == incoming.StationName
                 && block.HasSwitch == incoming.HasSwitch
                 && block.HasSignal == incoming.HasSignal
-                && block.HasCrossing == incoming.HasCrossing;
+                && block.HasCrossing == incoming.HasCrossing
+                && block.IsYardEntry == incoming.IsYardEntry
+                && block.TravelDirection == Direction(incoming)
+                && block.NormalNextBlockId == (incoming.NormalNextBlockId ?? string.Empty)
+                && block.ReverseNextBlockId == (incoming.ReverseNextBlockId ?? string.Empty);
         });
     }
 
@@ -239,6 +247,28 @@ internal static class TrackLayoutReconciler
         foreach (var train in state.ScheduledTrains.Where(train => train.LineId == line.LineId && !RouteFits(train, line)).ToList())
         {
             DropSchedule(state, train, result);
+        }
+
+        DropObsoleteStarts(state, line, result);
+    }
+
+    /// <summary>
+    /// Drops schedules not yet released whose start block the revised layout no longer marks as a
+    /// yard entry, so CTC never releases a train from a start that is no longer permitted. A train
+    /// already released (dispatched or being released) is on the track and keeps its schedule.
+    /// </summary>
+    private static void DropObsoleteStarts(CtcSystemState state, CtcLineState line, TrackLayoutSyncResult result)
+    {
+        var entries = line.Blocks.Where(block => block.IsYardEntry).Select(block => block.BlockId).ToHashSet(StringComparer.Ordinal);
+        var obsolete = state.ScheduledTrains
+            .Where(train => train.LineId == line.LineId && !entries.Contains(train.StartBlockId))
+            .Where(train => state.FindDispatchedTrain(train.TrainId) is null)
+            .Where(train => !state.DispatchQueue.Any(entry => entry.TrainId == train.TrainId && entry.QueueStatus == DispatchQueueStatus.Dispatching))
+            .ToList();
+        foreach (var train in obsolete)
+        {
+            DropSchedule(state, train, result);
+            result.InvalidStartTrainIds.Add(train.TrainId);
         }
     }
 
@@ -325,7 +355,14 @@ internal static class TrackLayoutReconciler
         block.HasSwitch = definition.HasSwitch;
         block.HasSignal = definition.HasSignal;
         block.HasCrossing = definition.HasCrossing;
+        block.IsYardEntry = definition.IsYardEntry;
+        block.TravelDirection = Direction(definition);
+        block.NormalNextBlockId = definition.NormalNextBlockId ?? string.Empty;
+        block.ReverseNextBlockId = definition.ReverseNextBlockId ?? string.Empty;
     }
+
+    private static string Direction(TrackBlockDefinition definition) =>
+        string.IsNullOrWhiteSpace(definition.TravelDirection) ? "Bidirectional" : definition.TravelDirection;
 
     private static string DisplayName(CtcLineState line) => string.IsNullOrWhiteSpace(line.Name) ? $"Line {line.LineId}" : line.Name;
 }

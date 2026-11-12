@@ -24,7 +24,8 @@
         "2"
       ],
       "normalNextBlockId": "",
-      "reverseNextBlockId": ""
+      "reverseNextBlockId": "",
+      "isYardEntry": true
     },
     {
       "id": "2",
@@ -621,7 +622,8 @@
         "RED-10"
       ],
       "normalNextBlockId": "",
-      "reverseNextBlockId": ""
+      "reverseNextBlockId": "",
+      "isYardEntry": true
     },
     {
       "id": "RED-10",
@@ -4009,7 +4011,8 @@
         "GREEN-64"
       ],
       "normalNextBlockId": "",
-      "reverseNextBlockId": ""
+      "reverseNextBlockId": "",
+      "isYardEntry": true
     },
     {
       "id": "GREEN-64",

@@ -598,9 +598,9 @@ public class CTCService : ICTCService
         dispatched.SuggestedAuthorityMeters = authority;
         dispatched.AuthorityLimitRouteIndex = authorizedBlocks - 1;
 
-        // CTC knows where the train enters because it released it there. From now on the
-        // location follows sequential occupancy along the active route (TrainLocationTracker).
-        // TODO: real route/yard logic will replace the temporary route-start rule.
+        // CTC knows where the train enters because it released it there: its starting block, a yard
+        // entry checked when the schedule was queued. From now on the location follows sequential
+        // occupancy along the active route (TrainLocationTracker).
         dispatched.CurrentBlockId = scheduledTrain.StartBlockId;
         dispatched.PreviousBlockId = string.Empty;
         dispatched.ActiveRouteIndex = 0;
@@ -904,7 +904,7 @@ public class CTCService : ICTCService
     /// A train is blank, not a supported train (only "001" to "010" can be dispatched),
     /// duplicated, uses an ID a train on another line already has (scheduled, queued or
     /// dispatched), is on an unknown line, has fewer than two route blocks or a block not on its
-    /// line, or its schedule needs a speed above the permitted maximum
+    /// line, does not start at one of its line's yard entries (<see cref="YardEntries"/>), or its schedule needs a speed above the permitted maximum
     /// (see <see cref="SpeedPlanner.ValidateFeasibility"/>).
     /// </exception>
     public void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains)
@@ -948,6 +948,14 @@ public class CTCService : ICTCService
             if (train.Route.Count < 2 || !train.Route[0].IsTimed || !train.Route[^1].IsTimed)
             {
                 throw new ArgumentException($"{TrainIds.DisplayName(train.TrainId)} needs a timed route start block and at least one later timed block.", nameof(scheduledTrains));
+            }
+
+            // A train enters service only from one of its line's yard entries (Route[0] is its
+            // starting block). Dispatcher-readable, so no parameter name.
+            string? startError = YardEntries.Validate(line, train.StartBlockId, TrainIds.DisplayName(train.TrainId), State.Lines);
+            if (startError is not null)
+            {
+                throw new ArgumentException(startError);
             }
 
             var route = ResolveRoute(train, line)

@@ -95,11 +95,48 @@ speed limits, stations, crossings and connections. The automated test
 
 | Item | How it is handled |
 | --- | --- |
-| The yard is not a block. Yard switches: Red 9 ("SWITCH TO/FROM YARD (75-yard)"; the "75" contradicts its row), Green 58 (57-yard) and 62 (yard-63) | Not modelled; those blocks are plain main-line blocks. Trains are placed in their start block, as on Blue. |
+| The yard is not a block. Yard switches: Red 9 ("SWITCH TO/FROM YARD (75-yard)"; the "75" contradicts its row), Green 58 (57-yard) and 62 (yard-63) | Not modelled as track; those blocks are plain main-line blocks. Trains are placed in their start block, as on Blue. The main-line blocks a train enters from the yard are marked `IsYardEntry` (see *Yard entries*). |
 | Signals ("Light") and transponders on Red and Green | None modelled. The Track Controller therefore has no signal to clear on these lines. |
 | Green block 16 is a station with no name | Shown as "Green 16 (unnamed station)". |
 | Station side (Left/Right), "UNDERGROUND" | Not part of the Track Model's block model or of the shared contracts. |
 | Heaters, ambient temperature, waiting passengers | The same documented simulation defaults as the Blue Line. |
+
+## Yard entries
+
+A train enters service only from a **yard entry**: a main-line block the Track Model's layout marks
+`IsYardEntry` (`TrackBlock.IsYardEntry`, published as `TrackBlockDefinition.IsYardEntry` in the
+existing `TrackLayoutMessage`). CTC derives each line's permitted starting blocks from that flag
+alone (`CTC.Core.Scheduling.YardEntries`) and never infers one from the lowest block number, a
+switch or a station. The bundled course data marks:
+
+| Line | Yard entry | Evidence |
+| --- | --- | --- |
+| Blue | `1` (A1) | The worksheet drawing runs Yard → 1 → 2 …; Blue has no yard-switch row. |
+| Red | `RED-9` (C9) | Row 9 is the only yard switch, "SWITCH TO/FROM YARD (75-yard)". **Uncertain:** its leg text names 75, which contradicts the row (block 75 is nowhere near 9), so the entry rests on the switch row alone (and on both schematics joining the yard at 9). If the corrected data names 8 or 10, change the flag there. |
+| Green | `GREEN-63` (K63) | Row 62, "SWITCH FROM YARD (Yard-63)": the yard joins block 63. Row 58, "SWITCH TO YARD (57-yard)", is the way *into* the yard from 57, so `GREEN-57` is an exit, not an entry; the switch rows 58 and 62 are not entries; `GREEN-1` and `GREEN-14` have no yard evidence. |
+
+The XLSX importer derives these from the yard text and rejects a workbook whose yard text does not
+state them; a JSON layout without the field, or a CSV without an `IsYardEntry` column, has no yard
+entries, and CTC then refuses to schedule on that line with an explanation. A layout revision that
+removes a yard entry drops any not-yet-released schedule starting there (reported in the layout
+summary); released trains are unaffected.
+
+In the Schedule Builder each train has its own starting-block selector offering only the line's
+yard entries (preselected when there is just one). That train's time in its starting block is its
+departure time; the converter builds the route from that block, so `ScheduledTrain.Route[0]`,
+`ScheduledTrain.StartBlockId` and `TrainDispatchRequestMessage.StartBlockId` are the selected block.
+`CTCService.QueueSchedule` enforces the same rule for every caller.
+
+**Routing limitation.** CTC routes by connectivity only (fewest blocks, no block twice). It does
+not apply the Track Model's direction of travel or switch geometry, which the Track Controller does.
+The Schedule Builder therefore reports, after queueing, any step against the direction of travel or
+any pass through a switch from one leg to the other (`RouteGeometry`); it does not change or block
+the route. For example, from `GREEN-63` to Edgebrook (`GREEN-9`) the shortest connected route runs
+63 → 62 → … → 29 against Green's one-way direction and is refused by the Track Controller ("No
+permitted connection from GREEN-63 to GREEN-62"); forcing it forward (timing e.g. `GREEN-120`)
+gives 76 → 77 → 101, two legs of switch 77, which the Track Controller cannot align. The legal route
+(… 76, 77, 78 … 85, 86 … 100, 85, 84 … 77, 101 … 150, 28 … 13, 12 … 9) passes 77–85 twice, which
+CTC's planner cannot produce.
 
 ## Identifiers
 

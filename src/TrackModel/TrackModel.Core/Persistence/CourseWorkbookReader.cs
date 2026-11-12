@@ -29,6 +29,14 @@ namespace TrackModel.Core.Persistence;
 ///   branches (Red 66-67 and 71-72, Green 100-101): those blocks join their switches instead.</item>
 ///   <item>Yard switches (Red 9, Green 58 and 62) are not modelled: the yard is not a block in the
 ///   workbook, so those blocks stay plain main-line blocks.</item>
+///   <item>Yard entries (<see cref="TrackBlock.IsYardEntry"/>), the main-line blocks a train leaving
+///   the yard enters first, come from the yard text and are checked against it. Blue: block 1, where
+///   the worksheet's drawing joins the yard (Blue has no yard switch row). Green: 63 only, named by
+///   "SWITCH FROM YARD (Yard-63)"; "SWITCH TO YARD (57-yard)" is the way INTO the yard from 57, so
+///   57 is an exit, not an entry, and the switch rows 58 and 62 are not entries either. Red: block
+///   9, the row of the only yard switch, "SWITCH TO/FROM YARD (75-yard)". Its leg text names 75,
+///   which contradicts its own row (block 75 is nowhere near 9), so the entry rests on the switch
+///   row alone; see the integration guide. Nothing else is ever marked.</item>
 ///   <item>The worksheets have no signal ("Light") or transponder entries for Red and Green, so
 ///   none are modelled; station side and "UNDERGROUND" are not part of this model.</item>
 ///   <item>Direction of travel is taken from the workbook's Track Layout drawing: Red is
@@ -42,16 +50,17 @@ internal static class CourseWorkbookReader
 {
     private static readonly XNamespace S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private static readonly XNamespace R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    private static readonly Regex YardLeg = new(@"\(\s*(yard|\d+)\s*-\s*(yard|\d+)\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex SwitchLegs = new(@"SWITCH\s*\(\s*(\d+)\s*-\s*(\d+)\s*;\s*(\d+)\s*-\s*(\d+)\s*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>Course data for a Red or Green worksheet: expected size, ID prefix, and the vF5 switches (switch, Normal, Reverse).</summary>
-    private sealed record LineSheet(string Sheet, string LineId, string IdPrefix, int Blocks, (int Switch, int Normal, int Reverse)[] Switches, int[] YardSwitchRows, Func<int, string> Direction);
+    private sealed record LineSheet(string Sheet, string LineId, string IdPrefix, int Blocks, (int Switch, int Normal, int Reverse)[] Switches, int[] YardSwitchRows, int[] YardEntries, Func<int, string> Direction);
 
     private static readonly LineSheet Red = new("Red Line", "Red", "RED-", 76,
-        [(16, 15, 1), (27, 28, 76), (33, 32, 72), (38, 39, 71), (44, 43, 67), (52, 53, 66)], [9], _ => "Bidirectional");
+        [(16, 15, 1), (27, 28, 76), (33, 32, 72), (38, 39, 71), (44, 43, 67), (52, 53, 66)], [9], [9], _ => "Bidirectional");
 
     private static readonly LineSheet Green = new("Green Line", "Green", "GREEN-", 150,
-        [(13, 12, 1), (28, 29, 150), (77, 76, 101), (85, 86, 100)], [58, 62],
+        [(13, 12, 1), (28, 29, 150), (77, 76, 101), (85, 86, 100)], [58, 62], [63],
         n => n <= 12 ? "Reverse" : n <= 28 ? "Bidirectional" : n <= 76 ? "Forward" : n <= 85 ? "Bidirectional" : "Forward");
 
     public static TrackLayout Load(string path)
@@ -131,6 +140,8 @@ internal static class CourseWorkbookReader
             throw new InvalidDataException("Blue Line infrastructure does not match the course vF5 topology.");
         Block(5).NormalNextBlockId = "6"; Block(5).ReverseNextBlockId = "11";
         foreach (var n in new[] { 9, 14 }) { Block(n).Beacon = Block(n + 1).StationName; Block(n).BeaconTargetBlockId = Block(n + 1).Id; }
+        // The worksheet's drawing runs Yard -> 1 -> 2 ...; the yard is not a block, so block 1 is the entry.
+        Block(1).IsYardEntry = true;
         return blocks;
     }
 
@@ -140,6 +151,7 @@ internal static class CourseWorkbookReader
         var byNumber = new SortedDictionary<int, TrackBlock>();
         var switches = new List<(int Row, int Switch, int Normal, int Reverse)>();
         var yardRows = new List<int>();
+        var yardTexts = new Dictionary<int, string>();
         var elevation = 0d;
         for (int i = 1; i < rows.Count; i++)
         {
@@ -156,7 +168,7 @@ internal static class CourseWorkbookReader
             var infrastructure = cells.GetValueOrDefault("G", "").Trim();
             if (infrastructure.Contains("SWITCH", StringComparison.OrdinalIgnoreCase))
             {
-                if (infrastructure.Contains("YARD", StringComparison.OrdinalIgnoreCase)) yardRows.Add(number);
+                if (infrastructure.Contains("YARD", StringComparison.OrdinalIgnoreCase)) { yardRows.Add(number); yardTexts[number] = infrastructure; }
                 else if (SwitchLegs.Match(infrastructure) is { Success: true } legs)
                 {
                     int[] pair1 = [int.Parse(legs.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(legs.Groups[2].Value, CultureInfo.InvariantCulture)];
@@ -188,6 +200,13 @@ internal static class CourseWorkbookReader
         if (!found.SequenceEqual(line.Switches.Order()) || !yardRows.Order().SequenceEqual(line.YardSwitchRows))
             throw new InvalidDataException($"{line.Sheet} switches do not match the course vF5 topology.");
 
+        foreach (var entry in line.YardEntries)
+        {
+            if (!IsStatedYardEntry(entry, yardTexts))
+                throw new InvalidDataException($"{line.Sheet} yard switches do not state block {entry} as the yard entry (course vF5).");
+            byNumber[entry].IsYardEntry = true;
+        }
+
         TrackBlock Block(int n) => byNumber[n];
         void Connect(int a, int b)
         {
@@ -214,6 +233,30 @@ internal static class CourseWorkbookReader
         }
 
         return [.. byNumber.Values];
+    }
+
+    /// <summary>
+    /// Whether the workbook's yard text supports <paramref name="entry"/> as a yard entry: a switch
+    /// leg "yard-n" (from the yard into n), or the row of a "TO/FROM YARD" switch whose leg text
+    /// does not name a neighbouring block (Red 9's "75-yard"). A "n-yard" leg on a "TO YARD" switch
+    /// leads into the yard and never makes n an entry.
+    /// </summary>
+    private static bool IsStatedYardEntry(int entry, IReadOnlyDictionary<int, string> yardTexts)
+    {
+        foreach (var (row, text) in yardTexts)
+        {
+            var leg = YardLeg.Match(text);
+            if (!leg.Success) continue;
+            bool fromYard = leg.Groups[1].Value.Equals("yard", StringComparison.OrdinalIgnoreCase);
+            string namedText = fromYard ? leg.Groups[2].Value : leg.Groups[1].Value;
+            if (!int.TryParse(namedText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var named)) continue;
+            bool bothWays = text.Contains("TO/FROM", StringComparison.OrdinalIgnoreCase);
+            if ((fromYard || bothWays) && named == entry) return true;
+            // A both-ways yard switch whose leg contradicts its own row (Red 9's "75-yard"): its row is the entry.
+            if (bothWays && Math.Abs(named - row) > 1 && row == entry) return true;
+        }
+
+        return false;
     }
 
     /// <summary>"STATION; PENN STATION; UNDERGROUND" -> "Penn Station". A station row without a name is named after its block, visibly.</summary>

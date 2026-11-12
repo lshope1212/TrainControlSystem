@@ -324,7 +324,8 @@ public partial class TrackService : ITrackService
                 // CTC plans speeds from the contract's km/h field; both describe the same civil limit.
                 SpeedLimitKilometersPerHour = UnitConversion.MetersPerSecondToKilometersPerHour(b.SpeedLimitMetersPerSecond),
                 HasHeater = b.HasHeater, Beacon = b.Beacon, BeaconTargetBlockId = b.BeaconTargetBlockId,
-                NormalNextBlockId = b.NormalNextBlockId, ReverseNextBlockId = b.ReverseNextBlockId
+                NormalNextBlockId = b.NormalNextBlockId, ReverseNextBlockId = b.ReverseNextBlockId,
+                IsYardEntry = b.IsYardEntry
             }).ToList()
         }).ToList()
     };

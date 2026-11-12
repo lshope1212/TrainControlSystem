@@ -24,8 +24,27 @@ internal static class BlueLine
     /// <summary>A1 → A5 → C11 → C15.</summary>
     public static readonly string[] BranchC = ["A1", "A2", "A3", "A4", "A5", "C11", "C12", "C13", "C14", "C15"];
 
+    /// <summary>
+    /// The fixture's yard entry: A1, where the real Blue Line's yard joins. Tests that need a train
+    /// to enter service elsewhere state their own fixture yard entries (<see cref="CreateLayout"/>);
+    /// CTC itself never accepts a start the layout does not mark.
+    /// </summary>
+    public static readonly string[] YardEntries = ["A1"];
+
     /// <param name="speedLimitKph">Overrides the speed limit of every block (e.g. to exceed the vehicle maximum).</param>
-    public static TrackLayoutMessage CreateLayout(double speedLimitKph = SpeedLimitKilometersPerHour) => new TrackLayoutMessage
+    /// <param name="yardEntries">The fixture layout's yard-entry blocks; <see cref="YardEntries"/> (A1) by default.</param>
+    public static TrackLayoutMessage CreateLayout(double speedLimitKph = SpeedLimitKilometersPerHour, string[]? yardEntries = null)
+    {
+        var layout = CreateTopology(speedLimitKph);
+        foreach (var block in layout.Lines[0].Blocks)
+        {
+            block.IsYardEntry = (yardEntries ?? YardEntries).Contains(block.BlockId);
+        }
+
+        return layout;
+    }
+
+    private static TrackLayoutMessage CreateTopology(double speedLimitKph) => new TrackLayoutMessage
     {
         Lines =
         {
@@ -55,10 +74,10 @@ internal static class BlueLine
         },
     };
 
-    public static CTCService CreateService(IMessageSender? sender = null, double speedLimitKph = SpeedLimitKilometersPerHour)
+    public static CTCService CreateService(IMessageSender? sender = null, double speedLimitKph = SpeedLimitKilometersPerHour, string[]? yardEntries = null)
     {
         var service = new CTCService(sender ?? new FakeMessageSender());
-        service.ApplyTrackLayout(CreateLayout(speedLimitKph));
+        service.ApplyTrackLayout(CreateLayout(speedLimitKph, yardEntries));
         ReportAllClear(service);
         return service;
     }
@@ -130,8 +149,10 @@ internal static class BlueLine
         var green = new TrackLineDefinition { LineId = GreenLineId, Name = "Green Line" };
         foreach (var block in layout.Lines[0].Blocks)
         {
-            green.Blocks.Add(Block("G-" + block.BlockId, block.BlockNumber, block.Section, block.SpeedLimitKilometersPerHour,
-                block.ConnectedBlockIds.Select(id => "G-" + id).ToArray()));
+            var copy = Block("G-" + block.BlockId, block.BlockNumber, block.Section, block.SpeedLimitKilometersPerHour,
+                block.ConnectedBlockIds.Select(id => "G-" + id).ToArray());
+            copy.IsYardEntry = block.IsYardEntry;
+            green.Blocks.Add(copy);
         }
 
         layout.Lines.Add(green);

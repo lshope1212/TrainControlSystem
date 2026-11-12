@@ -50,6 +50,8 @@ public class ScheduleBuilderViewModel : ViewModelBase
             }
 
             OnPropertyChanged(nameof(LineName));
+            OnPropertyChanged(nameof(YardEntryNotice));
+            OnPropertyChanged(nameof(HasNoYardEntries));
 
             if (_template is not null)
             {
@@ -60,6 +62,32 @@ public class ScheduleBuilderViewModel : ViewModelBase
     }
 
     public string LineName => Line?.Name ?? "No line selected";
+
+    /// <summary>
+    /// The line's permitted starting blocks (its yard entries), or why it cannot be scheduled when
+    /// its track layout states none. Empty when no line is selected.
+    /// </summary>
+    public string YardEntryNotice
+    {
+        get
+        {
+            if (Line is null)
+            {
+                return string.Empty;
+            }
+
+            var entries = YardEntries.For(Line);
+            return entries.Count == 0
+                ? YardEntries.NoneConfiguredMessage(Line)
+                : $"Starting blocks (yard entries): {string.Join(", ", entries.Select(YardEntries.Label))}";
+        }
+    }
+
+    /// <summary>The selected line's layout has no yard entries, so nothing can be scheduled on it.</summary>
+    public bool HasNoYardEntries => Line is not null && YardEntries.For(Line).Count == 0;
+
+    /// <summary>One starting-block selector per train of the current template, in column order.</summary>
+    public ObservableCollection<TrainStartSelectionViewModel> TrainStarts { get; } = new ObservableCollection<TrainStartSelectionViewModel>();
 
     public string NumberOfTrainsText
     {
@@ -107,6 +135,12 @@ public class ScheduleBuilderViewModel : ViewModelBase
             return;
         }
 
+        if (HasNoYardEntries)
+        {
+            StatusMessage = $"Schedule template not generated: {YardEntries.NoneConfiguredMessage(Line)}";
+            return;
+        }
+
         // Supported IDs (001-010) no scheduled, queued or dispatched train uses on any line, so a
         // new template never reuses a train ID. Too few left is reported, never thrown.
         try
@@ -120,7 +154,8 @@ public class ScheduleBuilderViewModel : ViewModelBase
         }
 
         StatusMessage = $"Generated a {trainCount}-train template for {Line.Name}. "
-            + $"Enter each train's route start time and the time it enters any later blocks (e.g. stations) as {ScheduleTemplateConverter.TimeFormat}; "
+            + StartInstruction()
+            + $"Enter each train's departure time in its starting block and the time it enters any later blocks (e.g. stations) as {ScheduleTemplateConverter.TimeFormat}; "
             + "CTC routes the train through the blank blocks in between. "
             + "Each timed stop gets a default Dwell (45 s at a station, otherwise 0 s), which you can change.";
     }
@@ -152,6 +187,13 @@ public class ScheduleBuilderViewModel : ViewModelBase
             // Show the routes CTC worked out, so the dispatcher can check the blank blocks were filled in as intended.
             var routes = result.Trains.Select(train => $"{TrainIds.DisplayName(train.TrainId)}: {string.Join(" → ", train.Route.Select(block => block.BlockId))}");
             StatusMessage = $"Queued {result.Trains.Count} train(s) for {Line.Name}. {string.Join("; ", routes)}";
+
+            // CTC routes by connectivity only; say so when the wayside will refuse the route it built.
+            var problems = result.Trains.SelectMany(train => RouteGeometry.FindProblems(Line, train)).ToList();
+            if (problems.Count > 0)
+            {
+                StatusMessage += $" Warning: {string.Join(" ", problems)}";
+            }
         }
         catch (ArgumentException ex)
         {
@@ -179,6 +221,12 @@ public class ScheduleBuilderViewModel : ViewModelBase
             CheckFileExists = true,
         };
 
+        if (HasNoYardEntries)
+        {
+            StatusMessage = $"Schedule upload failed: {YardEntries.NoneConfiguredMessage(Line)}";
+            return;
+        }
+
         if (dialog.ShowDialog() != true)
         {
             return;
@@ -196,6 +244,21 @@ public class ScheduleBuilderViewModel : ViewModelBase
             return;
         }
 
+        LoadCsv(csv, fileName);
+    }
+
+    /// <summary>
+    /// Shows an imported CSV schedule for review (the file-dialog-free part of Upload Schedule).
+    /// Trains whose starting block the file does not determine are listed for the dispatcher to choose.
+    /// </summary>
+    public void LoadCsv(string csv, string fileName)
+    {
+        if (Line is null)
+        {
+            StatusMessage = "Select a line before uploading a schedule.";
+            return;
+        }
+
         // The same IDs a generated template would get, so an imported schedule never reuses a train ID.
         var result = ScheduleCsvImporter.Import(Line, csv, TrainIds.AvailableIds(_ctc.State));
         if (!result.IsSuccess)
@@ -207,8 +270,61 @@ public class ScheduleBuilderViewModel : ViewModelBase
         var template = result.Template!;
         ShowTemplate(template);
         NumberOfTrainsText = template.TrainIds.Count.ToString(CultureInfo.InvariantCulture);
+        string starts = result.TrainsNeedingStartSelection.Count == 0
+            ? string.Empty
+            : $"Choose a starting block for {string.Join(", ", result.TrainsNeedingStartSelection.Select(TrainIds.DisplayName))}: the file does not determine it. ";
         StatusMessage = $"Loaded {template.TrainIds.Count}-train schedule for {Line.Name} from {fileName}. "
+            + starts
             + "Review the schedule, then press Queue Schedule.";
+    }
+
+    /// <summary>
+    /// Called after CTC applied a new track layout. A template whose line's yard entries or blocks
+    /// changed was built from an obsolete layout (its starting-block choices may no longer be
+    /// permitted), so it is discarded rather than queued from stale data.
+    /// </summary>
+    public void OnTrackLayoutChanged()
+    {
+        OnPropertyChanged(nameof(YardEntryNotice));
+        OnPropertyChanged(nameof(HasNoYardEntries));
+        if (_template is null || Line is null)
+        {
+            return;
+        }
+
+        bool sameEntries = YardEntries.For(Line).Select(block => block.BlockId).SequenceEqual(_template.YardEntryBlockIds);
+        bool sameBlocks = Line.Blocks.Select(block => block.BlockId).SequenceEqual(_template.Rows.Select(row => row.BlockId));
+        if (!sameEntries || !sameBlocks)
+        {
+            ClearTemplate();
+            string what = sameEntries ? "its blocks" : "its yard entries";
+            StatusMessage = $"{Line.Name}: the track layout changed ({what}), so the template's starting blocks may no longer be valid. Generate a new schedule template.";
+        }
+    }
+
+    private string StartInstruction()
+    {
+        if (_template is null)
+        {
+            return string.Empty;
+        }
+
+        return _template.YardEntryBlockIds.Count == 1
+            ? $"Every train starts at the line's only yard entry, {_template.DescribeYardEntries()}. "
+            : $"Choose each train's starting block (yard entries: {_template.DescribeYardEntries()}). ";
+    }
+
+    private void OnStartBlockChanged(int column, StartBlockChange change)
+    {
+        foreach (var row in Rows)
+        {
+            row.TrainTimes[column].Refresh();
+        }
+
+        if (change.Message is not null)
+        {
+            StatusMessage = change.Message;
+        }
     }
 
     /// <summary>
@@ -237,6 +353,11 @@ public class ScheduleBuilderViewModel : ViewModelBase
         {
             Rows.Add(new ScheduleTemplateRowViewModel(template, row, error => StatusMessage = error));
         }
+
+        for (int column = 0; column < template.TrainIds.Count; column++)
+        {
+            TrainStarts.Add(new TrainStartSelectionViewModel(template, column, OnStartBlockChanged));
+        }
     }
 
     private void ClearTemplate()
@@ -244,5 +365,6 @@ public class ScheduleBuilderViewModel : ViewModelBase
         _template = null;
         Rows.Clear();
         TrainColumns.Clear();
+        TrainStarts.Clear();
     }
 }

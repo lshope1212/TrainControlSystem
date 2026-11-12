@@ -366,7 +366,9 @@ public class CtcDispatchTests
     public async Task UnsafeStartForOneTrain_DoesNotStopOtherDueTrains()
     {
         var sender = new FakeMessageSender();
-        var service = BlueLine.CreateService(sender);
+        // Test fixture only: a second yard entry at C11, so two trains can enter on different branches.
+        // The production Blue Line has one yard entry (block 1); CTC accepts only starts its layout marks.
+        var service = BlueLine.CreateService(sender, yardEntries: ["A1", "C11"]);
         service.QueueSchedule([Train("001", At(12, 0, 2)), BlueLine.Train("002", At(12, 0, 4), route: ["C11", "C12", "C13"])]);
         BlueLine.Report(service, "A1", OccupancyState.Occupied);
 

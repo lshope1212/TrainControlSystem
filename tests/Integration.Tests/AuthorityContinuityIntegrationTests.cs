@@ -267,7 +267,7 @@ public sealed class AuthorityContinuityIntegrationTests
         TrainRun[] runs =
         [
             new("001", "Blue", ["1", "2", "3", "4"]),
-            new("003", "Red", ["RED-20", "RED-21", "RED-22", "RED-23", "RED-24", "RED-25"]),
+            new("003", "Red", PhysicalDispatchIntegrationTests.RedRoute),
             new("005", "Green", ["GREEN-63", "GREEN-64", "GREEN-65", "GREEN-66", "GREEN-67", "GREEN-68"]),
         ];
         await using var system = await StartAsync(true, null, runs);
