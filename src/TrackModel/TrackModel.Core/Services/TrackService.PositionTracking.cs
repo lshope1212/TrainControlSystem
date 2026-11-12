@@ -534,6 +534,7 @@ public partial class TrackService
         train.HeadIndex = head;
         if (cleared.Count > 0 || entered.Count > 0 || previousHead != headId)
         {
+            ForgetCompletedPassengerStops();
             OccupancyTransition?.Invoke(this, new(train.TrainId, train.LineId, entered, cleared, headId));
         }
     }

@@ -52,7 +52,7 @@ public class TrackServiceTests
     }
 
     [TestMethod]
-    public void PassengerExchange_RetryDoesNotDoubleCountPassengersOrTickets()
+    public void PassengerExchange_RetryDoesNotDoubleCountPassengers_AndDoesNotSellTickets()
     {
         var service = CreateService();
         var message = new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "104",
@@ -60,9 +60,9 @@ public class TrackServiceTests
         service.ApplyTrainUpdate(message);
         service.ApplyTrainUpdate(message);
         Assert.AreEqual(12, service.FindBlock("104")!.WaitingPassengers);
-        Assert.AreEqual(12, service.FindBlock("104")!.TicketsSold);
+        Assert.AreEqual(0, service.FindBlock("104")!.TicketsSold);
         Assert.AreEqual(8, service.FindBlock("104")!.DisembarkingPassengers);
-        Assert.AreEqual(12, service.CreateTicketSales("Blue").TicketsPerHour);
+        Assert.AreEqual(0, service.CreateTicketSales("Blue").TicketsPerHour);
     }
 
     [TestMethod]
@@ -128,6 +128,7 @@ public class TrackServiceTests
     public void TicketThroughput_ExpiresAfterOneSimulationHourButPreservesStationTotals()
     {
         var service = CreateService();
+        service.RecordStationArrivals("104", 12);
         service.ApplyTrainUpdate(new() { TrainId = "001", CurrentBlockId = "104", BoardingPassengers = 12, ExchangeId = "first" });
         service.SetSystemTime(TimeSpan.FromMinutes(59));
         Assert.AreEqual(12, service.CreateTicketSales("Blue").TicketsPerHour);

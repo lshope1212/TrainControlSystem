@@ -219,8 +219,7 @@ public partial class TrackService : ITrackService
                 throw new ArgumentException("Passenger exchange requires a stopped train.");
             if (message.BoardingPassengers > destination.WaitingPassengers)
                 throw new ArgumentException("Boarding exceeds the passengers waiting at this station.");
-            if (message.BoardingPassengers > int.MaxValue - destination.TicketsSold
-                || message.BoardingPassengers > int.MaxValue - destination.BoardingPassengers
+            if (message.BoardingPassengers > int.MaxValue - destination.BoardingPassengers
                 || message.DisembarkingPassengers > int.MaxValue - destination.DisembarkingPassengers)
                 throw new ArgumentException("Passenger totals are too large.");
         }
@@ -252,8 +251,6 @@ public partial class TrackService : ITrackService
                 destination.WaitingPassengers -= message.BoardingPassengers;
                 destination.BoardingPassengers += message.BoardingPassengers;
                 destination.DisembarkingPassengers += message.DisembarkingPassengers;
-                destination.TicketsSold += message.BoardingPassengers;
-                if (message.BoardingPassengers > 0) _sales.Enqueue((SystemTime, destination.LineId, message.BoardingPassengers));
                 _exchanges.Add(exchangeKey);
             }
         }
@@ -374,5 +371,9 @@ public partial class TrackService : ITrackService
     {
         if (!double.IsFinite(value) || value < 0) throw new ArgumentException(name + " must be a finite, nonnegative number.");
     }
-    private void Changed() => StateChanged?.Invoke(this, EventArgs.Empty);
+    private void Changed()
+    {
+        ForgetCompletedPassengerStops();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
 }

@@ -95,7 +95,7 @@ public sealed class TrackModelConnection
     private readonly DispatcherTimer _debounce;
 
     // Train environments for the Train Model's own sender (see ForwardTrainEnvironmentsAsync).
-    private readonly Channel<List<TrackModelTrainEnvironmentMessage>> _trainModelPending = Channel.CreateBounded<List<TrackModelTrainEnvironmentMessage>>(
+    private readonly Channel<TrainInputsSnapshot> _trainModelPending = Channel.CreateBounded<TrainInputsSnapshot>(
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
 
     // Activation commands for the Train Model: few, ordered, never dropped.
@@ -185,11 +185,39 @@ public sealed class TrackModelConnection
     /// </summary>
     private async Task ForwardTrainEnvironmentsAsync(CancellationToken token)
     {
+        var previousTrains = new HashSet<string>(StringComparer.Ordinal);
+        var sentBeacons = new Dictionary<string, (string Payload, DateTimeOffset SentAt)>(StringComparer.Ordinal);
         try
         {
-            await foreach (var environments in _trainModelPending.Reader.ReadAllAsync(token))
+            await foreach (var snapshot in _trainModelPending.Reader.ReadAllAsync(token))
             {
-                bool delivered = await SendBatchAsync(_endpoints.TrainModel, environments, token);
+                bool delivered = await SendBatchAsync(_endpoints.TrainModel, snapshot.Environments, token);
+                if (delivered)
+                {
+                    var current = snapshot.Environments.Where(e => e.TrainId.Length > 0).Select(e => e.TrainId).ToHashSet(StringComparer.Ordinal);
+                    foreach (var departed in previousTrains.Except(current).ToList())
+                    {
+                        delivered &= await TrySendAsync(_endpoints.TrainModel, new StationPassengerMessage { TrainId = departed }, token);
+                        delivered &= await TrySendAsync(_endpoints.TrainModel, new BeaconMessage { TrainId = departed }, token);
+                        if (delivered) { previousTrains.Remove(departed); sentBeacons.Remove(departed); }
+                    }
+                    foreach (var environment in snapshot.Environments.Where(e => e.TrainId.Length > 0))
+                    {
+                        // This existing typed input is already handled by the unchanged Train Model.
+                        previousTrains.Add(environment.TrainId);
+                        delivered &= await TrySendAsync(_endpoints.TrainModel, new StationPassengerMessage
+                            { TrainId = environment.TrainId, WaitingToBoard = environment.WaitingPassengers }, token);
+                    }
+                    foreach (var beacon in snapshot.Beacons)
+                    {
+                        var payload = MessageSerializer.Serialize(beacon);
+                        if (sentBeacons.TryGetValue(beacon.TrainId, out var previous) && previous.Payload == payload
+                            && DateTimeOffset.UtcNow - previous.SentAt < DefaultFeedbackHeartbeat) continue;
+                        var sent = await TrySendAsync(_endpoints.TrainModel, beacon, token);
+                        delivered &= sent;
+                        if (sent) sentBeacons[beacon.TrainId] = (payload, DateTimeOffset.UtcNow);
+                    }
+                }
                 bool changed;
                 lock (_delivery) { changed = _delivery[1] != delivered; _delivery[1] = delivered; }
                 if (changed) await ReportDeliveryAsync(token);
@@ -286,8 +314,8 @@ public sealed class TrackModelConnection
                         ApplyRouteUpdate(MessageSerializer.DeserializePayload<TrainRouteUpdateMessage>(envelope)); break;
                     case nameof(PassengerExchangeMessage):
                         var exchange = MessageSerializer.DeserializePayload<PassengerExchangeMessage>(envelope);
-                        // Informational: station counts follow TrackModelTrainUpdateMessage exchanges.
-                        Log($"Train {exchange.TrainId} passenger exchange reported: {exchange.Boarded} boarded, {exchange.Alighted} alighted, {exchange.LeftBehind} left behind.");
+                        var applied = _track.ApplyPassengerExchange(exchange);
+                        Log($"Train {exchange.TrainId} passenger exchange {(applied ? "recorded" : "unchanged")}: {exchange.Boarded} boarded, {exchange.Alighted} alighted, {exchange.LeftBehind} left behind.");
                         break;
                     case nameof(TrackModelFailureCommandMessage):
                         _track.ApplyFailures(MessageSerializer.DeserializePayload<TrackModelFailureCommandMessage>(envelope));
@@ -499,7 +527,7 @@ public sealed class TrackModelConnection
         var sequence = ++_environmentSequence;
         var environments = _track.Layout.Blocks.OrderBy(b => !(b.IsOccupied && b.IsTrainHead)).Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
         foreach (var environment in environments) { environment.SnapshotId = snapshotId; environment.Sequence = sequence; }
-        _trainModelPending.Writer.TryWrite(environments);
+        QueueTrainInputs(environments);
         var sales = _track.Layout.Blocks.Select(b => b.LineId).Distinct().Select(_track.CreateTicketSales).ToList();
         _pending.Writer.TryWrite(new(_track.LayoutRevision, _layoutRequestVersion, layout,
             sales, new SystemTimeMessage { SystemTime = _track.SystemTime }));
@@ -522,7 +550,7 @@ public sealed class TrackModelConnection
         var sequence = ++_environmentSequence;
         var environments = _track.Layout.Blocks.Where(b => b.IsTrainHead && b.TrainId.Length > 0).Select(b => _track.CreateTrainEnvironment(b.Id)).ToList();
         foreach (var environment in environments) { environment.SnapshotId = _latestSnapshotId; environment.Sequence = sequence; }
-        if (environments.Count > 0) _trainModelPending.Writer.TryWrite(environments);
+        QueueTrainInputs(environments);
         Interlocked.Exchange(ref _lastFullCaptureTimestamp, Stopwatch.GetTimestamp());
         return CaptureBlockStates(_latestSnapshotId, NextObservationTime());
     }
@@ -820,6 +848,16 @@ public sealed class TrackModelConnection
     }
 
     private void Report(string text) => _dispatcher.InvokeAsync(() => StatusReported?.Invoke(this, text));
+
+    // Capture auxiliary inputs on the owning thread, just like the existing environment snapshots.
+    private void QueueTrainInputs(List<TrackModelTrainEnvironmentMessage> environments)
+    {
+        var beacons = environments.Where(e => e.TrainId.Length > 0)
+            .Select(e => _track.CreateTrainBeacon(e.BlockId)).OfType<BeaconMessage>().ToList();
+        _trainModelPending.Writer.TryWrite(new(environments, beacons));
+    }
+
+    private sealed record TrainInputsSnapshot(List<TrackModelTrainEnvironmentMessage> Environments, List<BeaconMessage> Beacons);
 
     private sealed record ControllerEntry(IReadOnlyList<object> Messages, bool Coalescible);
 
