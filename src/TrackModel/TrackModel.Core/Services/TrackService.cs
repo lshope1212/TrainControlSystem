@@ -143,6 +143,9 @@ public partial class TrackService : ITrackService
         if (sequence > 0 && sequence <= b.CommandSequence) return false;
         if (b.HasSwitch && b.IsOccupied && b.Switch != message.Switch)
             throw new InvalidOperationException("An occupied switch cannot be thrown.");
+        // The switch machine is powered from its block: without power the points cannot move.
+        if (b.HasSwitch && b.PowerFailure && b.Switch != message.Switch)
+            throw new InvalidOperationException("A switch without power cannot be thrown.");
         var changed = b.CommandedSpeedMetersPerSecond != message.CommandedSpeedMetersPerSecond || b.AuthorityMeters != message.AuthorityMeters
             || b.MovementRequestId != requestId || b.AuthorityEntryBlockId != entry
             || (b.HasSwitch && b.Switch != message.Switch) || (b.HasSignal && b.Signal != message.Signal) || (b.HasCrossing && b.Crossing != message.Crossing);

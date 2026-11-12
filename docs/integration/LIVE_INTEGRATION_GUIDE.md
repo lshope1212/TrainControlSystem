@@ -688,7 +688,103 @@ These conditions still apply:
 7. The Train Controller shows positive commanded speed and authority, releases the service brake and
    accelerates. Occupancy moves 1 → 2 → … → 7 in the Track Model, Track Controller and CTC.
 
-For Station C (block 15), request switch 5 Reverse from CTC while its protection zone is clear and no active movement locks it. Wait for the reported Reverse position; signal 11 then clears the same way.
+For Station C (block 15) queue Train 001 from `A1` to `C15` instead. Nothing has to be done to
+switch 5: the Track Controller sets it Reverse for the route by itself (see
+[Automatic switch alignment](#automatic-switch-alignment)). The Track Controller column briefly
+shows *Waiting for switch 5 alignment feedback; this request needs 11 (switch 5 commanded Reverse
+for this route; waiting for the Track Model to report Reverse ...)*, the Track Model's switch 5 turns
+to block 11, signal 11 then clears the same way, and the train runs 1 -> ... -> 5 -> 11 -> ... -> 15.
+
+## Automatic switch alignment
+
+A train's route sets its own switches. CTC only requests the movement; the Track Controller derives
+each switch position the route needs, decides whether the switch may move, commands it, and grants
+authority only on the Track Model's reported position. Nothing else (no CTC switch request, no test
+or operator action) is needed for a route that leaves a switch the other way.
+
+### Why switch 5 used to stay Normal ("Waiting for switch 5 alignment feedback..." forever)
+
+1. **No position was ever selected from the route.** The Track Controller's switch command was the
+   reported position unless a separate `SwitchPositionRequestMessage` had set a desired position.
+   A movement request names its whole route, but nothing turned that route into a switch command, so
+   the route evaluation waited for an alignment nobody had asked for.
+2. **Even an explicit switch request was refused.** Switch protection required every protection-zone
+   block to report `TrackModelBlockStateMessage.IsReservedByCtc == false` (PLC: `reserved_known` and
+   not `reserved`). The Track Model never set that field (it has no knowledge of CTC routes), so every
+   zone looked "missing CTC reservation feedback" and no switch could move.
+
+### Reservations: what they are and who owns them
+
+A **CTC reservation is an accepted CTC movement request.** CTC creates it by sending the request
+(target block, entry block, route), keeps it by renewing it within the 10 s request watchdog, and
+releases it by cancelling it. The Track Controller retires it when its target block reports clear
+(the train has moved on, and its successor request holds the route ahead). The router shares each
+coordinated request with the waysides on its line. Each switch's protection zone belongs to its
+owner, so that owner's request table covers all reservations affecting its switch. No new message or Track Model state is
+needed: the reservation is synchronized by the existing request, renewal and cancellation traffic.
+
+* A reservation other than the route asking for the switch locks it (the PLC's `reserved` input).
+  The requesting route's own pending reservation never locks the switch it needs, so a route cannot
+  deadlock itself. Once that route is granted, its grant locks the zone (`movement_locked`).
+* A request that expired without being cancelled (CTC stopped renewing it) is stale: it no longer
+  authorizes anything, but it still reserves, so stale information restricts.
+* A reservation the track feedback does report (`IsReservedByCtc = true`, e.g. from a test harness)
+  is honoured in addition. The Track Model leaves the field empty; that no longer means "unknown",
+  because the Track Model is not where reservations live.
+* `WaysideBlockStatus.IsReservedByCtc` now shows whether the controller holds a reservation on the block.
+
+### The sequence for Train 001, block 1 to Station C (block 15), switch 5 starting Normal
+
+1. CTC detects Train 001 in block 1 and sends its request: target 1, route 2 3 4 5 11 12 13 14 15.
+2. The Track Controller accepts it. The route enters switch 5 from the stem (4) and leaves by the
+   Reverse leg (11), so it needs **Reverse** (crossing between a switch block and a leg needs that
+   leg, in either direction; moves to or from the stem alone need nothing; leg to leg is not a route).
+3. Switch 5 may move: its protection zone (4, 5, 6, 11) is fresh, clear, unfaulted, open, reserved by
+   no other route, covered by no granted authority and not approach-locked. In hardware mode the PLC
+   (`switch_move`) decides this, and the independent C# veto checks it again (both modes).
+4. The Track Controller commands Reverse in its next Track Model command batch (published at once:
+   switch commands now wake the Track Model publisher, like signal commands).
+5. The Track Model throws the switch (it refuses to throw an occupied or unpowered switch) and reports
+   Reverse in its next block-state batch.
+6. Only the reported Reverse, equal to the commanded position, satisfies the route evaluation
+   (`switch_confirmed` and `direction_ok`). Signal 11 is then prepared and, on its reported proceed
+   aspect, authority is granted.
+7. The train moves; the Track Model follows the actual switch position, so it enters block 11.
+
+### Holding, confirming, and never oscillating
+
+* The command is recomputed on every evaluation from the live routes. With no route needing a
+  switch, it holds its position: a finished route never "resets" a switch.
+* Two live routes claiming one switch hold it where it is (and, overlapping, both are withheld).
+* A throw that is commanded but not yet reported is completed, never commanded back mid-stroke, even
+  if the route is cancelled or the zone becomes unsafe. A throw the Track Model does not confirm within
+  5 s is reported as *not confirmed*; once moving is no longer permitted the command falls back to the
+  reported position. Authority is never granted on a command.
+* A copy of a cancelled request (same ID and route) is refused, so it can never take the block back
+  from the route CTC sent instead, or pull its switches back.
+
+### Approach locking
+
+When an authority over a switch's protection zone is withdrawn without its train having moved on
+(re-route, cancellation, revocation or watchdog expiry), the train may still be braking toward the
+switch. The switch then stays locked for 10 s (`SwitchApproachLockSeconds`) before another route may
+throw it: *switch 5 must be Reverse for this route, but it cannot move now: approach locked for 10 s
+after an authority over its protection zone was withdrawn while its train may still be approaching*.
+
+### Unsafe conditions still prevent switching
+
+Occupancy, unknown occupancy, stale feedback, faults, Track Model closure, Track Controller
+maintenance closure (for automatic alignment), other reservations, granted authority through the
+zone, approach locking, pause and maintenance mode all keep the switch where it is. The reason is
+shown in the movement reason (and in `WaysideBlockStatus.SwitchAlignment`), e.g. *switch 5 must be
+Reverse for this route, but it cannot move now: block 6 is occupied*. The same request is re-evaluated
+continuously, so the train continues automatically once the condition clears.
+
+### Changes for other modules
+
+None. CTC already sends the complete route; the Track Model already applies switch commands and
+reports the position. A custom PLC keeps working: the controller still feeds `reserved_known`,
+`reserved`, `movement_locked` and `requested_normal`, now computed from its reservation record.
 
 ## Demonstration: Blue, Red and Green together
 
@@ -847,13 +943,29 @@ against each other over isolated pipe names.
   production Train Model and Train Controller): Train 001 dispatched to block 10 has signal 6 commanded,
   applied by the Track Model and reported Green before the grant; positive speed and authority reach the
   Train Model and Train Controller; and the train runs 1 → … → 7 past the signal with no emergency brake.
-  The same is checked to block 15 through signal 11 (switch 5 Reverse). A broken rail beyond signal 6
+  The same is checked to block 15 through signal 11, starting from the normal start-up configuration
+  with switch 5 Normal: the route alone makes the Track Controller command Reverse, the Track Model
+  throws it once and reports it, the grant follows, and the train runs 1 -> ... -> 5 -> 11 -> 12 (and the
+  Station B route never moves switch 5). A broken rail beyond signal 6
   after the grant withdraws authority, signal 6 goes Red at the Track Model, the Train Model receives
   zero and the Train Controller brakes. Unit tests (`SignalClearanceTests`, real PLC and software mode,
   with a Track Model stand-in that reports only commanded equipment) cover the preparation order and
   the unsafe and revocation cases: Unknown, stale, occupied and faulted blocks, closures, the wrong
   switch position, pause, conflicts, manual red, signal power failure, cancelled and expired requests,
   and a PLC without the new input.
+- **Automatic switch alignment** (`AutomaticSwitchAlignmentIntegrationTests`, same production set-up;
+  no test commands or pre-positions a switch for its route): switch 5 lying Reverse is thrown Normal for
+  Station B and the train takes the Normal branch; with block 6 occupied, broken, without valid
+  occupancy or closed by the dispatcher, switch 5 is never thrown, authority stays zero with the reason
+  in the Track Controller and CTC, and the train continues through block 11 once the condition clears;
+  a train granted toward Station B and re-routed to Station C while approaching waits out approach
+  locking, gets switch 5 Reverse and runs through block 11, nothing ever grants over block 6 again and a
+  delayed copy of the cancelled request is refused; on Red, one route from RED-9 throws RED-16 Reverse and
+  RED-27 Normal (from Reverse), leaves the other four switches alone, and the train passes RED-16 on its
+  Reverse leg. Unit tests (`AutomaticSwitchAlignmentTests`, real PLC and software mode) cover the
+  route-derived positions (facing, trailing, several switches), reservations (another route, an expired
+  one, two claims, the route's own), every unsafe zone condition with recovery, pause, maintenance mode,
+  unconfirmed and in-progress throws, approach locking, re-routes and cancelled-request copies.
 - **Blue Line** (unchanged tests, Blue-only Track Model and controller): layout load and late-CTC
   synchronization, occupancy, equipment and faults, heartbeat freshness, disconnects, maintenance,
   the CTC TestUI workflow, complete movement requests, end-to-end authorization, cross-territory
@@ -884,8 +996,10 @@ batch command application, and multi-line deployment validation and routing.
 | Train Model | `PassengerExchangeMessage` now goes to the Track Model once per exchange, which logs it; station counts still change only through `TrackModelTrainUpdateMessage` exchanges. |
 | Train Model / Track Model | **Environment volume.** Track Model → Train Model is still one message per block per snapshot (241, occupied blocks first, on their own sender). The Train Model applies only its own trains' blocks; batching would reduce the connection count. |
 | Track Controller | **Cross-territory handoff implemented.** The default `course-territories-all-pc.deployment.json` uses 16 waysides (Blue 2, Red 6, Green 8). Current joint approvals preserve the endpoint at owner boundaries; lost peers withdraw authority. See the [runtime guide](../../src/TrackController/TrackController.Runtime/README.md#project-territory-split-and-cross-wayside-movement) and `ProjectSplit_CrossesWaysidesWithoutFalseZero_ThroughAllProductionModules`. Physical Pi testing is still required. |
-| Track Controller | **CTC switch commands: resolved for course deployments.** The course maps use wayside-owned movement locks (`requireCtcReservationFeedback: false`) because CTC has no separate reservation service. PLC and independent checks still require fresh clear protection-zone occupancy, no faults or closures, and no active movement through the zone. Explicit CTC reservations still veto movement; legacy configurations continue requiring reservation feedback. |
-| Track Controller | **Signalled routes (Blue): resolved.** Routes through signals 6 and 11 are now prepared, cleared on a safe route and granted on the Track Model's reported aspect (see [Signalled routes](#signalled-routes-signal-clearance-before-authority)). A custom PLC must use the `signal_clearance` input to benefit; one that does not keeps withholding (fail-safe). Station C additionally needs switch 5 reported Reverse, subject to the switch protection checks above. Red and Green have no signals in the course data. |
+| Track Controller | **CTC reservation feedback / automatic switch alignment: resolved.** The Track Controller owns reservations (its accepted CTC movement requests) and sets every switch a live route needs (see [Automatic switch alignment](#automatic-switch-alignment)). |
+| Track Controller | **Signalled routes (Blue): resolved.** Routes through signals 6 and 11 are now prepared, cleared on a safe route and granted on the Track Model's reported aspect (see [Signalled routes](#signalled-routes-signal-clearance-before-authority)). A custom PLC must use the `signal_clearance` input to benefit; one that does not keeps withholding (fail-safe). Station C's switch 5 Reverse is now set automatically. Red and Green have no signals in the course data. |
+| Track Controller / CTC | **Trains standing in a protection zone.** A switch's configured protection zone includes its stem and legs, so a train already standing in block 4 (or stopped on switch 5 itself) cannot have switch 5 thrown for a route that needs the other leg; the request is withheld with that reason until the zone clears. CTC can end a movement inside a switch block when the block beyond is unavailable, and a train stopped there waits for the switch's current leg. Re-route before the train reaches the zone. |
+| Track Controller | **Approach locking is time-based** (10 s wall clock after a withdrawn authority over the zone): the Track Model does not report train speed, so the controller cannot release it early for a stopped train. |
 | Track Controller | Starts in the 16-wayside course setup; the 12-block demonstration is available only as a saved regression fixture. The Blue map is directional (1→15), so reverse-direction Blue routes are rejected. A switch block lists both legs as exits (the controller's switch model requires it), so on Green a route can end on a one-way leg entered from the wrong side, but can never continue. |
 | Course data | Yard connections, Red/Green signals and transponders, station sides and the Green 16 station name are not in the workbook (see *Data the workbook does not contain*). |
 | CTC | Route planning (schedule builder, re-plan) follows connections without direction of travel. A Green schedule against the arrows is planned, then refused by the Track Controller, and CTC shows the refusal. Authority is not extended automatically when an obstruction ahead clears beyond a movement's original end; the next departure or a dispatcher re-plan recalculates it (pre-existing design). A request the Track Controller rejected is not renewed; it is replaced when the train moves or the dispatcher re-plans. |

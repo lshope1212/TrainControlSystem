@@ -385,7 +385,10 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             + $"|{snapshot.IsPaused}|{snapshot.IsMaintenanceMode}"
             // Signal commands too: a prepared route's proceed aspect (whose report the grant waits for)
             // and a restrictive aspect after a revocation reach the Track Model without the periodic wait.
-            + "|" + string.Join(",", snapshot.Blocks.Where(block => block.HasSignal).Select(block => $"{block.BlockId}:{block.CommandedSignal}"));
+            + "|" + string.Join(",", snapshot.Blocks.Where(block => block.HasSignal).Select(block => $"{block.BlockId}:{block.CommandedSignal}"))
+            // Switch commands too: a route's automatic alignment (whose reported position the grant waits for)
+            // reaches the Track Model at once.
+            + "|" + string.Join(",", snapshot.Blocks.Where(block => block.HasSwitch).Select(block => $"{block.BlockId}:{block.CommandedSwitch}"));
         lock (_connectionGate)
         {
             if (signature == _lastMovementSignature)

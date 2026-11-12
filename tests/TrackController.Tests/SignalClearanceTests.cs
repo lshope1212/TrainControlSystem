@@ -247,7 +247,7 @@ public sealed class SignalClearanceTests
     [DataRow("manual red at signal 6", 0d)]
     [DataRow("block 7 feedback unknown", 0d)]
     [DataRow("block 6 broken rail", 0d)]
-    [DataRow("switch 5 reported reverse", 0d)]
+    [DataRow("switch 5 stuck reverse", 0d)]
     [DataRow("Track Controller paused", 0d)]
     [DataRow("conflicting movement", 0d)]
     // An occupied or closed block 6 ends the authority BEFORE the signal (blocks 1-5, 250 m), as on any line.
@@ -256,6 +256,8 @@ public sealed class SignalClearanceTests
     public void UnsafeRoute_NeverClearsSignal6_AndNoAuthorityPassesIt(string condition, double maximumAuthority)
     {
         var line = new Line();
+        // A condition the Track Model keeps reporting whatever it is commanded.
+        Action<Dictionary<string, TrackModelBlockStateMessage>>? persistent = null;
         switch (condition)
         {
             case "power failure at signal 6": line.Report(rows => rows["6"].PowerFailure = true); break;
@@ -266,7 +268,11 @@ public sealed class SignalClearanceTests
             case "block 7 feedback unknown": line.Report(rows => rows["7"].Occupancy = OccupancyState.Unknown); break;
             case "block 6 broken rail": line.Report(rows => rows["6"].BrokenRail = true); break;
             case "block 6 occupied": line.Report(rows => rows["6"].Occupancy = OccupancyState.Occupied); break;
-            case "switch 5 reported reverse": line.Report(rows => rows["5"].Switch = SwitchPosition.Reverse); break;
+            // The controller now commands Normal for this route by itself; the points do not respond.
+            case "switch 5 stuck reverse":
+                persistent = rows => rows["5"].Switch = SwitchPosition.Reverse;
+                line.Report(persistent);
+                break;
             case "Track Controller paused": line.Service.SetSimulation(true); break;
             case "maintenance closure of block 6": line.Report(rows => rows["6"].IsClosed = true); break;
             case "conflicting movement":
@@ -278,7 +284,7 @@ public sealed class SignalClearanceTests
         line.Submit("1", ToStationB);
         for (int cycle = 0; cycle < 4; cycle++)
         {
-            line.Report();
+            line.Report(persistent);
             var movement = line.Movement;
             Assert.IsLessThanOrEqualTo(maximumAuthority, movement.AuthorizedAuthorityMeters, $"{condition}, cycle {cycle}: {movement.MovementReason}");
             Assert.AreEqual(SignalState.Red, line.Block("6").CommandedSignal, $"{condition}, cycle {cycle}: signal 6 stays restrictive.");

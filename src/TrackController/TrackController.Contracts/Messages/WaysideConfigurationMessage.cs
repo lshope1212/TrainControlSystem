@@ -26,5 +26,5 @@ public sealed class WaysideConfigurationMessage
     public bool AutomaticOperation { get; set; }
 
     /// <summary>Legacy external reservation service. Course CTC uses wayside-owned movement locks instead.</summary>
-    public bool RequireCtcReservationFeedback { get; set; } = true;
+    public bool RequireCtcReservationFeedback { get; set; }
 }

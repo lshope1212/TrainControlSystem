@@ -18,6 +18,8 @@ public sealed partial class TrackControllerService
 
         _lastPulse = now;
         PruneStaged();
+        // What the live CTC routes need of each switch, before any switch is commanded.
+        var switchDemands = ComputeSwitchDemands();
         foreach (var block in _blocks.Values.Where(block => _configuration.CoordinatedRoutes || _owned.Contains(block.Definition.BlockId)))
         {
             block.CommandedSignal = SignalState.Red;
@@ -44,18 +46,15 @@ public sealed partial class TrackControllerService
 
             if (block.Definition.NormalNextBlockId is not null)
             {
-                var reported = IsFresh(block) ? block.Feedback!.Switch : SwitchPosition.Unknown;
-                var desired = block.DesiredSwitch == SwitchPosition.Unknown ? reported : block.DesiredSwitch;
-                bool safe = GetSwitchProtectionReason(block) is null;
-                bool plcMove = !_hardwareMode;
-                if (_hardwareMode && _plc is not null)
+                if (_owned.Contains(block.Definition.BlockId))
                 {
-                    var outputs = SwitchPlc(block, desired);
-                    desired = outputs["switch_normal"][0] ? SwitchPosition.Normal : SwitchPosition.Reverse;
-                    plcMove = outputs["switch_move"][0];
+                    CommandSwitch(block, switchDemands.GetValueOrDefault(block.Definition.BlockId), now);
                 }
-
-                block.CommandedSwitch = plcMove && safe && (!_paused || _maintenanceMode) ? desired : reported;
+                else
+                {
+                    // A coordinating peer assesses the reported alignment. Only the owner commands the switch.
+                    block.CommandedSwitch = IsFresh(block) ? block.Feedback!.Switch : SwitchPosition.Unknown;
+                }
             }
         }
 
@@ -117,6 +116,7 @@ public sealed partial class TrackControllerService
                 block.CommandedSignal = SignalState.Red;
             }
         }
+        ArmApproachLocks(_lastResults, authorizations, now);
         _lastResults = authorizations;
         var continuations = ComputeContinuations(authorizations);
         var resultsByBlock = authorizations.ToDictionary(result => result.Request.TargetBlockId);
@@ -130,7 +130,7 @@ public sealed partial class TrackControllerService
             return new WaysideBlockStatus(definition.BlockId, definition.LengthMeters, definition.SpeedLimitMetersPerSecond,
                 definition.NextBlockIds.AsReadOnly(), definition.MapX, definition.MapY, definition.NormalNextBlockId is not null,
                 definition.HasSignal, definition.HasCrossing, feedback?.Occupancy ?? OccupancyState.Unknown,
-                feedback?.IsClosed == true ? "Closed" : block.Maintenance, fresh, feedback?.IsFaulted ?? false, fresh ? feedback?.IsReservedByCtc : null,
+                feedback?.IsClosed == true ? "Closed" : block.Maintenance, fresh, feedback?.IsFaulted ?? false, _owned.Contains(definition.BlockId) ? IsReserved(block) : null,
                 block.CommandedSwitch, feedback?.Switch ?? SwitchPosition.Unknown, block.CommandedSignal,
                 feedback?.Signal ?? SignalState.Unknown, block.CommandedCrossing, feedback?.Crossing ?? CrossingState.Unknown,
                 fresh ? feedback?.ActualSpeedMetersPerSecond : null,
@@ -147,6 +147,7 @@ public sealed partial class TrackControllerService
                 AuthorizedSpeedMetersPerSecond = movement.AuthorizedSpeedMetersPerSecond,
                 AuthorizedAuthorityMeters = movement.AuthorizedAuthorityMeters,
                 MovementStatus = movement.Status ?? "", MovementReason = movement.Reason ?? "",
+                SwitchAlignment = block.SwitchStatus,
                 Continuation = continuations.GetValueOrDefault(definition.BlockId)
             };
         }).ToArray();
@@ -247,7 +248,7 @@ public sealed partial class TrackControllerService
             {
                 if (block.CommandedSwitch != block.Feedback.Switch || block.Feedback.Switch == SwitchPosition.Unknown)
                 {
-                    return Stop(output, $"Waiting for switch {path[i]} alignment feedback.");
+                    return Stop(output, $"Waiting for switch {path[i]} alignment feedback ({SwitchWaitDetail(block)}).");
                 }
 
                 if (i + 1 < path.Length)
@@ -257,7 +258,7 @@ public sealed partial class TrackControllerService
                     bool aligned = block.Definition.StemBlockId is { } stem ? (previous == stem && path[i + 1] == connected) || (previous == connected && path[i + 1] == stem) : connected == path[i + 1];
                     if (!aligned)
                     {
-                        return Stop(output, $"Switch {path[i]} connects to {connected}; this request needs {path[i + 1]} (verify entry and alignment).");
+                        return Stop(output, $"Switch {path[i]} connects to {connected}; this request needs {path[i + 1]} ({SwitchWaitDetail(block)}).");
                     }
                 }
             }
