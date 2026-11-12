@@ -272,6 +272,18 @@ public sealed class ScheduleTemplateRow
     /// <summary>Blocks this block connects to, used to check each train's route is continuous.</summary>
     public IReadOnlyList<string> ConnectedBlockIds { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// "Forward" (toward increasing block numbers), "Reverse" (decreasing) or "Bidirectional", from the layout;
+    /// the route planner never routes a train against it (see <see cref="Routing.LineTopology"/>).
+    /// </summary>
+    public string TravelDirection { get; init; } = "Bidirectional";
+
+    /// <summary>For a switch block: the leg its Normal position connects to; empty otherwise.</summary>
+    public string NormalNextBlockId { get; init; } = string.Empty;
+
+    /// <summary>For a switch block: the leg its Reverse position connects to; empty otherwise.</summary>
+    public string ReverseNextBlockId { get; init; } = string.Empty;
+
     /// <summary>The block is one of the line's yard entries, so a train may start here.</summary>
     public bool IsYardEntry => Template?.YardEntryBlockIds.Contains(BlockId) == true;
 

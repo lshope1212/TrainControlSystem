@@ -35,7 +35,13 @@ internal sealed class DispatchedRun : IAsyncDisposable
     /// <param name="travelSeconds">Scheduled time from departure to the last route block (sets CTC's suggested speed).</param>
     /// <param name="prepareTrack">The Track Model's start-up state (e.g. another train or a failure); never used to set a switch for the route.</param>
     /// <param name="beforeResume">Runs with every module connected and the Track Controller still paused (e.g. a dispatcher's maintenance closure).</param>
-    public static async Task<DispatchedRun> StartAsync(string lineId, string[] route, Action<TrackService>? prepareTrack = null, double travelSeconds = 120, Func<LiveSystem, Task>? beforeResume = null)
+    /// <param name="schedule">
+    /// Builds the schedule on CTC's thread instead (e.g. through the Schedule Builder's template, letting CTC route the
+    /// train); <paramref name="route"/>[0] is then only the start block it is expected at.
+    /// </param>
+    /// <param name="clockMultiplier">The shared clock's speed (the Train Model accepts 1 to 10).</param>
+    public static async Task<DispatchedRun> StartAsync(string lineId, string[] route, Action<TrackService>? prepareTrack = null, double travelSeconds = 120, Func<LiveSystem, Task>? beforeResume = null,
+        Func<CTC.Core.Services.CTCService, IReadOnlyList<ScheduledTrain>>? schedule = null, double clockMultiplier = 5)
     {
         var system = new LiveSystem();
         try
@@ -59,6 +65,12 @@ internal sealed class DispatchedRun : IAsyncDisposable
             $"CTC sees {lineId} block {route[0]} clear.");
         await system.OnCtc(ctc =>
         {
+            if (schedule is not null)
+            {
+                ctc.QueueSchedule(schedule(ctc));
+                return 0;
+            }
+
             var scheduled = new ScheduledTrain { TrainId = "001", LineId = lineId };
             for (int i = 0; i < route.Length; i++)
             {
@@ -85,7 +97,7 @@ internal sealed class DispatchedRun : IAsyncDisposable
 
         var watch = new SwitchWatch(system, switchIds);
         await system.ResumeTrackControllerAsync();
-        var clock = new ClockPump(Departure - TimeSpan.FromSeconds(1), 5, system.CtcPipe, system.TrainModelPipe);
+        var clock = new ClockPump(Departure - TimeSpan.FromSeconds(1), clockMultiplier, system.CtcPipe, system.TrainModelPipe);
         var run = new DispatchedRun { System = system, TrainModel = trainModel, TrainController = trainController, Clock = clock, LineId = lineId, InitialSwitches = initial, Switches = watch };
         await LiveSystem.UntilAsync(async () => (await run.Train())?.ReleaseStatus == TrainReleaseStatus.DetectedOnTrack,
             $"CTC dispatches Train 001 and detects it in block {route[0]}.", TimeSpan.FromSeconds(20));

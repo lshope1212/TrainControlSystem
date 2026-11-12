@@ -78,6 +78,9 @@ public static class ScheduleTemplateFactory
             LengthMeters = block.LengthMeters,
             SpeedLimitKilometersPerHour = block.SpeedLimitKilometersPerHour,
             ConnectedBlockIds = block.ConnectedBlockIds.ToList(),
+            TravelDirection = block.TravelDirection,
+            NormalNextBlockId = block.NormalNextBlockId,
+            ReverseNextBlockId = block.ReverseNextBlockId,
             DefaultDwellTime = DwellTimePolicy.GetDefaultDwellTime(block),
         });
 

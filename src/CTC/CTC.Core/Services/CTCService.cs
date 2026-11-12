@@ -2,6 +2,7 @@ using CTC.Core.Dispatching;
 using CTC.Core.Exceptions;
 using CTC.Core.Interfaces;
 using CTC.Core.Models;
+using CTC.Core.Routing;
 using CTC.Core.Scheduling;
 using CTC.Core.Tracking;
 using TrainControl.Common.Validation;
@@ -333,8 +334,130 @@ public class CTCService : ICTCService
     public async Task SynchronizeMovementRequestsAsync(CancellationToken cancellationToken = default)
     {
         await _dispatches.SynchronizeAsync(State, cancellationToken);
+        await ContinueIntoNextSegmentsAsync(cancellationToken);
         await _movements.SynchronizeAsync(State, cancellationToken);
     }
+
+    /// <summary>
+    /// Continues every train whose movement reaches beyond its current authority segment
+    /// (<see cref="DispatchedTrainState.AuthorityLimitRouteIndex"/> before <see cref="DispatchedTrainState.MovementEndRouteIndex"/>)
+    /// into its next segment, once that is possible (see <see cref="MovementSegmentation"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The next segment starts at the train's current block and is never implied by the train entering a block:
+    /// it is an explicit new movement request with a new request ID, issued like a dispatcher re-plan (the
+    /// current request and any prepared successor are cancelled first) and evaluated by the Track Controller from
+    /// scratch, which sets the segment's switches before it grants anything. Handoff successors inside a
+    /// segment still never pass its end.
+    /// </para>
+    /// <para>
+    /// CTC continues only when the new segment reaches further than the current one and none of the switches it
+    /// must move has a protection-zone block that is not clear (typically the train's own rear, still leaving the
+    /// zone it passed on the way out). Until then the train keeps its current segment, whose end lies outside
+    /// those zones, so it can never be held where it would lock a switch it needs. A failed send leaves the
+    /// current segment in place and is retried on the next pass.
+    /// </para>
+    /// </remarks>
+    private async Task ContinueIntoNextSegmentsAsync(CancellationToken cancellationToken)
+    {
+        foreach (var train in State.DispatchedTrains.ToList())
+        {
+            if (train.AuthorityLimitRouteIndex >= train.MovementEndRouteIndex
+                || train.Phase != TrainMovementPhase.EnRoute
+                || !MovementRequestPlanner.IsEligible(train, train.Phase)
+                || State.FindLine(train.LineId) is not { } line
+                || _movementsInFlight.Contains(train.TrainId))
+            {
+                continue;
+            }
+
+            var route = train.ActiveRouteBlockIds.ToList();
+            int current = train.ActiveRouteIndex;
+            int limit = train.AuthorityLimitRouteIndex;
+            if (current < 0 || current >= route.Count || route[current] != train.CurrentBlockId || current > limit)
+            {
+                continue;
+            }
+
+            var topology = LineTopology.From(line);
+            string? enteredFrom = current == 0 && train.PreviousBlockId.Length > 0 ? train.PreviousBlockId : null;
+            int next = MovementSegmentation.SegmentEnd(topology, route, current, train.MovementEndRouteIndex, enteredFrom);
+            string? waiting = next <= limit ? null : MovementSegmentation.ExtensionBlocker(line, topology, route, limit, next, enteredFrom);
+            var request = next <= limit || waiting is not null
+                ? null
+                : MovementRequestPlanner.Plan(line, train.TrainId, route, current, next, train.PreviousBlockId, train.SuggestedSpeedMetersPerSecond);
+
+            // Nothing beyond the current segment can be covered yet (e.g. the block after it is occupied).
+            if (request is not null && current + request.PathBlockIds.Count <= limit)
+            {
+                request = null;
+                waiting = $"block {route[limit + 1]} after the current segment is not safe to enter yet";
+            }
+
+            string trainName = TrainIds.DisplayName(train.TrainId);
+            if (request is null)
+            {
+                string reason = waiting is null ? string.Empty : $"{trainName} waits to continue beyond {route[limit]}: {waiting}.";
+                if (reason != train.NextSegmentWaitReason)
+                {
+                    train.NextSegmentWaitReason = reason;
+                    if (reason.Length > 0)
+                    {
+                        OnStateChanged(CtcStateChangeKind.MovementRequestUpdated, train.CurrentBlockId, train.TrainId, reason);
+                    }
+                }
+
+                continue;
+            }
+
+            _movementsInFlight.Add(train.TrainId);
+            try
+            {
+                // Committed first so a pass that runs while this one awaits plans the same request; rolled back
+                // if it could not be sent, so CTC never claims a segment it did not request.
+                train.AuthorityLimitRouteIndex = next;
+                try
+                {
+                    await _movements.ReplaceAsync(train, request, cancellationToken);
+                }
+                catch
+                {
+                    train.AuthorityLimitRouteIndex = limit;
+                    throw;
+                }
+
+                train.NextSegmentWaitReason = string.Empty;
+                train.SuggestedAuthorityMeters = request.AuthorityMeters;
+                OnStateChanged(
+                    CtcStateChangeKind.MovementRequestUpdated,
+                    train.CurrentBlockId,
+                    train.TrainId,
+                    $"{trainName} continues into its next route segment: a new movement request from {route[current]} through {route[next]} "
+                    + $"(route block {next + 1} of {route.Count}), beyond the previous segment's end at {route[limit]}.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                OnStateChanged(
+                    CtcStateChangeKind.TrainMovementSuggestionFailed,
+                    trainId: train.TrainId,
+                    message: $"{trainName} is ready to continue beyond {route[limit]}, but its new movement request could not be sent: {ex.Message}");
+            }
+            finally
+            {
+                _movementsInFlight.Remove(train.TrainId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The end of the first authority segment of a movement from route index <paramref name="start"/> whose
+    /// authority may reach <paramref name="movementEnd"/> (see <see cref="MovementSegmentation"/>).
+    /// </summary>
+    private static int FirstSegmentEnd(CtcLineState line, IReadOnlyList<string> route, int start, int movementEnd, string? enteredFrom) =>
+        movementEnd <= start
+            ? movementEnd
+            : MovementSegmentation.SegmentEnd(LineTopology.From(line), route, start, movementEnd, string.IsNullOrEmpty(enteredFrom) ? null : enteredFrom);
 
     public void ApplyTicketSales(TicketSalesMessage message)
     {
@@ -489,8 +612,9 @@ public class CTCService : ICTCService
         var departure = departing ? MovementPlanner.DepartureTimeAfter(train, 0) : State.SystemTime;
         var speed = SpeedPlanner.CalculateLegSpeed(route, departure, target.ArrivalTime, State.SystemTime);
         int authorizedBlocks = AuthorityManager.CountAuthorizedBlocks(remainingRoute, trainOccupiesStartBlock: true);
-        int authorityLimit = train.ActiveRouteIndex + authorizedBlocks - 1;
-        double authority = remainingRoute.Take(authorizedBlocks).Sum(block => block.LengthMeters);
+        int movementEnd = train.ActiveRouteIndex + authorizedBlocks - 1;
+        int authorityLimit = FirstSegmentEnd(line, train.ActiveRouteBlockIds.ToList(), train.ActiveRouteIndex, movementEnd, train.ActiveRouteIndex == 0 ? train.PreviousBlockId : null);
+        double authority = remainingRoute.Take(authorityLimit - train.ActiveRouteIndex + 1).Sum(block => block.LengthMeters);
 
         var request = MovementRequestPlanner.IsEligible(train, TrainMovementPhase.EnRoute)
             ? MovementRequestPlanner.Plan(line, train.TrainId, train.ActiveRouteBlockIds.ToList(), train.ActiveRouteIndex, authorityLimit, train.PreviousBlockId, speed.SpeedMetersPerSecond)
@@ -511,6 +635,8 @@ public class CTCService : ICTCService
         train.SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond;
         train.SuggestedAuthorityMeters = authority;
         train.AuthorityLimitRouteIndex = authorityLimit;
+        train.MovementEndRouteIndex = movementEnd;
+        train.NextSegmentWaitReason = string.Empty;
         target.PlannedSpeedMetersPerSecond = speed.SpeedMetersPerSecond;
         target.TimingWarning = speed.ArrivalWarning;
         MovementPlanner.RecalculatePlannedSpeeds(train, line, State.SystemTime);
@@ -578,7 +704,10 @@ public class CTCService : ICTCService
             throw new DispatchException($"its start block {route[0].BlockId} is occupied, has unknown occupancy, or is closed for maintenance.");
         }
 
-        double authority = route.Take(authorizedBlocks).Sum(block => block.LengthMeters);
+        // A route that revisits blocks or sets a switch two ways is requested segment by segment.
+        int movementEnd = authorizedBlocks - 1;
+        int segmentEnd = FirstSegmentEnd(line, scheduledTrain.Route.Select(block => block.BlockId).ToList(), 0, movementEnd, null);
+        double authority = route.Take(segmentEnd + 1).Sum(block => block.LengthMeters);
         var speed = SpeedPlanner.CalculateInitialSpeed(scheduledTrain, route, State.SystemTime);
 
         State.DispatchQueue.Remove(entry);
@@ -596,7 +725,9 @@ public class CTCService : ICTCService
         dispatched.TrackingStatus = string.Empty;
         dispatched.SuggestedSpeedMetersPerSecond = speed.SpeedMetersPerSecond;
         dispatched.SuggestedAuthorityMeters = authority;
-        dispatched.AuthorityLimitRouteIndex = authorizedBlocks - 1;
+        dispatched.AuthorityLimitRouteIndex = segmentEnd;
+        dispatched.MovementEndRouteIndex = movementEnd;
+        dispatched.NextSegmentWaitReason = string.Empty;
 
         // CTC knows where the train enters because it released it there: its starting block, a yard
         // entry checked when the schedule was queued. From now on the location follows sequential
@@ -771,7 +902,9 @@ public class CTCService : ICTCService
                     : $"{trainName}'s previous stop is already {destinationBlockId}; choose a different destination.");
             }
 
-            var path = RouteManager.FindRoute(line, fromBlockId, destinationBlockId)
+            // The train continues in the direction it is travelling: from the block it entered the start from.
+            string? enteredFrom = fromIndex > 0 ? routeIds[fromIndex - 1] : train.PreviousBlockId;
+            var path = RouteManager.FindRoute(line, fromBlockId, destinationBlockId, enteredFrom)
                 ?? throw new DispatchException(stopIndex == 0
                     ? $"No route on {line.Name} connects {trainName}'s current block {fromBlockId} to {destinationBlockId}."
                     : $"No route on {line.Name} connects {trainName}'s stop {fromBlockId} to {destinationBlockId}.");
@@ -829,8 +962,9 @@ public class CTCService : ICTCService
         // Authority follows the route; its end is recalculated (along the unchanged or new route) only
         // when the movement is re-planned anyway. The train occupies its own current block.
         int authorizedBlocks = movementReplanned ? AuthorityManager.CountAuthorizedBlocks(routeBlocks, trainOccupiesStartBlock: true) : 0;
-        int authorityLimit = movementReplanned ? authorizedBlocks - 1 : train.AuthorityLimitRouteIndex - offset;
-        double authority = movementReplanned ? routeBlocks.Take(authorizedBlocks).Sum(block => block.LengthMeters) : train.SuggestedAuthorityMeters;
+        int movementEnd = movementReplanned ? authorizedBlocks - 1 : Math.Max(train.MovementEndRouteIndex, train.AuthorityLimitRouteIndex) - offset;
+        int authorityLimit = movementReplanned ? FirstSegmentEnd(line, routeIds, 0, movementEnd, train.PreviousBlockId) : train.AuthorityLimitRouteIndex - offset;
+        double authority = movementReplanned ? routeBlocks.Take(authorityLimit + 1).Sum(block => block.LengthMeters) : train.SuggestedAuthorityMeters;
         double suggestedSpeed = speed?.SpeedMetersPerSecond ?? train.SuggestedSpeedMetersPerSecond;
 
         if (movementReplanned && MovementRequestPlanner.IsEligible(train, phase))
@@ -845,6 +979,8 @@ public class CTCService : ICTCService
         train.SuggestedSpeedMetersPerSecond = suggestedSpeed;
         train.SuggestedAuthorityMeters = authority;
         train.AuthorityLimitRouteIndex = authorityLimit;
+        train.MovementEndRouteIndex = movementEnd;
+        train.NextSegmentWaitReason = string.Empty;
 
         // From now on occupancy is interpreted along this route. It starts at the current block,
         // so the train stays where it is; whether that block has been seen occupied is unchanged.

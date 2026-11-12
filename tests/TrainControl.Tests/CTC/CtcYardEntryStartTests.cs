@@ -403,7 +403,7 @@ public class CtcYardEntryStartTests
     }
 
     [TestMethod]
-    public void RouteGeometry_ReportsTheGreenYardToEdgebrookLimitations()
+    public void GreenYardToEdgebrook_IsRoutedInTheDirectionOfTravelAndRoundTheLoop_HoweverItIsTimed()
     {
         var service = new CTCService(new FakeMessageSender());
         var model = new TrackService();
@@ -411,33 +411,32 @@ public class CtcYardEntryStartTests
         service.ApplyTrackLayout(model.CreateLayoutMessage());
         var green = service.State.FindLine("Green")!;
 
-        // Shortest connected route from the yard: backwards up J-I-H-G against the one-way direction.
+        // The three schedules that used to expose the connectivity-only planner (backwards up J-I-H-G, leg to leg
+        // through switch 77, and no way round N twice) now all give the one legal route.
         var direct = ScheduleTemplateFactory.Create(green, 1);
         Row(direct, "GREEN-63").SetTrainTime(0, "14:00:00");
         Row(direct, "GREEN-9").SetTrainTime(0, "15:00:00");
-        var directTrain = ScheduleTemplateConverter.Convert(direct).Trains.Single();
-        Assert.AreEqual("GREEN-62", directTrain.Route[1].BlockId);
-        var directProblems = RouteGeometry.FindProblems(green, directTrain);
-        Assert.HasCount(1, directProblems);
-        StringAssert.StartsWith(directProblems[0], "Train 001's route moves GREEN-63 → GREEN-62 against Green Line's direction of travel (35 such steps)");
 
-        // Forced forward by timing GREEN-120: direction is right, but 76 -> 77 -> 101 crosses switch 77 leg to leg.
         var forward = ScheduleTemplateFactory.Create(green, 1);
         Row(forward, "GREEN-63").SetTrainTime(0, "14:00:00");
         Row(forward, "GREEN-120").SetTrainTime(0, "14:30:00");
         Row(forward, "GREEN-9").SetTrainTime(0, "15:00:00");
-        var forwardTrain = ScheduleTemplateConverter.Convert(forward).Trains.Single();
-        var problems = RouteGeometry.FindProblems(green, forwardTrain);
-        Assert.HasCount(1, problems);
-        StringAssert.StartsWith(problems[0], "Train 001's route passes switch GREEN-77 from GREEN-76 to GREEN-101, two legs of the switch");
 
-        // The direction-correct way round N (77..85 twice) cannot be expressed: the converter never reuses a block.
         var loop = ScheduleTemplateFactory.Create(green, 1);
         Row(loop, "GREEN-63").SetTrainTime(0, "14:00:00");
         Row(loop, "GREEN-90").SetTrainTime(0, "14:10:00");
         Row(loop, "GREEN-120").SetTrainTime(0, "14:30:00");
         Row(loop, "GREEN-9").SetTrainTime(0, "15:00:00");
-        StringAssert.Contains(ScheduleTemplateConverter.Convert(loop).ErrorMessage, "cannot reach GREEN-120 from GREEN-90");
+
+        foreach (var template in new[] { direct, forward, loop })
+        {
+            var result = ScheduleTemplateConverter.Convert(template);
+            Assert.IsTrue(result.IsSuccess, result.ErrorMessage);
+            var train = result.Trains.Single();
+            Assert.AreEqual("GREEN-64", train.Route[1].BlockId, "Out of the yard in the increasing direction.");
+            CollectionAssert.AreEqual(CtcGreenLineRoutingTests.YardToEdgebrook, train.Route.Select(block => block.BlockId).ToArray());
+            Assert.IsEmpty(RouteGeometry.FindProblems(green, train));
+        }
     }
 
     [TestMethod]

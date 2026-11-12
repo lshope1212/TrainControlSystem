@@ -43,8 +43,8 @@ public class CtcBlockState
 
     /// <summary>
     /// "Forward" (toward increasing block numbers), "Reverse" (decreasing) or "Bidirectional", as the
-    /// Track Model's layout gives it. CTC's route planner does not use it; it is only used to warn the
-    /// dispatcher about a route the wayside will refuse (see <see cref="Scheduling.RouteGeometry"/>).
+    /// Track Model's layout gives it. CTC's route planner never routes a train against it (see
+    /// <see cref="Routing.LineTopology"/>).
     /// </summary>
     public string TravelDirection { get; set; } = "Bidirectional";
 
