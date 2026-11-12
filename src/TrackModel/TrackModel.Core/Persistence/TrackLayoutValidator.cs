@@ -28,6 +28,9 @@ public static class TrackLayoutValidator
         }
         foreach (var b in layout.Blocks)
         {
+            if (!Enum.IsDefined(b.BeaconPlatformSide) || (b.BeaconDistanceToStopMeters is { } distance
+                && (!b.HasBeacon || !double.IsFinite(distance) || distance < 0)))
+                throw new ArgumentException($"Block {b.Id} has invalid beacon stopping metadata.");
             if (b.BeaconTargetBlockId.Length > 0 && (!b.HasBeacon || !ids.Contains(b.BeaconTargetBlockId)
                 || layout.Blocks.First(x => x.Id == b.BeaconTargetBlockId).LineId != b.LineId
                 || string.IsNullOrWhiteSpace(layout.Blocks.First(x => x.Id == b.BeaconTargetBlockId).StationName)))

@@ -31,6 +31,9 @@ public interface ITrackService
     void ApplyFailures(TrackModelFailureCommandMessage message);
     void ApplyTemperature(TrackModelTemperatureCommandMessage message);
     void ApplyPassengerDemand(TrackModelPassengerDemandMessage message);
+    void RecordStationArrivals(string blockId, int count);
+    bool ApplyPassengerExchange(PassengerExchangeMessage message);
+    BeaconMessage? CreateTrainBeacon(string blockId);
     void SetSystemTime(TimeSpan time);
     void SetMaintenance(string blockId, MaintenanceState state);
     TrackLayoutMessage CreateLayoutMessage();

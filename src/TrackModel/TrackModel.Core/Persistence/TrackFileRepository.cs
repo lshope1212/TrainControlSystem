@@ -44,6 +44,8 @@ public sealed class TrackFileRepository : ITrackRepository
                 TemperatureCelsius = D("TemperatureCelsius", 20), SpeedLimitMetersPerSecond = D("SpeedLimitMetersPerSecond", 19.444444),
                 StationName = S("StationName"), InitialWaitingPassengers = I("InitialWaitingPassengers"),
                 Beacon = S("Beacon"), BeaconTargetBlockId = S("BeaconTargetBlockId"),
+                BeaconDistanceToStopMeters = S("BeaconDistanceToStopMeters").Length == 0 ? null : D("BeaconDistanceToStopMeters"),
+                BeaconPlatformSide = Enum.Parse<TrainControl.Contracts.Enums.PlatformSide>(S("BeaconPlatformSide", "None"), true),
                 HasSwitch = B("HasSwitch"), HasSignal = B("HasSignal"), HasCrossing = B("HasCrossing"), HasHeater = B("HasHeater"),
                 TravelDirection = S("TravelDirection", "Bidirectional"),
                 ConnectedBlockIds = S("ConnectedBlockIds").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
