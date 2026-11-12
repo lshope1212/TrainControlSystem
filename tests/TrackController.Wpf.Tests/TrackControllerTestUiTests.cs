@@ -35,6 +35,7 @@ public sealed class TrackControllerTestUiTests
     {
         var inputs = session.Inputs;
         var controller = session.Controller;
+        controller.SelectedSetup = "Demonstration track (12 blocks)";
         await ExecuteAsync(controller.LoadSetupCommand);
         await UntilAsync(() => inputs.Snapshot.PlcStatus.Contains("Program loaded"));
         await ExecuteAsync(inputs.LoadScenarioCommand);
@@ -74,6 +75,7 @@ public sealed class TrackControllerTestUiTests
     {
         var inputs = session.Inputs;
         var controller = session.Controller;
+        controller.SelectedSetup = "Demonstration track (12 blocks)";
         await ExecuteAsync(controller.LoadSetupCommand);
         await UntilAsync(() => inputs.Snapshot.PlcStatus.Contains("Program loaded"));
         await ExecuteAsync(inputs.LoadScenarioCommand);

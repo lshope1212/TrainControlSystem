@@ -13,6 +13,52 @@ public sealed class WaysideSafetyTests
 {
     private static string GoodPlc => PiRuntimeTests.ProgramSource;
 
+    [TestMethod]
+    [DataRow("clear")]
+    [DataRow("occupied")]
+    [DataRow("unknown")]
+    [DataRow("reserved")]
+    [DataRow("fault")]
+    [DataRow("closure")]
+    [DataRow("stale")]
+    [DataRow("active movement")]
+    public void WaysideOwnedReservations_KeepVitalSwitchProtection(string scenario)
+    {
+        foreach (bool hardware in new[] { false, true })
+        {
+            var config = WaysideConfiguration.CreateDemo();
+            config.RequireCtcReservationFeedback = false;
+            var fixture = new Fixture(hardware, config);
+            fixture.Feedback(rows =>
+            {
+                foreach (var row in rows) { row.Occupancy = OccupancyState.Clear; row.IsReservedByCtc = null; }
+                var approach = rows.Single(row => row.BlockId == "5");
+                if (scenario == "occupied") approach.Occupancy = OccupancyState.Occupied;
+                if (scenario == "unknown") approach.Occupancy = OccupancyState.Unknown;
+                if (scenario == "reserved") approach.IsReservedByCtc = true;
+                if (scenario == "fault") approach.BrokenRail = true;
+                if (scenario == "closure") approach.IsClosed = true;
+                if (scenario == "active movement") rows.Single(row => row.BlockId == "4").Occupancy = OccupancyState.Occupied;
+            });
+            if (scenario == "stale") fixture.Clock.Advance(6);
+            if (scenario == "active movement")
+            {
+                var grant = fixture.Submit(fixture.Request("4", "5", "6", "7"));
+                Assert.IsGreaterThan(0.0, grant.AuthorizedAuthorityMeters);
+            }
+            var command = new SwitchPositionRequestMessage { BlockId = "6", RequestedPosition = SwitchPosition.Reverse };
+            if (scenario == "clear")
+            {
+                fixture.Service.RequestSwitch(command);
+                Assert.AreEqual(SwitchPosition.Reverse, fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "6").CommandedSwitch);
+            }
+            else
+            {
+                Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(command), $"{scenario}; PLC={hardware}");
+            }
+        }
+    }
+
 
     private sealed class Clock : TimeProvider
     {

@@ -101,6 +101,39 @@ public sealed class AuthorityContinuityIntegrationTests
     }
 
     [TestMethod]
+    public async Task ProjectSplit_CrossesWaysidesWithoutFalseZero_ThroughAllProductionModules()
+    {
+        var run = new TrainRun("001", "Green", ["GREEN-109", "GREEN-110", "GREEN-111", "GREEN-112"]);
+        await using var system = await StartAsync(true,
+            live => Path.Combine(live.CopySamples(_ => { }), "course-territories-all-pc.deployment.json"),
+            new TrainRun(run.TrainId, run.Line,
+                [.. Enumerable.Range(63, 15).Select(id => $"GREEN-{id}"), .. Enumerable.Range(101, 12).Select(id => $"GREEN-{id}")]));
+        // Main requires yard-entry dispatch and observes each successive occupied block.
+        // Feed that approach through the Track Model before measuring the 109 -> 110 handoff.
+        foreach (string blockId in Enumerable.Range(64, 14).Concat(Enumerable.Range(101, 9)).Select(id => $"GREEN-{id}"))
+        {
+            await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = run.TrainId, CurrentBlockId = blockId });
+            await LiveSystem.UntilAsync(async () => (await Dispatched(system, run.TrainId)).CurrentBlockId == blockId,
+                $"CTC follows the train through {blockId}.");
+        }
+        await using var onboard = new OnboardTrains(system.TrainModelPipe, run.TrainId);
+        var train = onboard[run.TrainId];
+        var (active, staged) = await PreparedAsync(system, run);
+        await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority > 0), "the train receives its initial authority.");
+        Assert.AreNotEqual(system.Wayside!.GetOwnerDescription(run.Route[0]), system.Wayside.GetOwnerDescription(run.Route[1]));
+        double expected = active.AuthorizedAuthorityMeters - await system.OnTrackModel(track => track.FindBlock(run.Route[0])!.LengthMeters);
+        int firstPickup = train.Received.Count - 1;
+        await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = run.TrainId, CurrentBlockId = run.Route[1], ActualSpeedMetersPerSecond = 8 });
+        await LiveSystem.UntilAsync(async () =>
+            system.WaysideBlock(run.Route[1]).Request?.RequestId == staged.RequestId
+            && Math.Abs(train.Authority - expected) < 1e-6
+            && (await Dispatched(system, run.TrainId)).MovementRequest?.RequestId == staged.RequestId,
+            "CTC, both waysides and the onboard train complete the boundary handoff.");
+        AssertNoZeroSince(train, firstPickup, "Changing wayside owners must not trigger emergency braking.");
+        await system.SendToTrackControllerAsync(new MaintenanceRequestMessage { BlockId = run.Route[2], RequestedState = MaintenanceState.Closed });
+        await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority == 0), "a downstream closure still reaches the train as zero authority.");
+    }
+    [TestMethod]
     public async Task MovingTrain_CrossesABlockBoundaryWithoutAFalseZero_AndAGenuineRevocationStopsItAtOnce()
     {
         var run = new TrainRun("001", "Blue", ["1", "2", "3", "4"]);
@@ -309,7 +342,12 @@ public sealed class AuthorityContinuityIntegrationTests
         await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority > 0), "the train holds its grant.");
 
         await system.StopCtcAsync();
-        await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority == 0), "no renewals: the watchdog withdraws the authority.", TimeSpan.FromSeconds(8));
+        // Track Model's output lease can expire before the next wayside publication. Wait for
+        // both asynchronous observations within the same watchdog deadline.
+        await LiveSystem.UntilAsync(() => Task.FromResult(train.Authority == 0
+            && system.WaysideBlock("1").AuthorizedAuthorityMeters == 0
+            && system.WaysideBlock("2").Continuation is null),
+            "no renewals: the watchdog withdraws the authority and its continuation.", TimeSpan.FromSeconds(8));
         Assert.IsNull(system.WaysideBlock("2").Continuation, "The unrenewed successor expired too.");
 
         await system.SendToTrackModelAsync(new TrackModelTrainUpdateMessage { TrainId = run.TrainId, CurrentBlockId = "2" });

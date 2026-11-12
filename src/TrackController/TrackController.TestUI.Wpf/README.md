@@ -94,7 +94,7 @@ Pause withholds movement and keeps signals red. You can still send feedback and
 requests. Manual equipment commands require maintenance mode and their normal
 protection checks; CTC switch requests while paused also need maintenance mode.
 The 5-second feedback and 10-second request watchdogs use real elapsed time and
-continue while paused. The displayed simulation clock and speed multiplier do
+continue while movement is held. CTC owns the simulation clock; its speed does
 not change those watchdog periods.
 
 **Keep test inputs active** refreshes the last transmitted feedback and movement

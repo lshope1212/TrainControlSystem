@@ -12,15 +12,16 @@ namespace TrackController.Tests;
 [TestClass]
 public sealed class MultiLineDeploymentTests
 {
-    private const string Course = "course-all-pc.deployment.json";
+    private const string Course = "course-territories-all-pc.deployment.json";
 
     [TestMethod]
     public async Task Read_CourseDeployment_OwnsEveryBlockOfEveryLineOnce()
     {
         using var files = new DeploymentFiles();
         var plan = files.Read(Course);
-        CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).ToArray());
-        CollectionAssert.AreEqual(new[] { 15, 76, 150 }, plan.Territories.Select(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration).Count).ToArray());
+        CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).Distinct().ToArray());
+        CollectionAssert.AreEqual(new[] { 15, 76, 150 }, plan.Territories.GroupBy(territory => territory.Configuration.LineName).Select(line => line.Sum(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration).Count)).ToArray());
+        Assert.IsTrue(plan.Territories.GroupBy(territory => territory.Configuration.LineName).All(line => line.Count() == 2));
         StringAssert.StartsWith(plan.LayoutDescription, "3 lines");
 
         await using var router = plan.CreateRuntime();
@@ -36,13 +37,13 @@ public sealed class MultiLineDeploymentTests
         var faults = new Dictionary<string, Action<DeploymentFiles>>
         {
             // The same map twice: a line may appear once.
-            ["line twice"] = files => files.Edit(Course, json => json["lines"]![2] = JsonNode.Parse("""{"trackFile":"blue-line-track-map.json","territoriesFile":"blue-line-territories-single.json"}""")),
+            ["line twice"] = files => files.Edit(Course, json => json["lines"]![2] = JsonNode.Parse("""{"trackFile":"blue-line-track-map.json","territoriesFile":"blue-line-project-territories.json"}""")),
             // A second line reusing Blue's block IDs: IDs must be unique across lines.
             ["colliding block IDs"] = files =>
             {
                 File.Copy(files.PathFor("blue-line-track-map.json"), files.PathFor("copy-track-map.json"));
                 files.Edit("copy-track-map.json", json => json["lineName"] = "Copy Line");
-                File.Copy(files.PathFor("blue-line-territories-single.json"), files.PathFor("copy-territories.json"));
+                File.Copy(files.PathFor("blue-line-project-territories.json"), files.PathFor("copy-territories.json"));
                 files.Edit("copy-territories.json", json => json["territories"]![0]!["id"] = "wayside-copy");
                 files.Edit(Course, json =>
                 {
@@ -50,10 +51,10 @@ public sealed class MultiLineDeploymentTests
                     json["territories"]!.AsArray().Add(JsonNode.Parse("""{"territoryId":"wayside-copy","execution":"Local"}"""));
                 });
             },
-            ["territory ID reused by another line"] = files => files.Edit("red-line-territories-single.json", json => json["territories"]![0]!["id"] = "wayside-blue"),
+            ["territory ID reused by another line"] = files => files.Edit("red-line-project-territories.json", json => json["territories"]![0]!["id"] = "wayside-blue"),
             ["missing assignment"] = files => files.Edit(Course, json => json["territories"]!.AsArray().RemoveAt(2)),
-            ["unowned block"] = files => files.Edit("green-line-territories-single.json", json => json["territories"]![0]!["blockIds"]!.AsArray().RemoveAt(0)),
-            ["block owned on the wrong line"] = files => files.Edit("red-line-territories-single.json", json => json["territories"]![0]!["blockIds"]!.AsArray().Add("GREEN-1")),
+            ["unowned block"] = files => files.Edit("green-line-project-territories.json", json => json["territories"]![0]!["blockIds"]!.AsArray().RemoveAt(0)),
+            ["block owned on the wrong line"] = files => files.Edit("red-line-project-territories.json", json => json["territories"]![0]!["blockIds"]!.AsArray().Add("GREEN-1")),
             ["lines mixed with trackFile"] = files => files.Edit(Course, json => json["trackFile"] = "blue-line-track-map.json"),
         };
 

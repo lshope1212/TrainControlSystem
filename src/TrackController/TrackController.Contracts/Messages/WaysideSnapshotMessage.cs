@@ -25,6 +25,9 @@ public sealed record WaysideSnapshotMessage(
     /// <summary>Feedback from adjacent foreign blocks. Observations confer no command or movement authority.</summary>
     public IReadOnlyList<WaysideBlockStatus> NeighborObservations { get; init; } = [];
 
+    /// <summary>Private route evaluations for the router. Never publish these as foreign block commands.</summary>
+    public IReadOnlyList<WaysideBlockStatus> RouteAssessments { get; init; } = [];
+
     /// <summary>Creates a copy with unavailable observations and stopped outputs after communication loss.</summary>
     public WaysideSnapshotMessage CreateStopSnapshot(string reason)
     {
@@ -35,6 +38,7 @@ public sealed record WaysideSnapshotMessage(
             ValidUntilUtc = now.AddSeconds(1),
             IsPaused = true,
             PlcStatus = reason,
+            RouteAssessments = [],
             Blocks = Blocks.Select(block => block with { IsFresh = false, Occupancy = OccupancyState.Unknown, IsReservedByCtc = null, CommandedSignal = SignalState.Red, CommandedCrossing = CrossingState.Closed, CommandedSwitch = SwitchPosition.Unknown, ReportedSignal = SignalState.Unknown, ReportedCrossing = CrossingState.Unknown, ReportedSwitch = SwitchPosition.Unknown, ActualSpeedMetersPerSecond = null, Status = reason, AuthorizedSpeedMetersPerSecond = 0, AuthorizedAuthorityMeters = 0, MovementStatus = block.Request is null ? "" : "Withheld", MovementReason = block.Request is null ? "" : reason, Continuation = null }).ToArray(),
             NeighborObservations = NeighborObservations.Select(neighbor => neighbor with { IsFresh = false, Occupancy = OccupancyState.Unknown, ReportedSignal = SignalState.Unknown, ReportedSwitch = SwitchPosition.Unknown, ReportedCrossing = CrossingState.Unknown, IsReservedByCtc = null, ActualSpeedMetersPerSecond = null }).ToArray()
         };

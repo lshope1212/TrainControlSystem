@@ -158,18 +158,20 @@ public sealed class PreparedDeployment
             foreach (var territory in Territories)
             {
                 IWaysideRuntime runtime;
+                var configuration = TrackController.Core.Models.WaysideConfiguration.ValidateAndCopy(territory.Configuration);
+                configuration.CoordinatedRoutes = Territories.Count(item => item.Configuration.LineName == configuration.LineName) > 1;
                 if (territory.Execution == "Pi")
                 {
-                    runtime = new PiWaysideRuntime(territory.Host, territory.Port, territory.Configuration, territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource);
+                    runtime = new PiWaysideRuntime(territory.Host, territory.Port, configuration, territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource);
                 }
                 else
                 {
-                    var service = new TrackControllerService(territory.Configuration);
+                    var service = new TrackControllerService(configuration);
                     service.LoadPlc(territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource);
                     runtime = new LocalWaysideRuntime(service);
                 }
 
-                entries.Add((territory.Configuration, territory.Execution, runtime, territory.Name));
+                entries.Add((configuration, territory.Execution, runtime, territory.Name));
             }
 
             return new(Name, entries);

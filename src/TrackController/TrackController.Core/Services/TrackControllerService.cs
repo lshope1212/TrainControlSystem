@@ -195,7 +195,7 @@ public sealed partial class TrackControllerService
             var now = _clock.GetUtcNow();
             foreach (var feedback in blocks)
             {
-                if (!_owned.Contains(feedback.BlockId) && !_neighbors.Contains(feedback.BlockId))
+                if (!_owned.Contains(feedback.BlockId) && !_neighbors.Contains(feedback.BlockId) && !(_configuration.CoordinatedRoutes && _blocks.ContainsKey(feedback.BlockId)))
                 {
                     throw new ArgumentException($"Block {feedback.BlockId} is neither owned nor an observed neighbor.");
                 }

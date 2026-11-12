@@ -32,9 +32,10 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
             {
                 case "GetSnapshot":
                     return Task.FromResult<object>(_controller.GetSnapshot());
+                case "CoordinateMovement":
                 case nameof(MovementSuggestionMessage):
                     var movement = MessageSerializer.DeserializePayload<MovementSuggestionMessage>(message);
-                    switch (_controller.SubmitMovement(movement))
+                    switch (message.MessageType == "CoordinateMovement" ? _controller.SubmitCoordinatedMovement(movement) : _controller.SubmitMovement(movement))
                     {
                         case MovementSubmission.Staged:
                             // Never a grant: authority changes hands only when the train is observed crossing.

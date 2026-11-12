@@ -1,8 +1,7 @@
 {
   "territories": [
     {
-      "id": "wayside-red",
-      "name": "Red Line",
+      "name": "Red Line · Yard & north loop",
       "blockIds": [
         "RED-1",
         "RED-2",
@@ -32,6 +31,16 @@
         "RED-26",
         "RED-27",
         "RED-28",
+        "RED-73",
+        "RED-74",
+        "RED-75",
+        "RED-76"
+      ],
+      "id": "wayside-red-a"
+    },
+    {
+      "name": "Red Line · Central & south loop",
+      "blockIds": [
         "RED-29",
         "RED-30",
         "RED-31",
@@ -75,12 +84,9 @@
         "RED-69",
         "RED-70",
         "RED-71",
-        "RED-72",
-        "RED-73",
-        "RED-74",
-        "RED-75",
-        "RED-76"
-      ]
+        "RED-72"
+      ],
+      "id": "wayside-red-b"
     }
   ]
 }

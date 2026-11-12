@@ -19,7 +19,7 @@ public sealed class CourseNetworkDataTests
 {
     private static readonly TrackLayout Course = CourseTrackLayout.Create();
 
-    private static string CourseDeployment => Path.Combine(LiveSystem.SamplesFolder, "course-all-pc.deployment.json");
+    private static string CourseDeployment => Path.Combine(LiveSystem.SamplesFolder, "course-territories-all-pc.deployment.json");
 
     [TestMethod]
     public void TrackModelCourseLayout_HasAllThreeLinesWithUniqueIds()
@@ -96,17 +96,14 @@ public sealed class CourseNetworkDataTests
         foreach (string line in new[] { "Red", "Green" })
         {
             string map = JsonSerializer.Serialize(CourseTrackMaps.BuildMap(Course, line), CourseTrackMaps.Json);
-            string territories = JsonSerializer.Serialize(CourseTrackMaps.BuildSingleTerritory(Course, line), CourseTrackMaps.Json);
             if (regenerate)
             {
                 File.WriteAllText(Path.Combine(CourseTrackMaps.SourceSamplesFolder(), CourseTrackMaps.MapFile(line)), map + Environment.NewLine);
-                File.WriteAllText(Path.Combine(CourseTrackMaps.SourceSamplesFolder(), CourseTrackMaps.TerritoriesFile(line)), territories + Environment.NewLine);
                 continue;
             }
 
             Assert.AreEqual(map, CourseTrackMaps.Canonical<WaysideConfigurationMessage>(File.ReadAllText(Path.Combine(LiveSystem.SamplesFolder, CourseTrackMaps.MapFile(line)))),
                 $"{CourseTrackMaps.MapFile(line)} no longer matches the Track Model layout; regenerate it (see CourseTrackMaps).");
-            Assert.AreEqual(territories, CourseTrackMaps.Canonical<TerritoryDefinitions>(File.ReadAllText(Path.Combine(LiveSystem.SamplesFolder, CourseTrackMaps.TerritoriesFile(line)))));
         }
 
         if (regenerate)
@@ -156,14 +153,14 @@ public sealed class CourseNetworkDataTests
     public async Task CombinedDeployment_OwnsEveryTrackModelBlockExactlyOnce()
     {
         var plan = WaysideDeployment.Read(CourseDeployment);
-        CollectionAssert.AreEqual(new[] { "wayside-blue", "wayside-red", "wayside-green" }, plan.Territories.Select(territory => territory.Id).ToArray());
-        CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).ToArray());
+        CollectionAssert.AreEqual(new[] { "wayside-blue-a", "wayside-blue-b", "wayside-red-a", "wayside-red-b", "wayside-green-a", "wayside-green-b" }, plan.Territories.Select(territory => territory.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, plan.Territories.Select(territory => territory.Configuration.LineName).Distinct().ToArray());
         var owned = plan.Territories.SelectMany(territory => WaysideConfiguration.GetOwnedIds(territory.Configuration)).ToArray();
         Assert.HasCount(241, owned);
         CollectionAssert.AreEquivalent(Course.Blocks.Select(block => block.Id).ToArray(), owned, "Track Model and Track Controller use exactly the same block IDs.");
         foreach (var territory in plan.Territories)
         {
-            Assert.IsEmpty(WaysideConfiguration.GetNeighborIds(territory.Configuration), "One territory per line: no boundaries inside a line.");
+            Assert.IsNotEmpty(WaysideConfiguration.GetNeighborIds(territory.Configuration), "Every course territory has a physical boundary with another wayside.");
         }
 
         await using var router = plan.CreateRuntime();

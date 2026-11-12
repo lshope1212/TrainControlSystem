@@ -45,7 +45,9 @@ public sealed class SignalClearanceTests
 
         public Line(bool hardware = true)
         {
-            var configuration = WaysideDeployment.Read(Path.Combine(AppContext.BaseDirectory, "PiSamples", "blue-line-all-pc.deployment.json")).Territories.Single().Configuration;
+            var configuration = System.Text.Json.JsonSerializer.Deserialize<WaysideConfigurationMessage>(
+                File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "PiSamples", "blue-line-track-map.json")),
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
             Service = new(configuration, Clock);
             if (hardware)
             {

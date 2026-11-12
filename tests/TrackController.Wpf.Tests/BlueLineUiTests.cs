@@ -78,7 +78,7 @@ public sealed class BlueLineUiTests
         await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1);
         bool descriptionUpdated = false;
         inputs.PropertyChanged += (_, change) => descriptionUpdated |= change.PropertyName == nameof(inputs.ScenarioDescription);
-        controller.SelectedSetup = "Green Line";
+        controller.SelectedSetup = "Demonstration track (12 blocks)";
         await ExecuteAsync(controller.LoadSetupCommand);
         await UntilAsync(() => inputs.Snapshot.LineName == "Green Line" && inputs.Blocks.Count == 12);
         Assert.IsTrue(descriptionUpdated);
@@ -93,7 +93,7 @@ public sealed class BlueLineUiTests
     [TestMethod]
     public Task SetupChoices_EachBuiltInLine_LoadsThroughCommand() => RunAsync(async session =>
     {
-        CollectionAssert.Contains(OperatorModel.SetupChoices.ToArray(), "Green Line");
+        CollectionAssert.Contains(OperatorModel.SetupChoices.ToArray(), "Demonstration track (12 blocks)");
         CollectionAssert.Contains(OperatorModel.SetupChoices.ToArray(), "Blue Line");
         Assert.AreEqual("Saved setup file…", OperatorModel.SetupChoices.Last());
         foreach (string line in OperatorModel.SetupChoices.SkipLast(1))
@@ -102,7 +102,9 @@ public sealed class BlueLineUiTests
             await ExecuteAsync(session.Controller.LoadSetupCommand);
             Assert.IsTrue(session.Controller.IsRoutedDeployment);
             Assert.IsNotEmpty(session.Controller.ExecutionRows);
-            Assert.AreEqual(line, session.Controller.Snapshot.LineName);
+            string expected = line == "Demonstration track (12 blocks)" ? "Green Line"
+                : line == "Course network · six waysides" ? "Blue Line / Red Line / Green Line" : line;
+            Assert.AreEqual(expected, session.Controller.Snapshot.LineName);
             Assert.IsTrue(session.Controller.Snapshot.IsPaused);
         }
     });

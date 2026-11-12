@@ -68,6 +68,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         Refresh();
         _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => Refresh(), _dispatcher);
         _host.Start();
+        IndexMapLines(null);
     }
 
     public ICommand PauseResumeCommand { get; }
@@ -114,7 +115,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public WaysideSnapshotMessage Snapshot => _snapshot;
 
-    public System.Windows.Media.Brush LineAccentBrush => LineAccent.For(_snapshot.LineName);
+    public System.Windows.Media.Brush LineAccentBrush => LineAccent.For(SelectedMapLine);
 
     public IReadOnlyList<WaysideBlockStatus> Blocks => _snapshot.Blocks;
 
@@ -144,11 +145,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public string ActualSpeed => SelectedBlock?.ActualSpeedMetersPerSecond is double speed ? $"{DisplayUnits.FormatMph(speed)} mph" : "Unavailable";
 
-    public string SimulationStatus => _snapshot.IsPaused ? "Paused" : $"Running · {_snapshot.SpeedMultiplier:0}×";
+    public string SimulationStatus => _snapshot.IsPaused ? "Movement held" : "Movement enabled";
 
-    public string SimulationTime => TimeSpan.FromSeconds(_snapshot.SimulationSeconds).ToString(@"hh\:mm\:ss");
 
-    public string PauseResumeLabel => _snapshot.IsPaused ? "Resume" : "Pause";
+
+    public string PauseResumeLabel => _snapshot.IsPaused ? "Enable movement" : "Hold movement";
 
     public int TabIndex
     {
@@ -316,7 +317,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             nameof(Movements),
             nameof(Equipment),
             nameof(SimulationStatus),
-            nameof(SimulationTime),
+            nameof(TerritoryMovements),
+            nameof(TerritoryEquipment),
             nameof(PauseResumeLabel),
             nameof(DataStatus),
             nameof(Connection)
@@ -332,13 +334,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         if (blockIds.Length > 0 && !_blockIds.SequenceEqual(blockIds))
         {
             _blockIds = blockIds;
+            if (_plan is null) IndexMapLines(null);
             OnPropertyChanged(nameof(BlockIds));
             if (!_blockIds.Contains(SelectedBlockId))
             {
-                SelectedBlockId = _blockIds[0];
+                SelectedBlockId = MapBlockIds.FirstOrDefault() ?? _blockIds[0];
             }
-            ManualTarget = Blocks.FirstOrDefault(block => block.HasSwitch)?.BlockId
-                ?? (_blockIds.Contains(ManualTarget) ? ManualTarget : _blockIds[0]);
+            ManualTarget = MapBlocks.FirstOrDefault(block => block.HasSwitch)?.BlockId
+                ?? (MapBlockIds.Contains(ManualTarget) ? ManualTarget : MapBlockIds.FirstOrDefault() ?? _blockIds[0]);
         }
 
         NotifySelection();
@@ -356,7 +359,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             {
                 IReadOnlyList<TrackModelBlockStateMessage> => "Track feedback sent. Waiting for the controller response.",
                 MovementSuggestionMessage request => request.IsActive ? "Movement request sent. Check Controller response for the decision." : "Movement cancellation sent.",
-                MessageEnvelope { MessageType: "SetSimulation" } simulation => MessageSerializer.ReadValue<bool>(simulation, "paused") ? "Pause requested." : "Resume requested. Check the simulation status above.",
+                MessageEnvelope { MessageType: "SetSimulation" } simulation => MessageSerializer.ReadValue<bool>(simulation, "paused") ? "Pause requested." : "Resume requested. Check the movement status above.",
                 SwitchPositionRequestMessage => "Switch request sent. Report the actual switch position separately.",
                 MaintenanceRequestMessage => "Block closure request sent. Check the block status for the result.",
                 MessageEnvelope { MessageType: "ApplyManual" } => "Manual command sent. Equipment feedback must confirm the change.",

@@ -32,10 +32,10 @@ public sealed class BlueLineTests
 
         public TrackControllerService Service { get; }
 
-        /// <summary>Starts a controller on the single-territory Blue Line, with a train on block 1 and fresh feedback.</summary>
+        /// <summary>Exercises one core against the Blue physical map, with a train on block 1 and fresh feedback.</summary>
         public Fixture(bool plc = false)
         {
-            Service = new(ReadDeployment("blue-line-all-pc.deployment.json").Territories.Single().Configuration, Clock);
+            Service = new(ReadMap(), Clock);
             if (plc)
             {
                 Service.LoadPlc("wayside.plc", File.ReadAllText(SamplePath("wayside.plc")));
@@ -81,13 +81,16 @@ public sealed class BlueLineTests
 
     private static string SamplePath(string name) => Path.Combine(AppContext.BaseDirectory, "PiSamples", name);
 
+    private static WaysideConfigurationMessage ReadMap() => JsonSerializer.Deserialize<WaysideConfigurationMessage>(
+        File.ReadAllText(SamplePath("blue-line-track-map.json")), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
     private static PreparedDeployment ReadDeployment(string name) => WaysideDeployment.Read(SamplePath(name));
 
     /// <summary>Verifies that the Blue Line map matches the course workbook layout.</summary>
     [TestMethod]
     public void Read_BlueLineMap_MatchesCourseWorkbook()
     {
-        var configuration = ReadDeployment("blue-line-all-pc.deployment.json").Territories.Single().Configuration;
+        var configuration = ReadMap();
         Assert.AreEqual("Blue Line", configuration.LineName);
         Assert.HasCount(15, configuration.Blocks);
         Assert.IsTrue(configuration.Blocks.All(block => block.LengthMeters == BlockMeters && Math.Abs(block.SpeedLimitMetersPerSecond - SpeedLimit) < 1e-9));
@@ -303,7 +306,7 @@ public sealed class BlueLineTests
             return;
         }
 
-        var controller = ReadDeployment("blue-line-all-pc.deployment.json").Territories.Single().Configuration.Blocks;
+        var controller = ReadMap().Blocks;
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var model = document.RootElement.GetProperty("blocks").EnumerateArray().ToArray();
         Assert.HasCount(model.Length, controller);

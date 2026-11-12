@@ -41,7 +41,7 @@ public sealed partial class TrackControllerService
         inputs["switch_confirmed"] = [feedback?.Switch == block.CommandedSwitch];
         inputs["reported_normal"] = [feedback?.Switch == SwitchPosition.Normal];
         inputs["reported_reverse"] = [feedback?.Switch == SwitchPosition.Reverse];
-        inputs["reserved_known"] = [feedback?.IsReservedByCtc is not null];
+        inputs["reserved_known"] = [!_configuration.RequireCtcReservationFeedback || feedback?.IsReservedByCtc is not null];
         inputs["reserved"] = [feedback?.IsReservedByCtc == true];
     }
 
@@ -51,7 +51,7 @@ public sealed partial class TrackControllerService
         inputs["zone_ok_in"] = [true];
         inputs["requested_normal"] = [desired == SwitchPosition.Normal];
         inputs["switch_request_known"] = [desired is SwitchPosition.Normal or SwitchPosition.Reverse];
-        inputs["movement_locked"] = [_snapshot?.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any()) == true];
+        inputs["movement_locked"] = [_lastResults.Any(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any()) == true];
         IReadOnlyDictionary<string, bool[]>? outputs = null;
         foreach (string id in block.Definition.SwitchProtectionBlockIds)
         {

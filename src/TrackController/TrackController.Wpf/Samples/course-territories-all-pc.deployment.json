@@ -1,0 +1,56 @@
+{
+  "name": "Course network · six waysides",
+  "territories": [
+    {
+      "execution": "Local",
+      "port": 11405,
+      "host": "127.0.0.1",
+      "territoryId": "wayside-blue-a"
+    },
+    {
+      "execution": "Local",
+      "port": 11406,
+      "host": "127.0.0.1",
+      "territoryId": "wayside-blue-b"
+    },
+    {
+      "host": "127.0.0.1",
+      "execution": "Local",
+      "territoryId": "wayside-red-a",
+      "port": 11407
+    },
+    {
+      "host": "127.0.0.1",
+      "execution": "Local",
+      "territoryId": "wayside-red-b",
+      "port": 11408
+    },
+    {
+      "host": "127.0.0.1",
+      "execution": "Local",
+      "territoryId": "wayside-green-a",
+      "port": 11409
+    },
+    {
+      "host": "127.0.0.1",
+      "execution": "Local",
+      "territoryId": "wayside-green-b",
+      "port": 11410
+    }
+  ],
+  "plcFile": "wayside.plc",
+  "lines": [
+    {
+      "trackFile": "blue-line-track-map.json",
+      "territoriesFile": "blue-line-project-territories.json"
+    },
+    {
+      "trackFile": "red-line-track-map.json",
+      "territoriesFile": "red-line-project-territories.json"
+    },
+    {
+      "trackFile": "green-line-track-map.json",
+      "territoriesFile": "green-line-project-territories.json"
+    }
+  ]
+}

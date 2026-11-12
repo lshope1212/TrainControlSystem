@@ -1,6 +1,7 @@
 {
   "waysideId": "Shared track map",
   "lineName": "Red Line",
+  "requireCtcReservationFeedback": false,
   "feedbackTimeoutSeconds": 5,
   "requestTimeoutSeconds": 10,
   "blocks": [

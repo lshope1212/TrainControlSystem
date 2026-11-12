@@ -12,26 +12,30 @@ Set **TrackController.Wpf** as the startup project in Visual Studio, or run:
 dotnet run --project src/TrackController/TrackController.Wpf
 ```
 
-For a demonstration, also start **TrackController.TestUI.Wpf**. In the operator
-window choose **Controller setup**, pick a line in the selector, and select
-**Load setup**. The Green Line sample starts two territories on the PC;
-the Blue Line sample starts one. Both load the sample PLC and start paused. In the
-Test UI load **Clear route** and select **Send feedback**, then select **Resume**
-in this window and **Send movement request** in the Test UI.
+The window sizes itself to 92% of the desktop working area (capped at 1600 × 1000
+WPF units) and centers on that screen. It opens the course network, paused, with
+six waysides: two for Blue, two for Red, and two for Green.
+All start on the PC; **Controller setup** can assign any territory to its own Pi
+runtime. The clock and simulation speed belong to CTC. **Hold movement / Enable
+movement** controls wayside permission, not the shared simulation clock.
 
+Select a **Line** and named **Territory** above the tabs. **Territory map** shows
+only that owner's blocks at readable scale, with scrolling and block selection.
+Movement permissions, equipment rows and manual targets use the same territory.
+The setup view shows all deployment assignments. Actual train speed is omitted
+from the operator detail panel because production block feedback does not supply it.
+
+For the separate Test UI demonstration, load **Demonstration track (12 blocks)**
+or **Blue Line**, send fresh feedback, then enable movement. These remain explicit
+test setups; the small demonstration is no longer mislabeled as the course Green Line.
 Choose **Saved setup file…** in the same selector and select **Load setup** to
 open a `.deployment.json` file. A setup includes its track, territory ownership,
 PC/Pi assignments, and PLC program. Loading requires pause and fresh feedback
-afterward. Choosing an item alone does not replace the active setup.
+afterward. Choosing an item alone does not replace the active setup. Saved setups must also split every line between at least two waysides.
 
 The collapsed **Advanced** section contains **Replace selected PLC…** to change only the
 selected territory’s program, preserving the track and other PLC assignments. The built-in setup already loads
 its PLC, so no additional program-loading step is needed for a demonstration.
-
-**Advanced → Use standalone controller** returns to the
-original PC controller for software-logic or single-territory tests. It does not
-load the selected line or a PLC automatically. Check the logic/program status;
-use **Change territory…**, the logic selector, and **Replace selected PLC…** for this advanced workflow.
 
 The footer shows CTC and Track Model connection states together and changes only
 when a receiver becomes available or unavailable. Routine feedback and output
@@ -55,13 +59,13 @@ Model's `blue-line.json`: fifteen 50 m blocks at 50 km/h, with the same block ID
 
 | Deployment file | Territories |
 | --- | --- |
-| `blue-line-all-pc.deployment.json` | One territory, all 15 blocks, on the PC. Any route to either station is possible. |
+| `blue-line-all-pc.deployment.json` | Two waysides: yard/junction/Station B (1–11) and Station C approach (12–15), both on PC. |
 | `blue-line-pc-and-pi.deployment.json` | `wayside-a` (blocks 12–15, PC) and `wayside-b` (blocks 1–11, Pi). |
 
 The switch zone (4, 5, 6, 11) and crossing zone (2, 3, 4) overlap at block 4, so
 blocks 2–6 and 11 must share an owner. The split keeps the yard, junction and
-Station B on one territory; a route to Station C ends at the territory boundary
-because requests spanning owners are rejected (see the
+Station B on one territory; routes to Station C can cross into the other owner
+using coordinated route approval and block-entry handoff (see the
 [territory guide](../TrackController.Runtime/README.md#change-territory-boundaries)).
 
 The map is outbound only (block 1 toward the stations), because the workbook has no
@@ -74,7 +78,7 @@ request for block 5 as Reverse and report the switch Reverse, then occupy block 
 and request `5, 11, 12`.
 
 PLC loading, controller logic, maintenance mode, manual equipment commands,
-Pause/Resume, and PC/Pi placement belong to the operator window. The Test UI
+Hold/Enable movement, and PC/Pi placement belong to the operator window. The Test UI
 contains simulated measurements, CTC requests, and captured controller outputs.
 There is no Test/Live switch: either the real modules or their test replacements
 connect to the same controller interface.
@@ -177,7 +181,7 @@ The input connection remains one-way. Outputs use separate pipes:
 
 Both module destinations share `PublishAsync`, their output projection, and `TrySendAsync`. The monitor is separate. Snapshot validity is bounded to 1.5 seconds and shortened by feedback/request expiry; the Pi client stops outputs on expiry or communication loss.
 
-Remaining integration limits: route handoff between owners is not implemented, so a request whose route leaves its owner's territory is rejected. CTC now sends a complete movement request for the train's current block on every block change and renews it within the request watchdog; it no longer sends its separate release intent. The Track Model does not report `IsReservedByCtc`, so with the real Track Model switch protection reports "missing CTC reservation feedback" and switch requests are refused. A route through the signalled blocks (6, 11) is first prepared: the PLC's clearance scan (`signal_clearance`) commands the signal when the route is otherwise safe, and authority is granted only once the Track Model reports the proceed aspect (see *Signalled routes* in the integration guide). Deployment territories and track IDs must agree with the Track Model layout. See `docs/integration/LIVE_INTEGRATION_GUIDE.md`.
+Cross-territory route approval and handoff are implemented; see the Runtime README. Remaining integration limits: CTC now sends a complete movement request for the train's current block on every block change and renews it within the request watchdog; it no longer sends its separate release intent. The course maps set `requireCtcReservationFeedback: false` because CTC uses movement requests rather than a separate reservation service. Switch protection remains in the wayside: the PLC and independent checks require fresh clear protection-zone occupancy, no faults or closures, and no active movement using that zone. An explicit `IsReservedByCtc: true` still locks the switch. Legacy configurations default to requiring the external reservation field. A route through the signalled blocks (6, 11) is first prepared: the PLC's clearance scan (`signal_clearance`) commands the signal when the route is otherwise safe, and authority is granted only once the Track Model reports the proceed aspect (see *Signalled routes* in the integration guide). Deployment territories and track IDs must agree with the Track Model layout. See `docs/integration/LIVE_INTEGRATION_GUIDE.md`.
 
 ## Verification
 
@@ -198,4 +202,4 @@ The deployment-level `plcFile` remains the default. Each entry in `territories` 
 
 The assigned PLC now owns route interlocking, numeric speed/authority selection using explicit Boolean gates, signals, switch interlocking, crossings, and closure completion. C# supplies individual facts and encoded input words, decodes the PLC output words, and independently vetoes unsafe results. It no longer supplies precomputed route permission or normal numeric movement limits to the PLC. See the [language and execution contract](../TrackController.Core/Control/README.md).
 
-Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 8. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.
+Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 10. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.

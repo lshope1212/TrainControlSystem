@@ -56,10 +56,10 @@ internal sealed class LiveSystem : IAsyncDisposable
 
     public static string SamplesFolder => Path.Combine(AppContext.BaseDirectory, "WaysideSamples");
 
-    /// <summary>The Track Controller deployment for the production three-line network: one territory per line, on this PC.</summary>
-    public static string CourseDeployment => Path.Combine(SamplesFolder, "course-all-pc.deployment.json");
+    /// <summary>The Track Controller deployment for the production three-line network: two waysides per line, on this PC.</summary>
+    public static string CourseDeployment => Path.Combine(SamplesFolder, "course-territories-all-pc.deployment.json");
 
-    /// <summary>Starts the Track Controller with a deployment (single-territory Blue Line by default). It starts paused, as in production.</summary>
+    /// <summary>Starts the Track Controller with a deployment (two-wayside Blue Line by default). It starts paused, as in production.</summary>
     public Task StartTrackControllerAsync(string? deploymentPath = null)
     {
         var plan = WaysideDeployment.Read(deploymentPath ?? Path.Combine(SamplesFolder, "blue-line-all-pc.deployment.json"));

@@ -37,10 +37,9 @@ public sealed partial class MainWindowViewModel
     /// <summary>Built-in setups by the line name their deployment reports. The first is selected by default.</summary>
     private static readonly Dictionary<string, string> SetupFiles = new()
     {
-        ["Green Line"] = "all-pc.deployment.json",
-        ["Blue Line"] = "blue-line-all-pc.deployment.json",
-        // The course network the production Track Model publishes: one territory per line, all on this PC.
-        ["Blue Line / Red Line / Green Line"] = "course-all-pc.deployment.json"
+        ["Course network · six waysides"] = "course-territories-all-pc.deployment.json",
+        ["Demonstration track (12 blocks)"] = "all-pc.deployment.json",
+        ["Blue Line"] = "blue-line-all-pc.deployment.json"
     };
 
     public static IReadOnlyList<string> SetupChoices { get; } = [.. SetupFiles.Keys, SavedSetupChoice];
@@ -59,49 +58,64 @@ public sealed partial class MainWindowViewModel
 
     public ObservableCollection<ExecutionRow> ExecutionRows { get; } = [];
 
-    /// <summary>Map filter choice that draws every line of the deployment.</summary>
-    public const string AllMapLines = "All lines";
-
-    private Dictionary<string, string> _lineOfBlock = new(StringComparer.Ordinal);
-    private string _selectedMapLine = AllMapLines;
-
-    /// <summary>"All lines" plus each line of a multi-line deployment.</summary>
-    public IReadOnlyList<string> MapLines { get; private set; } = [AllMapLines];
-
-    public bool HasSeveralMapLines => MapLines.Count > 2;
-
-    /// <summary>The territory overview draws one line at a time when several are loaded (presentation only).</summary>
+    public sealed record MapTerritory(string Id, string Name, string Line, IReadOnlySet<string> Blocks);
+    private IReadOnlyList<MapTerritory> _mapTerritories = [];
+    private string _selectedMapLine = "";
+    private MapTerritory? _selectedMapTerritory;
+    public IReadOnlyList<string> MapLines => _mapTerritories.Select(item => item.Line).Distinct().ToArray();
+    public IReadOnlyList<MapTerritory> MapTerritories => _mapTerritories.Where(item => item.Line == SelectedMapLine).ToArray();
     public string SelectedMapLine
     {
         get => _selectedMapLine;
         set
         {
-            if (SetProperty(ref _selectedMapLine, value ?? AllMapLines))
+            if (SetProperty(ref _selectedMapLine, value))
             {
-                OnPropertyChanged(nameof(MapBlocks));
+                OnPropertyChanged(nameof(MapTerritories));
+                SelectedMapTerritory = MapTerritories.FirstOrDefault();
+                OnPropertyChanged(nameof(LineAccentBrush));
             }
         }
     }
-
-    public IReadOnlyList<WaysideBlockStatus> MapBlocks => SelectedMapLine == AllMapLines
-        ? Blocks
-        : Blocks.Where(block => _lineOfBlock.GetValueOrDefault(block.BlockId) == SelectedMapLine).ToArray();
-
-    /// <summary>Which line owns each block, from the deployment's territories.</summary>
+    public MapTerritory? SelectedMapTerritory
+    {
+        get => _selectedMapTerritory;
+        set
+        {
+            if (SetProperty(ref _selectedMapTerritory, value))
+            {
+                NotifyMap();
+                if (value is not null && !value.Blocks.Contains(ManualTarget))
+                    ManualTarget = MapBlocks.FirstOrDefault(block => block.HasSwitch)?.BlockId ?? value.Blocks.FirstOrDefault() ?? "";
+                if (value is not null && !value.Blocks.Contains(SelectedBlockId))
+                    SelectedBlockId = value.Blocks.FirstOrDefault() ?? "";
+            }
+        }
+    }
+    public IReadOnlyList<WaysideBlockStatus> MapBlocks => Blocks.Where(block => SelectedMapTerritory?.Blocks.Contains(block.BlockId) == true).ToArray();
+    public IReadOnlyList<MovementRow> TerritoryMovements => Movements.Where(row => SelectedMapTerritory?.Blocks.Contains(row.Target) == true).ToArray();
+    public IReadOnlyList<EquipmentRow> TerritoryEquipment => Equipment.Where(row => SelectedMapTerritory?.Blocks.Contains(row.Block) == true).ToArray();
+    public string[] MapBlockIds => MapBlocks.Select(block => block.BlockId).ToArray();
+    public string MapDescription => SelectedMapTerritory is { } territory ? $"{territory.Id} · {territory.Blocks.Count} owned blocks · scroll to explore; click a block for details" : "Load a controller setup.";
+    private void NotifyMap()
+    {
+        foreach (string property in new[] { nameof(MapBlocks), nameof(MapBlockIds), nameof(MapDescription), nameof(TerritoryMovements), nameof(TerritoryEquipment) })
+            OnPropertyChanged(property);
+    }
     private void IndexMapLines(PreparedDeployment? plan)
     {
-        _lineOfBlock = plan?.Territories
-            .SelectMany(territory => TrackController.Core.Models.WaysideConfiguration.GetOwnedIds(territory.Configuration).Select(id => (id, territory.Configuration.LineName)))
-            .ToDictionary(item => item.id, item => item.LineName, StringComparer.Ordinal) ?? new(StringComparer.Ordinal);
-        MapLines = [AllMapLines, .. _lineOfBlock.Values.Distinct()];
-        _selectedMapLine = AllMapLines;
+        _mapTerritories = plan is null
+            ? [new(Snapshot.WaysideId, "Standalone territory", Snapshot.LineName, Blocks.Select(block => block.BlockId).ToHashSet(StringComparer.Ordinal))]
+            : plan.Territories.Select(territory => new MapTerritory(territory.Id, territory.Name, territory.Configuration.LineName,
+                TrackController.Core.Models.WaysideConfiguration.GetOwnedIds(territory.Configuration))).ToArray();
+        var preferred = _mapTerritories.FirstOrDefault(item => item.Blocks.Contains(SelectedBlockId)) ?? _mapTerritories[0];
+        _selectedMapLine = preferred.Line;
         OnPropertyChanged(nameof(MapLines));
-        OnPropertyChanged(nameof(HasSeveralMapLines));
         OnPropertyChanged(nameof(SelectedMapLine));
-        OnPropertyChanged(nameof(MapBlocks));
+        OnPropertyChanged(nameof(MapTerritories));
+        SelectedMapTerritory = preferred;
     }
-
-    public string LayoutDescription => _plan?.LayoutDescription ?? "No line setup loaded. Choose a line above and select Load setup.";
+    public string LayoutDescription => _plan is { } plan ? $"{plan.Name} · {plan.Territories.Count} waysides · {plan.Territories.Sum(item => item.Configuration.OwnedBlockIds?.Count ?? item.Configuration.Blocks.Count)} blocks" : "Standalone test controller. Load the course network for integration.";
 
     public string DeploymentFile => _plan?.SourcePath ?? "";
 
@@ -207,6 +221,8 @@ public sealed partial class MainWindowViewModel
 
     private async Task UseDeploymentAsync(PreparedDeployment? plan)
     {
+        if (plan is not null && plan.Territories.GroupBy(territory => territory.Configuration.LineName).Any(line => line.Count() < 2))
+            throw new ArgumentException("Each line needs at least two wayside territories for this assignment. Load a split deployment.");
         var current = await _host.PollForSetupAsync(_lifetime.Token);
         if (!current.IsPaused)
         {
@@ -219,6 +235,7 @@ public sealed partial class MainWindowViewModel
             _controller.ResetTestState();
             _host = routed is null ? new WaysidePipeHost(_controller, _pipeNames) : new WaysidePipeHost(routed, _pipeNames);
             _plan = plan;
+            _snapshot = _host.LatestSnapshot;
             IndexMapLines(plan);
             ObserveHost();
             _host.Start();
