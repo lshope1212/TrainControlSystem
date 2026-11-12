@@ -13,7 +13,16 @@ public sealed partial class TrackControllerService
     /// active here is only validated and staged (<see cref="MovementSubmission.Staged"/>): it grants
     /// nothing until <see cref="ApplyFeedback"/> observes the train's transition into its target.
     /// </summary>
-    public MovementSubmission SubmitMovement(MovementSuggestionMessage message)
+    public MovementSubmission SubmitMovement(MovementSuggestionMessage message) => SubmitMovementCore(message, false);
+
+    /// <summary>Router-only route assessment. Foreign equipment commands remain forbidden.</summary>
+    public MovementSubmission SubmitCoordinatedMovement(MovementSuggestionMessage message)
+    {
+        if (!_configuration.CoordinatedRoutes) throw new InvalidOperationException("This runtime is not configured for coordinated routes.");
+        return SubmitMovementCore(message, true);
+    }
+
+    private MovementSubmission SubmitMovementCore(MovementSuggestionMessage message, bool coordinated)
     {
         ArgumentNullException.ThrowIfNull(message);
         lock (_gate)
@@ -22,7 +31,7 @@ public sealed partial class TrackControllerService
             {
                 throw new ArgumentException("Provide a target block and request ID (up to 128 characters). The train label is optional.");
             }
-            GetOwnedBlock(message.TargetBlockId);
+            if (coordinated) GetBlock(message.TargetBlockId); else GetOwnedBlock(message.TargetBlockId);
 
             if (!message.IsActive)
             {
@@ -97,7 +106,7 @@ public sealed partial class TrackControllerService
 
             for (int i = 0; i < path.Length; i++)
             {
-                var block = GetOwnedBlock(path[i]);
+                var block = coordinated ? GetBlock(path[i]) : GetOwnedBlock(path[i]);
                 if (i + 1 < path.Length && !block.Definition.NextBlockIds.Contains(path[i + 1]))
                 {
                     throw new ArgumentException($"No permitted connection from {path[i]} to {path[i + 1]}.");
@@ -287,14 +296,19 @@ public sealed partial class TrackControllerService
                 return $"{prefix}block {id} is {zone.Maintenance.ToLowerInvariant()} for maintenance.";
             }
 
+            if (_configuration.RequireCtcReservationFeedback && zone.Feedback.IsReservedByCtc is null)
+            {
+                return $"{prefix}block {id} is missing CTC reservation feedback.";
+            }
+
             if (ReservationHolder(zone, requesterId) is { } holder)
             {
                 return $"{prefix}block {id} is reserved by CTC for {holder}.";
             }
         }
 
-        var movement = _snapshot?.Authorizations.FirstOrDefault(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any());
-        if (movement is not null)
+        var movement = _lastResults.FirstOrDefault(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any());
+        if (movement.Request is not null)
         {
             return $"{prefix}active movement from block {movement.Request!.TargetBlockId} uses its protection zone.";
         }

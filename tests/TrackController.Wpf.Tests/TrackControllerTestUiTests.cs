@@ -35,12 +35,11 @@ public sealed class TrackControllerTestUiTests
     {
         var inputs = session.Inputs;
         var controller = session.Controller;
-        await ExecuteAsync(controller.LoadSetupCommand);
+        await controller.LoadDeploymentAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "Samples", "all-pc.deployment.json"));
         await UntilAsync(() => inputs.Snapshot.PlcStatus.Contains("Program loaded"));
         await ExecuteAsync(inputs.LoadScenarioCommand);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
-        await ExecuteAsync(controller.PauseResumeCommand);
         await UntilAsync(() => !inputs.Snapshot.IsPaused);
         inputs.RequestedSwitch = SwitchPosition.Reverse;
         await ExecuteAsync(inputs.SendSwitchCommand);
@@ -74,7 +73,7 @@ public sealed class TrackControllerTestUiTests
     {
         var inputs = session.Inputs;
         var controller = session.Controller;
-        await ExecuteAsync(controller.LoadSetupCommand);
+        await controller.LoadDeploymentAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "Samples", "all-pc.deployment.json"));
         await UntilAsync(() => inputs.Snapshot.PlcStatus.Contains("Program loaded"));
         await ExecuteAsync(inputs.LoadScenarioCommand);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
@@ -94,7 +93,7 @@ public sealed class TrackControllerTestUiTests
         await UntilAsync(() => controller.Blocks.All(block => block.IsFresh && block.Occupancy == OccupancyState.Clear));
         await ExecuteAsync(controller.SendManualCommand);
         await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == "6").CommandedSwitch == SwitchPosition.Reverse);
-        Assert.IsTrue(inputs.Snapshot.IsPaused);
+        Assert.IsTrue(inputs.Snapshot.IsMaintenanceMode);
         Assert.AreEqual(SwitchPosition.Normal, inputs.Blocks.Single(block => block.BlockId == "6").ReportedSwitch);
         StringAssert.Contains(controller.ManualCommandResult, "Accepted");
         await UntilAsync(() => controller.Equipment.Single(equipment => equipment.Equipment == "Switch 6").Status.Contains("Waiting for Reverse feedback"));
@@ -115,7 +114,6 @@ public sealed class TrackControllerTestUiTests
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
         Assert.IsFalse(inputs.HasUnsentFeedback);
-        await ExecuteAsync(controller.PauseResumeCommand);
         await UntilAsync(() => !inputs.Snapshot.IsPaused);
         await ExecuteAsync(inputs.SendMovementCommand);
         await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));

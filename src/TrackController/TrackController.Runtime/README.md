@@ -10,25 +10,25 @@ The track controller separates three decisions:
 
 Territory names do not imply hardware or software. The same territory can run on either target, using the same logic. Changing execution does not move blocks between owners or edit connections. The unprefixed examples use the illustrative 12-block Green Line map, not the team's final track data.
 
-The `blue-line-*` files are the same three decisions for the course Blue Line prototype (15 blocks, switch 5, crossing 3, signals 6 and 11): `blue-line-track-map.json`, `blue-line-territories.json` (two territories) or `blue-line-territories-single.json` (one), and `blue-line-all-pc.deployment.json` or `blue-line-pc-and-pi.deployment.json`. See the [operator README](../TrackController.Wpf/README.md#blue-line-prototype) for the layout and why the single-territory file is used for full routes. They share `wayside.plc` unchanged.
+The `blue-line-*` files are the same three decisions for the course Blue Line prototype (15 blocks, switch 5, crossing 3, signals 6 and 11): `blue-line-track-map.json`, `blue-line-project-territories.json` (two local territories) or `blue-line-territories.json` (the two-territory PC/Pi example), and `blue-line-all-pc.deployment.json` or `blue-line-pc-and-pi.deployment.json`. See the [operator README](../TrackController.Wpf/README.md#blue-line-prototype) for the layout and alternative territory assignments. They share `wayside.plc` unchanged.
 
 ## Change PC/Pi placement in the UI
 
-1. Pause the controller in **TrackController.Wpf**.
-2. Open **Controller setup → Load setup**. It starts two named territories on the PC, without needing a Pi. For a saved plan, choose **Saved setup file…** in the selector, then **Load setup**.
-3. Under **Execution setup**, inspect **Owned blocks** and **Observe only**. Choose **PC** or **Pi** in **Run on** for each territory.
-4. For a Pi, use its local SSH tunnel endpoint. The default junction endpoint is `127.0.0.1:11405`; see [Pi setup](../TrackController.Pi/README.md). Each additional Pi territory needs a separate runtime/tunnel port. Two territories cannot share one runtime process.
-5. Select **Apply execution**. This validates the choices, verifies that all controllers are paused, and replaces the deployment. Feedback and movement requests are cleared; the current valid PLC source is retained. It restarts paused, and a missing Pi stays unavailable.
-6. Send fresh feedback and explicitly resume. Test UI requests still enter through the normal module message interface.
-7. Optionally select **Save applied choices**. This writes execution placement and PLC assignments to the loaded deployment JSON. Assigned programs are saved as content-addressed `.plc` copies beside that JSON; original PLC files, the map, and ownership remain unchanged. **Apply** by itself does not save to disk.
+1. Enable **Maintenance mode** in **TrackController.Wpf**.
+2. Open **Controller setup → Load layout**. The application starts the 16-wayside course network on the PC, without needing a Pi. For a saved plan, choose **Saved setup file…** in the selector, then **Load layout**.
+3. Filter the **Wayside territories** list by line and select a territory. Choose **PC** or **Pi** under **Run this territory on**. Pi address and port fields appear only for Pi assignments. Block counts stay in the list; the complete block list is under **Advanced → Owned blocks**.
+4. For a Pi, enter its IP address and runtime port, normally `192.168.50.2:11405`; see [Pi setup](../TrackController.Pi/README.md). Each additional territory on the same Pi needs a separate runtime port. Two territories cannot share one runtime process.
+5. Select **Apply changes**. This validates the choices, requires maintenance mode, and replaces the deployment. Feedback and movement requests are cleared; the current valid PLC source is retained. It retains maintenance mode, and a missing Pi stays unavailable.
+6. Send fresh feedback, then leave maintenance mode when ready. Test UI requests still enter through the normal module message interface.
+7. Optionally select **Save setup**. This writes execution placement and PLC assignments to the loaded deployment JSON. Assigned programs are saved as content-addressed `.plc` copies beside that JSON; original PLC files, the map, and ownership remain unchanged. **Apply** by itself does not save to disk.
 
-**Applied** shows the execution target currently in use; **Run on** is an editable draft until Apply. Changes while running are refused. An invalid assignment leaves the existing deployment in place. The save operation detects an externally edited deployment file and asks you to reload it rather than overwriting that edit.
+**Currently** shows the applied target for the selected territory; **Run this territory on** edits a draft until **Apply changes**. Edited territories remain marked in the list when selecting another territory. Changes outside maintenance mode are refused. An invalid assignment leaves the existing deployment in place. The save operation detects an externally edited deployment file and asks you to reload it rather than overwriting that edit.
 
 The default file dialog opens the application's copied `Samples` directory. To keep changes in your repository, load the deployment from the source `src/TrackController/TrackController.Wpf/Samples` folder before saving. No rebuild is needed to load edited JSON files directly.
 
 ## Change territory boundaries
 
-Edit `territories.json`, move block IDs between lists, then pause and reload the deployment. For example:
+Edit `territories.json`, move block IDs between lists, then enter maintenance mode and reload the deployment. For example:
 
 ```json
 {
@@ -43,13 +43,13 @@ Every map block must have exactly one owner. Missing, duplicate, and unknown blo
 
 ## Several lines in one deployment
 
-`course-all-pc.deployment.json` runs the Blue, Red and Green course lines in one controller process, one territory per line. Instead of `trackFile`/`territoriesFile` it lists `lines`, each with its own shared map and ownership file:
+`course-territories-all-pc.deployment.json` runs the Blue, Red and Green course lines in one controller process: two Blue waysides, six Red waysides, and eight Green waysides. Instead of `trackFile`/`territoriesFile` it lists `lines`, each with its own shared map and ownership file:
 
 ```json
 "lines": [
-  { "trackFile": "blue-line-track-map.json", "territoriesFile": "blue-line-territories-single.json" },
-  { "trackFile": "red-line-track-map.json", "territoriesFile": "red-line-territories-single.json" },
-  { "trackFile": "green-line-track-map.json", "territoriesFile": "green-line-territories-single.json" }
+  { "trackFile": "blue-line-track-map.json", "territoriesFile": "blue-line-project-territories.json" },
+  { "trackFile": "red-line-track-map.json", "territoriesFile": "red-line-project-territories.json" },
+  { "trackFile": "green-line-track-map.json", "territoriesFile": "green-line-project-territories.json" }
 ]
 ```
 
@@ -63,32 +63,80 @@ For each territory, the runtime derives adjacent foreign blocks from the shared 
 
 Only the owner can issue movement, maintenance, switch, or manual commands for a block. The controller core enforces this independently of the router, including when running on the Pi. A territory's snapshot publishes commanded block statuses only for owned blocks. Foreign feedback appears separately in `NeighborObservations`, which contains no commanded equipment state or authority. The combined module snapshot has exactly one commanded status per map block.
 
-The controller-owned `TrackController.Contracts.Messages.WaysideConfigurationMessage.OwnedBlockIds` is explicit for shared-map deployments. Null retains the legacy meaning: every supplied block is owned. Each runtime receives the map so its physical topology remains intact, but accepts feedback only for owned blocks and directly observed neighbors. Observations retain the same freshness checks as owned feedback.
+The controller-owned `TrackController.Contracts.Messages.WaysideConfigurationMessage.OwnedBlockIds` is explicit for shared-map deployments. Null retains the legacy meaning: every supplied block is owned. Each runtime receives the map so its physical topology remains intact, and, in coordinated mode, accepts measured feedback for the full line to validate shared routes. Observations retain the same freshness checks as owned feedback.
 
-Neighbor observations currently provide context; they do not grant cross-boundary movement. Requests whose target and future path span owners are rejected. A previous entry block may be an observed neighbor if the actual map connects it to the target, but all newly authorized distance remains within the target's territory. Continuous inter-territory movement still needs a coordinated handoff protocol. Do not interpret a physical edge or a clear neighboring block as permission to cross it.
+## Project territory split and cross-wayside movement
 
+`course-territories-all-pc.deployment.json` is the operator application's default.
+It uses 16 controllers. The individual Blue, Red and Green presets use these same ownership files:
+
+| Territory | Owned blocks | Reason for boundary |
+| --- | --- | --- |
+| BL-A · Yard & junction | 1–6, 11 | Keeps the overlapping switch/crossing zones and both branch signals together. |
+| BL-B · Station B & Station C | 7–10, 12–15 | Shares one controller across both short terminal branches; handoffs at 6→7 and 11→12. |
+| RL-A · Shadyside & Herron | RED-1–17 | Northern loop, switch 16 and crossing 11. |
+| RL-B · Swissville & Penn | RED-18–28, RED-75–76 | Penn junction and its branch approach. |
+| RL-C · Steel Plaza | RED-29–36, RED-72–74 | Steel Plaza and switch 33 with its branch. |
+| RL-D · First Ave junctions | RED-37–45, RED-67–71 | Both ends of the city bypass, switches 38 and 44. |
+| RL-E · Station Square junction | RED-46–53, RED-66 | Crossing 47 and the southern loop's switch 52. |
+| RL-F · South Hills loop | RED-54–65 | Outer loop and South Hills Junction station. |
+| GL-A · Pioneer & Edgebrook | GREEN-1–20 | Northern loop, switch 13, Edgebrook and crossing 19. |
+| GL-B · Whited & South Bank junction | GREEN-21–35, GREEN-138–150 | Both approaches meet at switch 28. |
+| GL-C · Central & Inglewood outbound | GREEN-36–53 | Outbound corridor through Central and Inglewood. |
+| GL-D · Yard to Dormont | GREEN-54–75 | Connected outbound corridor through the yard entry, Overbrook, Glenbury and Dormont. |
+| GL-E · Glenbury to Central return | GREEN-110–137 | Return corridor through Glenbury, Overbrook and Inglewood toward Central. |
+| GL-F · Mt Lebanon junctions | GREEN-76–86, GREEN-100–101 | Both southern junctions and their complete switch zones. |
+| GL-G · Poplar & Castle Shannon | GREEN-87–99 | Southern outer loop and its stations. |
+| GL-H · Dormont return & crossing | GREEN-102–109 | Connected return corridor through Dormont and crossing 108. |
+
+These project defaults divide Red into six controllers and Green into eight, while the short Blue line retains two. Each Red and Green territory forms a connected stretch of track. Branches can have nonconsecutive block IDs where they join at a switch. Every block has one owner and every switch/crossing protection zone stays intact. Each territory can run on PC or a separate Pi endpoint; a missing Pi has no automatic local substitute. Single-line presets use exactly the same ownership as the combined 16-controller network. Schematic coordinates affect presentation only; connections, direction, lengths and safety inputs are unchanged.
+
+For a split line, `PreparedDeployment` enables private `CoordinatedRoutes` mode.
+The router forwards the same route, staged successor, cancellations and measured
+line feedback to each controller on that line. Each runs its own PLC and
+independent safety checks, including its locally owned maintenance/interlocks.
+Shadow evaluation of foreign blocks does not publish foreign equipment commands:
+`Blocks` remains owner-only, `NeighborObservations` is measurement-only, and
+private `RouteAssessments` are consumed exclusively by the router.
+
+The router requires current assessments from every controller on the line,
+publishes the most restrictive common speed/authority, and holds that issued
+block-entry limit for unchanged requests. A reduction becomes zero, never a
+shortened nonzero value mid-block; improvement cannot extend it. CTC's existing
+replacement, explicit limit change and station departure semantics remain intact.
+An individual runtime assessment is not permission to operate a train on its own.
+
+A staged continuation is published only with joint approval, capped by the
+predecessor's actual published grant minus the current block's full length.
+Promotion requires an observed clear-to-occupied transition while that joint
+continuation was valid, in addition to the cores' existing ambiguity, route,
+freshness and overlap checks. A cancelled, expired or unavailable participant
+withholds the combined route and its continuation. A rejected partial delivery
+is cancelled at every participant. The router serializes inputs and polls all
+participants before publishing a completed transaction; a Pi lease cannot be
+extended by transport delay. Cross-line routes remain invalid.
 ## External test inputs and resets
 
 Input source is independent of placement. The separate `TrackController.TestUI.Wpf`
 application sends to the same controller pipes used by CTC and Track Model, with
 either all-PC or mixed PC/Pi execution. It does not create a second deployment.
 
-Stop repeated test inputs before **Reset controller** in the operator window.
+Stop repeated test inputs before **Reset all controllers** in the operator window.
 Reset clears feedback and requests, retains applied placement and the current
-valid PLC, and creates paused sessions. A lost Pi never transfers its blocks to
-a local controller. Fresh feedback and an explicit resume are required afterward.
+valid PLC, and retains maintenance mode across new sessions. A lost Pi never transfers its blocks to
+a local controller. Send fresh feedback and leave maintenance mode when ready.
 
 ## Compatibility and verification
 
 Older deployments that reference `configurationFile` still load. `legacy-pc-and-pi.deployment.json` preserves the previous demonstration; use the new shared-map examples for further development.
 
-The Pi protocol is version 8 to carry movement results on their target block snapshots, alongside shared movement requests and feedback contracts: authority is a fixed route limit from the target block's entry, with no train offset input, and signal feedback accepts Super Green. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected so the two ends cannot interpret authority differently.
+The Pi protocol is version 11 to carry automatic-operation and maintenance initialization as well as coordinated route assessments alongside owner-only block snapshots, alongside shared movement requests and feedback contracts: authority is a fixed route limit from the target block's entry, with no train offset input, and signal feedback accepts Super Green. Recopy the updated Pi package before connecting an older device installation. A version mismatch is rejected so the two ends cannot interpret authority differently.
 
-Automated checks cover intact boundary edges, exclusive command ownership, invalid partitions and split protection zones, feedback fan-out, direct Pi ownership enforcement, equivalent local/Pi decisions, explicit placement saving, and the operator execution editor receiving external Test UI inputs through module pipes. Device-level Pi/LED verification and cross-territory handoff remain separate integration work.
+Automated checks cover intact boundary edges, exclusive command ownership, invalid partitions and split protection zones, feedback fan-out, direct Pi ownership enforcement, equivalent local/Pi decisions, explicit placement saving, and the operator execution editor receiving external Test UI inputs through module pipes. Cross-territory tests cover local/Pi handoff, remote closure, lost Pi, overlapping requests and rejected promotion after revocation. The full-module integration test checks that no false zero reaches the onboard train at a wayside boundary. Physical Pi/LED verification remains a hardware test.
 
 ## Per-territory PLC assignment
 
-Pause, then open Controller setup and select a **PLC territory** under Controller logic. The source viewer shows that assignment. Under Advanced, choose **Replace selected PLC…**. The replacement is validated before sending and targets only that territory on PC or Pi; inspect the reported PLC status before explicitly resuming. Reset and Apply execution retain the individual assignments. **Save applied choices** saves portable PLC copies and assignment references next to the loaded deployment file.
+Enter maintenance mode, then open Controller setup and select a **territory** in the wayside list. The source viewer shows that assignment. Under Advanced, choose **Replace selected PLC…**. The replacement is validated before sending and targets only that territory on PC or Pi; inspect the reported PLC status before leaving maintenance mode. Reset and Apply changes retain the individual assignments. **Save setup** saves portable PLC copies and assignment references next to the loaded deployment file.
 
 The deployment-level `plcFile` remains the default. Each entry in `territories` may override it with its own relative `plcFile`. Every referenced PLC is validated before runtimes are created. Paths must remain inside the deployment folder. Existing deployments need no changes. A PLC message with `territoryId` targets that owner; omitting it retains the legacy broadcast behavior.
 
@@ -96,4 +144,10 @@ The deployment-level `plcFile` remains the default. Each entry in `territories` 
 
 The assigned PLC now owns route interlocking, numeric speed/authority selection using explicit Boolean gates, signals, switch interlocking, crossings, and closure completion. C# supplies individual facts and encoded input words, decodes the PLC output words, and independently vetoes unsafe results. It no longer supplies precomputed route permission or normal numeric movement limits to the PLC. See the [language and execution contract](../TrackController.Core/Control/README.md).
 
-Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 8. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.
+Use the updated `Samples/wayside.plc`, beginning with `plc boolean_v1`. Older permission-only programs are rejected. Rebuild/redeploy the Pi package for protocol version 11. Source and programs are the same on PC/Pi; territory assignment selects the file used by each controller.
+
+## Production lifecycle and simulation ownership
+
+CTC owns the system clock, speed multiplier and simulation pause. The Track Controller operator UI has no Hold/Enable movement or local time controls. Production PC/Pi sessions use `AutomaticOperation`: valid PLCs evaluate immediately, but authority still requires fresh safe feedback and a current CTC request. Maintenance mode withholds automatic movement and is required for layout/placement changes, PLC replacement and resets. Exiting maintenance returns to automatic evaluation. Pi reconnection retains the requested maintenance state, clears old requests/feedback and requires fresh inputs. An unavailable or invalid controller cannot grant authority.
+
+The `SetSimulation` interface and snapshot time fields remain only for compatibility with isolated legacy test harnesses; production sessions reject that command and do not advance a local simulation clock. Pi protocol 11 carries the production lifecycle and maintenance initialization, so rebuild/copy/restart older Pi binaries.

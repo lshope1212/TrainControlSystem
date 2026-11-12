@@ -34,7 +34,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     };
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher;
-    private string _status = "Open Controller setup, choose a line, then select Load setup.";
+    private string _status = "Open Controller setup, choose a line, then select Load layout.";
     private string _connection = "Starting local connection…";
     private string _selectedBlockId = "5";
     private WaysideSnapshotMessage _snapshot = null!;
@@ -45,21 +45,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
     private string _plcSource = "Select a .plc file to view its Boolean program.";
     private bool _hardwareMode = true;
     private bool _maintenanceMode;
-    private int _speedMultiplier = 1;
+
     private int _tabIndex;
 
     /// <summary>Creates the operator view model around the single running controller.</summary>
     public MainWindowViewModel(TrackControllerService controller, string[]? pipeNames = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+        _controller.EnableAutomaticOperation();
         _dispatcher = Dispatcher.CurrentDispatcher;
         _pipeNames = pipeNames is null ? WaysidePipeHost.CreatePipeNames() : [.. pipeNames];
         _host = new WaysidePipeHost(_controller, _pipeNames);
         ObserveHost();
-        PauseResumeCommand = Command(() => SendAsync(MessageSerializer.CreateEnvelope("SetSimulation", new { paused = !Snapshot.IsPaused, speedMultiplier = SpeedMultiplier })));
+
         LoadPlcCommand = new AsyncRelayCommand(() => LoadSelectedPlcAsync(), () => !_disposed);
         LoadLayoutCommand = Command(ChooseLayoutAsync);
-        LoadSetupCommand = new AsyncRelayCommand(() => RunAsync(LoadSelectedSetupAsync), () => !_disposed && Snapshot is { IsPaused: true });
+        LoadSetupCommand = new AsyncRelayCommand(() => RunAsync(LoadSelectedSetupAsync), () => !_disposed && CanEditSetup);
         ApplyExecutionCommand = Command(ApplyExecutionAsync);
         SaveExecutionCommand = Command(SaveExecutionAsync);
         RestoreLocalDemoCommand = Command(() => UseDeploymentAsync(null));
@@ -68,9 +69,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         Refresh();
         _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => Refresh(), _dispatcher);
         _host.Start();
+        IndexMapLines(null);
     }
 
-    public ICommand PauseResumeCommand { get; }
+
 
     public ICommand LoadPlcCommand { get; }
 
@@ -110,11 +112,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         private set => SetProperty(ref _plcSource, value);
     }
 
-    public string PlcSummary => Snapshot.IsHardwareMode ? Snapshot.PlcStatus.Replace("hardware mode", "PLC logic") : "Software logic active. A PLC program is not required.";
+    public string PlcSummary => Snapshot.IsHardwareMode ? _host.GetPlcStatus(SelectedPlcTerritory?.Id).Replace("hardware mode", "PLC logic") : "Software logic active. A PLC program is not required.";
 
     public WaysideSnapshotMessage Snapshot => _snapshot;
 
-    public System.Windows.Media.Brush LineAccentBrush => LineAccent.For(_snapshot.LineName);
+    public System.Windows.Media.Brush LineAccentBrush => LineAccent.For(SelectedMapLine);
 
     public IReadOnlyList<WaysideBlockStatus> Blocks => _snapshot.Blocks;
 
@@ -144,11 +146,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public string ActualSpeed => SelectedBlock?.ActualSpeedMetersPerSecond is double speed ? $"{DisplayUnits.FormatMph(speed)} mph" : "Unavailable";
 
-    public string SimulationStatus => _snapshot.IsPaused ? "Paused" : $"Running · {_snapshot.SpeedMultiplier:0}×";
 
-    public string SimulationTime => TimeSpan.FromSeconds(_snapshot.SimulationSeconds).ToString(@"hh\:mm\:ss");
 
-    public string PauseResumeLabel => _snapshot.IsPaused ? "Resume" : "Pause";
+
+
+
 
     public int TabIndex
     {
@@ -179,20 +181,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             }
         }
     }
-
-    public int SpeedMultiplier
-    {
-        get => _speedMultiplier;
-        set
-        {
-            if (SetProperty(ref _speedMultiplier, value))
-            {
-                _ = RunAsync(() => SendAsync(MessageSerializer.CreateEnvelope("SetSimulation", new { paused = _snapshot.IsPaused, speedMultiplier = value })));
-            }
-        }
-    }
-
-    public int[] SpeedMultipliers { get; } = Enumerable.Range(1, 10).ToArray();
 
     private void NotifySelection()
     {
@@ -277,11 +265,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         _snapshot = _host.LatestSnapshot;
         _hardwareMode = _snapshot.IsHardwareMode;
         _maintenanceMode = _snapshot.IsMaintenanceMode;
-        _speedMultiplier = (int)_snapshot.SpeedMultiplier;
+
         OnPropertyChanged(nameof(IsHardwareMode));
         OnPropertyChanged(nameof(ControllerMode));
         OnPropertyChanged(nameof(IsMaintenanceMode));
-        OnPropertyChanged(nameof(SpeedMultiplier));
+
 
         _movements = _snapshot.Authorizations.Select(authorization => new MovementRow(authorization)).ToArray();
         _equipment = Blocks.SelectMany(blockStatus =>
@@ -315,9 +303,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             nameof(MapBlocks),
             nameof(Movements),
             nameof(Equipment),
-            nameof(SimulationStatus),
-            nameof(SimulationTime),
-            nameof(PauseResumeLabel),
+
+            nameof(TerritoryMovements),
+            nameof(TerritoryEquipment),
+
             nameof(DataStatus),
             nameof(Connection)
         }
@@ -332,16 +321,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         if (blockIds.Length > 0 && !_blockIds.SequenceEqual(blockIds))
         {
             _blockIds = blockIds;
+            if (_plan is null) IndexMapLines(null);
             OnPropertyChanged(nameof(BlockIds));
             if (!_blockIds.Contains(SelectedBlockId))
             {
-                SelectedBlockId = _blockIds[0];
+                SelectedBlockId = MapBlockIds.FirstOrDefault() ?? _blockIds[0];
             }
-            ManualTarget = Blocks.FirstOrDefault(block => block.HasSwitch)?.BlockId
-                ?? (_blockIds.Contains(ManualTarget) ? ManualTarget : _blockIds[0]);
+            ManualTarget = MapBlocks.FirstOrDefault(block => block.HasSwitch)?.BlockId
+                ?? (MapBlockIds.Contains(ManualTarget) ? ManualTarget : MapBlockIds.FirstOrDefault() ?? _blockIds[0]);
         }
 
         NotifySelection();
+        OnPropertyChanged(nameof(CanEditSetup));
         OnPropertyChanged(nameof(CanEditExecution));
         OnPropertyChanged(nameof(CanApplyExecution));
     }
@@ -356,13 +347,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             {
                 IReadOnlyList<TrackModelBlockStateMessage> => "Track feedback sent. Waiting for the controller response.",
                 MovementSuggestionMessage request => request.IsActive ? "Movement request sent. Check Controller response for the decision." : "Movement cancellation sent.",
-                MessageEnvelope { MessageType: "SetSimulation" } simulation => MessageSerializer.ReadValue<bool>(simulation, "paused") ? "Pause requested." : "Resume requested. Check the simulation status above.",
+
                 SwitchPositionRequestMessage => "Switch request sent. Report the actual switch position separately.",
                 MaintenanceRequestMessage => "Block closure request sent. Check the block status for the result.",
                 MessageEnvelope { MessageType: "ApplyManual" } => "Manual command sent. Equipment feedback must confirm the change.",
                 MessageEnvelope { MessageType: "SetMaintenanceMode" } => "Maintenance mode change sent.",
                 MessageEnvelope { MessageType: "SetControllerMode" } => "Controller logic change sent.",
-                MessageEnvelope { MessageType: "LoadPlc" } => "PLC program sent. Check Controller setup for its status before resuming.",
+                MessageEnvelope { MessageType: "LoadPlc" } => "PLC program sent. Check Controller setup for its status before leaving maintenance mode.",
                 _ => "Input sent. Waiting for the controller response."
             };
         }
@@ -394,9 +385,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         if (_plan is { } plan)
         {
             var selected = SelectedPlcTerritory ?? throw new InvalidOperationException("Select a PLC territory first.");
-            if (!(await _host.PollForSetupAsync(_lifetime.Token)).IsPaused)
+            if (!(await _host.PollForSetupAsync(_lifetime.Token)).IsMaintenanceMode)
             {
-                throw new InvalidOperationException("Pause the controller before assigning a PLC.");
+                throw new InvalidOperationException("Enter maintenance mode before assigning a PLC.");
             }
             string id = selected.Id;
             var replacement = plan.WithTerritoryProgram(id, Path.GetFileName(path), source);
@@ -405,7 +396,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             var displayed = replacement.Territories.SingleOrDefault(territory => territory.Id == SelectedPlcTerritory?.Id);
             PlcSource = displayed?.ProgramSource ?? replacement.ProgramSource;
             OnPropertyChanged(nameof(SelectedPlcName));
-            Status = $"PLC sent to {selected.Name}. Check PLC status before resuming; Save applied choices preserves the assignment.";
+            Status = $"PLC sent to {selected.Name}. Check PLC status before leaving maintenance; Save setup preserves the assignment.";
         }
         else
         {
@@ -436,7 +427,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         var config = JsonSerializer.Deserialize<WaysideConfigurationMessage>(File.ReadAllText(dialog.FileName), ConfigurationJson) ?? throw new ArgumentException("Empty configuration.");
         await SendAsync(config);
         SelectedBlockId = config.Blocks.FirstOrDefault()?.BlockId ?? "";
-        Status = "Territory configuration sent. Check the controller response before resuming.";
+        Status = "Territory configuration sent. Check the controller response before leaving maintenance mode.";
     }
 
     /// <summary>Stops UI updates and awaits the controller host before shutdown.</summary>

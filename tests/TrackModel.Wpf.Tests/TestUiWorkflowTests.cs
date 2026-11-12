@@ -272,12 +272,12 @@ public class TestUiWorkflowTests
         var b=_connection.Model.FindBlock("104")!;
         var waiting=b.WaitingPassengers; var tickets=b.TicketsSold; var boarding=b.BoardingPassengers; var exits=b.DisembarkingPassengers;
         _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
-        Assert.AreEqual(waiting-3,b.WaitingPassengers); Assert.AreEqual(tickets+3,b.TicketsSold);
+        Assert.AreEqual(waiting-3,b.WaitingPassengers); Assert.AreEqual(tickets,b.TicketsSold);
         Assert.AreEqual(boarding+3,b.BoardingPassengers); Assert.AreEqual(exits+2,b.DisembarkingPassengers);
-        await _vm.RefreshAsync(); Assert.AreEqual(tickets+3,b.TicketsSold);
-        _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync(); Assert.AreEqual(tickets+6,b.TicketsSold);
+        await _vm.RefreshAsync(); Assert.AreEqual(tickets,b.TicketsSold);
+        _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync(); Assert.AreEqual(tickets,b.TicketsSold);
         _vm.Boarding="0"; _vm.Disembarking="0"; _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
-        Assert.AreEqual(tickets+6,b.TicketsSold);
+        Assert.AreEqual(tickets,b.TicketsSold);
     }
 
     [TestMethod]
@@ -305,6 +305,7 @@ public class TestUiWorkflowTests
     public async Task ClockMidnight_PreservesTicketsFromThePrecedingHour()
     {
         _vm.Time="23:59:55"; _vm.ActualSpeed="0"; await _vm.RefreshAsync();
+        _connection.Model.RecordStationArrivals("104",3);
         _vm.Boarding="3"; _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
         Assert.AreEqual(3,_connection.Model.CreateTicketSales("Blue").TicketsPerHour);
         _vm.StepClockCommand.Execute(null); await _vm.RefreshAsync();
@@ -357,7 +358,7 @@ public class TestUiWorkflowTests
         Assert.IsTrue(_vm.Messages.Any(m => m.Destination == "CTC"));
         Assert.IsTrue(_vm.Messages.Where(m => m.Destination == "CTC").All(m => m.MessageType == nameof(TicketSalesMessage)));
         Assert.IsFalse(_vm.Messages.Any(m => m.Destination == "Train Controller"));
-        Assert.AreEqual("12 / 8",_vm.SelectedOutput!.PassengerTotals); Assert.AreEqual("12",_vm.SelectedOutput.Tickets);
+        Assert.AreEqual("12 / 8",_vm.SelectedOutput!.PassengerTotals); Assert.AreEqual("0",_vm.SelectedOutput.Tickets);
     }
 
     [TestMethod]
@@ -368,10 +369,10 @@ public class TestUiWorkflowTests
         {
             _vm.Boarding=count; _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
             StringAssert.Contains(_vm.Status,"nonnegative whole number");
-            Assert.AreEqual("12",Output("104").Tickets);
+            Assert.AreEqual("0",Output("104").Tickets);
         }
         _vm.Boarding="999"; _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
-        StringAssert.Contains(_vm.Status,"Boarding exceeds"); Assert.AreEqual("12",Output("104").Tickets);
+        StringAssert.Contains(_vm.Status,"Boarding exceeds"); Assert.AreEqual("0",Output("104").Tickets);
     }
 
     private async Task UseBlueLineAsync()
@@ -415,8 +416,8 @@ public class TestUiWorkflowTests
         _vm.CurrentBlock="10"; _vm.Boarding="3"; _vm.Disembarking="2";
         _vm.SendTrainCommand.Execute(null); await _vm.RefreshAsync();
         Assert.AreEqual("21 waiting",Output("10").Demand); Assert.AreEqual("3 / 2",Output("10").PassengerTotals);
-        Assert.AreEqual("3",Output("10").Tickets); StringAssert.Contains(_vm.TicketSales,"3 tickets/hour");
-        await _vm.RefreshAsync(); Assert.AreEqual("3",Output("10").Tickets);
+        Assert.AreEqual("0",Output("10").Tickets); StringAssert.Contains(_vm.TicketSales,"0 tickets/hour");
+        await _vm.RefreshAsync(); Assert.AreEqual("0",Output("10").Tickets);
         Assert.AreEqual("21 waiting",Output("10").Demand);
         Assert.AreEqual("24 waiting",Output("15").Demand);
         Assert.IsFalse(_connection.Sent.Any(m => m is TrackModelPassengerDemandMessage));

@@ -206,16 +206,17 @@ public sealed class WaysideDeployment
                 throw new ArgumentException("Execution must be Local or Pi.");
             }
 
-            if (territory.Execution == "Pi" && (!IPAddress.TryParse(territory.Host, out var address) || !IPAddress.IsLoopback(address) || territory.Port is < 1 or > 65535))
+            if (territory.Execution == "Pi" && (!IPAddress.TryParse(territory.Host, out var address) || (address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any)) || territory.Port is < 1 or > 65535))
             {
-                throw new ArgumentException($"{territory.Name}: use a loopback IP and valid SSH tunnel port for the Pi.");
+                throw new ArgumentException($"{territory.Name}: use the Pi IP address and a port from 1 to 65535 (loopback is also supported for local testing).");
             }
         }
 
-        var ports = territories.Where(territory => territory.Execution == "Pi").Select(territory => territory.Port).ToArray();
-        if (ports.Distinct().Count() != ports.Length)
+        var endpoints = territories.Where(territory => territory.Execution == "Pi")
+            .Select(territory => (Address: IPAddress.Parse(territory.Host), territory.Port)).ToArray();
+        if (endpoints.Distinct().Count() != endpoints.Length)
         {
-            throw new ArgumentException("Each Pi territory needs a distinct local tunnel/runtime port; one runtime has one owner.");
+            throw new ArgumentException("Each Pi territory needs a distinct IP/port endpoint; one runtime has one owner.");
         }
     }
 

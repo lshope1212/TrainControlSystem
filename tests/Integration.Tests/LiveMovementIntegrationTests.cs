@@ -7,7 +7,7 @@ namespace TrainControl.Integration.Tests;
 
 /// <summary>
 /// CTC movement requests against the real Track Controller: complete route context, correlated
-/// acknowledgements, actual authorization kept apart from delivery, safe rejection across a
+/// acknowledgements, actual authorization kept apart from delivery, coordinated evaluation across a
 /// territory boundary, renewal on wall time and expiry when CTC disappears. Physical release is
 /// stood in for by a Train Model-style telemetry input to the real Track Model.
 /// </summary>
@@ -31,7 +31,7 @@ public sealed class LiveMovementIntegrationTests
     /// All modules up (the production Track Model starts with no trains), train 001 scheduled on <paramref name="route"/>,
     /// released by the shared clock's time, and placed in its start block via the Track Model.
     /// </summary>
-    /// <param name="deployment">Prepares the Track Controller deployment (e.g. an edited copy of the samples); the single-territory Blue Line by default.</param>
+    /// <param name="deployment">Prepares the Track Controller deployment (e.g. an edited copy of the samples); the two-wayside Blue Line by default.</param>
     private static async Task<LiveSystem> PlacedTrainAsync(string[] route, Func<LiveSystem, string>? deployment = null, TimeSpan? renewal = null)
     {
         var system = new LiveSystem();
@@ -119,7 +119,7 @@ public sealed class LiveMovementIntegrationTests
     }
 
     [TestMethod]
-    public async Task CrossTerritoryRequest_IsRejectedSafely_AndNeverReportedAsAuthorized()
+    public async Task CrossTerritoryRequest_IsAcceptedForEvaluation_ButPauseWithholdsAuthority()
     {
         // The two-territory Blue Line split, both territories on this PC. Route 1..5, then branch C
         // (11 in one territory, 12-15 in the other).
@@ -135,12 +135,11 @@ public sealed class LiveMovementIntegrationTests
             return Path.Combine(folder, "blue-line-pc-and-pi.deployment.json");
         });
 
-        await LiveSystem.UntilAsync(() => AcknowledgedAs(live, RequestAcknowledgementOutcome.Rejected), "the Track Controller rejects a request crossing its territories.");
+        await LiveSystem.UntilAsync(() => AcknowledgedAs(live, RequestAcknowledgementOutcome.AcceptedForEvaluation), "both territories accept the route for evaluation.");
         var request = (await Request(live))!;
-        Assert.Contains("territory boundary", request.AcknowledgementDetail);
-        Assert.IsFalse(request.IsMovementAuthorized);
-        Assert.Contains("rejected by the Track Controller", await live.OnCtc(ctc => MovementRequestCoordinator.Describe(ctc.State.FindDispatchedTrain("001")!)));
-        Assert.IsNull(live.WaysideBlock("1").Request, "Nothing was registered at the controller.");
+        Assert.IsFalse(request.IsMovementAuthorized, "Accepted delivery does not bypass the controller's movement hold.");
+        Assert.AreEqual(request.RequestId, live.WaysideBlock("1").Request!.RequestId);
+        Assert.AreEqual(0, live.WaysideBlock("1").AuthorizedAuthorityMeters);
     }
 
     [TestMethod]

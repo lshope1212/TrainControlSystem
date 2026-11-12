@@ -27,9 +27,9 @@ namespace TrackController.Core.Services;
 /// cancelling it. The controller retires it when its target block reports clear (the train moved on;
 /// its successor holds the route ahead). A request that expired without being cancelled (CTC stopped
 /// renewing it) is stale and keeps reserving: it no longer authorizes anything, but nothing may be
-/// assumed about the route its train was given. Every movement request for a block is routed to the
-/// block's owning controller and a switch's protection zone must lie in that same territory, so this
-/// controller's request table is the complete reservation record for every zone it protects. The
+/// assumed about the route its train was given. Every coordinated movement request is shared across its line, including the
+/// switch's owner. A switch's protection zone belongs to one territory, so the owner's
+/// request table is the complete reservation record for every zone it protects. The
 /// Track Model has no knowledge of CTC routes; a reservation it does report
 /// (<see cref="TrackModelBlockStateMessage.IsReservedByCtc"/> = true) is honoured as an additional one.
 /// </para>
@@ -265,8 +265,8 @@ public sealed partial class TrackControllerService
 
     /// <summary>A positive authority from the previous evaluation runs through the switch's protection zone.</summary>
     private bool IsMovementLocked(Block block) =>
-        _snapshot?.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0
-            && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any()) == true;
+        _lastResults.Any(authorization => authorization.AuthorizedAuthorityMeters > 0
+            && new[] { authorization.Request.TargetBlockId }.Concat(authorization.Request.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any());
 
     private bool IsApproachLocked(Block block) => block.SwitchApproachLockedUntil is { } until && _clock.GetUtcNow() < until;
 

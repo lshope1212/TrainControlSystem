@@ -406,13 +406,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
             {
                 IReadOnlyList<TrackModelBlockStateMessage> => "Track feedback sent. Waiting for the controller response.",
                 MovementSuggestionMessage request => request.IsActive ? "Movement request sent. Check Controller response for the decision." : "Movement cancellation sent.",
-                MessageEnvelope { MessageType: "SetSimulation" } simulation => MessageSerializer.ReadValue<bool>(simulation, "paused") ? "Pause requested." : "Resume requested. Check the simulation status above.",
+
                 SwitchPositionRequestMessage => "Switch request sent. Report the actual switch position separately.",
                 MaintenanceRequestMessage => "Block closure request sent. Check the block status for the result.",
                 MessageEnvelope { MessageType: "ApplyManual" } => "Manual command sent. Equipment feedback must confirm the change.",
                 MessageEnvelope { MessageType: "SetMaintenanceMode" } => "Maintenance mode change sent.",
                 MessageEnvelope { MessageType: "SetControllerMode" } => "Controller logic change sent.",
-                MessageEnvelope { MessageType: "LoadPlc" } => "PLC program sent. Check Controller setup for its status before resuming.",
+                MessageEnvelope { MessageType: "LoadPlc" } => "PLC program sent. Check Controller setup for its status before leaving maintenance mode.",
                 _ => "Input sent. Waiting for the controller response."
             };
         }

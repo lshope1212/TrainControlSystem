@@ -145,7 +145,7 @@ public sealed class PreparedDeployment
     }
 
     /// <summary>Creates the territory runtimes and disposes partially created instances if setup fails.</summary>
-    public TerritoryRuntimeRouter CreateRuntime()
+    public TerritoryRuntimeRouter CreateRuntime(bool automaticOperation = false, bool maintenanceMode = false)
     {
         WaysideDeployment.ValidateTargets(Territories);
         foreach (string source in Territories.Select(territory => territory.ProgramSource ?? ProgramSource).Distinct(StringComparer.Ordinal))
@@ -158,18 +158,22 @@ public sealed class PreparedDeployment
             foreach (var territory in Territories)
             {
                 IWaysideRuntime runtime;
+                var configuration = TrackController.Core.Models.WaysideConfiguration.ValidateAndCopy(territory.Configuration);
+                configuration.CoordinatedRoutes = Territories.Count(item => item.Configuration.LineName == configuration.LineName) > 1;
+                configuration.AutomaticOperation = automaticOperation;
                 if (territory.Execution == "Pi")
                 {
-                    runtime = new PiWaysideRuntime(territory.Host, territory.Port, territory.Configuration, territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource);
+                    runtime = new PiWaysideRuntime(territory.Host, territory.Port, configuration, territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource, maintenanceMode);
                 }
                 else
                 {
-                    var service = new TrackControllerService(territory.Configuration);
+                    var service = new TrackControllerService(configuration);
+                    service.SetMaintenanceMode(maintenanceMode);
                     service.LoadPlc(territory.ProgramName ?? ProgramName, territory.ProgramSource ?? ProgramSource);
                     runtime = new LocalWaysideRuntime(service);
                 }
 
-                entries.Add((territory.Configuration, territory.Execution, runtime, territory.Name));
+                entries.Add((configuration, territory.Execution, runtime, territory.Name));
             }
 
             return new(Name, entries);

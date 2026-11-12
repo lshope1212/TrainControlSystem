@@ -7,7 +7,7 @@ using TrainControl.Contracts.Messages;
 namespace TrackController.Runtime;
 
 /// <summary>Block ownership routes one logical module's inputs to PC or Pi; it does not vote or duplicate control.</summary>
-public sealed class TerritoryRuntimeRouter : IWaysideRuntime
+public sealed partial class TerritoryRuntimeRouter : IWaysideRuntime
 {
     private readonly (WaysideConfigurationMessage Configuration, string Execution, IWaysideRuntime Runtime, string? Name, HashSet<string> Observed)[] _entries;
     private readonly Dictionary<string, int> _owners;
@@ -17,14 +17,27 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
     public WaysideSnapshotMessage LatestSnapshot { get; private set; }
 
     /// <summary>Returns the applied controller and execution target for a block.</summary>
-    public string GetOwnerDescription(string blockId) => _owners.TryGetValue(blockId, out int owner) ? $"{_entries[owner].Name ?? _entries[owner].Configuration.WaysideId} · {(_entries[owner].Execution == "Pi" ? "Pi 5" : "Local PC")}" : "Unassigned";
+    public string GetOwnerDescription(string blockId) => _owners.TryGetValue(blockId, out int owner) ? $"{_entries[owner].Configuration.LineName} · {_entries[owner].Name ?? _entries[owner].Configuration.WaysideId} · {(_entries[owner].Execution == "Pi" ? "Pi 5" : "Local PC")}" : "Unassigned";
+
+    /// <summary>Returns the selected territory's live PLC diagnostic without combining other territories' messages.</summary>
+    public string GetTerritoryPlcStatus(string territoryId)
+    {
+        foreach (var entry in _entries)
+        {
+            if (entry.Configuration.WaysideId != territoryId) continue;
+            var snapshot = entry.Runtime.LatestSnapshot;
+            return snapshot.ValidUntilUtc > DateTimeOffset.UtcNow ? snapshot.PlcStatus : "PLC status expired. Waiting for the controller.";
+        }
+
+        return "PLC status unavailable.";
+    }
 
     /// <summary>Validates unique ownership and connects each territory to its assigned runtime.</summary>
     public TerritoryRuntimeRouter(string name, IEnumerable<(WaysideConfigurationMessage Configuration, string Execution, IWaysideRuntime Runtime, string? Name)> entries)
     {
         _name = name;
         _entries = entries.Select(entry => (entry.Configuration, entry.Execution, entry.Runtime, entry.Name,
-            WaysideConfiguration.GetOwnedIds(entry.Configuration).Union(WaysideConfiguration.GetNeighborIds(entry.Configuration)).ToHashSet(StringComparer.Ordinal))).ToArray();
+            (entry.Configuration.CoordinatedRoutes ? entry.Configuration.Blocks.Select(block => block.BlockId) : WaysideConfiguration.GetOwnedIds(entry.Configuration).Union(WaysideConfiguration.GetNeighborIds(entry.Configuration))).ToHashSet(StringComparer.Ordinal))).ToArray();
         if (_entries.Length == 0)
         {
             throw new ArgumentException("No territories configured.");
@@ -63,6 +76,7 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
                 {
                     throw new ArgumentException("Feedback must have distinct blocks.");
                 }
+                ObserveTransitions(feedback);
                 // Validate every owner before delivering any subset.
                 foreach (var block in feedback)
                 {
@@ -79,6 +93,7 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
                     ? MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(message).BlockId
                     : MessageSerializer.DeserializePayload<BlockStatusMessage>(message).BlockId;
                 Owner(id);
+                if (message.MessageType == nameof(TrackModelBlockStateMessage)) ObserveTransitions([MessageSerializer.DeserializePayload<TrackModelBlockStateMessage>(message)]);
                 return Receipt(message.MessageType, await Task.WhenAll(_entries.Where(entry => entry.Observed.Contains(id)).Select(entry => entry.Runtime.ReceiveAsync(message, cancellationToken))));
             }
 
@@ -93,9 +108,13 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
                 }
             }
 
+            if (message.MessageType == nameof(MovementSuggestionMessage))
+            {
+                return await RouteMovementAsync(MessageSerializer.DeserializePayload<MovementSuggestionMessage>(message), cancellationToken);
+            }
+
             int? target = message.MessageType switch
             {
-                nameof(MovementSuggestionMessage) => MovementOwner(MessageSerializer.DeserializePayload<MovementSuggestionMessage>(message)),
                 nameof(SwitchPositionRequestMessage) => Owner(MessageSerializer.DeserializePayload<SwitchPositionRequestMessage>(message).BlockId),
                 nameof(MaintenanceRequestMessage) => Owner(MessageSerializer.DeserializePayload<MaintenanceRequestMessage>(message).BlockId),
                 "ApplyManual" => Owner(MessageSerializer.ReadValue<string>(message, "blockId")),
@@ -136,8 +155,12 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
         }
         finally
         {
-            LatestSnapshot = Combine();
-            _operations.Release();
+            try
+            {
+                // Acknowledge/publicize one complete evaluation, including Pi responses, never half a transaction.
+                await PollAllAsync(cancellationToken);
+            }
+            finally { _operations.Release(); }
         }
     }
 
@@ -169,27 +192,6 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
 
     private int Owner(string id) => id is not null && _owners.TryGetValue(id, out int owner) ? owner : throw new ArgumentException($"Block '{id}' has no owner in this deployment.");
 
-    private int MovementOwner(MovementSuggestionMessage request)
-    {
-        var owner = Owner(request.TargetBlockId);
-        if (request.PathBlockIds is null)
-        {
-            throw new ArgumentException("Movement route is missing.");
-        }
-
-        if (request.PathBlockIds.Any(id => Owner(id) != owner))
-        {
-            throw new ArgumentException("Movement cannot cross a territory boundary until handoff coordination is implemented. Authority must end within its owner.");
-        }
-
-        if (request.EntryBlockId is not null && !_entries[owner].Observed.Contains(request.EntryBlockId))
-        {
-            throw new ArgumentException("Movement entry must be in this territory or an adjacent observed block.");
-        }
-
-        return owner;
-    }
-
     private static WaysideAcknowledgementMessage Receipt(string type, object[] replies)
     {
         var errors = replies.OfType<WaysideAcknowledgementMessage>().Where(acknowledgement => !acknowledgement.IsAccepted).Select(acknowledgement => acknowledgement.Detail).ToArray();
@@ -200,7 +202,7 @@ public sealed class TerritoryRuntimeRouter : IWaysideRuntime
     {
         var snapshots = _entries.Select(entry => entry.Runtime.LatestSnapshot.ValidUntilUtc > DateTimeOffset.UtcNow ? entry.Runtime.LatestSnapshot : entry.Runtime.LatestSnapshot.CreateStopSnapshot($"{entry.Configuration.WaysideId} output expired.")).ToArray();
         // A multi-line deployment reports every line it controls, e.g. "Blue Line / Red Line / Green Line".
-        return new(_name, string.Join(" / ", snapshots.Select(snapshot => snapshot.LineName).Distinct()), snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId} ({snapshot.PlcName}): {snapshot.PlcStatus}")), snapshots.SelectMany(snapshot => snapshot.Blocks).ToArray());
+        return new(_name, string.Join(" / ", snapshots.Select(snapshot => snapshot.LineName).Distinct()), snapshots.Min(snapshot => snapshot.EvaluatedAtUtc), snapshots.Min(snapshot => snapshot.ValidUntilUtc), snapshots.Max(snapshot => snapshot.SimulationSeconds), snapshots.All(snapshot => snapshot.IsPaused), snapshots[0].SpeedMultiplier, true, snapshots.Any(snapshot => snapshot.IsMaintenanceMode), string.Join(" / ", snapshots.Select(snapshot => snapshot.PlcName).Distinct()), string.Join(" · ", snapshots.Select(snapshot => $"{snapshot.WaysideId} ({snapshot.PlcName}): {snapshot.PlcStatus}")), CombineRoutes(snapshots));
     }
 
     /// <summary>Stops owned background operations and releases connections before returning.</summary>

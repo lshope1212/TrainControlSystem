@@ -29,6 +29,10 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     /// <summary>Returns the applied controller and execution target for a block.</summary>
     public string GetOwnerDescription(string blockId) => _runtime is TerritoryRuntimeRouter router ? router.GetOwnerDescription(blockId) : "Standalone controller · local PC";
 
+    public string GetPlcStatus(string? territoryId) => _runtime is TerritoryRuntimeRouter router
+        ? territoryId is null ? "" : router.GetTerritoryPlcStatus(territoryId)
+        : LatestSnapshot.PlcStatus;
+
     private readonly string[] _pipes;
     private readonly CancellationTokenSource _stop = new();
     private Task[]? _workers;

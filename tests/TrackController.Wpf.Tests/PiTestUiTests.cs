@@ -35,7 +35,6 @@ public sealed class PiTestUiTests
             await ExecuteAsync(inputs.LoadScenarioCommand);
             await ExecuteAsync(inputs.ApplyFeedbackCommand);
             await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
-            await ExecuteAsync(controller.PauseResumeCommand);
             await UntilAsync(() => !inputs.Snapshot.IsPaused);
             await ExecuteAsync(inputs.SendMovementCommand);
             await UntilAsync(() => inputs.Snapshot.Authorizations.Any(authorization => authorization.AuthorizedAuthorityMeters > 0));

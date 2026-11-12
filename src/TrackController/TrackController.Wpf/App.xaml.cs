@@ -13,10 +13,11 @@ public partial class App : Application
     private MainWindowViewModel? _viewModel;
     private bool _closing;
 
-    protected override void OnStartup(StartupEventArgs eventArgs)
+    protected override async void OnStartup(StartupEventArgs eventArgs)
     {
         base.OnStartup(eventArgs);
         _viewModel = new MainWindowViewModel(new TrackControllerService());
+        await _viewModel.LoadDeploymentAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "Samples", "course-territories-all-pc.deployment.json"));
         var window = new MainWindow(_viewModel);
         window.Closing += OnWindowClosing;
         MainWindow = window;

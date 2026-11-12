@@ -1,14 +1,20 @@
 {
-  "name": "Blue Line prototype (one territory, PC)",
+  "name": "Blue Line · 2 waysides",
   "trackFile": "blue-line-track-map.json",
-  "territoriesFile": "blue-line-territories-single.json",
+  "territoriesFile": "blue-line-project-territories.json",
   "plcFile": "wayside.plc",
   "territories": [
     {
-      "territoryId": "wayside-blue",
+      "territoryId": "wayside-blue-a",
       "execution": "Local",
-      "host": "127.0.0.1",
+      "host": "192.168.50.2",
       "port": 11405
+    },
+    {
+      "territoryId": "wayside-blue-b",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11406
     }
   ]
 }

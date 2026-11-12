@@ -42,12 +42,14 @@ public sealed class PiRuntimeTests
 
     /// <summary>Verifies that pc and network runtime use same program and return same movement.</summary>
     [TestMethod]
-    public async Task ReceiveAsync_SameInputsOnPcAndPi_ReturnsSameMovement()
+    [DataRow("127.0.0.1")]
+    [DataRow("127.0.0.2")]
+    public async Task ReceiveAsync_SameInputsOnPcAndPi_ReturnsSameMovement(string bindAddress)
     {
-        await using var server = new PiRuntimeServer(0);
+        await using var server = new PiRuntimeServer(0, System.Net.IPAddress.Parse(bindAddress));
         server.Start();
         var config = WaysideConfiguration.CreateDemo();
-        await using var remote = new PiWaysideRuntime("127.0.0.1", server.Port, config, "wayside.plc", ProgramSource);
+        await using var remote = new PiWaysideRuntime(bindAddress, server.Port, config, "wayside.plc", ProgramSource);
         await using var local = Local(config);
         Assert.IsTrue((await remote.PollAsync()).IsPaused);
         var request = Movement();
@@ -179,13 +181,16 @@ public sealed class PiRuntimeTests
         Assert.AreEqual("deny.plc", snapshot.PlcName);
     }
 
-    /// <summary>Verifies that duplicate block owners and non tunnel endpoints are rejected.</summary>
+    /// <summary>Verifies that duplicate block owners and invalid endpoints are rejected, while a direct Pi IP is accepted.</summary>
     [TestMethod]
-    public void Load_DuplicateOwnersOrNonLoopbackHost_RejectsDeployment()
+    public async Task Load_DuplicateOwnersOrInvalidHost_RejectsDeployment()
     {
         var config = Section("A", "1");
         Assert.ThrowsExactly<ArgumentException>(() => new TerritoryRuntimeRouter("Bad", [(config, "Local", Local(config), null), (config, "Local", Local(config), null)]));
-        Assert.ThrowsExactly<ArgumentException>(() => new PiWaysideRuntime("192.168.50.2", 11405, config, "wayside.plc", ProgramSource));
+        foreach (string invalid in new[] { "", "invalid host", "0.0.0.0", "::" })
+            Assert.ThrowsExactly<ArgumentException>(() => new PiWaysideRuntime(invalid, 11405, config, "wayside.plc", ProgramSource));
+        await using var direct = new PiWaysideRuntime("192.168.50.2", 11405, config, "wayside.plc", ProgramSource);
+        Assert.IsTrue(direct.LatestSnapshot.IsPaused);
     }
 
     /// <summary>Verifies that idle connection publishes stop without another pc message.</summary>

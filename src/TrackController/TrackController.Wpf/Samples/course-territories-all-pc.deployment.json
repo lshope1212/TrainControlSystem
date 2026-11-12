@@ -1,0 +1,116 @@
+{
+  "name": "Course network · 16 waysides",
+  "plcFile": "wayside.plc",
+  "lines": [
+    {
+      "trackFile": "blue-line-track-map.json",
+      "territoriesFile": "blue-line-project-territories.json"
+    },
+    {
+      "trackFile": "red-line-track-map.json",
+      "territoriesFile": "red-line-project-territories.json"
+    },
+    {
+      "trackFile": "green-line-track-map.json",
+      "territoriesFile": "green-line-project-territories.json"
+    }
+  ],
+  "territories": [
+    {
+      "territoryId": "wayside-blue-a",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11405
+    },
+    {
+      "territoryId": "wayside-blue-b",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11406
+    },
+    {
+      "territoryId": "wayside-red-a",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11407
+    },
+    {
+      "territoryId": "wayside-red-b",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11408
+    },
+    {
+      "territoryId": "wayside-red-c",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11409
+    },
+    {
+      "territoryId": "wayside-red-d",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11410
+    },
+    {
+      "territoryId": "wayside-red-e",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11411
+    },
+    {
+      "territoryId": "wayside-red-f",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11412
+    },
+    {
+      "territoryId": "wayside-green-a",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11413
+    },
+    {
+      "territoryId": "wayside-green-b",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11414
+    },
+    {
+      "territoryId": "wayside-green-c",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11415
+    },
+    {
+      "territoryId": "wayside-green-d",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11416
+    },
+    {
+      "territoryId": "wayside-green-e",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11417
+    },
+    {
+      "territoryId": "wayside-green-f",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11418
+    },
+    {
+      "territoryId": "wayside-green-g",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11419
+    },
+    {
+      "territoryId": "wayside-green-h",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11420
+    }
+  ]
+}

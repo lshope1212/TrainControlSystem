@@ -32,7 +32,6 @@ public sealed class MovementProgressTests
 
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
-        await ExecuteAsync(session.Controller.PauseResumeCommand);
         await UntilAsync(() => !inputs.Snapshot.IsPaused);
         inputs.RequestedPath = "5, 6, 7, 8";
         await ExecuteAsync(inputs.SendMovementCommand);
@@ -236,7 +235,11 @@ public sealed class MovementProgressTests
         SetOccupancy(inputs, "4", OccupancyState.Unknown);
         SetOccupancy(inputs, "5", OccupancyState.Occupied);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
-        await UntilAsync(() => inputs.Snapshot.Authorizations.Count == 1 && inputs.Snapshot.Authorizations.Single().AuthorizedAuthorityMeters == 0);
+        await UntilAsync(() => inputs.Blocks.Single(block => block.BlockId == "4").Occupancy == OccupancyState.Unknown
+            && inputs.Blocks.Single(block => block.BlockId == "5").Occupancy == OccupancyState.Occupied);
+        // Coordinated routes retire the cleared origin; unknown feedback must not recreate
+        // permission or advance the test train. A retired request has no authorization row.
+        Assert.IsTrue(inputs.Snapshot.Authorizations.All(result => result.AuthorizedAuthorityMeters == 0));
         Assert.AreEqual("4", inputs.TargetBlock);
     });
 
@@ -315,7 +318,6 @@ public sealed class MovementProgressTests
         await ExecuteAsync(inputs.LoadScenarioCommand);
         await ExecuteAsync(inputs.ApplyFeedbackCommand);
         await UntilAsync(() => inputs.Blocks.All(block => block.IsFresh));
-        await ExecuteAsync(session.Controller.PauseResumeCommand);
         await UntilAsync(() => !inputs.Snapshot.IsPaused);
         inputs.TargetBlock = "12";
         inputs.RequestedPath = "";

@@ -16,6 +16,9 @@ public class TrackBlock
     public string StationName { get; set; } = string.Empty;
     public string Beacon { get; set; } = string.Empty;
     public string BeaconTargetBlockId { get; set; } = string.Empty;
+    /// <summary>Optional surveyed distance from this beacon to the stopping point. Null means unknown.</summary>
+    public double? BeaconDistanceToStopMeters { get; set; }
+    public PlatformSide BeaconPlatformSide { get; set; } = PlatformSide.None;
     public int InitialWaitingPassengers { get; set; }
     public bool HasSwitch { get; set; }
     public bool HasSignal { get; set; }

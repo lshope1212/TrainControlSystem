@@ -16,6 +16,8 @@ public class MainWindowViewModel : ViewModelBase
     private int _layoutRevision = -1;
     private LineOption? _selectedLine;
     private BlockViewModel? _selectedBlock;
+    private BlockViewModel? _selectedStation;
+    private string _arrivingCustomers = "10";
     private string _status = "Ready";
     private string _delivery = "Waiting for external modules.";
     private int _diagramRevision;
@@ -25,6 +27,7 @@ public class MainWindowViewModel : ViewModelBase
         ImportCommand = new RelayCommand(_ => Import());
         ExportCommand = new RelayCommand(_ => Export());
         DemoCommand = new RelayCommand(_ => LoadDemo());
+        RecordArrivalsCommand = new RelayCommand(_ => RecordArrivals());
         _track.StateChanged += (_, _) => Refresh();
         Refresh();
     }
@@ -35,6 +38,9 @@ public class MainWindowViewModel : ViewModelBase
     public ICommand ImportCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand DemoCommand { get; }
+    public ICommand RecordArrivalsCommand { get; }
+    public BlockViewModel? SelectedStation { get => _selectedStation; set => SetProperty(ref _selectedStation, value); }
+    public string ArrivingCustomers { get => _arrivingCustomers; set => SetProperty(ref _arrivingCustomers, value); }
     public string LayoutName => _track.Layout.Name;
     public string SystemTime => _track.SystemTime.ToString(@"hh\:mm\:ss");
     public int BlockCount => Blocks.Count;
@@ -80,6 +86,7 @@ public class MainWindowViewModel : ViewModelBase
     private void RebuildBlocks()
     {
         var previous = SelectedBlock?.Id;
+        var previousStation = SelectedStation?.Id;
         Blocks.Clear(); Stations.Clear(); Failures.Clear();
         foreach (var b in _track.Layout.Blocks.Where(b => b.LineId == SelectedLine?.Id))
         {
@@ -90,10 +97,26 @@ public class MainWindowViewModel : ViewModelBase
         }
         SelectedBlock = Blocks.FirstOrDefault(b => b.Id == previous)
             ?? Blocks.FirstOrDefault();
+        SelectedStation = Stations.FirstOrDefault(b => b.Id == previousStation) ?? Stations.FirstOrDefault();
         DiagramRevision++;
         OnPropertyChanged(nameof(DiagramHeight));
         OnPropertyChanged(nameof(BlockCount));
         OnPropertyChanged(nameof(OccupiedCount));
+    }
+
+    private void RecordArrivals()
+    {
+        if (SelectedStation is null || !int.TryParse(ArrivingCustomers, out var count) || count <= 0)
+        {
+            Status = "Select a station and enter a positive whole number of arriving customers.";
+            return;
+        }
+        try
+        {
+            _track.RecordStationArrivals(SelectedStation.Id, count);
+            Status = $"{count} customers entered {SelectedStation.Station}; {count} tickets sold.";
+        }
+        catch (ArgumentException ex) { Status = ex.Message; }
     }
 
     private void Import()

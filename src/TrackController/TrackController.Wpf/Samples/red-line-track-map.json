@@ -1,6 +1,7 @@
 {
   "waysideId": "Shared track map",
   "lineName": "Red Line",
+  "requireCtcReservationFeedback": false,
   "feedbackTimeoutSeconds": 5,
   "requestTimeoutSeconds": 10,
   "blocks": [
@@ -16,8 +17,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 420
+      "mapX": 1058.19,
+      "mapY": 318.51
     },
     {
       "blockId": "RED-2",
@@ -31,8 +32,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 420
+      "mapX": 1086.64,
+      "mapY": 295.57
     },
     {
       "blockId": "RED-3",
@@ -46,8 +47,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 420
+      "mapX": 1118.21,
+      "mapY": 274.52
     },
     {
       "blockId": "RED-4",
@@ -61,8 +62,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 420
+      "mapX": 1159.05,
+      "mapY": 243.96
     },
     {
       "blockId": "RED-5",
@@ -76,8 +77,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 420
+      "mapX": 1185.21,
+      "mapY": 219.93
     },
     {
       "blockId": "RED-6",
@@ -91,8 +92,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 420
+      "mapX": 1225.07,
+      "mapY": 206.64
     },
     {
       "blockId": "RED-7",
@@ -106,8 +107,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 420,
+      "mapX": 1290.8,
+      "mapY": 206.84,
       "stationName": "Shadyside"
     },
     {
@@ -122,8 +123,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 420
+      "mapX": 1351.66,
+      "mapY": 221.26
     },
     {
       "blockId": "RED-9",
@@ -137,8 +138,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 420
+      "mapX": 1394.55,
+      "mapY": 253.75
     },
     {
       "blockId": "RED-10",
@@ -152,8 +153,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 420
+      "mapX": 1397.79,
+      "mapY": 304.75
     },
     {
       "blockId": "RED-11",
@@ -171,8 +172,8 @@
         "RED-11",
         "RED-12"
       ],
-      "mapX": 1090,
-      "mapY": 420
+      "mapX": 1331.82,
+      "mapY": 328.57
     },
     {
       "blockId": "RED-12",
@@ -186,8 +187,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 420
+      "mapX": 1254.43,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-13",
@@ -201,8 +202,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 420
+      "mapX": 1175.5,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-14",
@@ -216,8 +217,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 420
+      "mapX": 1126.5,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-15",
@@ -231,8 +232,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 420
+      "mapX": 1077.5,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-16",
@@ -255,8 +256,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 420,
+      "mapX": 1011.9,
+      "mapY": 336.0,
       "stationName": "Herron Ave"
     },
     {
@@ -271,8 +272,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 420
+      "mapX": 965.7,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-18",
@@ -286,8 +287,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 420
+      "mapX": 919.5,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-19",
@@ -301,8 +302,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 420
+      "mapX": 873.3,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-20",
@@ -316,8 +317,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 420
+      "mapX": 827.1,
+      "mapY": 336.0
     },
     {
       "blockId": "RED-21",
@@ -331,8 +332,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 530,
+      "mapX": 768.28,
+      "mapY": 340.61,
       "stationName": "Swissville"
     },
     {
@@ -347,8 +348,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 530
+      "mapX": 720.85,
+      "mapY": 349.84
     },
     {
       "blockId": "RED-23",
@@ -362,8 +363,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 530
+      "mapX": 692.17,
+      "mapY": 376.51
     },
     {
       "blockId": "RED-24",
@@ -377,8 +378,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 409.64
     },
     {
       "blockId": "RED-25",
@@ -392,8 +393,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 530,
+      "mapX": 675.0,
+      "mapY": 428.91,
       "stationName": "Penn Station"
     },
     {
@@ -408,8 +409,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 448.18
     },
     {
       "blockId": "RED-27",
@@ -432,8 +433,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 467.45
     },
     {
       "blockId": "RED-28",
@@ -447,8 +448,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 486.73
     },
     {
       "blockId": "RED-29",
@@ -462,8 +463,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 506.0
     },
     {
       "blockId": "RED-30",
@@ -477,8 +478,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 525.27
     },
     {
       "blockId": "RED-31",
@@ -492,8 +493,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 544.55
     },
     {
       "blockId": "RED-32",
@@ -507,8 +508,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 563.82
     },
     {
       "blockId": "RED-33",
@@ -531,8 +532,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 583.09
     },
     {
       "blockId": "RED-34",
@@ -546,8 +547,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 602.36
     },
     {
       "blockId": "RED-35",
@@ -561,8 +562,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 530,
+      "mapX": 675.0,
+      "mapY": 621.64,
       "stationName": "Steel Plaza"
     },
     {
@@ -577,8 +578,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 640.91
     },
     {
       "blockId": "RED-37",
@@ -592,8 +593,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 660.18
     },
     {
       "blockId": "RED-38",
@@ -616,8 +617,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 679.45
     },
     {
       "blockId": "RED-39",
@@ -631,8 +632,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 698.73
     },
     {
       "blockId": "RED-40",
@@ -646,8 +647,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 530
+      "mapX": 675.0,
+      "mapY": 718.0
     },
     {
       "blockId": "RED-41",
@@ -661,8 +662,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 640
+      "mapX": 675.0,
+      "mapY": 737.27
     },
     {
       "blockId": "RED-42",
@@ -676,8 +677,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 640
+      "mapX": 675.0,
+      "mapY": 756.55
     },
     {
       "blockId": "RED-43",
@@ -691,8 +692,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 640
+      "mapX": 675.0,
+      "mapY": 775.82
     },
     {
       "blockId": "RED-44",
@@ -715,8 +716,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 640
+      "mapX": 675.0,
+      "mapY": 795.09
     },
     {
       "blockId": "RED-45",
@@ -730,8 +731,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 640,
+      "mapX": 675.0,
+      "mapY": 814.36,
       "stationName": "First Ave"
     },
     {
@@ -746,8 +747,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 640
+      "mapX": 661.21,
+      "mapY": 863.25
     },
     {
       "blockId": "RED-47",
@@ -765,8 +766,8 @@
         "RED-47",
         "RED-48"
       ],
-      "mapX": 666,
-      "mapY": 640
+      "mapX": 616.53,
+      "mapY": 918.98
     },
     {
       "blockId": "RED-48",
@@ -780,8 +781,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 640,
+      "mapX": 540.37,
+      "mapY": 957.9,
       "stationName": "Station Square"
     },
     {
@@ -796,8 +797,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 640
+      "mapX": 456.25,
+      "mapY": 970.0
     },
     {
       "blockId": "RED-50",
@@ -811,8 +812,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 640
+      "mapX": 408.75,
+      "mapY": 970.0
     },
     {
       "blockId": "RED-51",
@@ -826,8 +827,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 640
+      "mapX": 361.25,
+      "mapY": 970.0
     },
     {
       "blockId": "RED-52",
@@ -850,8 +851,8 @@
       ],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 640
+      "mapX": 313.75,
+      "mapY": 970.0
     },
     {
       "blockId": "RED-53",
@@ -865,8 +866,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 640
+      "mapX": 266.25,
+      "mapY": 970.0
     },
     {
       "blockId": "RED-54",
@@ -880,8 +881,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 640
+      "mapX": 218.75,
+      "mapY": 970.0
     },
     {
       "blockId": "RED-55",
@@ -895,8 +896,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 640
+      "mapX": 154.5,
+      "mapY": 936.2
     },
     {
       "blockId": "RED-56",
@@ -910,8 +911,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 640
+      "mapX": 103.85,
+      "mapY": 888.47
     },
     {
       "blockId": "RED-57",
@@ -925,8 +926,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1726,
-      "mapY": 640
+      "mapX": 64.62,
+      "mapY": 836.16
     },
     {
       "blockId": "RED-58",
@@ -940,8 +941,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1832,
-      "mapY": 640
+      "mapX": 55.43,
+      "mapY": 776.52
     },
     {
       "blockId": "RED-59",
@@ -955,8 +956,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1938,
-      "mapY": 640
+      "mapX": 78.59,
+      "mapY": 739.04
     },
     {
       "blockId": "RED-60",
@@ -970,8 +971,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 2044,
-      "mapY": 640,
+      "mapX": 136.2,
+      "mapY": 723.68,
       "stationName": "South Hills Junction"
     },
     {
@@ -986,8 +987,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 30,
-      "mapY": 750
+      "mapX": 187.98,
+      "mapY": 746.61
     },
     {
       "blockId": "RED-62",
@@ -1001,8 +1002,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 136,
-      "mapY": 750
+      "mapX": 203.95,
+      "mapY": 799.82
     },
     {
       "blockId": "RED-63",
@@ -1016,8 +1017,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 242,
-      "mapY": 750
+      "mapX": 217.98,
+      "mapY": 853.27
     },
     {
       "blockId": "RED-64",
@@ -1031,8 +1032,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 348,
-      "mapY": 750
+      "mapX": 240.8,
+      "mapY": 905.06
     },
     {
       "blockId": "RED-65",
@@ -1046,8 +1047,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 454,
-      "mapY": 750
+      "mapX": 260.39,
+      "mapY": 931.18
     },
     {
       "blockId": "RED-66",
@@ -1061,8 +1062,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 560,
-      "mapY": 750
+      "mapX": 291.9,
+      "mapY": 950.88
     },
     {
       "blockId": "RED-67",
@@ -1076,8 +1077,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 666,
-      "mapY": 750
+      "mapX": 622.5,
+      "mapY": 796.0
     },
     {
       "blockId": "RED-68",
@@ -1091,8 +1092,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 772,
-      "mapY": 750
+      "mapX": 570.0,
+      "mapY": 773.0
     },
     {
       "blockId": "RED-69",
@@ -1106,8 +1107,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 878,
-      "mapY": 750
+      "mapX": 570.0,
+      "mapY": 743.0
     },
     {
       "blockId": "RED-70",
@@ -1121,8 +1122,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 984,
-      "mapY": 750
+      "mapX": 570.0,
+      "mapY": 713.0
     },
     {
       "blockId": "RED-71",
@@ -1136,8 +1137,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1090,
-      "mapY": 750
+      "mapX": 619.5,
+      "mapY": 683.0
     },
     {
       "blockId": "RED-72",
@@ -1151,8 +1152,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1196,
-      "mapY": 750
+      "mapX": 622.5,
+      "mapY": 575.0
     },
     {
       "blockId": "RED-73",
@@ -1166,8 +1167,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1302,
-      "mapY": 750
+      "mapX": 570.0,
+      "mapY": 548.67
     },
     {
       "blockId": "RED-74",
@@ -1181,8 +1182,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1408,
-      "mapY": 750
+      "mapX": 570.0,
+      "mapY": 526.0
     },
     {
       "blockId": "RED-75",
@@ -1196,8 +1197,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1514,
-      "mapY": 750
+      "mapX": 570.0,
+      "mapY": 503.33
     },
     {
       "blockId": "RED-76",
@@ -1211,8 +1212,8 @@
       "switchProtectionBlockIds": [],
       "hasCrossing": false,
       "crossingProtectionBlockIds": [],
-      "mapX": 1620,
-      "mapY": 750
+      "mapX": 622.5,
+      "mapY": 474.0
     }
   ]
 }

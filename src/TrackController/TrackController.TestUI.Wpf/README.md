@@ -24,17 +24,14 @@ dotnet run --project src/TrackController/TrackController.TestUI.Wpf
 Keep the real CTC/Track Model applications and other peer simulators closed during
 this test; only one process can own each named pipe.
 
-1. Controller: **Controller setup**, choose a line, then **Load setup**.
-   This loads the sample PLC and starts paused. Green Line territories run on PC;
-   so does the single Blue Line territory.
+1. Controller: enter **Maintenance mode**, open **Controller setup**, choose **Blue Line**, then **Load layout**. Both Blue territories default to PC and load their PLCs automatically.
 2. Test UI: choose **Clear route**, then **Load preset**. This only edits the draft.
-3. Test UI: **Send feedback**. Wait for every feedback block (12 on Green, 15 on Blue) to become current.
-4. Controller: **Resume**.
-5. Test UI: **Send movement request**. The default speed is 25 mph; requested
-   authority is calculated from the route. Green: block 5 to the entrance of block
-   8 via 6 and 7, a 300 m / 984.25 ft limit. Blue: block 4 to the entrance of block
-   7 via 5 and 6, a 150 m / 492.13 ft limit. Inspect **Controller response**.
+3. Test UI: **Send feedback**. Wait for all 15 Blue blocks to become current.
+4. Controller: leave **Maintenance mode**. There is no local Resume control; the PLC evaluates automatically.
+5. Test UI: **Send movement request**. Blue's preset requests block 4 to the entrance of block 7 via 5 and 6, a 150 m / 492.13 ft limit. Inspect **Controller response**.
 6. Test UI: load **Switch mismatch** and send feedback. The controller withholds authority.
+
+The course presets have Blue 2, Red 6 and Green 8 territories. The older 12-block demonstration remains a saved regression fixture, not the course Green line.
 
 The block IDs, route, and equipment in the drafts and presets come from the layout the
 controller reports: the route is the first switch, the block that leads into it, and the
@@ -90,11 +87,11 @@ and equipment protection still apply. Red/unknown withhold movement, and Yellow
 restricts speed. Feedback reports actual equipment state; selecting an aspect
 does not itself issue a controller signal command.
 
-Pause withholds movement and keeps signals red. You can still send feedback and
+Maintenance mode withholds movement and keeps signals red. You can still send feedback and
 requests. Manual equipment commands require maintenance mode and their normal
-protection checks; CTC switch requests while paused also need maintenance mode.
+protection checks. Normal CTC switch requests use automatic evaluation and the same vital protection checks.
 The 5-second feedback and 10-second request watchdogs use real elapsed time and
-continue while paused. The displayed simulation clock and speed multiplier do
+continue while movement is held. CTC owns the simulation clock; its speed does
 not change those watchdog periods.
 
 **Keep test inputs active** refreshes the last transmitted feedback and movement
@@ -108,7 +105,7 @@ test workflow.
 
 **Clear test inputs** stops repeats, cancels the submitted movement request, and
 clears draft/captured state. Previously sent feedback expires normally; this
-button does not reset or pause the controller. Use **Reset controller** in the
+button does not reset or pause the controller. Use **Reset all controllers**, in maintenance mode, in the
 operator window when a new controller session is needed.
 
 Switch and closure requests simulate CTC. Equipment feedback simulates Track
@@ -125,8 +122,7 @@ Earlier movements for other targets remain until cancelled or expired.
 For switch testing, load **All blocks clear** and select **Send feedback** with
 repeats enabled. The usual **Clear route** preset occupies the switch approach:
 block 5 locks switch 6 on Green, and block 4 locks switch 5 on Blue.
-Resume the controller for a CTC switch request, or enable its
-maintenance mode for manual operation. Send Normal or Reverse and inspect
+Normal CTC switch requests use automatic PLC evaluation; manual equipment commands require maintenance mode. Send Normal or Reverse and inspect
 **Command**. In **Track feedback → Equipment**, set the reported switch position
 and select **Send feedback** to simulate confirmation from Track Model.
 The switch request result remains visible in its section, including the block

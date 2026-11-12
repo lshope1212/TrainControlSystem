@@ -1,0 +1,56 @@
+{
+  "name": "Green Line · 3 waysides",
+  "trackFile": "green-line-track-map.json",
+  "territoriesFile": "green-line-project-territories.json",
+  "plcFile": "wayside.plc",
+  "territories": [
+    {
+      "territoryId": "wayside-green-a",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11413
+    },
+    {
+      "territoryId": "wayside-green-b",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11414
+    },
+    {
+      "territoryId": "wayside-green-c",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11415
+    },
+    {
+      "territoryId": "wayside-green-d",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11416
+    },
+    {
+      "territoryId": "wayside-green-e",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11417
+    },
+    {
+      "territoryId": "wayside-green-f",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11418
+    },
+    {
+      "territoryId": "wayside-green-g",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11419
+    },
+    {
+      "territoryId": "wayside-green-h",
+      "execution": "Local",
+      "host": "192.168.50.2",
+      "port": 11420
+    }
+  ]
+}

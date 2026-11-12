@@ -9,7 +9,7 @@ namespace TrainControl.Integration.Tests;
 /// <summary>
 /// Derives a Track Controller shared track map from the Track Model's layout, the authority for
 /// block identity and physical layout. This is how <c>red-line-track-map.json</c> and
-/// <c>green-line-track-map.json</c> (and their single-territory ownership files) were produced, and
+/// <c>green-line-track-map.json</c> were produced, and
 /// the tests check the checked-in files still equal what it derives, so the maps cannot drift from
 /// the Track Model. Set <c>TRAINCONTROL_REGENERATE_TRACK_MAPS=1</c> and run
 /// <see cref="CourseNetworkDataTests"/> to rewrite them in the source tree.
@@ -45,9 +45,7 @@ internal static class CourseTrackMaps
 
     public static string MapFile(string lineId) => $"{lineId.ToLowerInvariant()}-line-track-map.json";
 
-    public static string TerritoriesFile(string lineId) => $"{lineId.ToLowerInvariant()}-line-territories-single.json";
 
-    public static string TerritoryId(string lineId) => "wayside-" + lineId.ToLowerInvariant();
 
     public static WaysideConfigurationMessage BuildMap(TrackLayout layout, string lineId)
     {
@@ -123,19 +121,6 @@ internal static class CourseTrackMaps
             Blocks = definitions,
         };
     }
-
-    public static TerritoryDefinitions BuildSingleTerritory(TrackLayout layout, string lineId) => new()
-    {
-        Territories =
-        [
-            new TerritoryDefinition
-            {
-                Id = TerritoryId(lineId),
-                Name = lineId + " Line",
-                BlockIds = [.. layout.Blocks.Where(block => block.LineId == lineId).OrderBy(block => block.Number).Select(block => block.Id)],
-            },
-        ],
-    };
 
     /// <summary>Canonical text of a JSON file in this format, so formatting differences never matter.</summary>
     public static string Canonical<T>(string json) => JsonSerializer.Serialize(JsonSerializer.Deserialize<T>(json, Json), Json);

@@ -144,7 +144,14 @@
      </Grid>
      <Border Style="{StaticResource Card}" ><StackPanel><TextBlock Text="Station Information" Style="{StaticResource Heading}"/><DataGrid ItemsSource="{Binding Stations}" MaxHeight="235" FontSize="20" RowHeight="44" ColumnHeaderHeight="48"><DataGrid.Columns>
       <DataGridTextColumn Header="Station" Binding="{Binding Station}" Width="*" MinWidth="90"/><DataGridTextColumn Header="Boarding" Binding="{Binding Boarding}" Width="SizeToHeader"/><DataGridTextColumn Header="Disembarking" Binding="{Binding Disembarking}" Width="SizeToHeader"/><DataGridTextColumn Header="Waiting" Binding="{Binding Waiting}" Width="SizeToHeader"/><DataGridTextColumn Header="Tickets" Binding="{Binding TicketsSold}" Width="SizeToHeader"/>
-     </DataGrid.Columns></DataGrid></StackPanel></Border>
+     </DataGrid.Columns></DataGrid>
+      <TextBlock Text="Customers entering the station" Style="{StaticResource Label}" Margin="0,12,0,4"/>
+      <WrapPanel>
+       <ComboBox ItemsSource="{Binding Stations}" SelectedItem="{Binding SelectedStation}" DisplayMemberPath="Station" MinWidth="160" Margin="0,0,8,6" AutomationProperties.Name="Arrival station"/>
+       <TextBox Text="{Binding ArrivingCustomers, UpdateSourceTrigger=PropertyChanged}" Width="65" Margin="0,0,8,6" AutomationProperties.Name="Arriving customers"/>
+       <Button Content="Record arrivals" Command="{Binding RecordArrivalsCommand}" Margin="0,0,0,6" AutomationProperties.Name="Record station arrivals"/>
+      </WrapPanel>
+     </StackPanel></Border>
     </StackPanel>
    </ScrollViewer>
   </Grid>
