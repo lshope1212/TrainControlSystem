@@ -569,6 +569,131 @@ broken by that rename).
   time-based expiries (request watchdog, stale feedback) are still detected on the 500 ms cycle.
 - The Hardware Train Controller (Pi) receives the same relayed values but was not exercised.
 
+## Signalled routes: signal clearance before authority
+
+Blue Line blocks 6 (toward Station B) and 11 (toward Station C) carry signals. Red and Green have no
+signals in the course data, so nothing in this section changes them.
+
+### Root cause of "Waiting for proceed signal feedback at block 6"
+
+A request from block 1 to block 10 was withheld forever, although the route was clear. Three pieces
+of the Track Controller depended on each other in a circle:
+
+1. **The PLC needed a reported proceed aspect.** In `wayside.plc`,
+   `signal_ok = not has_signal or (signal_proceed and not manual_red)`, where `signal_proceed` is the
+   Track Model's *reported* aspect. With block 6 reporting Red, the scan stopped at block 6 with
+   `route_fault`, so `movement_enabled` was false and the whole authority was zero, not only the part
+   beyond the signal.
+2. **Signals were commanded only for granted authority.** `EvaluateVital` set an aspect only for
+   the blocks covered by its own *granted* output. With zero authority it covered nothing.
+3. **Everything else was forced Red.** At the end of `Reevaluate`, every signal outside a granted
+   authority was set back to Red. The software comparison mode had the same circle: it commanded
+   Green first, then withheld the grant for lack of feedback, and then this step reset the signal to
+   Red.
+
+So the signal stayed Red because there was no authority, and there was no authority because the
+signal was Red. Block 11 had the same circle (and, on top of that, needs switch 5 Reverse).
+
+### The fix: a route-preparation step
+
+`TrackControllerService.Reevaluate` now runs in three steps on every evaluation:
+
+1. **Prepare (`PrepareSignals`).** For each active request, the PLC runs a separate
+   **clearance scan**. It is the normal route scan with the new PLC input `signal_clearance` set,
+   and `wayside.plc` now reads
+   `signal_ok = not has_signal or ((signal_proceed or signal_clearance) and not manual_red)`.
+   Only a signal's *own reported aspect* stops counting. Every other input still applies: session
+   (running, maintenance, request lease and retirement, origin occupied, route conflicts), freshness,
+   Unknown occupancy, faults, closures, occupancy ahead, switch position and direction, crossing
+   closed, and manual red. If that scan protects a route through the signal, and the independent C#
+   check (`IsAuthorizationSafe(..., requireSignalProof: false)`) passes as well, the signals the route
+   covers are commanded to the PLC's aspect (`signal_clear` and `signal_yellow`). The independent
+   check also refuses to clear a signal the Track Model reports as Unknown (for example after a power
+   failure). **Nothing is granted in this step.**
+2. **Authorize (unchanged).** The normal PLC scan, with `signal_clearance` false, needs the Track
+   Model's *reported* proceed aspect. The independent check then needs that aspect both commanded
+   **and** reported, and caps Yellow at 5 m/s. Authority is granted only here.
+3. **Restrict.** Any signal that is neither covered by a granted authority nor prepared in this
+   evaluation is commanded Red.
+
+Prepared aspects are not stored. They are rebuilt from Red on every evaluation (every feedback batch,
+request and command, and at least every 500 ms). So a request that is cancelled, expires, is
+superseded or retired, or becomes unsafe leaves its signals Red on the next evaluation. Pausing or
+maintenance mode makes `session_ok` false, so both scans fail and every signal goes Red.
+
+`WaysidePipeHost` now also includes commanded signal aspects in its movement-output signature. A
+newly prepared aspect, or a signal dropping to Red, therefore reaches the Track Model at once instead
+of on the next 500 ms publication.
+
+### The sequence for Train 001, block 1 → 10
+
+| Cycle | Track Controller | Track Model reports | Authority |
+| --- | --- | --- | --- |
+| Request arrives | Crossing 3 commanded Closed; signal 6 Red (the crossing is not yet proven) | crossing Open, signal 6 Red | 0, *Waiting for crossing 3 to report closed.* |
+| Next feedback | Clearance scan passes: **signal 6 commanded Green** | crossing Closed, signal 6 Red | 0, *Waiting for proceed signal feedback at block 6 (commanded Green; Track Model reports Red).* |
+| Next feedback | Authorization scan passes on the reported aspect | signal 6 **Green** | 450 m, granted |
+
+The live test logs this exact sequence. Each wait lasts one feedback cycle, typically well under a
+second. The grant then reaches the Train Model and Train Controller as usual, and the train runs
+through switch 5 and block 6 with normal block-to-block handoffs.
+
+### Requested versus reported aspects
+
+The Track Controller keeps the two apart, and the operator window shows both.
+
+- **Commanded:** `WaysideBlockStatus.CommandedSignal`, which the controller sends in
+  `TrackModelCommandMessage.Signal`.
+- **Reported:** `TrackModelBlockStateMessage.Signal`, the Track Model's `EffectiveSignal` (Unknown on
+  power failure). It appears as `WaysideBlockStatus.ReportedSignal`, and it is what CTC displays.
+
+Authority uses only the reported aspect (PLC input `signal_proceed`), plus the requirement that the
+aspect is also commanded. The withheld reason says which side is missing: *(commanded Green; Track
+Model reports Red)* means the report is pending; *(held Red: the route is not safe to clear)* means
+the route itself is not safe; *(held Red manually)* means a maintainer set it Red.
+
+### Unsafe conditions still prevent authorization
+
+Only the signal's own report is relaxed in the clearance scan, and only for commanding the signal.
+These conditions still apply:
+
+- **Occupied, Unknown or stale blocks, broken rail, track-circuit or power failures, maintenance
+  closures, or a switch not reported in the needed position:** the clearance scan fails, so the
+  signal stays Red and there is no authority. An occupied or closed block ahead ends the authority
+  before that block, exactly as on unsignalled lines (an occupied block 6 gives blocks 1–5 only, and
+  signal 6 stays Red). An occupied block beyond the signal clears it to Caution (Yellow, 5 m/s) for
+  the shortened route.
+- **Conflicting requests over the same blocks:** neither request is prepared or granted.
+- **Pause, maintenance mode, an expired or retired request:** the session vetoes apply to both
+  scans.
+- **After a grant:** any of the above, or signal 6's reported aspect turning non-proceed, withdraws
+  the authority on the next evaluation. A shortened route is zero, never a shortened nonzero value
+  inside the block (`HoldBlockAuthority`). The signal is re-evaluated (Red, or Caution if a shorter
+  route through it is still safe), the zero is published at once, and the Train Controller brakes on
+  its own protections. Genuine zeros are never delayed.
+- **A PLC that does not use `signal_clearance`** (a custom or older program) behaves as before:
+  it withholds and never forces a grant. A Raspberry Pi territory needs the rebuilt
+  `TrackController.Core`, because an older Pi build rejects the new `wayside.plc` and therefore
+  withholds everything (also fail-safe).
+
+### Verify it in the production applications
+
+1. Launch **Track Controller**, **CTC Office**, **Track Model**, **Train Model** and
+   **Train Controller** from the Launcher.
+2. In the Track Controller, load **Blue Line / Red Line / Green Line** and resume it.
+3. In the Train Controller, set Train 001's Kp/Ki (for example the test gains Kp = 20000, Ki = 0).
+4. In CTC, queue Train 001 on Blue from `A1` (block 1) to `B10` (block 10) and run the clock.
+5. Train 001 appears in block 1. Under **Dispatched Trains**, the Track Controller column may show
+   *Waiting for crossing 3…* and then *Waiting for proceed signal feedback at block 6 (commanded
+   Green; Track Model reports Red)* for about a second. It then shows the grant.
+6. On the Track Controller's equipment list, signal 6 shows commanded Green and reported Green, and
+   signal 11 stays Red. The Track Model's block 6 light is Green.
+7. The Train Controller shows positive commanded speed and authority, releases the service brake and
+   accelerates. Occupancy moves 1 → 2 → … → 7 in the Track Model, Track Controller and CTC.
+
+For Station C (block 15), switch 5 must report Reverse first. With the real Track Model the Track
+Controller cannot throw it (see *CTC reservation feedback* under
+[Outstanding work](#outstanding-work-and-limitations)). Signal 11 then clears the same way.
+
 ## Demonstration: Blue, Red and Green together
 
 Close any TestUIs first: the CTC TestUI hosts the Track Controller pipe and the Track Model TestUI
@@ -724,6 +849,17 @@ against each other over isolated pipe names.
   `GREEN-63 → 64 → 65 → 66` from the occupancy its position produces, with two-block footprints at each
   boundary, the successor handoff while the trailing block is still occupied, and no emergency brake; a
   coalesced report reaches the Track Controller as every intermediate step in order.
+- **Signalled routes** (`SignalledRouteIntegrationTests`, course deployment and bundled `wayside.plc`, with the
+  production Train Model and Train Controller): Train 001 dispatched to block 10 has signal 6 commanded,
+  applied by the Track Model and reported Green before the grant; positive speed and authority reach the
+  Train Model and Train Controller; and the train runs 1 → … → 7 past the signal with no emergency brake.
+  The same is checked to block 15 through signal 11 (switch 5 Reverse). A broken rail beyond signal 6
+  after the grant withdraws authority, signal 6 goes Red at the Track Model, the Train Model receives
+  zero and the Train Controller brakes. Unit tests (`SignalClearanceTests`, real PLC and software mode,
+  with a Track Model stand-in that reports only commanded equipment) cover the preparation order and
+  the unsafe and revocation cases: Unknown, stale, occupied and faulted blocks, closures, the wrong
+  switch position, pause, conflicts, manual red, signal power failure, cancelled and expired requests,
+  and a PLC without the new input.
 - **Blue Line** (unchanged tests, Blue-only Track Model and controller): layout load and late-CTC
   synchronization, occupancy, equipment and faults, heartbeat freshness, disconnects, maintenance,
   the CTC TestUI workflow, complete movement requests, end-to-end authorization, cross-territory
@@ -755,7 +891,7 @@ batch command application, and multi-line deployment validation and routing.
 | Train Model / Track Model | **Environment volume.** Track Model → Train Model is still one message per block per snapshot (241, occupied blocks first, on their own sender). The Train Model applies only its own trains' blocks; batching would reduce the connection count. |
 | Track Controller | **Cross-territory handoff.** A request whose route leaves its owner's territory is rejected ("Movement cannot cross a territory boundary…"). The production deployment uses one territory per line, so no movement on the course lines crosses a boundary today. Splitting a line (for example to run part of it on a Raspberry Pi) needs a handoff protocol first: the owner grants authority up to its boundary; the next owner, observing the shared boundary block, is asked for the continuation; both sides' grants are combined and reported against one request ID; and a lost neighbour withdraws the combined authority. The existing neighbour observations provide the shared-block feedback this needs. |
 | Track Controller / Track Model | **CTC reservation feedback.** Switch protection requires `TrackModelBlockStateMessage.IsReservedByCtc`, which the Track Model does not report. With the real Track Model, switch requests are refused ("missing CTC reservation feedback") on every line, and CTC shows that refusal. Trains can still move through a switch in its current position. Decide which module owns reservations. |
-| Track Controller | **Signalled routes (Blue).** With the bundled `wayside.plc`, a request through block 6 or 11 is withheld ("Waiting for proceed signal feedback at block 6"). The PLC needs a proceed aspect before granting, but signals are commanded only for blocks a granted authority covers. Red and Green have no signals in the course data. |
+| Track Controller | **Signalled routes (Blue): resolved.** Routes through signals 6 and 11 are now prepared, cleared on a safe route and granted on the Track Model's reported aspect (see [Signalled routes](#signalled-routes-signal-clearance-before-authority)). A custom PLC must use the `signal_clearance` input to benefit; one that does not keeps withholding (fail-safe). Station C additionally needs switch 5 Reverse, which depends on the CTC reservation feedback item above. Red and Green have no signals in the course data. |
 | Track Controller | Starts in its 12-block demonstration territory; the three-line setup is one selection plus **Load setup**. The Blue map is directional (1→15), so reverse-direction Blue routes are rejected. A switch block lists both legs as exits (the controller's switch model requires it), so on Green a route can end on a one-way leg entered from the wrong side, but can never continue. |
 | Course data | Yard connections, Red/Green signals and transponders, station sides and the Green 16 station name are not in the workbook (see *Data the workbook does not contain*). |
 | CTC | Route planning (schedule builder, re-plan) follows connections without direction of travel. A Green schedule against the arrows is planned, then refused by the Track Controller, and CTC shows the refusal. Authority is not extended automatically when an obstruction ahead clears beyond a movement's original end; the next departure or a dispatcher re-plan recalculates it (pre-existing design). A request the Track Controller rejected is not renewed; it is replaced when the train moves or the dispatcher re-plans. |

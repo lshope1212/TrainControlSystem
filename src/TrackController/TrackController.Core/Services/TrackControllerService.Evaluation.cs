@@ -59,19 +59,12 @@ public sealed partial class TrackControllerService
             }
         }
 
+        // 1. Route preparation: command proceed aspects for routes that are safe apart from the signals'
+        //    own reported aspects. This grants nothing; step 2 still needs the Track Model's report.
+        var prepared = PrepareSignals();
+
+        // 2. Authorization: PLC (or software) scan plus independent checks, both on reported aspects.
         var candidates = _requests.Values.Select(request => _hardwareMode ? EvaluateVital(request) : EvaluateSoftware(request)).ToList();
-        foreach (var authorization in candidates.Where(authorization => !_hardwareMode && authorization.AuthorizedAuthorityMeters > 0 && GetCoveredBlocks(authorization).All(id => !GetBlock(id).Definition.HasCrossing || GetBlock(id).Feedback?.Crossing == CrossingState.Closed)))
-        {
-            foreach (string id in GetCoveredBlocks(authorization))
-            {
-                var block = GetBlock(id);
-                if (block.Definition.HasSignal && !block.ManualRed)
-                {
-                    bool restricted = authorization.AuthorizedAuthorityMeters < authorization.Request.SuggestedAuthorityMeters;
-                    block.CommandedSignal = restricted ? SignalState.Yellow : SignalState.Green;
-                }
-            }
-        }
 
         var authorizations = new List<MovementResult>();
         foreach (var authorization in candidates)
@@ -91,7 +84,7 @@ public sealed partial class TrackControllerService
 
                 if (block.Definition.HasSignal && (block.ManualRed || block.Feedback?.Signal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow)))
                 {
-                    result = Stop(result, $"Waiting for proceed signal feedback at block {id}.");
+                    result = Stop(result, $"Waiting for proceed signal feedback at block {id}{SignalWaitDetail(block)}.");
                 }
 
                 if (block.Definition.HasCrossing && block.Feedback?.Crossing != CrossingState.Closed)
@@ -110,9 +103,11 @@ public sealed partial class TrackControllerService
             authorizations.Add(result);
         }
 
-        // Rejected PLC candidates cannot leave a proceed aspect behind.
+        // Rejected PLC candidates cannot leave a proceed aspect behind. A signal stays permissive only for a
+        // granted authority or a route this very evaluation prepared; nothing carries over between evaluations.
         var permittedBlocks = authorizations.Where(authorization => authorization.AuthorizedAuthorityMeters > 0)
             .SelectMany(GetCoveredBlocks).ToHashSet(StringComparer.Ordinal);
+        permittedBlocks.UnionWith(prepared);
         foreach (var block in _blocks.Values.Where(block => _owned.Contains(block.Definition.BlockId) && block.Definition.HasSignal))
         {
             if (!permittedBlocks.Contains(block.Definition.BlockId))
@@ -298,8 +293,55 @@ public sealed partial class TrackControllerService
         };
     }
 
+    /// <summary>
+    /// Route preparation, the step between "route requested" and "authority granted". A signal receives
+    /// its proceed command only when (a) the PLC clearance scan, which is the normal scan except that a
+    /// signal's own reported aspect does not stop it, would protect the route through that signal, and
+    /// (b) the independent route check passes on everything but signal proof. Occupancy, freshness,
+    /// faults, closures, switch alignment, crossings, conflicts, pause, maintenance, manual red and the
+    /// request lease all still apply. The aspects are recomputed from scratch on every evaluation, so a
+    /// cancelled, expired, superseded or newly unsafe request leaves its signals Red at once.
+    /// </summary>
+    /// <returns>The owned signal blocks commanded to a proceed aspect by this preparation.</returns>
+    private HashSet<string> PrepareSignals()
+    {
+        var prepared = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var request in _requests.Values)
+        {
+            var (candidate, aspect) = _hardwareMode ? EvaluateVitalClearance(request) : EvaluateSoftwareClearance(request);
+            if (candidate.AuthorizedAuthorityMeters <= 0 || aspect is not (SignalState.Green or SignalState.Yellow)
+                || !IsAuthorizationSafe(candidate, requireSignalProof: false))
+            {
+                continue;
+            }
+
+            foreach (string id in GetCoveredBlocks(candidate))
+            {
+                var block = GetBlock(id);
+                if (block.Definition.HasSignal && !block.ManualRed && _owned.Contains(id))
+                {
+                    block.CommandedSignal = aspect;
+                    prepared.Add(id);
+                }
+            }
+        }
+
+        return prepared;
+    }
+
+    /// <summary>Software comparison mode's clearance candidate: its scan does not read signals, so it is the evaluation itself.</summary>
+    private (MovementResult Candidate, SignalState Aspect) EvaluateSoftwareClearance((MovementSuggestionMessage Value, DateTimeOffset Received) request)
+    {
+        var candidate = EvaluateSoftware(request);
+        return (candidate, candidate.AuthorizedAuthorityMeters < candidate.Request.SuggestedAuthorityMeters ? SignalState.Yellow : SignalState.Green);
+    }
+
     /// <summary>Checks movement limits and current conditions for a previously validated request route.</summary>
-    private bool IsAuthorizationSafe(MovementResult output)
+    /// <param name="requireSignalProof">
+    /// False only for route preparation: the route's signals need not yet be commanded or reported at
+    /// proceed. Every authority that is granted is checked with true (commanded AND reported proceed).
+    /// </param>
+    private bool IsAuthorizationSafe(MovementResult output, bool requireSignalProof = true)
     {
         if (!double.IsFinite(output.AuthorizedAuthorityMeters) || !double.IsFinite(output.AuthorizedSpeedMetersPerSecond) || output.AuthorizedAuthorityMeters < 0 || output.AuthorizedSpeedMetersPerSecond < 0)
         {
@@ -338,12 +380,18 @@ public sealed partial class TrackControllerService
                 return false;
             }
 
-            if (definition.HasSignal && (block.CommandedSignal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow) || feedback.Signal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow)))
+            if (requireSignalProof && definition.HasSignal && (block.CommandedSignal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow) || feedback.Signal is not (SignalState.Green or SignalState.SuperGreen or SignalState.Yellow)))
             {
                 return false;
             }
 
-            if (definition.HasSignal && (block.CommandedSignal == SignalState.Yellow || feedback.Signal == SignalState.Yellow) && output.AuthorizedSpeedMetersPerSecond > 5)
+            // Never clear a signal the Track Model cannot show (e.g. power failure reports Unknown).
+            if (definition.HasSignal && (block.ManualRed || feedback.Signal is not (SignalState.Red or SignalState.Yellow or SignalState.Green or SignalState.SuperGreen)))
+            {
+                return false;
+            }
+
+            if (requireSignalProof && definition.HasSignal && (block.CommandedSignal == SignalState.Yellow || feedback.Signal == SignalState.Yellow) && output.AuthorizedSpeedMetersPerSecond > 5)
             {
                 return false;
             }

@@ -105,8 +105,8 @@ public sealed class LiveMovementIntegrationTests
     [TestMethod]
     public async Task RouteWithoutSignals_IsAuthorizedEndToEnd_AndCtcReportsExactlyTheCommandedAuthority()
     {
-        // Blocks 1-4 have no signal, so the bundled PLC can grant this route (see the integration
-        // guide for routes through the signalled blocks 6 and 11).
+        // Blocks 1-4 have no signal, so the grant needs no signal clearance (SignalledRouteIntegrationTests
+        // covers routes through the signalled blocks 6 and 11).
         await using var system = await PlacedTrainAsync(["1", "2", "3", "4"]);
         await system.ResumeTrackControllerAsync();
 

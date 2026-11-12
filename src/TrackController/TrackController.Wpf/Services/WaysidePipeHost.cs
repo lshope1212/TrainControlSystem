@@ -371,14 +371,17 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
     /// <summary>
     /// Wakes the Track Model publisher when what is commanded for movement changed: grants, their
-    /// request IDs, limits and decisions, and prepared handoffs.
+    /// request IDs, limits and decisions, prepared handoffs, and signal aspects.
     /// </summary>
     private void SignalIfMovementOutputChanged(WaysideSnapshotMessage snapshot)
     {
         string signature = string.Join(";", snapshot.Blocks
             .Where(block => block.Request is not null || block.Continuation is not null)
             .Select(block => $"{block.BlockId}|{block.Request?.RequestId}|{block.MovementStatus}|{block.AuthorizedSpeedMetersPerSecond:R}|{block.AuthorizedAuthorityMeters:R}|{block.Continuation}"))
-            + $"|{snapshot.IsPaused}|{snapshot.IsMaintenanceMode}";
+            + $"|{snapshot.IsPaused}|{snapshot.IsMaintenanceMode}"
+            // Signal commands too: a prepared route's proceed aspect (whose report the grant waits for)
+            // and a restrictive aspect after a revocation reach the Track Model without the periodic wait.
+            + "|" + string.Join(",", snapshot.Blocks.Where(block => block.HasSignal).Select(block => $"{block.BlockId}:{block.CommandedSignal}"));
         lock (_connectionGate)
         {
             if (signature == _lastMovementSignature)

@@ -96,7 +96,8 @@ internal sealed class LiveSystem : IAsyncDisposable
     /// Also seed the standalone demonstration's stopped train 001 in Blue block 1, for tests about
     /// live occupancy. Off by default, as in production, where CTC allocates train 001 itself.
     /// </param>
-    public async Task StartTrackModelAsync(bool allLines = false, bool demonstrationTrain = false)
+    /// <param name="prepare">Adjusts the loaded Track Model before it starts communicating (its start-up state).</param>
+    public async Task StartTrackModelAsync(bool allLines = false, bool demonstrationTrain = false, Action<TrackService>? prepare = null)
     {
         _trackModelThread = new DispatcherThread("Track Model UI");
         _trackModelStop = new CancellationTokenSource();
@@ -112,6 +113,7 @@ internal sealed class LiveSystem : IAsyncDisposable
                 case (false, true): BlueLineTrackLayout.LoadDemonstration(track); break;
             }
 
+            prepare?.Invoke(track);
             return track;
         });
         var connection = await _trackModelThread.GetAsync(() => new TrackModelConnection(Track, _trackModelThread.Dispatcher, endpoints));

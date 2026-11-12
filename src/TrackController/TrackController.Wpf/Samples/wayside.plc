@@ -12,7 +12,10 @@ selected_entry = (reported_normal and entry_normal) or (reported_reverse and ent
 direction_ok = ((not has_next) or ((has_stem and ((entry_stem and selected_exit) or (exit_stem and selected_entry))) or (not has_stem and selected_exit)))
 alignment_ok = not has_switch or (switch_known and switch_confirmed and direction_ok)
 entry_allowed = not block_closed and (is_origin or (block_clear and not block_pending))
-signal_ok = not has_signal or (signal_proceed and not manual_red)
+# signal_proceed is the Track Model's reported aspect. signal_clearance is set only on the separate
+# clearance scan, which may command a proceed aspect but never grants authority; the authorization
+# scan always needs real proceed feedback.
+signal_ok = not has_signal or ((signal_proceed or signal_clearance) and not manual_red)
 crossing_ok = not has_crossing or crossing_closed
 g_needed_000 = false or remaining_in_00
 g_needed_001 = g_needed_000 or remaining_in_01

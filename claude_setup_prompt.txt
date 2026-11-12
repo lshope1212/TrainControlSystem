@@ -1,277 +1,311 @@
-# TrainControlSystem — Implement Yard-Restricted Route Starting Blocks
+# Claude Code Prompt — Fix Blue Line Signal/Movement Authority Deadlock
 
-You are working in the TrainControlSystem C#/.NET/WPF repository, on the latest `Luke_CTC` branch.
+You are working in the `TrainControlSystem` C#/.NET/WPF repository, on the latest `Luke_CTC` branch.
 
 ## Objective
 
-Modify the CTC Schedule Builder so that the dispatcher can **select the starting block for each train's route**, rather than automatically using the lowest-numbered block on the selected line.
+Fix an existing integration issue in the Track Controller that prevents trains from receiving movement authority when their route includes a signal-controlled block on the Blue Line.
 
-However, for realistic train dispatching, **only legitimate yard-entry blocks should be available as starting locations**.
+**This must be a permanent architectural fix, not a workaround that bypasses signal safety.**
 
-This is a focused change to the existing scheduling workflow. All five modules are already connected, and the existing solution build and integration tests have passed. Preserve that working integration.
+The system's existing physical train dispatch, train tracking, movement authority handoff, shared clock, and intermodule communication are already implemented. Preserve this functionality.
 
-## 1. Inspect the current implementation
+## 1. Current problem — confirmed during live testing
 
-Before modifying code, examine:
+I recently performed a live test with all five modules running.
 
-- `ScheduleTemplateFactory.cs`
-- `ScheduleTemplate.cs` and `ScheduleTemplateConverter.cs`
-- `ScheduleBuilderViewModel.cs`
-- `ScheduleTemplateRowViewModel.cs`
-- `ScheduleCsvImporter.cs`
-- `ScheduledTrain.cs` and `CTCService.QueueSchedule()`
-- The CTC Schedule Builder XAML
-- Track Model's course layout, importer and layout message contracts
-- `TrackLayoutReconciler.cs`
-- Existing CTC scheduling and integration tests
+The CTC successfully dispatched Train 001 onto Blue Line block 1 (A1), with a destination of block 10 (B10).
 
-Currently, `ScheduleTemplateFactory.GetRouteStartBlock()` assumes that the route starts at the lowest-numbered block.
+The following worked correctly:
 
-Remove that assumption from production schedule creation.
+- CTC released Train 001 from the schedule.
+- The Track Controller forwarded the physical dispatch request.
+- The Track Model activated the train through the Train Model.
+- Track Model correctly reported Train 001 occupying block 1.
+- CTC correctly inferred Train 001's position.
+- The Track Controller was running, not paused.
 
-## 2. Determine legitimate yard-entry blocks
+However, Train 001 never moved.
 
-The actual track layout is authoritative.
+The Train Controller reported:
 
-The current course network contains the following yard information:
+- Commanded speed: 0 mph
+- Movement authority: 0 ft
+- Actual speed: 0 mph
+- Service brake applied due to authority protection.
 
-- Blue Line: yard entrance at the beginning of the line, near Block `1`.
-- Red Line: yard switch associated with `RED-9`.
-- Green Line: yard connections associated with `GREEN-58` and `GREEN-62`, described as `57-yard` and `yard-63`.
+CTC's Dispatched Trains tab revealed the exact problem:
 
-**Important:** These references identify yard connections or switches, not necessarily the precise mainline block where a dispatched train should first appear.
+**`Withheld: Waiting for proceed signal feedback at block 6.`**
 
-Investigate the course track layout and existing documentation to establish the valid mainline starting blocks.
+The train's requested route was:
 
-In particular, examine whether `GREEN-57` and `GREEN-63` are the appropriate Green Line yard-entry blocks, rather than simply assuming that switch blocks 58 and 62 must be selected.
+`1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10`
 
-Do not arbitrarily classify a block as yard-adjacent merely because it is the first block, contains a switch, or is close to a station.
+Block 5 contains the branching switch, and block 6 is a signal-controlled block on the path to Station B.
 
-`GREEN-14` must not be treated as a yard entrance without supporting layout evidence.
+A similar issue is documented for signal block 11 on the alternate branch.
 
-### Represent yard-entry information explicitly
+### Suspected root cause
 
-Introduce a small, maintainable way for CTC to identify valid yard-entry blocks.
+The Track Controller's PLC or movement evaluator requires a signal to report a proceed aspect before granting movement authority.
 
-Prefer placing explicit yard-entry metadata alongside the Track Model's authoritative course layout and exposing it through the existing layout message when practical.
+However, the signal receives its proceed command only when movement authority has already been granted.
 
-A field such as `IsYardEntry` on a block definition is acceptable, as is another clean solution that preserves the existing architecture.
+This creates a circular dependency:
 
-Requirements:
+1. CTC requests movement authority.
+2. Track Controller requires a proceed signal to approve the movement.
+3. The proceed signal is not commanded because the movement has not yet been approved.
+4. The signal remains red.
+5. Track Controller permanently withholds movement authority.
+6. The train stays stopped with zero commanded speed and authority.
 
-- Preserve the current track geometry and block IDs.
-- Do not create fictitious yard blocks.
-- Do not modify PLC switch behavior.
-- Do not add a direct CTC connection to the Train Model.
-- Do not modify existing train physics.
-- Preserve compatibility with the three-line layout.
-- Ensure imported or revised layouts do not silently invent yard-entry locations.
-- If the evidence cannot establish an exact yard-entry block, explicitly report that uncertainty rather than guessing.
+This issue is already documented in:
 
-The CTC must derive its available starting blocks from the selected line's validated yard-entry information.
+`docs/integration/LIVE_INTEGRATION_GUIDE.md`
 
-If none are defined, show a clear explanation and prevent scheduling until the information is configured.
+Under **Outstanding work and limitations → Signalled routes (Blue)**.
 
-## 3. Add starting-block selection to the Schedule Builder
+## 2. Investigate the actual implementation
 
-Modify the existing CTC Schedule Builder UI.
+Before making changes, thoroughly inspect the relevant Track Controller and Track Model code.
 
-When the dispatcher creates a schedule template:
+Pay particular attention to:
 
-1. Select a line (Blue, Red, or Green), as currently supported.
-2. Enter the number of trains and generate the schedule template.
-3. For each train, choose a starting block from a dropdown containing ONLY that line's valid yard-entry blocks.
-4. Enter the departure time for the selected starting block.
-5. Enter arrival times at the desired later blocks as before.
-6. Queue the schedule using the existing workflow.
+- The bundled `wayside.plc` program.
+- PLC input and output evaluation.
+- Movement request validation and authorization.
+- Signal command generation.
+- Signal state and feedback handling.
+- Track Model's application of wayside signal commands.
+- Track Model → Track Controller equipment feedback.
+- The signal requirements enforced by the Track Controller.
+- The existing movement authorization lifecycle.
+- The Blue Line track topology and signal definitions.
+- Existing Track Controller and integration tests.
 
-### UI requirements
+Determine precisely why signal block 6 cannot transition to a proceed state before movement authorization is granted.
 
-- Provide one starting-block selection per train, not one global selection for every train.
-- The dropdown should use readable block labels and actual block IDs.
-- If the line has exactly one valid yard entry, selecting it automatically is acceptable.
-- If multiple yard entries exist, the dispatcher should be able to choose independently for each train.
-- Clearly indicate each train's selected starting block in the schedule grid.
-- Only the selected starting block's time should be interpreted as that train's departure time.
-- The dispatcher must not be able to select an arbitrary track block as a starting location.
-- Preserve the existing spreadsheet-style schedule builder, destination times and dwell-time editing.
+Also establish whether block 11 suffers from the same problem.
 
-Keep the UI relatively simple. A compact starting-block selector associated with each train is preferable to a major Schedule Builder redesign.
+**Do not assume the suspected root cause is the entire problem. Confirm the exact dependency in code before modifying it.**
 
-## 4. Update schedule conversion and route generation
+## 3. Implement the permanent fix
 
-Currently, the schedule template has a single `IsRouteStart` flag on a block row.
+Modify the appropriate Track Controller and/or Track Model logic to eliminate the circular dependency.
 
-That assumption must be revised to support different starting blocks for different trains.
+### Desired behavior
 
-The new model must:
+When CTC requests movement along a route containing a signal-controlled block:
 
-- Store the selected starting block separately for each train.
-- Identify that train's departure time at its selected start block.
-- Build that train's route beginning at the correct block.
-- Continue using the existing schedule waypoint and route construction system.
-- Preserve timed destinations, intermediate untimed blocks and dwell settings.
-- Never add unrelated blocks before the selected starting block.
-- Preserve the order in which blocks are actually traveled.
+1. The Track Controller receives the movement request.
+2. It validates the requested route against current occupancy, maintenance closures, switch position, direction of travel, track conditions, conflicting movements, and other safety requirements.
+3. If the proposed movement is safe, the Track Controller can determine and command the appropriate signal aspect **without requiring that movement authority has already been granted**.
+4. Where confirmed signal feedback is required for authorization, the Track Controller waits for actual feedback from the Track Model.
+5. After the required signal and other safety conditions are satisfied, the movement request becomes authorized.
+6. The authorized speed and authority propagate through the Track Model to the Train Model and Train Controller.
+7. The train can then release its service brake and begin moving under normal controller operation.
 
-The final `ScheduledTrain.Route[0]` must contain the selected start block.
+### Important architectural requirements
 
-Consequently, `ScheduledTrain.StartBlockId` and the existing `TrainDispatchRequestMessage` should automatically carry the correct starting block without needing a new dispatch protocol.
+Separate the concept of **a route that is safe and eligible for signal clearance** from **a movement that has received final authority**.
 
-### Changing an existing selection
+If appropriate, introduce a small intermediate route/signal preparation state in the Track Controller.
 
-If the dispatcher changes the selected starting block after entering schedule times:
+For example:
 
-- Do not silently misinterpret the old departure time as a destination time.
-- Preserve valid user-entered information where practical.
-- Clearly identify any schedule times that must be reconsidered.
-- Revalidate the resulting route before allowing it to be queued.
+- A movement request is received.
+- Its route is provisionally validated.
+- The appropriate proceed signal is requested.
+- Actual signal feedback is verified.
+- Final movement authority is granted.
 
-### CSV schedules
+However, do not introduce unnecessary new architecture if an existing mechanism can support this safely.
 
-Ensure the existing CSV schedule import remains usable.
+The exact implementation should follow the repository's established design.
 
-The imported template must support the same yard-entry restrictions and starting-block selections as manually generated templates.
+### Safety constraints
 
-You may add optional starting-block metadata or allow the dispatcher to select the starting block after import.
+The following conditions are mandatory:
 
-Do not silently treat an arbitrary first timed block as a valid yard entry.
+- Never grant movement authority solely because a signal command was issued.
+- Do not treat a requested green signal as confirmed green feedback.
+- Never force all signals to green.
+- Never remove or bypass the existing PLC safety checks.
+- Never fabricate signal feedback.
+- A signal must remain restrictive whenever its protected route is unsafe.
+- Occupied or unknown blocks must continue preventing unsafe authorization.
+- Maintenance closures and track failures must continue restricting movement.
+- Conflicting movements must not receive incompatible authority.
+- Switch alignment must continue being validated.
+- Stale or missing feedback must fail safely.
+- Pausing the Track Controller must still withdraw movement authority.
+- A loss of signal protection or another safety condition must cause prompt authority reevaluation and revocation.
 
-Preserve backward compatibility where the starting block can be determined unambiguously from the valid yard entries. Otherwise require explicit selection.
+Take care that a prepared signal does not remain permissive after its movement request is cancelled, expires, is superseded, or becomes unsafe.
 
-## 5. Validate the selected starting block
+Avoid introducing race conditions between signal commands, asynchronous Track Model feedback, and movement authorization.
 
-Add appropriate checks in CTC.Core, not only in the WPF UI.
+## 4. Preserve existing integration functionality
 
-A schedule should be rejected if:
+Do not redesign unrelated modules.
 
-- The starting block is missing.
-- The starting block is on a different line.
-- The starting block is not an approved yard entry.
-- The route does not begin at the selected starting block.
-- The route contains disconnected blocks.
-- A timed destination is unreachable through the existing route planner.
-- A departure time is missing or invalid.
+In particular, preserve:
 
-Use dispatcher-readable error messages.
+- CTC's schedule-based dispatch.
+- Physical train placement through the Track Controller and Track Model.
+- Train ID normalization.
+- Anonymous occupancy feedback and CTC train location inference.
+- Existing Train Model physics.
+- Existing Train Controller safety logic.
+- Movement request renewal and cancellation.
+- Prepared-successor authority handoffs.
+- Zero-authority emergency revocation behavior.
+- All three course lines.
+- Multiple trains operating simultaneously.
+- Existing named-pipe communication contracts unless an additive contract change is genuinely necessary.
 
-Continue using the existing live occupancy, maintenance and safety checks when the train is actually released.
+**Do not change the Train Controller to ignore zero authority or release its brakes without authorization.** The Train Controller is behaving correctly in this scenario.
 
-Do not reserve or occupy the selected starting block merely because it appears in a schedule. Physical placement must still happen through the existing dispatch integration.
+Prefer the smallest maintainable change that resolves the problem at its source.
 
-### Routing limitations
+This task is specifically about signal/authority sequencing. Do not attempt to redesign cross-territory handoffs, fix the separate missing CTC switch-reservation feedback, or rewrite general route planning.
 
-The existing CTC shortest-path logic does not account for every one-way travel restriction or physical switch constraint.
+## 5. Add automated regression tests
 
-Do not unnecessarily redesign the entire routing algorithm in this task.
+Add comprehensive tests using the repository's existing testing framework and established integration-test patterns.
 
-However, inspect the generated route and make sure the change does not conceal those limitations.
+### Test A — Blue Line signal 6
 
-If a route is connected in the CTC layout but would be rejected by the Track Controller or Track Model because of direction or switch geometry, report that limitation accurately.
+Create a movement request for Train 001 from block 1 toward block 10, using the real Blue Line layout and wayside logic.
 
-Do not claim a route to Edgebrook is executable merely because selecting a yard starting block made it possible to generate a schedule.
+Verify that:
 
-## 6. Preserve all existing system integration
+1. Train 001 is placed at block 1.
+2. The Track Controller receives the movement request.
+3. The signal at block 6 can be commanded to a proceed aspect when the proposed route is safe.
+4. The required feedback reaches the Track Controller.
+5. The movement becomes authorized.
+6. Authorized speed and authority are both positive.
+7. The resulting commanded values reach the Train Model and Train Controller.
 
-The current dispatch integration is:
+The test must not manually set the signal to green to bypass the problem.
 
-CTC → Track Controller → Track Model → Train Model
+### Test B — Blue Line signal 11
 
-Train Model position → Track Model occupancy → Track Controller → CTC
+Repeat the equivalent test for a valid route from block 1 toward block 15 through signal block 11.
 
-Do not change this architecture.
+Verify that the same deadlock does not occur on the alternate branch.
 
-Existing behavior to preserve:
+Use the correct switch alignment for each route.
 
-- Canonical train IDs `001`–`010`
-- Simulation-clock-controlled schedule release
-- Dispatch request retries and acknowledgements
-- Automatic Train Model activation
-- Cumulative position reporting
-- Multi-block occupancy
-- CTC's anonymous occupancy-based location inference
-- Movement suggestions and authority handoffs
-- Dispatcher rerouting after a train has been released
-- Three-line operation
-- Default station dwell times and editable dwell times
+### Test C — Unsafe conditions
 
-The new starting-block selection should affect the **initial planned route and physical placement location**, not how the system subsequently tracks or controls the train.
+Verify that authority remains withheld when:
 
-## 7. Testing requirements
+- The protected signal cannot safely clear.
+- A required block is occupied.
+- Block feedback is Unknown or stale.
+- A relevant track failure is present.
+- The switch alignment is incorrect.
+- The Track Controller is paused.
+- A conflicting movement makes the route unsafe.
 
-Add or update tests for:
+Verify that a previously prepared proceed signal cannot authorize an unsafe movement.
 
-**Starting-block selection**
-- A line with one valid yard entry selects it correctly.
-- A line with multiple yard entries permits choosing any eligible entry.
-- A non-yard block cannot be selected or queued as a starting block.
-- Each train in a multi-train schedule can have a different starting block.
-- A selected block on another line is rejected.
-- Missing yard-entry metadata produces a clear failure.
+### Test D — Revocation
 
-**Scheduling**
-- Departure time is read from the selected start block.
-- Intermediate route blocks are generated correctly.
-- The route begins at the selected block.
-- Existing arrival and dwell times continue working.
-- Changing the start block does not silently corrupt a schedule.
-- CSV imports use the same validation.
-- A changed layout invalidates an obsolete start selection.
+After successfully authorizing a movement through a signal-controlled route, introduce an unsafe condition.
 
-**Integration**
-- CTC sends the selected `StartBlockId` in `TrainDispatchRequestMessage`.
-- Track Controller forwards the existing request correctly.
-- Track Model and Train Model activate the train at the selected start block.
-- Position zero causes the selected starting block to become occupied.
-- CTC detects the new occupancy and begins normal movement authorization.
+Verify that:
 
-Preserve all existing tests, including the recently added `PhysicalDispatchIntegrationTests` and `LivePhysicsEndToEndTests`.
+- The Track Controller withdraws or restricts the authority appropriately.
+- Signal state is reevaluated and commanded restrictively when required.
+- The Train Model receives the updated authority.
+- The Train Controller reacts using its existing safety protections.
 
-If old test fixtures deliberately dispatch from arbitrary non-yard blocks, distinguish those isolated testing fixtures from the actual production yard-entry policy. Update affected tests appropriately without creating a production bypass that allows unrestricted dispatching.
+Do not introduce any delay or suppression of genuine zero-authority messages.
 
-## 8. Explicitly out of scope
+### Test E — Regression tests
 
-Do NOT implement changes for these issues:
+Run the existing relevant tests covering:
 
-- Automatic station braking or stopping at Edgebrook
-- Arrival-time prediction or accuracy improvements
-- Changes to CTC's train location inference
-- PLC reservation feedback or switch-control fixes
-- Train Controller engineer gain tuning
-- Hardware Raspberry Pi integration
-- Unrelated train physics or authority changes
+- Blue Line movement authority.
+- Signal and PLC behavior.
+- Prepared-successor handoffs.
+- Authority continuity.
+- Emergency revocation.
+- Physical dispatch.
+- Live physics and occupancy tracking.
+- Red and Green Line movement authorization.
 
-These will be addressed separately.
+Ensure the fix does not alter the expected behavior of lines without signals.
 
-## 9. Special attention: Edgebrook use case
+## 6. Verify the live demo scenario
 
-Iteration 3 requires the dispatcher to dispatch a train to Edgebrook Station (`GREEN-9`) for arrival at 3:00 PM.
+The intended demonstration scenario is:
 
-This feature must allow the dispatcher to begin the schedule from a legitimate Green Line yard entry rather than the automatically chosen `GREEN-1`.
+1. Start all five production modules through the Launcher.
+2. Load the Blue/Red/Green Track Controller setup.
+3. Ensure the Track Controller is running.
+4. Configure Train 001 with working software-controller test gains.
+5. Queue Train 001 for the Blue Line route from block 1 to block 10.
+6. Allow CTC to dispatch the train automatically.
+7. Observe Train 001 appearing on block 1.
+8. Observe the Track Controller successfully clearing the required signal and granting authority.
+9. Observe positive commanded speed and authority at the Train Controller.
+10. Observe Train 001 accelerating and moving into subsequent blocks.
+11. Observe live occupancy transitions in the Track Model, Track Controller, and CTC.
 
-After implementing the change:
+The fix should eliminate the previous indefinite message:
 
-1. Identify the verified Green Line yard-entry blocks.
-2. Attempt to generate a schedule from an eligible yard entry to `GREEN-9`.
-3. Inspect the resulting route, including Green Line travel direction and switch geometry.
-4. Determine whether the route can be accepted by the current Track Controller and Track Model.
-5. If it cannot, explain the exact route blocker and the smallest follow-up change needed.
+`Withheld: Waiting for proceed signal feedback at block 6.`
 
-Do not introduce fake yard connections or override wayside safety logic just to make the Edgebrook route work.
+It is acceptable for this message to appear temporarily while waiting for real feedback, but it must not remain indefinitely when all safety conditions are satisfied.
 
-## 10. Final deliverables
+If the full trip cannot proceed because of a separate preexisting issue, identify that issue clearly rather than silently expanding the scope of this task.
 
-After implementing:
+## 7. Documentation
 
-1. List all files modified, grouped by module.
-2. Explain how valid yard-entry blocks are defined and verified.
-3. State the selectable start blocks for Blue, Red and Green.
-4. Explain how the dispatcher selects a starting block for each train.
-5. Explain how the chosen block becomes the first block in the schedule and dispatch request.
-6. Confirm that the existing module communication architecture remains unchanged.
-7. Report actual build and test results, including any failures.
-8. Give me exact steps for testing the feature in the CTC UI.
-9. State whether a yard-origin Green Line train can now be routed to Edgebrook using the current topology and wayside constraints.
-10. Identify anything that still prevents the complete Edgebrook demonstration.
+Update:
 
-Implement the changes directly. Keep them focused, maintainable and compatible with the already working system integration.
+`docs/integration/LIVE_INTEGRATION_GUIDE.md`
+
+Explain:
+
+- The actual root cause.
+- The implementation used to eliminate the circular dependency.
+- The new signal/authority evaluation sequence.
+- How actual signal feedback is distinguished from requested signal state.
+- How unsafe conditions continue preventing authorization.
+- How to verify the fix in the production applications.
+
+Update the existing Blue Line signal limitation if it is now resolved.
+
+## 8. Build, test, and final report
+
+After implementing the changes:
+
+1. Build the entire solution.
+2. Run the relevant unit tests.
+3. Run the integration tests.
+4. Resolve any regressions introduced by your changes.
+5. Report any existing unrelated failures separately.
+
+Do not claim a test passed unless it was actually executed successfully.
+
+### Final report
+
+Provide:
+
+1. **Root cause:** The exact code-level reason for the signal deadlock.
+2. **Changes made:** Files modified and explanation of each meaningful change.
+3. **New behavior:** How the Blue Line signal and movement authority now work.
+4. **Safety verification:** Why the fix does not bypass existing protections.
+5. **Test results:** Build results, tests executed, passed/failed counts, and any failures.
+6. **Remaining limitations:** Any relevant issues still preventing the full Blue Line demonstration.
+
+Finish with a short **manual testing checklist** showing how I can reproduce the original scenario in Visual Studio and confirm that Train 001 now moves from A1 toward Station B.
+
+**Important:** Implement the fix rather than only recommending it. Do not commit or push any changes; leave them in my working tree for review.
