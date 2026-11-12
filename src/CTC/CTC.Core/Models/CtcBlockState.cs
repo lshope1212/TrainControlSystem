@@ -39,6 +39,13 @@ public class CtcBlockState
 
     public OccupancyState Occupancy { get; set; } = OccupancyState.Unknown;
 
+    /// <summary>
+    /// The last DEFINITE occupancy (Clear or Occupied) reported for the block; null before any. A block
+    /// that went Unknown (stale reports, a track circuit failure) and comes back Occupied, having last
+    /// been Occupied, shows no new train entering it, so train tracking does not treat it as an entry.
+    /// </summary>
+    public OccupancyState? LastDefiniteOccupancy { get; set; }
+
     public SignalState Signal { get; set; } = SignalState.Unknown;
 
     public SwitchPosition Switch { get; set; } = SwitchPosition.Unknown;

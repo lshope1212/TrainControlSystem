@@ -10,8 +10,9 @@ namespace TrainControl.Tests.CTC;
 
 /// <summary>
 /// Release semantics: at its departure time a train whose start block is safe leaves the queue
-/// awaiting placement. Nothing is sent then (no module receives a release request yet); its first
-/// complete movement request goes to the Track Controller once its start block reports occupied.
+/// awaiting placement and its physical dispatch goes to the Track Controller (never a movement
+/// request); its first complete movement request goes to the Track Controller once its start block
+/// reports occupied.
 /// </summary>
 [TestClass]
 public class CtcDispatchTests
@@ -52,21 +53,27 @@ public class CtcDispatchTests
         await service.SetSystemTimeAsync(At(11, 59, 59));
         await service.SetSystemTimeAsync(At(12, 0, 4));
 
-        Assert.IsEmpty(sender.SentMessages);
+        Assert.IsEmpty(sender.AllMessages);
         Assert.HasCount(1, service.State.DispatchQueue);
         Assert.IsEmpty(service.State.DispatchedTrains);
     }
 
     [TestMethod]
-    public async Task ExactDeparture_ReleasesTrainAwaitingPlacementWithoutSendingAnything()
+    public async Task ExactDeparture_ReleasesTrainAwaitingPlacement_SendingOnlyItsPhysicalDispatch()
     {
         var (service, sender) = CreateService(("001", At(12, 0, 5)));
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
-        // No module receives a release request, and the Track Controller authorizes movement only
-        // for a train it sees in the target block, so nothing is sent yet.
+        // The Track Controller authorizes movement only for a train it sees in the target block, so no
+        // movement request yet: only the dispatch that has the train placed.
         Assert.IsEmpty(sender.SentMessages);
+        var dispatch = (TrainDispatchRequestMessage)sender.DispatchMessages.Single();
+        Assert.AreEqual("001", dispatch.TrainId);
+        Assert.AreEqual("BLUE", dispatch.LineId);
+        Assert.AreEqual("A1", dispatch.StartBlockId);
+        CollectionAssert.AreEqual(BlueLine.BranchB.ToArray(), dispatch.RouteBlockIds.ToArray());
+        Assert.IsFalse(string.IsNullOrWhiteSpace(dispatch.RequestId));
         Assert.IsEmpty(service.State.DispatchQueue);
 
         var dispatched = service.State.DispatchedTrains.Single();
@@ -214,7 +221,7 @@ public class CtcDispatchTests
 
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
-        Assert.IsEmpty(sender.SentMessages);
+        Assert.IsEmpty(sender.AllMessages, "An unsafe start block is not dispatched into.");
         Assert.AreEqual(DispatchQueueStatus.Queued, service.State.DispatchQueue.Single().QueueStatus);
         Assert.IsEmpty(service.State.DispatchedTrains);
         var failure = changes.Single(change => change.Kind == CtcStateChangeKind.DispatchFailed);
@@ -241,7 +248,7 @@ public class CtcDispatchTests
 
         Assert.IsEmpty(service.State.DispatchedTrains);
         Assert.AreEqual(DispatchQueueStatus.Queued, service.State.DispatchQueue.Single().QueueStatus);
-        Assert.IsEmpty(sender.SentMessages);
+        Assert.IsEmpty(sender.AllMessages);
     }
 
     [TestMethod]
@@ -407,7 +414,7 @@ public class CtcDispatchTests
     }
 
     [TestMethod]
-    public async Task Dispatch_RaisesSystemTimeThenTrainDispatched()
+    public async Task Dispatch_RaisesSystemTimeThenTrainDispatched_ThenItsDispatchIsSent()
     {
         var (service, _) = CreateService(("001", At(12, 0, 5)));
         var changes = Record(service);
@@ -415,9 +422,11 @@ public class CtcDispatchTests
         await service.SetSystemTimeAsync(At(12, 0, 5));
 
         CollectionAssert.AreEqual(
-            new[] { CtcStateChangeKind.SystemTime, CtcStateChangeKind.TrainDispatched },
+            new[] { CtcStateChangeKind.SystemTime, CtcStateChangeKind.TrainDispatched, CtcStateChangeKind.TrainDispatchRequestUpdated },
             changes.Select(change => change.Kind).ToArray());
         Assert.AreEqual("001", changes[1].TrainId);
+        Assert.AreEqual("001", changes[2].TrainId);
+        Assert.Contains("delivered to the Track Controller", changes[2].Message!);
     }
 
     [TestMethod]
@@ -454,7 +463,9 @@ public class CtcDispatchTests
             where TMessage : class
         {
             Sent.Add(message);
-            return _release.Task;
+
+            // Only movement requests are held: this test is about overlapping movement synchronization.
+            return message is MovementSuggestionMessage ? _release.Task : Task.CompletedTask;
         }
     }
 }

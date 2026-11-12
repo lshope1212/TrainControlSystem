@@ -75,7 +75,8 @@ public class CtcSharedClockTests
         Assert.AreEqual(7.0, message.SpeedMultiplier);
         Assert.IsFalse(message.IsPaused);
         Assert.AreEqual("001", ctc.State.DispatchedTrains.Single().TrainId);
-        Assert.IsEmpty(sender.SentMessages, "Releasing sends nothing until the train is placed on the track.");
+        Assert.IsEmpty(sender.SentMessages, "No movement request until the train is placed on the track.");
+        Assert.HasCount(1, sender.DispatchMessages.OfType<TrainDispatchRequestMessage>().Where(m => m.TrainId == "001").ToList(), "Its physical dispatch is sent once.");
     }
 
     [TestMethod]
@@ -93,7 +94,7 @@ public class CtcSharedClockTests
         }
 
         Assert.AreEqual(At(12, 0, 0), ctc.State.SystemTime);
-        Assert.IsEmpty(sender.SentMessages);
+        Assert.IsEmpty(sender.AllMessages);
         Assert.HasCount(1, ctc.State.DispatchQueue);
     }
 
@@ -154,7 +155,8 @@ public class CtcSharedClockTests
         Assert.AreEqual(At(11, 0, 0), ctc.State.SystemTime);
         Assert.AreEqual("001", ctc.State.DispatchedTrains.Single().TrainId);
         Assert.AreEqual("002", ctc.State.DispatchQueue.Single().TrainId);
-        Assert.IsEmpty(sender.SentMessages, "Releasing sends nothing until the train is placed on the track.");
+        Assert.IsEmpty(sender.SentMessages, "No movement request until the train is placed on the track.");
+        Assert.AreEqual("001", sender.DispatchMessages.OfType<TrainDispatchRequestMessage>().Single().TrainId, "Only the released train is dispatched, once.");
     }
 
     /// <summary>Train 001: A1 at 12:00:00, station A3 at 12:01:00 (45 s dwell), A5 at 12:05:00, B10 at 12:10:00.</summary>

@@ -19,18 +19,21 @@ public sealed class TrainModelNamedPipeReceiver
 {
     private readonly MainWindowViewModel _vm;
     private readonly Dispatcher _dispatcher;
+    private readonly string _pipeName;
 
-    public TrainModelNamedPipeReceiver(MainWindowViewModel vm, Dispatcher dispatcher)
+    /// <param name="pipeName">Inbound pipe; <see cref="NamedPipeNames.TrainModel"/> unless a test isolates it.</param>
+    public TrainModelNamedPipeReceiver(MainWindowViewModel vm, Dispatcher dispatcher, string? pipeName = null)
     {
         _vm = vm ?? throw new ArgumentNullException(nameof(vm));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _pipeName = string.IsNullOrWhiteSpace(pipeName) ? NamedPipeNames.TrainModel : pipeName;
     }
 
     /// <summary>Readable outcome of each received message (or receive error), on the UI thread.</summary>
     public event EventHandler<string>? StatusReported;
 
     public Task RunAsync(CancellationToken cancellationToken) =>
-        NamedPipeTransport.ListenAsync(NamedPipeNames.TrainModel, HandleAsync, ReportError, cancellationToken);
+        NamedPipeTransport.ListenAsync(_pipeName, HandleAsync, ReportError, cancellationToken);
 
     private Task HandleAsync(MessageEnvelope envelope)
     {
@@ -46,7 +49,10 @@ public sealed class TrainModelNamedPipeReceiver
 
             // Shared simulation clock (Launcher / CTC, or the TestUI test clock).
             nameof(SystemTimeMessage) => Bind<SystemTimeMessage>(envelope, m => _vm.ApplySystemTime(m)),
-            // Train placed on / removed from the track (dispatch / retirement).
+            // Physical dispatch: the Track Model activates (or retires) a train at cumulative position 0.
+            nameof(TrainActivationMessage) => Bind<TrainActivationMessage>(envelope, m => _vm.ApplyTrainActivation(m)),
+
+            // Legacy/TestUI placement by block (no position telemetry contract); kept for the standalone TestUI.
             nameof(TrackModelTrainUpdateMessage) => Bind<TrackModelTrainUpdateMessage>(envelope, m =>
                 _vm.ApplyTrainPlacement(m.TrainId, m.CurrentBlockId, m.ActualSpeedMetersPerSecond)),
             nameof(SpeedCommandMessage) => Bind<SpeedCommandMessage>(envelope, m =>

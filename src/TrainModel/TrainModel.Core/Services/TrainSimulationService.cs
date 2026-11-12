@@ -133,6 +133,15 @@ public class TrainSimulationService : ITrainSimulationService
         Train.PassengerEmergencyBrakePending = false;
     }
 
+    public void PlaceAtDispatchOrigin()
+    {
+        Train.PositionMeters = 0;
+        Train.VelocityMetersPerSecond = 0;
+        Train.AccelerationMetersPerSecondSquared = 0;
+        Train.PreviousAccelerationMetersPerSecondSquared = 0;
+        CurrentState = BuildState();
+    }
+
     private TrainState BuildState()
     {
         // Signal availability: lost if a pickup failure is injected, else whatever

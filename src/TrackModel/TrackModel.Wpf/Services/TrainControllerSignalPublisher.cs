@@ -8,9 +8,10 @@ using TrainControl.Contracts.Messages;
 namespace TrackModel.Wpf.Services;
 
 /// <summary>
-/// Sends each occupying train its current block's effective light state using the existing
-/// Train Controller contract. Capture runs on the model's UI thread; sending has its own queue
-/// so an absent Train Controller cannot delay wayside feedback or train environments.
+/// Sends each train the effective light state of its HEAD block (the block its front is in) using the
+/// existing Train Controller contract. A train spanning several blocks is one train with one light:
+/// its trailing blocks are never considered. Capture runs on the model's UI thread; sending has its own
+/// queue so an absent Train Controller cannot delay wayside feedback or train environments.
 /// </summary>
 internal sealed class TrainControllerSignalPublisher(ITrackService track, string endpoint)
 {
@@ -25,7 +26,7 @@ internal sealed class TrainControllerSignalPublisher(ITrackService track, string
     public void Capture(bool force = false)
     {
         var signals = track.Layout.Blocks
-            .Where(block => block.IsOccupied && TrainIdConvention.TryNormalize(block.TrainId, out _))
+            .Where(block => block.IsOccupied && block.IsTrainHead && TrainIdConvention.TryNormalize(block.TrainId, out _))
             .Select(block => new TrackModelSignalMessage
             {
                 BlockId = block.Id,
@@ -36,7 +37,9 @@ internal sealed class TrainControllerSignalPublisher(ITrackService track, string
             .Select(group => group.Count() == 1 ? group.Single() : new TrackModelSignalMessage
             {
                 TrainId = group.Key,
-                Signal = SignalState.Unknown // Conflicting aliases must not select a light arbitrarily.
+                // Two head blocks for one canonical ID can only be conflicting labels (e.g. "TRAIN-001" and
+                // "001"), never normal multi-block occupancy: never select a light arbitrarily.
+                Signal = SignalState.Unknown
             })
             .OrderBy(signal => signal.TrainId, StringComparer.Ordinal)
             .ToList();

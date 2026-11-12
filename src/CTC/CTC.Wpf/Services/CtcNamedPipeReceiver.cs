@@ -68,6 +68,9 @@ public sealed class CtcNamedPipeReceiver
             nameof(BlockStatusBatchMessage) => RouteAsync<BlockStatusBatchMessage>(envelope, (ctc, m) => ApplyBlockStatusesAsync(ctc, m, cancellationToken)),
             nameof(TrackLayoutMessage) => Route<TrackLayoutMessage>(envelope, (ctc, m) => _layoutSummary = ctc.ApplyTrackLayout(m).Summary),
             nameof(RequestAcknowledgementMessage) => Route<RequestAcknowledgementMessage>(envelope, (ctc, m) => ctc.ApplyRequestAcknowledgement(m)),
+            // A stage of a physical dispatch, relayed by the Track Controller; dispatches still pending are
+            // brought up to date at once (e.g. a retryable refusal).
+            nameof(TrainDispatchStatusMessage) => Route<TrainDispatchStatusMessage>(envelope, (ctc, m) => ctc.ApplyTrainDispatchStatus(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
             nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ApplySystemTimeAsync(ctc, m, cancellationToken)),
             _ => null,

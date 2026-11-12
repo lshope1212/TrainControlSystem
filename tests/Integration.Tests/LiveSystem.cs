@@ -39,6 +39,9 @@ internal sealed class LiveSystem : IAsyncDisposable
     /// <summary>Where the Track Model sends train environments (the Train Model's inbound pipe).</summary>
     public string TrainModelPipe => _prefix + ".TrainModel";
 
+    /// <summary>The Train Controller's inbound pipe: the Track Model's lights and the Train Model's statuses go here.</summary>
+    public string TrainControllerPipe => TrackModelPipe + ".TrainController";
+
     public TrackService? Track { get; private set; }
 
     public WaysidePipeHost? Wayside { get; private set; }

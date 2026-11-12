@@ -32,6 +32,8 @@
     <ProjectReference Include="..\..\src\CTC\CTC.TestUI.Wpf\CTC.TestUI.Wpf.csproj" />
     <!-- The train's side of authority continuity: the Train Model's track-circuit pickup and the production Train Controller. -->
     <ProjectReference Include="..\..\src\TrainModel\TrainModel.Core\TrainModel.Core.csproj" />
+    <!-- The production Train Model application layer (view model, physics loop, receiver, publisher) for the live dispatch and physics tests. -->
+    <ProjectReference Include="..\..\src\TrainModel\TrainModel.Wpf\TrainModel.Wpf.csproj" />
     <ProjectReference Include="..\..\src\TrainController\TrainController.Integration\TrainController.Integration.csproj" />
     <None Include="..\..\src\TrackController\TrackController.Wpf\Samples\**\*" Link="WaysideSamples\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

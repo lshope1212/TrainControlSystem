@@ -140,6 +140,28 @@ public class TrainControllerSignalTests
         Assert.AreEqual(SignalState.Unknown, await session.ControllerLightAsync("001"));
     }
 
+    [TestMethod]
+    public async Task TrainSpanningTwoBlocks_GetsItsHeadBlocksLight_NotAnAliasConflict()
+    {
+        // Dispatched in 5 and driven by position telemetry until its front is 10 m into 6 (rear still in 5).
+        await using var session = await Session.StartAsync(track =>
+        {
+            track.RequestTrainPlacement(new TrainDispatchRequestMessage { RequestId = "d1", TrainId = "001", LineId = "Blue", StartBlockId = "5", RouteBlockIds = ["5", "6", "7"] });
+            long sequence = 0;
+            for (double position = 0; position <= 60; position += 3)
+            {
+                track.ApplyTrainPosition(new TrainStateMessage { TrainId = "001", PositionMeters = position, TrainLengthMeters = 32.2, Sequence = sequence++, DispatchRequestId = "d1" });
+            }
+
+            track.ApplyCommand(new() { BlockId = "6", Signal = SignalState.Green });
+        });
+
+        CollectionAssert.AreEqual(new[] { "5", "6" }, await session.ReadAsync(track => track.Layout.Blocks.Where(b => b.IsOccupied).Select(b => b.Id).ToArray()));
+        await session.UntilSignalAsync("001", "6", SignalState.Green);
+        Assert.AreEqual(SignalState.Green, await session.ControllerLightAsync("001"), "Normal multi-block occupancy is one train with its head block's light.");
+        Assert.IsFalse(session.Received.Any(message => message.TrainId == "001" && message.BlockId == "5"), "The trailing block never sends the train a light.");
+    }
+
     private static async Task UntilAsync(Func<bool> condition, string reason)
     {
         var timer = Stopwatch.StartNew();
@@ -215,6 +237,8 @@ public class TrainControllerSignalTests
         }
 
         public Task ApplyAsync(Action<TrackService> action) => _dispatcher.InvokeAsync(() => action(_track)).Task;
+
+        public Task<T> ReadAsync<T>(Func<TrackService, T> read) => _dispatcher.InvokeAsync(() => read(_track)).Task;
 
         public Task UntilSignalAsync(string trainId, string blockId, SignalState aspect) => UntilAsync(() =>
         {

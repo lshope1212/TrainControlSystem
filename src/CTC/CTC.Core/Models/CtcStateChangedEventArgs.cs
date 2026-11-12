@@ -32,9 +32,10 @@ public enum CtcStateChangeKind
 
     /// <summary>
     /// A train was released: its departure time came and its start block was safe, so it left the
-    /// dispatch queue and was added to the dispatched trains, awaiting placement on the track. This is
-    /// CTC's decision only: no module confirms a physical release yet, and no message is sent until
-    /// the train is detected at its start block (<see cref="TrainDetectedOnTrack"/>).
+    /// dispatch queue and was added to the dispatched trains, awaiting placement on the track. Its
+    /// physical dispatch is sent to the Track Controller (<see cref="TrainDispatchRequestUpdated"/>);
+    /// CTC reports the train on the track only once it is detected at its start block
+    /// (<see cref="TrainDetectedOnTrack"/>).
     /// <see cref="CtcStateChangedEventArgs.TrainId"/> names the train;
     /// <see cref="CtcStateChangedEventArgs.Message"/> carries a warning (e.g. the train left late) or is null.
     /// </summary>
@@ -46,6 +47,14 @@ public enum CtcStateChangeKind
     /// is the block.
     /// </summary>
     TrainDetectedOnTrack,
+
+    /// <summary>
+    /// A train's physical dispatch or route update changed: sent, a send failed, or the Track
+    /// Controller / Track Model reported a stage (forwarded, activation requested, placed, rejected,
+    /// tracking fault, retired). Never a location change. <see cref="CtcStateChangedEventArgs.Message"/>
+    /// describes it.
+    /// </summary>
+    TrainDispatchRequestUpdated,
 
     /// <summary>
     /// A train's movement request changed: issued, cancelled, a send failed, or the Track Controller

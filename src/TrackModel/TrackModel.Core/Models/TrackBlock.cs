@@ -26,9 +26,20 @@ public class TrackBlock
     public string NormalNextBlockId { get; set; } = string.Empty;
     public string ReverseNextBlockId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Physically occupied by <see cref="TrainId"/>: any part of that train is in this block. A train
+    /// longer than a block, or straddling a boundary, occupies several blocks at once.
+    /// </summary>
     [JsonIgnore] public bool IsOccupied { get; set; }
     [JsonIgnore] public bool IsClosed { get; set; }
+    /// <summary>The train occupying the block (its owner); empty when clear. One train per block.</summary>
     [JsonIgnore] public string TrainId { get; set; } = string.Empty;
+    /// <summary>
+    /// The FRONT of <see cref="TrainId"/> is in this block. Exactly one block per train is its head: the
+    /// block whose speed/authority code, signal and beacon the train receives. Trailing blocks stay
+    /// occupied (track circuits and wayside safety) but never describe the train's environment.
+    /// </summary>
+    [JsonIgnore] public bool IsTrainHead { get; set; }
     [JsonIgnore] public double ActualSpeedMetersPerSecond { get; set; }
     [JsonIgnore] public double CommandedSpeedMetersPerSecond { get; set; }
     [JsonIgnore] public double AuthorityMeters { get; set; }

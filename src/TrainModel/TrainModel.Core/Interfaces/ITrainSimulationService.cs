@@ -36,4 +36,12 @@ public interface ITrainSimulationService
     /// <summary>Clear the emergency brake. Only the Train Controller may call this —
     /// a passenger request can set it but never reset it.</summary>
     void ClearEmergencyBrakeFromController();
+
+    /// <summary>
+    /// Puts the train at the origin of a new dispatch: cumulative position 0, at rest, no acceleration,
+    /// and refreshes <see cref="CurrentState"/> at once. The physical specification (length, mass) and
+    /// onboard state are kept. The Train Model knows no track geometry: position 0 is simply where this
+    /// dispatch's distance count starts.
+    /// </summary>
+    void PlaceAtDispatchOrigin();
 }

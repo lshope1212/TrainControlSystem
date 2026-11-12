@@ -4,6 +4,10 @@ namespace TrainControl.Contracts.Messages;
 
 /// <summary>Track-derived inputs for a train. A block with no train has an empty TrainId.</summary>
 /// <remarks>
+/// Only a train's HEAD block (the block its front is in) names the train: a train spanning several blocks
+/// receives exactly one environment, and its trailing blocks (still occupied) report an empty TrainId.
+/// </remarks>
+/// <remarks>
 /// For an occupied block, speed and authority are the code that applies to the occupying train (zero
 /// when the block carries a continuation code for a train entering from another block). A zero is
 /// always an authoritative stop code. <see cref="Sequence"/> increases with every Track Model snapshot
