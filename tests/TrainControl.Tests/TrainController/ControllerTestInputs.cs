@@ -13,8 +13,8 @@ internal static class ControllerTestInputs
     public const double Dt = 0.1;
 
     /// <summary>
-    /// Arbitrary TEST-ONLY gains so behavior tests do not depend on the untuned Kp = 1 / Ki = 0
-    /// startup placeholder. Not tuned values and not a recommendation for operation.
+    /// Arbitrary TEST-ONLY gains so behavior tests do not depend on the startup defaults.
+    /// Not tuned values and not a recommendation for operation.
     /// </summary>
     public static readonly EngineerSettings ArbitraryTestGains = EngineerSettings.Create(20_000.0, 0.0);
 

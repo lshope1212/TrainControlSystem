@@ -50,14 +50,14 @@ public class TrainStateRegistryTests
     }
 
     [TestMethod]
-    public void EngineerSettings_DefaultToKp1Ki0_AndAreIndependentPerTrain()
+    public void EngineerSettings_StartWithTheDefaultGains_AndAreIndependentPerTrain()
     {
         var registry = new TrainStateRegistry();
 
         foreach (var slot in registry.Trains)
         {
-            Assert.AreEqual(1.0, slot.Engineer.Kp);
-            Assert.AreEqual(0.0, slot.Engineer.Ki);
+            Assert.AreEqual(EngineerSettings.DefaultKp, slot.Engineer.Kp);
+            Assert.AreEqual(EngineerSettings.DefaultKi, slot.Engineer.Ki);
         }
 
         registry.Get("TRAIN-004").SetEngineerSettings(2500.0, 12.5);
@@ -85,18 +85,16 @@ public class TrainStateRegistryTests
     }
 
     [TestMethod]
-    public void EngineerSettings_StartupDefaults_AreFlaggedAsUntunedPlaceholder()
+    public void EngineerSettings_ResetKeepsTheEngineersGains()
     {
         var registry = new TrainStateRegistry();
         var slot = registry.Get("TRAIN-002");
 
-        Assert.IsTrue(slot.Engineer.IsUntunedStartupPlaceholder);
-
         slot.SetEngineerSettings(15_000.0, 300.0);
-        Assert.IsFalse(slot.Engineer.IsUntunedStartupPlaceholder);
-
         registry.ResetAllRuntime();
-        Assert.IsFalse(slot.Engineer.IsUntunedStartupPlaceholder, "Reset never restores the placeholder over tuned gains.");
+
+        Assert.AreEqual(15_000.0, slot.Engineer.Kp, "Reset never restores the defaults over the Engineer's gains.");
+        Assert.AreEqual(300.0, slot.Engineer.Ki);
     }
 
     [TestMethod]

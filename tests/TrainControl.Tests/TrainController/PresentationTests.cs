@@ -60,14 +60,14 @@ public class PresentationTests
     }
 
     [TestMethod]
-    public void MainStatus_WarnsAboutUntunedGains_UntilTuned()
+    public void MainStatus_WarnsOnlyWhenBothGainsAreZero()
     {
         var slot = new TrainStateRegistry().Get("TRAIN-003");
 
-        Assert.AreNotEqual(string.Empty, TrainControllerPresenter.BuildMain(slot, null).GainsWarning);
+        Assert.AreEqual(string.Empty, TrainControllerPresenter.BuildMain(slot, null).GainsWarning, "Default gains are usable.");
 
-        slot.SetEngineerSettings(15_000.0, 200.0);
-        Assert.AreEqual(string.Empty, TrainControllerPresenter.BuildMain(slot, null).GainsWarning);
+        slot.SetEngineerSettings(0.0, 0.0);
+        Assert.AreNotEqual(string.Empty, TrainControllerPresenter.BuildMain(slot, null).GainsWarning);
     }
 
     [TestMethod]

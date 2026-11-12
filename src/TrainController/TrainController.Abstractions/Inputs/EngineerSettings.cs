@@ -6,21 +6,21 @@ namespace TrainController.Abstractions.Inputs;
 /// </summary>
 /// <remarks>
 /// <para>
-/// UNTUNED SAFE STARTUP PLACEHOLDER: the defaults (Kp = 1.0, Ki = 0.0) only give the
-/// controller a defined, harmless starting point. They are NOT usable operating gains — in
-/// SI terms Kp = 1 W per m/s produces only a few watts, so the train barely moves. The
-/// Engineer must tune Kp/Ki per train. Nothing in the controllers or tests may treat the
-/// placeholder as a realistic tuned value; see <see cref="IsUntunedStartupPlaceholder"/>.
+/// STARTUP DEFAULTS (Kp = 100 000 W per m/s, Ki = 10 000 W per m/s per s) are first-estimate
+/// operating gains, not a placeholder: with the 40.9 t empty train at about 15 m/s, Kp gives a
+/// speed-error time constant of roughly m·v / Kp ≈ 6 s, and Ki (integral time ≈ 10 s) removes
+/// the steady error needed to overcome rolling resistance. They are linearized estimates; the
+/// Engineer can retune Kp/Ki per train at any time.
 /// </para>
 /// <para>Only the lower bound (≥ 0, finite) is enforced; no project source defines an upper bound.</para>
 /// </remarks>
 public sealed record EngineerSettings
 {
-    /// <summary>Untuned startup placeholder, not an operating gain.</summary>
-    public const double DefaultKp = 1.0;
+    /// <summary>Startup proportional gain, W per (m/s). First-estimate operating value.</summary>
+    public const double DefaultKp = 100_000.0;
 
-    /// <summary>Untuned startup placeholder, not an operating gain.</summary>
-    public const double DefaultKi = 0.0;
+    /// <summary>Startup integral gain, W per (m/s·s). First-estimate operating value.</summary>
+    public const double DefaultKi = 10_000.0;
 
     public double Kp { get; init; } = DefaultKp;
 
@@ -29,12 +29,6 @@ public sealed record EngineerSettings
     public static EngineerSettings Default { get; } = new EngineerSettings();
 
     public bool IsValid => IsValidGain(Kp) && IsValidGain(Ki);
-
-    /// <summary>
-    /// True while the gains still equal the untuned startup placeholder. For UI warnings only;
-    /// controllers apply whatever gains they are given and never special-case this.
-    /// </summary>
-    public bool IsUntunedStartupPlaceholder => Kp == DefaultKp && Ki == DefaultKi;
 
     public static bool IsValidGain(double gain) => double.IsFinite(gain) && gain >= 0.0;
 

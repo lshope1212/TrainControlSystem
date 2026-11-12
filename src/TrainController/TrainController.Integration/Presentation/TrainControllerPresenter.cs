@@ -166,7 +166,7 @@ public sealed record MainUiTrainStatus
 
     public DisplayValue Fault { get; init; } = DisplayValue.Missing;
 
-    /// <summary>Non-empty while Kp/Ki are still the untuned startup placeholder.</summary>
+    /// <summary>Non-empty when the gains cannot produce traction (Kp = Ki = 0).</summary>
     public string GainsWarning { get; init; } = string.Empty;
 
     public IReadOnlyList<string> Alerts { get; init; } = Array.Empty<string>();
@@ -273,8 +273,8 @@ public static class TrainControllerPresenter
                 ? $"Queued for next tick: \"{slot.Driver.AnnouncementPending}\""
                 : string.Empty,
             Announcement = LastAnnouncementText(slot),
-            GainsWarning = slot.Engineer.IsUntunedStartupPlaceholder
-                ? "Kp/Ki are the untuned startup placeholder (1.0 / 0.0) — not operating gains. Tune before running."
+            GainsWarning = slot.Engineer.Kp == 0.0 && slot.Engineer.Ki == 0.0
+                ? "Kp and Ki are both 0: the controller produces no traction."
                 : string.Empty,
         };
 

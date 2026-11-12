@@ -200,8 +200,9 @@ logged with the reason. When a Brake Failure is detected while the driver is hol
 service brake (Manual testing), the integration layer releases that now-ineffective request
 (logged), so after "Reset failures" the train is not left braked by a forgotten toggle — the
 same outcome as in Automatic. Failure detected / cleared / reset rejected are written to the event
-log (category `Safety`). Brake and engine failures are not judged at low Kp: with the untuned
-placeholder gains the power never reaches 48 kW.
+log (category `Safety`). Engine failure needs the controller to demand at least 48 kW: while
+cruising very little power is needed, so a dead engine is detected quickly only while the train
+is accelerating (Ki makes the power rise when the speed keeps falling).
 
 Testing failures in the Test UI: turn **Simple physics** off only while provoking a failure
 (hold the actual speed by hand). Turn it back on before "Reset failures": with physics off the
@@ -360,12 +361,11 @@ current provisional behavior; all remain changeable in one place.
 | Overspeed has no tolerance band (none defined) | provisional | `OverspeedProtection` |
 | Announcement events and wording ("Next station: X. …" on new beacon, "Arrived at X." on arrival; driver text takes precedence) | provisional | `SoftwareTrainController` |
 
-**Kp = 1.0 / Ki = 0.0 are an untuned, safe startup placeholder — not usable operating gains.**
-They are specified by the project brief only as startup values (`EngineerSettings`). With SI
-gains (W per m/s) Kp = 1 produces only a few watts, so trains barely move until the Engineer
-tunes Kp/Ki for each train. `EngineerSettings.IsUntunedStartupPlaceholder` lets the UI warn
-about it; controllers never special-case it, and no test relies on it as a realistic value
-(behavior tests use explicitly named test-only gains).
+**Startup gains: Kp = 100 000 W per (m/s), Ki = 10 000 W per (m/s·s)** (`EngineerSettings`).
+First-estimate operating values: at about 15 m/s with the empty train they give a speed-error
+time constant of roughly 6 s and an integral time of about 10 s. They are linearized estimates;
+the Engineer can retune Kp/Ki per train at any time. The UI warns only if both gains are 0.
+Behavior tests use explicitly named test-only gains and do not depend on these defaults.
 
 
 ## Normal mode: Train Model link and global tick clock (interim)
