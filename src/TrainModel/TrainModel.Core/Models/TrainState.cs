@@ -78,6 +78,12 @@ public class TrainState
 
     /// <summary>Passengers left on the platform because the train was full.</summary>
     public int LastLeftBehind { get; set; }
+    /// <summary>Id of the most recent passenger exchange (for the Track Model to dedupe).</summary>
+    public System.Guid LastExchangeId { get; set; }
+
+    /// <summary>Station (beacon name) of the most recent exchange.</summary>
+    public string LastExchangeStation { get; set; } = string.Empty;
+
 
     /// <summary>Whether the last exchange hit the capacity ceiling.</summary>
     public bool WasAtCapacity { get; set; }

@@ -59,6 +59,13 @@ public sealed class TrackCircuitReceiver
         inputs.CommandedSpeedMetersPerSecond = environment.CommandedSpeedMetersPerSecond;
         inputs.CommandedAuthorityMeters = environment.AuthorityMeters;
         inputs.GradePercent = environment.GradePercent;
+        // Passenger demand also rides the combined environment message; apply it so boarding
+        // uses the Track Model's station population (Derrick point 1). A dedicated
+        // StationPassengerMessage, if also sent, updates the same field — last writer wins.
+        if (environment.WaitingPassengers >= 0)
+        {
+            inputs.PassengerDemand = environment.WaitingPassengers;
+        }
         return true;
     }
 
