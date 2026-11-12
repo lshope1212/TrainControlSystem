@@ -40,7 +40,8 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     private readonly ConcurrentQueue<object> _monitorResults = new();
     // CTC's ordered outbox: request acknowledgements and dispatch statuses, sent ahead of status batches.
     private readonly ConcurrentQueue<object> _ctcAcknowledgements = new();
-    private readonly SemaphoreSlim _ctcAcknowledgementQueued = new(0);
+    private readonly SemaphoreSlim _ctcOutputChanged = new(0);
+    private int _ctcMovementChanged;
 
     // Physical dispatch coordination (CTC <-> Track Model); never part of PLC evaluation.
     private readonly TrainDispatchRelay _dispatch;
@@ -121,15 +122,16 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
         SignalIfMovementOutputChanged(_runtime.LatestSnapshot);
 
+        var acknowledgement = CreateCtcAcknowledgement(envelope, result);
         if (result is WaysideAcknowledgementMessage { IsAccepted: false } rejected)
         {
-            InputReceived?.Invoke($"Rejected: {rejected.Detail}");
+            InputReceived?.Invoke(rejected.IsRetiredMovement
+                ? $"Movement request ended for block {acknowledgement?.BlockId ?? "unknown"}."
+                : $"Rejected: {rejected.Detail}");
         }
 
-        // CTC learns whether each of its requests was accepted for evaluation or rejected (and why);
-        // delivery of its bytes alone tells it nothing. Sent by the CTC publisher, never from this
-        // receive loop, so a busy CTC can never stall the controller's input pipe.
-        if (CreateCtcAcknowledgement(envelope, result) is { } acknowledgement)
+        // The CTC publisher sends the response so a busy CTC cannot stall the controller's input pipe.
+        if (acknowledgement is not null)
         {
             EnqueueForCtc(acknowledgement);
         }
@@ -145,7 +147,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     {
         _ctcAcknowledgements.Enqueue(message);
         while (_ctcAcknowledgements.Count > 100) _ctcAcknowledgements.TryDequeue(out _);
-        _ctcAcknowledgementQueued.Release();
+        _ctcOutputChanged.Release();
     }
 
     private async Task PublishAsync(Pipe pipe, CancellationToken stop)
@@ -219,6 +221,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         {
             while (!stop.IsCancellationRequested)
             {
+                statusesDue |= Interlocked.Exchange(ref _ctcMovementChanged, 0) != 0;
                 IEnumerable<object> statuses = statusesDue ? CreateCtcBatch(await _runtime.PollAsync(stop).ConfigureAwait(false)) : [];
                 bool delivered = true;
                 bool attempted = false;
@@ -257,10 +260,10 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                     UpdateConnection(true, delivered);
                 }
 
-                // Wake early only for a new acknowledgement; statuses keep their cadence.
+                // Wake early for acknowledgements and changed movement output.
                 var remaining = PublishInterval - sinceStatuses.Elapsed;
-                statusesDue = remaining <= TimeSpan.Zero || !await _ctcAcknowledgementQueued.WaitAsync(remaining, stop).ConfigureAwait(false);
-                while (_ctcAcknowledgementQueued.CurrentCount > 0 && _ctcAcknowledgementQueued.Wait(0))
+                statusesDue = remaining <= TimeSpan.Zero || !await _ctcOutputChanged.WaitAsync(remaining, stop).ConfigureAwait(false);
+                while (_ctcOutputChanged.CurrentCount > 0 && _ctcOutputChanged.Wait(0))
                 {
                 }
             }
@@ -299,6 +302,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
                 { IsAccepted: true } => RequestAcknowledgementOutcome.AcceptedForEvaluation,
                 _ => RequestAcknowledgementOutcome.Rejected,
             },
+            IsRetiredMovement = receipt?.IsRetiredMovement == true,
             Detail = receipt?.Detail ?? "The controller runtime returned no acknowledgement.",
             BlockId = request.BlockId ?? "",
             TrainId = request.TrainId ?? "",
@@ -400,6 +404,9 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         }
 
         _trackModelOutputChanged.Release();
+        // CTC needs the new grant promptly to prepare the next handoff, especially at high clock rates.
+        if (Interlocked.Exchange(ref _ctcMovementChanged, 1) == 0)
+            _ctcOutputChanged.Release();
     }
 
     private static IEnumerable<BlockStatusMessage> CreateCtcMessages(WaysideSnapshotMessage snapshot)
@@ -553,7 +560,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
         await _runtime.DisposeAsync();
         _stop.Dispose();
-        _ctcAcknowledgementQueued.Dispose();
+        _ctcOutputChanged.Dispose();
         _trackModelOutputChanged.Dispose();
     }
 }

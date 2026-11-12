@@ -54,6 +54,10 @@ public sealed class CrossTerritoryTests
         await PiRuntimeTests.Send(router, new MaintenanceRequestMessage { BlockId = "GREEN-111", RequestedState = MaintenanceState.Closed });
         await PiRuntimeTests.Send(router, Request());
         Assert.AreEqual(200, Block(router, "GREEN-109").AuthorizedAuthorityMeters, 1e-6);
+        var restricted = Block(router, "GREEN-109");
+        Assert.AreEqual("Restricted", restricted.MovementStatus);
+        StringAssert.Contains(restricted.MovementReason, "Authority is shorter than the CTC request.");
+        StringAssert.Contains(restricted.MovementReason, "Speed is lower than the CTC suggestion.");
         // Track Model later confirms the closure to every controller. The original 200 m remains safe.
         await PiRuntimeTests.Send(router, new TrackModelBlockStateMessage
         {
@@ -63,12 +67,19 @@ public sealed class CrossTerritoryTests
         await PiRuntimeTests.Send(router, new MaintenanceRequestMessage { BlockId = "GREEN-111", RequestedState = MaintenanceState.Open });
         await Ready(router, plan);
         Assert.AreEqual(200, Block(router, "GREEN-109").AuthorizedAuthorityMeters, 1e-6, "Reopening cannot extend the issued endpoint.");
+        StringAssert.Contains(Block(router, "GREEN-109").MovementReason, "Authority is held at the endpoint already issued for this block.");
         var held = Request();
         held.SuggestedSpeedMetersPerSecond = 0;
         await PiRuntimeTests.Send(router, held);
         Assert.AreEqual(0, Block(router, "GREEN-109").AuthorizedAuthorityMeters);
         await PiRuntimeTests.Send(router, Request());
         Assert.AreEqual(300, Block(router, "GREEN-109").AuthorizedAuthorityMeters, 1e-6, "CTC can authorize departure using its existing same-ID speed transition.");
+        Assert.AreEqual("Speed is lower than the CTC suggestion.", Block(router, "GREEN-109").MovementReason);
+        var fullyApproved = Request();
+        fullyApproved.SuggestedSpeedMetersPerSecond = 7;
+        await PiRuntimeTests.Send(router, fullyApproved);
+        Assert.AreEqual("Approved", Block(router, "GREEN-109").MovementStatus);
+        Assert.AreEqual("", Block(router, "GREEN-109").MovementReason);
     }
     [TestMethod]
     [DataRow(false)]
@@ -96,6 +107,14 @@ public sealed class CrossTerritoryTests
         Assert.AreEqual(200, Block(router, "GREEN-110").AuthorizedAuthorityMeters, 1e-6);
         Assert.HasCount(241, router.LatestSnapshot.Blocks.Select(block => block.BlockId).Distinct().ToArray());
         Assert.HasCount(1, router.LatestSnapshot.Authorizations);
+
+        // An old renewal can arrive after the transition. Every Green wayside rejects it, but
+        // the acknowledgement names the old target and reports that reason only once.
+        var lateRenewal = await PiRuntimeTests.Send(router, Request());
+        Assert.IsFalse(lateRenewal.IsAccepted);
+        Assert.IsTrue(lateRenewal.IsRetiredMovement);
+        Assert.AreEqual("Target block GREEN-109: This request's target block cleared. Submit a new request ID and current target block.", lateRenewal.Detail);
+        Assert.AreEqual(200, Block(router, "GREEN-110").AuthorizedAuthorityMeters, 1e-6);
     }
 
     [TestMethod]

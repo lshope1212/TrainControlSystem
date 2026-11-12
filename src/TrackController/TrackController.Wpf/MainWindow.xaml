@@ -219,12 +219,12 @@
                 <Border Style="{StaticResource Panel}" Margin="0,0,12,0">
                     <DockPanel>
                         <WrapPanel DockPanel.Dock="Bottom" Margin="10,4">
-                            <TextBlock Text="● Clear" Foreground="#368653" Margin="0,0,12,0"/>
-                            <TextBlock Text="● Occupied" Foreground="#C84036" Margin="0,0,12,0"/>
-                            <TextBlock Text="● Unknown" Foreground="#6B7280" Margin="0,0,12,0"/>
+                            <TextBlock Text="━ Clear" Foreground="#368653" Margin="0,0,12,0"/>
+                            <TextBlock Text="━ Occupied / faulted" Foreground="#C84036" Margin="0,0,12,0"/>
+                            <TextBlock Text="━ Unknown" Foreground="#64748B" Margin="0,0,12,0"/>
                             <TextBlock Text="□ Maintenance" Foreground="#BB721F" Margin="0,0,12,0"/>
-                                                        <TextBlock Text="╲ Crossing" Foreground="#344256" Margin="0,0,12,0"/>
-                            <TextBlock Text="◇ Switch · ○ Station · ⇢ Handoff" Foreground="#6D28D9"/>
+                            <TextBlock Text="× Crossing" Foreground="#6D28D9" Margin="0,0,12,0"/>
+                            <TextBlock Text="SW Switch · ⇢ Handoff" Foreground="#6D28D9"/>
                         </WrapPanel>
                         <StackPanel DockPanel.Dock="Top" Margin="10,8">
                             <WrapPanel>
@@ -235,7 +235,7 @@
                             </WrapPanel>
                             <TextBlock Text="{Binding MapHandoffs}" TextWrapping="Wrap" FontSize="11" Foreground="#6D28D9" Margin="0,6,0,0"/>
                         </StackPanel>
-                        <controls:TerritoryMap x:Name="TrackMap" Blocks="{Binding MapBlocks}" NetworkBlocks="{Binding Blocks}"
+                        <controls:TerritoryMap x:Name="TrackMap" Blocks="{Binding MapBlocks}" NetworkBlocks="{Binding Blocks}" LineName="{Binding SelectedMapLine}"
                                                SelectedBlockId="{Binding SelectedBlockId}" Margin="6" MinHeight="160"/>
 </DockPanel>
                 </Border>

@@ -9,7 +9,7 @@ using TrainControl.Contracts.Enums;
 namespace TrackController.Wpf.Controls;
 
 /// <summary>Territory-only schematic; loaded coordinates never change physical connectivity.</summary>
-public sealed class TerritoryMap : FrameworkElement
+public sealed partial class TerritoryMap : FrameworkElement
 {
     public static readonly DependencyProperty BlocksProperty = DependencyProperty.Register(nameof(Blocks), typeof(IEnumerable), typeof(TerritoryMap),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, BlocksChanged));
@@ -62,10 +62,13 @@ public sealed class TerritoryMap : FrameworkElement
         base.OnRender(dc);
         dc.DrawRectangle(Brushes.White, null, new Rect(RenderSize));
         _targets.Clear();
+        _courseTargets.Clear();
         var blocks = Visible;
         if (blocks.Length == 0 || ActualWidth < 1 || ActualHeight < 1) return;
         var owned = blocks.ToDictionary(block => block.BlockId);
         var network = (NetworkBlocks?.Cast<WaysideBlockStatus>() ?? blocks).ToDictionary(block => block.BlockId);
+        if (DrawCourseMap(dc, blocks, network)) return;
+
         double minX = blocks.Min(block => block.MapX), maxX = blocks.Max(block => block.MapX);
         double minY = blocks.Min(block => block.MapY), maxY = blocks.Max(block => block.MapY);
         // A schematic has no distance scale: expand each axis to use the available viewport.
@@ -124,7 +127,11 @@ public sealed class TerritoryMap : FrameworkElement
                 dc.DrawGeometry(fill, new Pen(Brushes.White, 1), shape);
             }
             else dc.DrawEllipse(fill, new Pen(Brushes.White, 1), point, 5, 5);
-            if (block.HasCrossing) dc.DrawLine(new Pen(Ink("#344256"), 2), point + new Vector(-7, -7), point + new Vector(7, 7));
+            if (block.HasCrossing)
+            {
+                dc.DrawLine(CrossingPen, point + new Vector(-6, -6), point + new Vector(6, 6));
+                dc.DrawLine(CrossingPen, point + new Vector(-6, 6), point + new Vector(6, -6));
+            }
             if (!string.IsNullOrWhiteSpace(block.StationName)) dc.DrawEllipse(null, new Pen(Ink("#6D28D9"), 1.5), point, 8, 8);
         }
         foreach (var block in blocks.OrderByDescending(block => block.BlockId == SelectedBlockId).ThenByDescending(block => block.HasSwitch))
@@ -170,8 +177,8 @@ public sealed class TerritoryMap : FrameworkElement
         }
         else
         {
-            var hit = _targets.FirstOrDefault(item => (item.Value - point).Length <= 12);
-            var block = Visible.FirstOrDefault(item => item.BlockId == hit.Key);
+            string? hit = HitBlock(point, 12);
+            var block = Visible.FirstOrDefault(item => item.BlockId == hit);
             ToolTip = block is null ? null : $"{block.BlockId}{(string.IsNullOrEmpty(block.StationName) ? "" : " · " + block.StationName)}\n{block.Occupancy} · {block.Maintenance}"
                 + (block.HasSwitch ? $"\nSwitch: {block.ReportedSwitch}" : "") + (block.HasSignal ? $"\nSignal: {block.ReportedSignal}" : "");
             Cursor = block is null ? Cursors.SizeAll : Cursors.Hand;
@@ -183,8 +190,8 @@ public sealed class TerritoryMap : FrameworkElement
         ReleaseMouseCapture();
         if (!_dragged)
         {
-            var hit = _targets.OrderBy(item => (item.Value - e.GetPosition(this)).Length).FirstOrDefault();
-            if (hit.Key is not null && (hit.Value - e.GetPosition(this)).Length <= 14) SetCurrentValue(SelectedBlockIdProperty, hit.Key);
+            string? hit = HitBlock(e.GetPosition(this), 14);
+            if (hit is not null) SetCurrentValue(SelectedBlockIdProperty, hit);
         }
         e.Handled = true;
     }

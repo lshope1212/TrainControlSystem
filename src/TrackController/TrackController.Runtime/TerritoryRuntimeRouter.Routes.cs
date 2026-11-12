@@ -55,7 +55,11 @@ public sealed partial class TerritoryRuntimeRouter
         }
         if (_issued.TryGetValue(key, out var retained))
             _issued[key] = (request, retained.Meters);
-        return receipt with { IsStagedSuccessor = receipt.IsAccepted && replies.OfType<WaysideAcknowledgementMessage>().All(reply => reply.IsStagedSuccessor) };
+        return receipt with
+        {
+            Detail = receipt.IsAccepted ? receipt.Detail : $"Target block {request.TargetBlockId}: {receipt.Detail}",
+            IsStagedSuccessor = receipt.IsAccepted && replies.OfType<WaysideAcknowledgementMessage>().All(reply => reply.IsStagedSuccessor)
+        };
     }
 
     private void ObserveTransitions(IReadOnlyList<TrackModelBlockStateMessage> feedback)
@@ -90,6 +94,8 @@ public sealed partial class TerritoryRuntimeRouter
             double speed = checks.Any(check => check is null) ? 0 : checks.Min(check => check!.AuthorizedSpeedMetersPerSecond);
             string reason = checks.FirstOrDefault(check => check is null || check.AuthorizedAuthorityMeters <= 0)?.MovementReason
                 ?? "A participating wayside has no current route approval.";
+            string authorityLimit = "Authority is shorter than the CTC request.";
+            string speedLimit = "Speed is lower than the CTC suggestion.";
             if (request.PredecessorRequestId is not null)
             {
                 if (!_transfers.TryGetValue(key, out var transfer))
@@ -99,6 +105,10 @@ public sealed partial class TerritoryRuntimeRouter
                 }
                 else
                 {
+                    if (transfer.AuthorizedAuthorityMeters < authority)
+                        authorityLimit = "Authority is capped at the endpoint carried over from the previous block.";
+                    if (transfer.AuthorizedSpeedMetersPerSecond < speed)
+                        speedLimit = "Speed is capped at the limit carried over from the previous block.";
                     authority = Math.Min(authority, transfer.AuthorizedAuthorityMeters);
                     speed = Math.Min(speed, transfer.AuthorizedSpeedMetersPerSecond);
                 }
@@ -110,16 +120,34 @@ public sealed partial class TerritoryRuntimeRouter
                     authority = 0;
                     reason = "A wayside withdrew part of the issued route; authority is zero until the full grant is safe again.";
                 }
-                else authority = held.Meters;
+                else
+                {
+                    if (held.Meters < authority)
+                        authorityLimit = "Authority is held at the endpoint already issued for this block.";
+                    authority = held.Meters;
+                }
             }
             if (speed <= 0) authority = 0;
             if (authority <= 0) speed = 0;
             else _issued.TryAdd(key, (request, authority));
+            string status = "Withheld";
+            if (authority > 0)
+            {
+                bool authorityRestricted = authority < request.SuggestedAuthorityMeters;
+                bool speedRestricted = speed < request.SuggestedSpeedMetersPerSecond;
+                status = authorityRestricted || speedRestricted ? "Restricted" : "Approved";
+                reason = (authorityRestricted, speedRestricted) switch
+                {
+                    (true, true) => $"{authorityLimit} {speedLimit}",
+                    (true, false) => authorityLimit,
+                    (false, true) => speedLimit,
+                    _ => ""
+                };
+            }
             blocks[original.BlockId] = original with
             {
                 AuthorizedAuthorityMeters = authority, AuthorizedSpeedMetersPerSecond = speed,
-                MovementStatus = authority <= 0 ? "Withheld" : authority < request.SuggestedAuthorityMeters || speed < request.SuggestedSpeedMetersPerSecond ? "Restricted" : "Approved",
-                MovementReason = authority <= 0 ? reason : "Route approved by all waysides on this line."
+                MovementStatus = status, MovementReason = reason
             };
         }
         var grants = blocks.Values.Where(block => block.Request is not null).ToDictionary(block => (_entries[Owner(block.BlockId)].Configuration.LineName, block.Request!.RequestId));

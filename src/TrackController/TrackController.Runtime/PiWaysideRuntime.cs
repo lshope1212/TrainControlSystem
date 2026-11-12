@@ -135,7 +135,11 @@ public sealed class PiWaysideRuntime : IWaysideRuntime
             }
 
             var result = MessageSerializer.DeserializePayload<WaysideAcknowledgementMessage>(envelope);
-            return result;
+            // Older protocol 11 Pi builds send the original retirement reason without the flag.
+            return !result.IsAccepted && (message.MessageType is "CoordinateMovement" or nameof(MovementSuggestionMessage))
+                && result.Detail == RetiredMovementRequestException.Detail
+                ? result with { IsRetiredMovement = true }
+                : result;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or SocketException or JsonException or OperationCanceledException or ArgumentException or InvalidOperationException)
         {

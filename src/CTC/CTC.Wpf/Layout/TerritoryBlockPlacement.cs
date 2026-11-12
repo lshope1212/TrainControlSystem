@@ -1,6 +1,10 @@
 using System.Windows;
 
+#if TRACK_CONTROLLER_MAP
+namespace TrackController.Wpf.Layout;
+#else
 namespace CTC.Wpf.Layout;
+#endif
 
 /// <summary>
 /// Where one block is drawn on the territory schematic: a short polyline (in layout units)

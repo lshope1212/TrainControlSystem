@@ -133,6 +133,11 @@ public sealed class OperatorViewTests
                 await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 view.UpdateLayout();
                 StringAssert.StartsWith(session.Controller.MapHandoffs, "Handoffs:", territory.Name);
+                var map = (FrameworkElement)window.FindName("TrackMap");
+                var tracks = VisualTreeHelper.GetDrawing(map).Children.OfType<GeometryDrawing>()
+                    .Where(drawing => drawing.Geometry is StreamGeometry && drawing.Brush is null)
+                    .Select(drawing => drawing.Geometry).Distinct().ToArray();
+                Assert.HasCount(territory.Blocks.Count, tracks, $"Each owned block should have a track segment in {territory.Name}.");
                 if (Environment.GetEnvironmentVariable("TRACK_CONTROLLER_RENDER_DIR") is { Length: > 0 } output)
                 {
                     var bitmap = new RenderTargetBitmap(1180, 650, 96, 96, PixelFormats.Pbgra32);

@@ -66,6 +66,9 @@ public sealed class MovementRequestState
 
     public string AcknowledgementDetail { get; set; } = string.Empty;
 
+    /// <summary>The wayside has ended this request. It cannot be renewed or grant authority again.</summary>
+    public bool IsRetired { get; set; }
+
     /// <summary>What the Track Controller actually commands for this request.</summary>
     public MovementAuthorizationState Authorization { get; set; } = MovementAuthorizationState.None;
 
