@@ -147,6 +147,11 @@ public sealed class SimulationClockHost
 
         // Distribute the new state now rather than on the next tick.
         Publish();
+        if (request.Command == SimulationClockCommand.ResetSystem)
+        {
+            _ = BroadcastSystemResetAsync();
+        }
+
         return Task.CompletedTask;
     }
 
@@ -177,6 +182,10 @@ public sealed class SimulationClockHost
             case SimulationClockCommand.Reset:
                 clock.Reset();
                 return "reset";
+
+            case SimulationClockCommand.ResetSystem:
+                clock.Reset(); // the modules are told separately (BroadcastSystemResetAsync)
+                return "system reset";
 
             default:
                 throw new ArgumentException($"Unknown clock command '{request.Command}'.");
@@ -233,6 +242,54 @@ public sealed class SimulationClockHost
         {
             Volatile.Write(ref subscriber.IsSending, 0);
         }
+    }
+
+    /// <summary>Every module that resets its own state on a ResetMessage.</summary>
+    private static readonly (string Name, string Pipe)[] ResetTargets =
+    {
+        ("CTC", NamedPipeNames.Ctc),
+        ("Track Controller", NamedPipeNames.TrackController),
+        ("Track Model", NamedPipeNames.TrackModel),
+        ("Train Model", NamedPipeNames.TrainModel),
+        ("Train Controller", NamedPipeNames.TrainController),
+    };
+
+    /// <summary>
+    /// Whole-system reset: sends one ResetMessage to every module (each clears its own state).
+    /// A module that is not running is reported and skipped; the clock reset happens regardless.
+    /// </summary>
+    private async Task BroadcastSystemResetAsync()
+    {
+        var reset = new ResetMessage { ResetId = DateTime.UtcNow.Ticks };
+        var failed = new List<string>();
+        await Task.WhenAll(ResetTargets.Select(async target =>
+        {
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    await NamedPipeTransport.SendAsync(target.Pipe, reset, _shutdownToken, 1000).ConfigureAwait(false);
+                    return;
+                }
+                catch (OperationCanceledException) when (_shutdownToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch
+                {
+                    await Task.Delay(200).ConfigureAwait(false);
+                }
+            }
+
+            lock (failed)
+            {
+                failed.Add(target.Name);
+            }
+        })).ConfigureAwait(false);
+
+        Report(failed.Count == 0
+            ? "System reset sent to all modules."
+            : $"System reset sent; not reached: {string.Join(", ", failed)} (not running?).");
     }
 
     private void SetReachable(Subscriber subscriber, bool reachable, string detail)

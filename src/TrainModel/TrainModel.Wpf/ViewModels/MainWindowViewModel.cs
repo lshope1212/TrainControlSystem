@@ -470,6 +470,37 @@ public sealed class MainWindowViewModel : ViewModelBase
     /// its current position. A different dispatch of an active train is adopted only while the train is
     /// still at its origin; a train that has moved is never reset by a retry. Activate = false retires it.
     /// </remarks>
+    /// <summary>
+    /// Whole-system reset (ResetMessage from the Launcher): every train is retired and removed, all
+    /// inputs and dispatch state are cleared. The step count keeps increasing (TickIds stay unique).
+    /// </summary>
+    public void ResetSystem()
+    {
+        foreach (var trainId in _activeTrains.ToList())
+        {
+            if (_fleet.GetTrain(trainId) is { } plant)
+            {
+                _publisher.PublishToController(plant.CurrentState, _stepCount, isActive: false, passengerRequested: false);
+            }
+        }
+
+        foreach (var trainId in _inputsByTrain.Keys.ToList())
+        {
+            _fleet.RemoveTrain(trainId);
+        }
+
+        _activeTrains.Clear();
+        _dispatchRequestByTrain.Clear();
+        _inputsByTrain.Clear();
+        _lastControllerTickByTrain.Clear();
+        _beaconSequence.Clear();
+        _lastBeaconRead.Clear();
+        _pendingSystemSteps = 0;
+        Roster.Clear();
+        Log("INFO", "Console", "System reset: all trains removed.");
+        RefreshNow();
+    }
+
     public void ApplyTrainActivation(TrainActivationMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);

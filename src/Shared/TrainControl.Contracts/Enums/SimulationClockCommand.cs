@@ -16,4 +16,9 @@ public enum SimulationClockCommand
 
     /// <summary>Return to the startup state: start time, paused, 1x.</summary>
     Reset,
+    /// <summary>
+    /// Whole-system reset: the clock resets (start time, paused, 1x) AND every module receives a
+    /// ResetMessage and returns to its startup state (no trains, no requests, no failures).
+    /// </summary>
+    ResetSystem,
 }

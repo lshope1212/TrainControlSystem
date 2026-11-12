@@ -53,6 +53,8 @@ public sealed class TrainModelNamedPipeReceiver
             nameof(TrainActivationMessage) => Bind<TrainActivationMessage>(envelope, m => _vm.ApplyTrainActivation(m)),
 
             // Legacy/TestUI placement by block (no position telemetry contract); kept for the standalone TestUI.
+            // Whole-system reset from the Launcher.
+            nameof(ResetMessage) => Bind<ResetMessage>(envelope, _ => _vm.ResetSystem()),
             nameof(TrackModelTrainUpdateMessage) => Bind<TrackModelTrainUpdateMessage>(envelope, m =>
                 _vm.ApplyTrainPlacement(m.TrainId, m.CurrentBlockId, m.ActualSpeedMetersPerSecond)),
             nameof(SpeedCommandMessage) => Bind<SpeedCommandMessage>(envelope, m =>

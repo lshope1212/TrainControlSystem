@@ -228,6 +228,10 @@
                                 ToolTip="Return the clock to its start time, paused, 1x"
                                 Command="{Binding ResetSimulationTimeCommand}"/>
 
+                        <Button Content="Reset System"
+                                ToolTip="Reset the WHOLE system: clock and every module (all trains removed)"
+                                Command="{Binding ResetSystemCommand}"/>
+
                     </StackPanel>
 
                     <TextBlock Text="{Binding ControlStatus}"

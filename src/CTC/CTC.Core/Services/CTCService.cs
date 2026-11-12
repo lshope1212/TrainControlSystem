@@ -83,6 +83,30 @@ public class CTCService : ICTCService
 
     public CtcSystemState State { get; } = new CtcSystemState();
 
+    /// <inheritdoc />
+    public void ResetOperations()
+    {
+        State.DispatchedTrains.Clear();
+        State.DispatchQueue.Clear();
+        State.ScheduledTrains.Clear();
+        _movementsInFlight.Clear();
+        foreach (var line in State.Lines)
+        {
+            line.TicketSalesPerHour = 0;
+            foreach (var block in line.Blocks)
+            {
+                block.PendingMaintenanceRequestId = string.Empty;
+                block.PendingSwitchRequestId = string.Empty;
+                block.RequestedMaintenanceState = block.ConfirmedMaintenanceState;
+            }
+        }
+
+        OnStateChanged(CtcStateChangeKind.Schedule, message: "System reset: schedule cleared.");
+        OnStateChanged(CtcStateChangeKind.DispatchQueue, message: "System reset: dispatch queue cleared.");
+        OnStateChanged(CtcStateChangeKind.TicketSales);
+        OnStateChanged(CtcStateChangeKind.BlockStatus, message: "System reset: all trains removed.");
+    }
+
     public event EventHandler<CtcStateChangedEventArgs>? StateChanged;
 
     /// <summary>

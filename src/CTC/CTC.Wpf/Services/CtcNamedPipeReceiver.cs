@@ -73,6 +73,8 @@ public sealed class CtcNamedPipeReceiver
             nameof(TrainDispatchStatusMessage) => Route<TrainDispatchStatusMessage>(envelope, (ctc, m) => ctc.ApplyTrainDispatchStatus(m)),
             nameof(TicketSalesMessage) => Route<TicketSalesMessage>(envelope, (ctc, m) => ctc.ApplyTicketSales(m)),
             nameof(SystemTimeMessage) => RouteAsync<SystemTimeMessage>(envelope, (ctc, m) => ApplySystemTimeAsync(ctc, m, cancellationToken)),
+            // Whole-system reset (from the Launcher): back to the startup state.
+            nameof(ResetMessage) => Route<ResetMessage>(envelope, (ctc, _) => ctc.ResetOperations()),
             _ => null,
         };
 

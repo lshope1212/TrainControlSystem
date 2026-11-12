@@ -357,6 +357,12 @@ public sealed class TrackModelConnection
                         _track.SetMaintenance(maintenance.BlockId, maintenance.RequestedState); break;
                     case nameof(TrackModelSnapshotRequestMessage):
                         RequestSnapshot(); break;
+                    case nameof(ResetMessage):
+                        // Whole-system reset: same layout, startup state (no trains, switches normal,
+                        // signals red, crossings open, no failures, initial passengers).
+                        _track.LoadLayout(_track.Layout);
+                        Log("System reset: track returned to its startup state; all trains removed.");
+                        PublishNow(); break;
                     default: throw new ArgumentException("Unsupported message type: " + envelope.MessageType);
                 }
                 StatusReported?.Invoke(this, "Input accepted");

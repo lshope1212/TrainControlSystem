@@ -10,6 +10,13 @@ namespace CTC.Core.Interfaces;
 /// </summary>
 public interface ICTCService
 {
+    /// <summary>
+    /// Whole-system reset: back to the startup state. Removes every dispatched train, the dispatch
+    /// queue and the loaded schedule, and pending maintenance/switch requests; keeps the track layout
+    /// (live block status is refreshed by the Track Controller).
+    /// </summary>
+    void ResetOperations() { } // default: no-op, so test doubles need not implement it
+
     CtcSystemState State { get; }
 
     /// <summary>

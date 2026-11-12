@@ -64,6 +64,9 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
     public event Action<WaysideAcknowledgementMessage>? AcknowledgementReceived;
 
+    /// <summary>Whole-system reset requested (ResetMessage from the Launcher).</summary>
+    public event Action? SystemResetRequested;
+
     /// <summary>Connects a runtime to the production named-pipe receiver and output publishers.</summary>
     public WaysidePipeHost(TrackControllerService controller, string[]? pipeNames = null) : this(new LocalWaysideRuntime(controller), pipeNames)
     {
@@ -127,6 +130,13 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
     private async Task HandleAsync(MessageEnvelope envelope)
     {
+        // Whole-system reset: the view model reloads the current deployment (fresh controllers).
+        if (envelope.MessageType == nameof(TrainControl.Contracts.Messages.ResetMessage))
+        {
+            SystemResetRequested?.Invoke();
+            return;
+        }
+
         // Dispatch coordination is relayed at this integration layer; it never reaches the runtime or PLC.
         if (TrainDispatchRelay.Handles(envelope.MessageType))
         {

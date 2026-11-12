@@ -42,6 +42,7 @@ public sealed class SimulationClockViewModel : ViewModelBase
         SetSimulationTimeCommand = new AsyncRelayCommand(_ => SetTimeAsync());
         ResetSimulationTimeCommand = new AsyncRelayCommand(
             _ => RequestAsync(new SimulationTimeControlMessage { Command = SimulationClockCommand.Reset }, "reset"));
+        ResetSystemCommand = new AsyncRelayCommand(_ => ResetSystemAsync());
 
         // Only notices that clock updates stopped arriving; it never advances any time itself.
         var connectionCheck = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -102,6 +103,21 @@ public sealed class SimulationClockViewModel : ViewModelBase
     public ICommand SetSimulationTimeCommand { get; }
 
     public ICommand ResetSimulationTimeCommand { get; }
+
+    /// <summary>Whole-system reset (clock + every module back to its startup state), after confirmation.</summary>
+    public ICommand ResetSystemCommand { get; }
+
+    private Task ResetSystemAsync()
+    {
+        var answer = System.Windows.MessageBox.Show(
+            "Reset the WHOLE system?\n\nThe clock returns to its start time (paused, 1x) and every module " +
+            "clears its state: all trains are removed, all requests and failures are cleared. " +
+            "The loaded schedule is cleared too.",
+            "Reset system", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Warning);
+        return answer == System.Windows.MessageBoxResult.OK
+            ? RequestAsync(new SimulationTimeControlMessage { Command = SimulationClockCommand.ResetSystem }, "system reset")
+            : Task.CompletedTask;
+    }
 
     /// <summary>Adopts the clock's authoritative state. Called on the UI thread for every received SystemTimeMessage.</summary>
     public void ApplyClockState(SystemTimeMessage message)

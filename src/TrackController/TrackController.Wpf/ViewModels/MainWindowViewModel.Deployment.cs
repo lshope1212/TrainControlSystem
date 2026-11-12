@@ -271,6 +271,18 @@ public sealed partial class MainWindowViewModel
     {
         _host.StatusChanged += text => Post(() => Connection = text);
         _host.InputReceived += text => Post(() => Status = text);
+        _host.SystemResetRequested += () => Post(async () =>
+        {
+            try
+            {
+                await UseDeploymentAsync(_plan, systemReset: true);
+                Status = "System reset: all territories restarted with the current deployment (no feedback, no requests).";
+            }
+            catch (Exception ex)
+            {
+                Status = $"System reset failed: {ex.Message}";
+            }
+        });
         _host.AcknowledgementReceived += receipt => Post(() =>
         {
             if (receipt.MessageType == "ApplyManual")
@@ -281,12 +293,13 @@ public sealed partial class MainWindowViewModel
         });
     }
 
-    private async Task UseDeploymentAsync(PreparedDeployment? plan)
+    /// <param name="systemReset">Whole-system reset from the Launcher: reloads without requiring maintenance mode.</param>
+    private async Task UseDeploymentAsync(PreparedDeployment? plan, bool systemReset = false)
     {
         if (plan is not null && plan.Territories.GroupBy(territory => territory.Configuration.LineName).Any(line => line.Count() < 2))
             throw new ArgumentException("Each line needs at least two wayside territories for this assignment. Load a split deployment.");
         var current = await _host.PollForSetupAsync(_lifetime.Token);
-        if (_hasLoadedDeployment && !current.IsMaintenanceMode)
+        if (_hasLoadedDeployment && !current.IsMaintenanceMode && !systemReset)
         {
             throw new InvalidOperationException("Enter maintenance mode before changing its deployment or execution.");
         }
