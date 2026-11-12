@@ -120,15 +120,19 @@ public sealed class AutomaticSwitchAlignmentIntegrationTests
         await using var run = await DispatchedRun.StartAsync("Blue", ToStationB);
         var system = run.System;
         await SignalledRouteIntegrationTests.AssertSignalClearsAndTrainMovesAsync(run, signal: "6", otherSignal: "11");
-        int sentBefore = system.CtcSent!.Delivered.Count;
+        // The block-1 request can still be retiring when CTC first reports block 2. Wait for
+        // the grant at the current block so the replay targets the movement this re-route cancels.
+        await LiveSystem.UntilAsync(async () => (await run.Train())!.MovementRequest is { Plan.TargetBlockId: "2", IsMovementAuthorized: true },
+            "CTC confirms the current grant from block 2.");
+        string oldRequestId = (await run.Train())!.MovementRequest!.RequestId;
+        var oldRequest = system.CtcSent!.Delivered.OfType<MovementSuggestionMessage>().Last(message => message.IsActive && message.RequestId == oldRequestId);
 
         // Re-route from where the train is now (block 2), well before the switch.
         await system.OnCtcAsync(ctc => ctc.UpdateDispatchedTrainPlanAsync("001", "15", DispatchedRun.Departure + TimeSpan.FromSeconds(240)));
         await LiveSystem.UntilAsync(async () => (await run.Train())!.MovementRequest?.Plan.PathBlockIds.Contains("11") == true, "CTC requests the new route.", TimeSpan.FromSeconds(10));
         // The request the re-route cancelled: the train's granted movement over the Normal branch.
-        var sent = system.CtcSent.Delivered.OfType<MovementSuggestionMessage>().ToList();
-        var cancelled = system.CtcSent.Delivered.Skip(sentBefore).OfType<MovementSuggestionMessage>().First(message => !message.IsActive && message.PathBlockIds.Contains("6"));
-        var oldRequest = sent.Last(message => message.IsActive && message.RequestId == cancelled.RequestId);
+        await LiveSystem.UntilAsync(() => Task.FromResult(system.CtcSent.Delivered.OfType<MovementSuggestionMessage>().Any(message => !message.IsActive && message.RequestId == oldRequestId)),
+            "CTC cancels the grant from block 2.");
         Assert.IsFalse(await system.OnTrackModel(track => track.FindBlock("4")!.IsOccupied || track.FindBlock("5")!.IsOccupied), "Re-routed while still approaching the junction.");
 
         // From now on, nothing may ever grant a movement over block 6.
