@@ -188,7 +188,7 @@ public class ScheduleBuilderViewModel : ViewModelBase
             var routes = result.Trains.Select(train => $"{TrainIds.DisplayName(train.TrainId)}: {string.Join(" → ", train.Route.Select(block => block.BlockId))}");
             StatusMessage = $"Queued {result.Trains.Count} train(s) for {Line.Name}. {string.Join("; ", routes)}";
 
-            // CTC routes by connectivity only; say so when the wayside will refuse the route it built.
+            // CTC's routes follow the layout's direction of travel and switch geometry; warn if one would still be refused.
             var problems = result.Trains.SelectMany(train => RouteGeometry.FindProblems(Line, train)).ToList();
             if (problems.Count > 0)
             {

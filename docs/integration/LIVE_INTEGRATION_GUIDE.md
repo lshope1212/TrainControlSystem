@@ -127,16 +127,26 @@ departure time; the converter builds the route from that block, so `ScheduledTra
 `ScheduledTrain.StartBlockId` and `TrainDispatchRequestMessage.StartBlockId` are the selected block.
 `CTCService.QueueSchedule` enforces the same rule for every caller.
 
-**Routing limitation.** CTC routes by connectivity only (fewest blocks, no block twice). It does
-not apply the Track Model's direction of travel or switch geometry, which the Track Controller does.
-The Schedule Builder therefore reports, after queueing, any step against the direction of travel or
-any pass through a switch from one leg to the other (`RouteGeometry`); it does not change or block
-the route. For example, from `GREEN-63` to Edgebrook (`GREEN-9`) the shortest connected route runs
-63 → 62 → … → 29 against Green's one-way direction and is refused by the Track Controller ("No
-permitted connection from GREEN-63 to GREEN-62"); forcing it forward (timing e.g. `GREEN-120`)
-gives 76 → 77 → 101, two legs of switch 77, which the Track Controller cannot align. The legal route
-(… 76, 77, 78 … 85, 86 … 100, 85, 84 … 77, 101 … 150, 28 … 13, 12 … 9) passes 77–85 twice, which
-CTC's planner cannot produce.
+**Routing.** CTC plans the shortest *legal* route (`CTC.Core/Routing/RoutePlanner`): a breadth-first
+search over routing states (block entered from, current block) that applies the Track Model's
+direction of travel, passes a switch only between its stem and one leg, and never reverses — the
+same rules the Track Controller enforces (`LineTopology`). Because the state includes the approach,
+a route may revisit a block when the network requires it. From `GREEN-63` to Edgebrook (`GREEN-9`)
+the dispatcher times only those two blocks and CTC fills in all 117 visits: 63 … 77, 78 … 85,
+86 … 100, 85, 84 … 77, 101 … 150, 28 … 13, 12 … 9 (switch 77 Normal then Reverse, 85 Normal then
+Reverse, 28 Reverse, 13 Normal). `RouteGeometry` still warns about a route given some other way.
+
+**Movement segments.** One movement request may not revisit a block (the Track Controller refuses
+it) and every live request demands its switches, so a route like Green's is requested in bounded
+segments (`MovementSegmentation`). A segment never repeats a block and ends before the train comes
+back into the protection zone of a switch it set the other way (Green: the first segment ends at
+`GREEN-99`, before `GREEN-100` re-enters switch 85's zone). `DispatchedTrainState.AuthorityLimitRouteIndex`
+is the current segment's fixed end (successors never pass it) and `MovementEndRouteIndex` the
+movement's. Once the train has left the zones of the switches the next segment must move (CTC sees
+them clear: for Green, when the rear leaves `GREEN-86`), CTC cancels the current request and sends
+the next segment as a new request with a new ID, which the Track Controller evaluates from scratch:
+it throws 85 and 77 Reverse, waits for the Track Model's report, then grants. Until then
+`NextSegmentWaitReason` says why the train is waiting.
 
 ## Identifiers
 

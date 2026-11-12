@@ -169,8 +169,16 @@ public static class MovementRequestPlanner
 
         int last = Math.Min(limitIndex, routeBlockIds.Count - 1);
         var blocks = new List<CtcBlockState>();
+        var included = new HashSet<string>(StringComparer.Ordinal);
         for (int i = currentIndex; i <= last; i++)
         {
+            // One request never revisits a block (the Track Controller refuses it); a route that does is
+            // covered segment by segment (MovementSegmentation), so this only guards that.
+            if (!included.Add(routeBlockIds[i]))
+            {
+                break;
+            }
+
             var block = line.Blocks.FirstOrDefault(candidate => candidate.BlockId == routeBlockIds[i]);
             if (block is null)
             {

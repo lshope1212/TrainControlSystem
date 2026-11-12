@@ -135,12 +135,29 @@ public class DispatchedTrainState
     public string PreviousBlockId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Fixed end of the current movement's authority: the index in <see cref="ActiveRouteBlockIds"/>
-    /// of the last block it covers; -1 for none. Set only when a movement starts (release, departure
-    /// after a stop, a dispatcher re-plan); moving block to block never extends it, and requests only
-    /// ever cover less (when a block ahead is unsafe), never more.
+    /// Fixed end of the current movement-authority segment: the index in <see cref="ActiveRouteBlockIds"/>
+    /// of the last block it covers; -1 for none. Set when a movement starts (release, departure after a
+    /// stop, a dispatcher re-plan) and when the train explicitly continues into its next segment (see
+    /// <see cref="MovementEndRouteIndex"/>); moving block to block never extends it, and requests only ever
+    /// cover less (when a block ahead is unsafe), never more.
     /// </summary>
     public int AuthorityLimitRouteIndex { get; set; } = -1;
+
+    /// <summary>
+    /// Where the current movement's authority ends: the last route index it may reach before the first block
+    /// that was unsafe when it started, or the route's end; -1 for none. A route that revisits blocks or must
+    /// set a switch two ways cannot be requested at once, so the movement is covered by bounded segments
+    /// (<see cref="Routing.MovementSegmentation"/>): <see cref="AuthorityLimitRouteIndex"/> is the current
+    /// segment's end and is at most this. While it is less, CTC continues into the next segment with an
+    /// explicit new movement request once the Track Controller can protect it.
+    /// </summary>
+    public int MovementEndRouteIndex { get; set; } = -1;
+
+    /// <summary>
+    /// Dispatcher-readable reason the train cannot continue into its next authority segment yet (e.g. its rear
+    /// is still in the protection zone of a switch the next segment must move); empty when it is not waiting.
+    /// </summary>
+    public string NextSegmentWaitReason { get; set; } = string.Empty;
 
     /// <summary>
     /// The movement request CTC currently holds at the Track Controller for this train, with its

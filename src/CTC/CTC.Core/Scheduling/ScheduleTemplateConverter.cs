@@ -1,5 +1,6 @@
 using System.Globalization;
 using CTC.Core.Models;
+using CTC.Core.Routing;
 
 namespace CTC.Core.Scheduling;
 
@@ -35,10 +36,13 @@ public sealed class ScheduleConversionResult
 /// starting block (one of the line's yard entries, chosen per train), where it is the departure
 /// time. The route always begins at that starting block; no block before it is ever added. The
 /// dispatcher only times the blocks that matter (e.g. stations); the timed blocks are taken in time order and CTC routes the train
-/// between them through the connected blank blocks. Blank blocks not on that path are not
-/// used, so on a branching line timing any block on a branch selects that branch. Physical
-/// feasibility (speed) is checked later by CTC when the schedule is queued, because it
-/// needs the live track layout.
+/// between them along the shortest LEGAL path (<see cref="RoutePlanner"/>: the line's direction of travel,
+/// switches only between stem and leg, no reversing), continuing in the direction the train arrived at
+/// each waypoint. A block may be visited more than once when the network requires it (e.g. the Green
+/// Line's yard-to-Edgebrook route passes N twice, once each way around the loop), so a single timed
+/// destination is enough. Blank blocks not on that path are not used, so on a branching line timing any
+/// block on a branch selects that branch. Physical feasibility (speed) is checked later by CTC when the
+/// schedule is queued, because it needs the live track layout.
 /// </remarks>
 public static class ScheduleTemplateConverter
 {
@@ -177,26 +181,27 @@ public static class ScheduleTemplateConverter
             }
         }
 
-        // Connect each waypoint to the next through the track topology, routing through blocks
-        // that have no time. A block is never used twice, so a train cannot reverse onto the
-        // other branch of a switch.
-        var rowsById = template.Rows.ToDictionary(row => row.BlockId);
+        // Connect each waypoint to the next along the line's legal topology, routing through blocks
+        // that have no time and continuing in the direction the train arrived in. Blocks may repeat
+        // where the network requires it (a loop); a train never reverses.
+        var topology = LineTopology.From(template.Rows);
         var timeByBlockId = waypoints.ToDictionary(waypoint => waypoint.Row.BlockId, waypoint => waypoint.Time);
         var route = new List<ScheduledRouteBlock> { new() { BlockId = start.Row.BlockId, ArrivalTime = start.Time } };
-        var used = new HashSet<string> { start.Row.BlockId };
 
         foreach (var stop in stops)
         {
             string fromId = route[^1].BlockId;
-            var path = FindPath(rowsById, fromId, stop.Row.BlockId, used);
-            if (path is null)
+            string? enteredFrom = route.Count > 1 ? route[^2].BlockId : null;
+            var path = RoutePlanner.FindRoute(topology, fromId, stop.Row.BlockId, enteredFrom)?.Skip(1).ToList();
+            if (path is null || path.Count == 0)
             {
+                // "Connected" here means legally driveable: the direction of travel and switch geometry apply.
                 return $"{trainName} cannot reach {stop.Row.BlockId} from {fromId} along connected blocks without reversing. "
                     + "Check the times are in travel order and on one branch.";
             }
 
             // The path passes a block the dispatcher timed for LATER, so the times are out of order.
-            var passed = path.SkipLast(1).FirstOrDefault(timeByBlockId.ContainsKey);
+            var passed = path.SkipLast(1).FirstOrDefault(blockId => timeByBlockId.TryGetValue(blockId, out var time) && time > stop.Time);
             if (passed is not null)
             {
                 return $"{trainName} passes {passed} on the way from {fromId} to {stop.Row.BlockId}, but is scheduled to enter "
@@ -206,13 +211,11 @@ public static class ScheduleTemplateConverter
             foreach (var blockId in path.SkipLast(1))
             {
                 route.Add(new ScheduledRouteBlock { BlockId = blockId });
-                used.Add(blockId);
             }
 
             // Dwell does not change when the train enters the stop; it delays the next movement,
             // which SpeedPlanner.ValidateFeasibility checks once the schedule is queued.
             route.Add(new ScheduledRouteBlock { BlockId = stop.Row.BlockId, ArrivalTime = stop.Time, DwellTime = stop.Dwell });
-            used.Add(stop.Row.BlockId);
         }
 
         // The route is built from the selected start, so this only guards that construction.
@@ -261,54 +264,6 @@ public static class ScheduleTemplateConverter
         if (isStart && dwell > TimeSpan.Zero)
         {
             return "the starting block has no dwell time; trains depart it at their departure time.";
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Shortest path (fewest blocks) from <paramref name="fromId"/> to <paramref name="toId"/>
-    /// over <see cref="ScheduleTemplateRow.ConnectedBlockIds"/>, never entering a block in
-    /// <paramref name="used"/>. Returns the blocks after <paramref name="fromId"/>, ending with
-    /// <paramref name="toId"/>, or null when there is no such path.
-    /// </summary>
-    /// <remarks>
-    /// On a line with loops more than one path can exist; the dispatcher picks a specific one
-    /// by timing a block on it.
-    /// </remarks>
-    private static List<string>? FindPath(IReadOnlyDictionary<string, ScheduleTemplateRow> rowsById, string fromId, string toId, IReadOnlySet<string> used)
-    {
-        var previous = new Dictionary<string, string> { [fromId] = fromId };
-        var frontier = new Queue<string>();
-        frontier.Enqueue(fromId);
-
-        while (frontier.Count > 0)
-        {
-            string current = frontier.Dequeue();
-            if (current == toId)
-            {
-                var path = new List<string>();
-                for (string blockId = toId; blockId != fromId; blockId = previous[blockId])
-                {
-                    path.Add(blockId);
-                }
-
-                path.Reverse();
-                return path;
-            }
-
-            if (!rowsById.TryGetValue(current, out var row))
-            {
-                continue;
-            }
-
-            foreach (var next in row.ConnectedBlockIds)
-            {
-                if (!used.Contains(next) && rowsById.ContainsKey(next) && previous.TryAdd(next, current))
-                {
-                    frontier.Enqueue(next);
-                }
-            }
         }
 
         return null;

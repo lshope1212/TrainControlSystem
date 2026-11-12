@@ -1,387 +1,542 @@
-# Claude Code Prompt — Fix Automatic Switch Alignment and Route Authorization
+# Claude Code Prompt — Complete Green Line Routing for Iteration 3
 
 ## Objective
 
-Investigate and fix the automatic switch alignment problem in our TrainControlSystem repository.
+Implement the remaining routing changes necessary for Train 001 to travel autonomously from the Green Line yard entry (GREEN-63) to Edgebrook Station (GREEN-9), using the existing fully integrated TrainControlSystem.
 
-The system currently dispatches and moves trains successfully when their route follows the initial positions of the switches. However, when a route requires a switch to change position, the Track Controller accepts the movement request but indefinitely withholds authority.
+The recent automatic switch-alignment fix is already implemented. Do not replace or undo it.
 
-**Goal: A train's planned route should automatically cause the necessary switches to be aligned safely, with the Track Controller verifying actual switch feedback before granting authority.**
+**Primary goal: The dispatcher should be able to schedule Train 001 from GREEN-63 to GREEN-9, and the system should construct and execute the physically valid route through the complete Green Line network, including its loops, repeated blocks, and switches.**
 
-Implement this as a proper production integration fix, not a workaround.
+The train must move using the real Train Model physics, Train Controller commands, Track Model occupancy, Track Controller authority, and CTC scheduling.
 
-## 1. Reproduce and understand the problem
+This is a focused implementation task, not merely an investigation.
 
-The system uses C#/.NET, WPF, MVVM, named-pipe communication, and separate CTC, Track Controller, Track Model, Train Controller, and Train Model modules.
+### Important scope limitation
 
-We have recently completed much of the physical dispatch and movement integration.
+We are currently concentrating ONLY on getting the train through the entire route.
 
-### Reproduction scenario
+Do NOT attempt to fix or redesign:
 
-On the Blue Line:
+- Physical station stopping and station beacon behavior.
+- The 45-second station dwell implementation.
+- Exact scheduled arrival-time accuracy.
+- Train Controller PID tuning or physics.
+- Passenger exchanges.
+- Automatic end-of-service train retirement.
+- Unrelated UI or module functionality.
 
-- Train 001 starts at block 1.
-- The scheduled destination is Station C at block 15.
-- The route follows blocks 1, 2, 3, 4, 5, 11, 12, 13, 14, 15.
-- Switch 5 initially reports Normal.
-- This route requires switch 5 to be Reverse, connecting the stem at block 4 toward block 11.
+These are separate future tasks.
 
-The train successfully dispatches into the Track Model, and the movement request is delivered to the Track Controller.
+For this task, success means the train physically travels the entire legal route and its front enters Edgebrook's block, GREEN-9, with the CTC correctly tracking its progress.
 
-The CTC displays a message similar to:
+It does not yet need to demonstrate accurate stopping at the station platform.
 
-"Train 001 movement request for blocks 1 to 15 (500 m): accepted, but authority withheld: Waiting for switch 5 alignment feedback; this request needs 11 (verify entry and alignment)."
+---
 
-Consequently, the train receives zero movement authority and remains stopped.
+## 1. Understand the existing Green Line topology
 
-The reverse scenario also occurs: routes that require Normal alignment may fail when the switch initially lies Reverse.
+Review the actual course layout in:
 
-### Existing integration test workaround
+`src/TrackModel/SampleLayouts/course-lines.json`
 
-Examine:
+Also investigate:
 
-`tests/Integration.Tests/SignalledRouteIntegrationTests.cs`
-
-The test `Train001_ToStationC_ClearsSignal11_IsAuthorized_AndMoves` currently initializes switch 5 to Reverse before starting the test.
-
-The comment explicitly describes the limitation that prevents the Track Controller from throwing the switch live.
-
-**This workaround must no longer be necessary after the fix.**
-
-## 2. Investigate the complete switch-control pipeline
-
-Before editing, trace how a switch command should move through the system:
-
-1. CTC constructs a train's planned route.
-2. CTC sends the movement request to the Track Controller.
-3. The required switch positions are determined from the route topology.
-4. The Track Controller verifies that each switch's protection zone permits movement.
-5. The Track Controller commands the required switch alignment.
-6. The command reaches the Track Model.
-7. The Track Model applies the physical switch change and reports its actual position.
-8. The Track Controller confirms alignment and grants authority.
-9. The Train Controller receives positive authority and permits the train to move.
-
-Identify precisely where the existing implementation fails.
-
-### Files to investigate
-
-CTC:
-
-- `src/CTC/CTC.Core/Services/CTCService.cs`
-- `src/CTC/CTC.Core/Dispatching/MovementRequestCoordinator.cs`
-- `src/CTC/CTC.Core/Dispatching/MovementRequestPlan.cs`
-- `src/CTC/CTC.Core/Dispatching/RouteManager.cs`
-- `src/CTC/CTC.Core/Dispatching/TrainDispatchCoordinator.cs`
-
-Track Controller:
-
-- `src/TrackController/TrackController.Core/Services/TrackControllerService.Requests.cs`
-- `src/TrackController/TrackController.Core/Services/TrackControllerService.Evaluation.cs`
-- `src/TrackController/TrackController.Core/Services/TrackControllerService.VitalPlc.cs`
-- `src/TrackController/TrackController.Core/Services/TrackControllerService.Authority.cs`
-- `src/TrackController/TrackController.Wpf/Services/WaysidePipeHost.cs`
-- `src/TrackController/TrackController.Runtime/TerritoryRuntimeRouter.cs`
-- `src/TrackController/TrackController.Wpf/Samples/wayside.plc`
-
-Track Model:
-
-- `src/TrackModel/TrackModel.Core/Services/TrackService.cs`
+- `src/TrackModel/TrackModel.Core/Services/CourseTrackLayout.cs`
 - `src/TrackModel/TrackModel.Core/Services/TrackTopology.cs`
-- `src/TrackModel/TrackModel.Wpf/Services/TrackModelConnection.cs`
+- `src/TrackController/TrackController.Wpf/Samples/green-line-track-map.json`
+- `src/CTC/CTC.Core/Scheduling/RouteGeometry.cs`
+- `docs/integration/LIVE_INTEGRATION_GUIDE.md`
 
-Shared contracts:
+### The required route
 
-- `SwitchPositionRequestMessage`
-- `MovementSuggestionMessage`
-- `TrackModelBlockStateMessage`
-- `TrackModelCommandMessage`
+The correct Green Line route is not the shortest undirected path.
 
-Review the relevant tests and any additional supporting files.
+The train must leave the yard and initially proceed in the increasing block-number direction.
 
-Use the actual current code rather than assuming these files remain unchanged.
+The expected physical route is:
 
-## 3. Known issues to investigate and resolve
+1. GREEN-63 → GREEN-64 → ... → GREEN-77
+2. GREEN-77 → GREEN-78 → ... → GREEN-85
+3. GREEN-85 → GREEN-86 → ... → GREEN-100
+4. GREEN-100 → GREEN-85 → GREEN-84 → ... → GREEN-77
+5. GREEN-77 → GREEN-101 → GREEN-102 → ... → GREEN-150
+6. GREEN-150 → GREEN-28 → GREEN-27 → ... → GREEN-13
+7. GREEN-13 → GREEN-12 → ... → GREEN-9 (Edgebrook)
 
-### Issue A — No automatic switch position selection
+According to the current layout, this route contains 117 block visits, including repeated visits to GREEN-77 through GREEN-85.
 
-The CTC already supports explicit switch requests through:
+Verify this route against the actual topology before implementing it.
 
-`CTCService.SetSwitchPositionAsync()`
+The route must respect track direction and switch geometry.
 
-However, switch requests are separate from movement requests.
+### Important junction behavior
 
-The Track Controller's evaluation logic also appears to use the reported switch position whenever no desired switch position has been specified.
+Switch 77:
 
-As a result, the movement request specifies the desired route but does not cause the required switch change.
+- First visit: GREEN-76 → GREEN-77 → GREEN-78, requiring Normal.
+- Second visit: GREEN-78 → GREEN-77 → GREEN-101, requiring Reverse.
 
-**Required fix:**
+Switch 85:
 
-Implement automatic switch alignment as part of normal movement preparation.
+- First visit: GREEN-84 → GREEN-85 → GREEN-86, requiring Normal.
+- Second visit: GREEN-100 → GREEN-85 → GREEN-84, requiring Reverse.
 
-The system must determine which switch positions a route requires based on the actual topology, including:
+Switch 28:
 
-- The block from which the train enters the switch.
-- The block through which it must exit.
-- The switch's stem, Normal branch, and Reverse branch.
-- Whether the route is physically valid.
+- GREEN-150 → GREEN-28 → GREEN-27, requiring Reverse.
 
-For Blue Line block 5, the route 4 → 5 → 11 requires Reverse.
+Switch 13:
 
-Choose the best architectural solution after inspecting the code. This might involve the CTC proactively requesting switch alignment or the Track Controller deriving required positions from accepted movement requests.
+- GREEN-14 → GREEN-13 → GREEN-12, requiring Normal.
 
-Prefer reusing existing interfaces and controls instead of creating a redundant switch-control mechanism.
+The system must be able to change these switches at the appropriate times, using the automatic switch-alignment functionality recently implemented.
 
-The Track Controller must remain responsible for enforcing safety and deciding whether switching is actually permitted.
+**Do not hardcode these block IDs or switch positions into production routing logic.**
 
-Do not let the CTC directly manipulate the Track Model's switch position.
+They are acceptance-test expectations for the current course layout.
 
-### Issue B — Missing CTC reservation feedback
+---
 
-Investigate the switch safety logic in:
+## 2. Fix the CTC route-planning algorithm
 
-`TrackControllerService.Requests.cs`
+The current CTC uses shortest-path routing based primarily on connectivity.
 
-Particularly:
+Investigate:
 
-`GetSwitchProtectionReason()`
+- `src/CTC/CTC.Core/Dispatching/RouteManager.cs`
+- `src/CTC/CTC.Core/Scheduling/ScheduleTemplateConverter.cs`
+- `src/CTC/CTC.Core/Scheduling/RouteGeometry.cs`
 
-The current implementation requires each block in the switch's protection zone to have:
+### Current problems
 
-`IsReservedByCtc == false`
+1. The route planner does not fully enforce the track's direction of travel.
+2. It does not properly consider the stem and branches of switches.
+3. It prevents revisiting any block.
+4. It can construct a physically invalid route that is later rejected by the Track Controller.
 
-However, the Track Model's `CreateBlockState()` does not currently populate `IsReservedByCtc`.
+### Required changes
 
-Therefore, reservation feedback is null and the Track Controller treats the protection zone as unsafe.
+Implement a general-purpose topology-aware route planner.
 
-The PLC similarly uses `reserved_known` and `reserved`.
+The planner must:
 
-**Required fix:**
+- Respect directed track travel.
+- Respect switch geometry.
+- Never route from one switch leg directly to another without passing through the stem.
+- Allow valid repeated block visits when the network requires them.
+- Avoid immediate reversals.
+- Prevent infinite loops.
+- Select a valid route to the destination.
+- Work for Blue, Red, and Green without line-specific hardcoding.
+- Support the CTC Schedule Builder and dispatcher rerouting.
 
-Implement a proper, truthful means of determining whether the switch protection zone is reserved by CTC.
+I recommend investigating a graph-search state that includes both the current block and the block from which the train entered.
 
-Investigate whether reservation ownership already exists somewhere in the system before introducing new state or messages.
+For example:
 
-If it does not exist, implement the minimum complete reservation-tracking integration necessary to support safe automatic switch operation.
+`RoutingState(PreviousBlockId, CurrentBlockId)`
 
-Requirements:
+This allows a train to revisit a physical block from a different approach while preventing endless exploration of identical routing states.
 
-- Do not simply hardcode `IsReservedByCtc = false`.
-- Do not bypass the reservation check.
-- Do not treat unknown reservation state as proof that the zone is unreserved.
-- Clearly define what constitutes a reservation, who owns it, and when it is created or released.
-- Prevent conflicting train movements or switch changes through a protected zone.
-- Ensure that stale or unavailable reservation information results in a safe restriction.
-- Keep the feedback synchronized through the existing communication architecture.
+Choose an appropriate shortest-valid-path algorithm, such as BFS over directed routing states, or another approach justified by the actual topology.
 
-Be careful to distinguish a movement request that is awaiting switch alignment from an already granted movement authority. A pending route must not unnecessarily deadlock itself by being treated as an incompatible reservation.
+Reuse existing track-direction and switch-geometry logic where possible so CTC and Track Controller agree on which connections are legal.
 
-### Issue C — Command and feedback synchronization
+### Schedule Builder behavior
 
-Once the required switch position is selected and approved:
+The dispatcher must be able to:
 
-- The Track Controller should issue the command through the existing Track Model command pipeline.
-- The Track Model should change the switch only when physically safe.
-- The Track Model must publish the new actual switch position.
-- The Track Controller must verify that the reported position matches the required position.
-- Authority must remain withheld until the switch alignment is confirmed.
+1. Select Green Line.
+2. Create a schedule for Train 001.
+3. Select GREEN-63 as the starting block.
+4. Enter an arrival time at Edgebrook, GREEN-9.
+5. Queue the schedule successfully.
 
-Acknowledging a switch request is not equivalent to confirming that the switch moved.
+The Schedule Builder must automatically fill in the valid route.
 
-If a command is rejected, blocked, or never confirmed, the system must clearly report why and must not grant unsafe authority.
+The dispatcher should NOT need to manually enter all 117 block visits or add arbitrary intermediate timed stops to force the correct route.
 
-Verify that repeated command publication, evaluation cycles, and asynchronous feedback cannot cause the system to oscillate, incorrectly reset switch positions, or generate conflicting commands.
+Preserve the ability to create schedules with multiple timed waypoints.
 
-## 4. Support automatic alignment during the entire journey
+---
 
-This functionality must not work only at initial dispatch.
+## 3. Support repeated blocks throughout CTC and Track Model
 
-A train may have multiple junctions along its route. A dispatcher may also change the destination after the train has departed.
+The full route revisits GREEN-77 through GREEN-85.
 
-The implementation should handle:
+A repeated physical block is not necessarily an invalid route. The distinction is that the train enters it from a different predecessor and at a different point in its journey.
 
-- An initial route that requires a switch change.
-- Several switches requiring different alignments.
-- A train approaching a switch that is already correctly aligned.
-- A train approaching a switch that needs to change alignment.
-- A route update requiring a different switch position.
-- A switch that cannot currently be moved because its protection zone is occupied, reserved, faulted, or otherwise unsafe.
-- Multiple trains with potentially conflicting movement requests.
+Review how route positions are represented in:
 
-A switch change must happen only when safe.
+- `DispatchedTrainState`
+- `ScheduledTrain`
+- `ScheduledRouteBlock`
+- `MovementPlanner`
+- `TrainLocationTracker`
+- `TrainDispatchCoordinator`
+- `TrackService.PositionTracking.cs`
+- `TrackTopology.cs`
 
-If a switch cannot be aligned, withhold the necessary authority and clearly report the reason. Reevaluate when conditions change so that the train can continue automatically once the route becomes safe.
+### Required behavior
 
-Do not throw a switch beneath a train or within an unsafe protection zone.
+The train's progress must be represented by its current occurrence or index in the ordered route, not just a unique block ID.
 
-Preserve authority continuity and the existing movement-request handoff mechanism.
+For example, the first visit to GREEN-85 and the second visit to GREEN-85 must be distinguishable.
 
-## 5. Preserve the current safety architecture
+Verify that:
 
-This project is intended to realistically simulate railway operations.
+- Physical dispatch accepts the valid full route.
+- Track Model position tracking supports repeated blocks in the planned route.
+- Cumulative position remains continuous and does not reset when a block is revisited.
+- CTC location inference advances along the correct route occurrence.
+- An occupancy transition does not accidentally move the train to the wrong occurrence of a repeated block.
+- Route updates and movement-plan indices remain valid.
+- The train is not incorrectly marked as having completed its route on the first visit to a repeated block.
 
-Therefore:
+Preserve the existing principle that the CTC infers train identity from anonymous block occupancy and known routes.
 
-- The CTC requests movement but never grants the final safety authority.
-- The Track Controller remains the final authority for movement and switch control.
-- The Track Model represents the actual physical switch state.
-- Reported switch alignment must be verified, not assumed.
-- Missing or stale feedback must remain fail-safe.
-- An occupied or protected switch must not be thrown.
-- The PLC-based hardware mode must remain supported.
-- Software and PLC modes must enforce equivalent safety requirements.
-- Cancellation, route changes, watchdog expiration, and loss of communication must not leave unsafe switch commands or authorizations active.
+Do not introduce train IDs into Track Controller block-occupancy reports just to simplify tracking.
 
-Do not solve this by removing interlocks, forcing signals Green, granting authority optimistically, or modifying the Train Controller to ignore zero authority.
+When occupancy information is ambiguous, retain conservative behavior rather than guessing.
 
-## 6. Integration tests — required
+---
 
-Add or update tests that validate the actual behavior across module boundaries.
+## 4. Fix movement authority across repeated switches and route segments
 
-### Test A — Blue Line, Normal to Reverse
+**This is a critical part of the task. Do not stop after fixing route generation.**
 
-**This is the primary acceptance test.**
+The Track Controller currently rejects a movement request that revisits the same block.
 
-1. Initialize the Blue Line in its normal startup configuration.
-2. Confirm switch 5 initially reports Normal.
-3. Dispatch Train 001 from block 1 toward Station C, block 15.
-4. Confirm the CTC movement request is accepted.
-5. Confirm the system automatically establishes that switch 5 must be Reverse.
-6. Confirm the Track Controller safely commands Reverse.
-7. Confirm the Track Model actually changes the switch.
-8. Confirm the Track Controller receives Reverse feedback.
-9. Confirm movement authority becomes positive.
-10. Confirm Train 001 begins moving through the real Train Model physics and Train Controller.
-11. Confirm the train follows the correct branch, including block 11.
+See:
 
-**No test setup may manually preposition switch 5 to Reverse.**
+`src/TrackController/TrackController.Core/Services/TrackControllerService.Requests.cs`
 
-Update the existing `Train001_ToStationC_ClearsSignal11_IsAuthorized_AndMoves` test accordingly.
+The existing `SubmitMovement()` validation includes a distinct-block check.
 
-### Test B — Already correctly aligned
+This is reasonable for a single protected movement request, even though the train's entire journey can revisit blocks.
 
-Dispatch Train 001 toward Station B, block 10, with switch 5 already Normal.
+Additionally, the recently added automatic switch-alignment functionality derives switch demands from active movement requests.
 
-Verify that the train receives authority and moves without unnecessary switch commands or regressions.
+If one request includes both visits to switch 77 or switch 85, the system may demand two different positions from the same switch simultaneously.
 
-### Test C — Reverse to Normal
+### Required solution
 
-Begin with switch 5 Reverse.
+Design and implement a safe way to execute the full route using appropriate movement-authority segments.
 
-Request a route through the Normal branch.
+**Preferred approach: Keep the full route as the train's planned journey, but issue bounded movement requests over appropriate portions of it.**
 
-Verify that the switch automatically returns to Normal safely, feedback is confirmed, and the train can proceed.
+These requests should not contain repeated block IDs or simultaneous conflicting switch alignments.
 
-### Test D — Unsafe switch protection zone
+The system must automatically progress between these segments as the train advances.
 
-Simulate a switch protection zone that is:
+Do not require the dispatcher to manually issue new movement requests at each junction.
 
-- Occupied.
-- Reserved by a conflicting train.
-- Faulted or closed.
-- Missing necessary feedback.
+### Requirements for segmentation
 
-Verify that switch movement is prohibited, authority is withheld when required, and no unsafe command is applied.
+1. Each movement request covers a contiguous, physically valid portion of the train's route.
+2. Each request contains enough route context for the Track Controller to safely evaluate it.
+3. A request cannot demand two incompatible positions for the same switch.
+4. Switch positions must be commanded and confirmed before the train is authorized to traverse them.
+5. The CTC must automatically prepare or issue further movement requests as the train progresses.
+6. The train must eventually obtain authority through the entire route.
+7. Movement authority must never jump forward or extend implicitly just because a train enters another block.
 
-When the unsafe condition genuinely clears, verify that the system can retry and recover automatically where appropriate.
+### Preserve existing authority safety
 
-### Test E — Route changes
+The current system uses a fixed authority endpoint and block-to-block handoff mechanism.
 
-Dispatch a train and then reroute it while it is still safely approaching the junction.
-
-Verify that switch alignment is updated as needed and that stale commands or previous route requests cannot grant authority over the wrong branch.
-
-### Test F — Multiple switches
-
-Add a focused test using an existing suitable multi-switch layout.
-
-Verify that the system determines the required positions independently for each switch and does not rely on a single hardcoded Blue Line switch ID.
-
-Use the existing production-style integration test infrastructure wherever possible.
-
-Do not construct a separate fake switch implementation that bypasses the real modules.
-
-## 7. Scope limitations
-
-Keep this change focused on automatic switch alignment, reservation feedback, and the required integration.
-
-**Do not expand this task into unrelated features.**
+Preserve its safety guarantees.
 
 In particular:
 
-- Do not redesign the CTC schedule builder.
-- Do not implement the separate Green Line directional-routing improvements.
-- Do not change station dwell-time behavior.
-- Do not redesign train-location inference.
-- Do not modify the existing physics model unless necessary to resolve a directly related defect.
-- Do not change the shared clock implementation.
-- Do not alter unrelated WPF user interfaces.
+- A renewal of an existing request must not extend its authority.
+- A staged successor must not exceed its predecessor's authorized endpoint or speed.
+- A new movement segment that extends beyond an earlier endpoint must use an explicit new request, with a new request ID and full Track Controller evaluation.
+- Do not bypass Track Controller approval.
+- Do not grant optimistic authority while a new segment is being prepared.
+- Do not allow stale or cancelled requests to regain authority.
+- Preserve safe braking behavior if new authority is delayed or withheld.
+- Avoid unnecessary zero-authority gaps when safe, without weakening the existing handoff rules.
 
-Small improvements to diagnostics or switch status displays are acceptable if they directly support this fix.
+Choose segment boundaries carefully, particularly near switch protection zones.
 
-Preserve existing public contracts when practical. If contracts must change, update all affected producers, consumers, and tests together.
+A train should not be allowed to move into a switch protection zone and then become permanently unable to change the switch needed for its subsequent route.
 
-## 8. Build and verification
+The system should prepare the required alignment early enough to avoid this deadlock where safely possible.
+
+### Specific Green Line scenario
+
+The train must successfully:
+
+1. Cross switch 77 on its Normal branch.
+2. Cross switch 85 on its Normal branch.
+3. Travel around the loop to GREEN-100.
+4. Have switch 85 safely transition to Reverse for the second traversal.
+5. Continue back through GREEN-85 and GREEN-84.
+6. Have switch 77 safely transition to Reverse for the second traversal.
+7. Continue to GREEN-101 and onward.
+
+Pay special attention to reservation ownership, approach locking, and the occupancy protection zones around these switches.
+
+If the switch cannot safely move, the authority must remain restricted and the movement should resume automatically when conditions permit.
+
+---
+
+## 5. Preserve the automatic switch-alignment fix
+
+The most recent repository change implemented automatic switch positioning and CTC route reservations.
+
+Investigate:
+
+`src/TrackController/TrackController.Core/Services/TrackControllerService.Switching.cs`
+
+And the existing automatic switch tests.
+
+Do not redesign this functionality unnecessarily.
+
+The new routing system must work with:
+
+- Automatic switch-position selection.
+- Track Model switch-position feedback.
+- Switch protection zones.
+- Occupancy-based interlocking.
+- CTC movement reservations.
+- PLC-based switch safety.
+- Approach locking.
+- Movement authority handoff.
+
+The Track Controller remains the final authority for movement.
+
+If supporting repeated routes requires coordination between CTC movement segmentation and switch alignment, implement that coordination through the existing architecture.
+
+Do not simply remove the Track Controller's repeated-block validation or ignore conflicting switch demands without replacing their safety guarantees.
+
+---
+
+## 6. Ensure physical movement can continue through the entire journey
+
+The existing Green Line physical movement integration tests demonstrate only a short route near GREEN-63.
+
+Extend the integration so it works through the entire route.
+
+Examine the production communication pipeline:
+
+CTC → Track Controller → Track Model → Train Model → Train Controller
+
+And the return paths for:
+
+- Train commands.
+- Position telemetry.
+- Occupancy.
+- Movement-authority reports.
+- Switch feedback.
+
+Confirm that the train can continuously progress through the full route.
+
+Potential issues to investigate include:
+
+- CTC losing track of a train when it revisits a block.
+- Track Model rejecting valid repeated-block traversal.
+- Movement requests being rejected at route-segment boundaries.
+- Authority failing to transition to the next segment.
+- The Train Controller receiving zero authority unexpectedly.
+- A switch remaining locked by an old movement request.
+- A movement request attempting to align a switch that the train is already occupying.
+- The CTC incorrectly declaring arrival at an intermediate repeated block.
+- A valid next segment being blocked by stale reservation state.
+
+Address problems that directly prevent full-route traversal.
+
+Do not modify unrelated physics or station-control behavior.
+
+---
+
+## 7. Required tests
+
+Add comprehensive tests using the repository's existing testing conventions.
+
+### Test A — Correct Green Line route generation
+
+Create a schedule for Train 001 starting at GREEN-63 with Edgebrook (GREEN-9) as its only destination.
+
+Assert that:
+
+- The schedule is accepted.
+- The route begins at GREEN-63.
+- The route ends at GREEN-9.
+- Every consecutive pair is connected.
+- Every step respects the permitted travel direction.
+- Every switch traversal follows valid stem/leg geometry.
+- The route includes both occurrences of switches 77 and 85.
+- No invalid immediate reversals occur.
+- The route does not contain unbounded looping.
+
+Verify the expected 117-block route against the actual current layout.
+
+### Test B — Repeated-block tracking
+
+Simulate valid occupancy transitions around GREEN-85 and GREEN-77.
+
+Verify that the CTC tracks the first and second visits as different route occurrences.
+
+The route index must advance correctly, without confusing one visit with another.
+
+### Test C — Movement segmentation
+
+Verify that the full route produces appropriately bounded movement requests.
+
+Each movement request must:
+
+- Be accepted by the Track Controller.
+- Contain no repeated block IDs.
+- Contain no incompatible demands for the same switch.
+- Respect the correct authority limits.
+- Use valid request IDs and cancellation/renewal semantics.
+
+Verify that subsequent segments are issued automatically.
+
+### Test D — Sequential switch alignment
+
+Verify that:
+
+- GREEN-77 is aligned Normal for the first traversal.
+- GREEN-85 is aligned Normal for the first traversal.
+- GREEN-85 is aligned Reverse for its second traversal.
+- GREEN-77 is aligned Reverse for its second traversal.
+- Subsequent switches are correctly aligned for the route toward Edgebrook.
+
+All alignments must be commanded through the Track Controller and confirmed by actual Track Model feedback.
+
+No test may manually preposition switches to the correct alignment as a workaround.
+
+### Test E — Safety at segment boundaries
+
+Test delayed, unavailable, or unsafe switch alignment and movement authorization.
+
+The train must not be granted movement through an unconfirmed or unsafe junction.
+
+Verify automatic recovery after the obstacle clears when recovery is safe.
+
+### Test F — Complete physical integration
+
+**This is the primary acceptance test.**
+
+Use the real integration infrastructure and production module implementations.
+
+1. Start the shared simulation clock and all five necessary modules.
+2. Load the complete three-line course layout and Track Controller deployment.
+3. Queue Train 001 on Green from GREEN-63 to Edgebrook, GREEN-9.
+4. Advance simulation time to dispatch.
+5. Confirm physical train placement and activation.
+6. Confirm the Train Controller commands traction.
+7. Observe the train's movement through real Train Model physics.
+8. Observe actual Track Model block occupancy.
+9. Confirm CTC tracking and movement authority remain consistent.
+10. Verify traversal of the loop, including both visits to GREEN-77 and GREEN-85.
+11. Verify the train proceeds through GREEN-101 and GREEN-150.
+12. Verify traversal through GREEN-28 and GREEN-13.
+13. Verify the train physically reaches GREEN-9.
+
+The integration test must not teleport the train or inject fake occupancy transitions to make it pass.
+
+It should exercise the real system under an appropriately accelerated simulation clock and use bounded assertions/timeouts.
+
+A separate fast unit test may simulate occupancy transitions to test routing logic, but that is not a substitute for the real physical integration test.
+
+If completing the full physical test is blocked by unrelated station-stopping functionality, report that distinction accurately. Do not silently bypass the missing functionality or mark the test as passed.
+
+---
+
+## 8. Regression testing
 
 After implementing:
 
 1. Build the complete solution.
-2. Run all relevant CTC, Track Controller, and Track Model unit tests.
-3. Run the relevant integration tests.
-4. Run the existing signal-clearance and authority-handoff regression tests.
-5. Run the new automatic switch-alignment tests.
-6. Investigate any failures caused by the changes.
-7. Fix regressions rather than weakening test assertions.
-8. Run the full test suite if supported in the environment.
+2. Run CTC unit tests.
+3. Run Track Controller unit tests.
+4. Run Track Model unit tests.
+5. Run the existing Blue Line physical movement tests.
+6. Run the automatic switch-alignment tests.
+7. Run authority-continuity and block-handoff tests.
+8. Run existing Red and Green Line integration tests.
+9. Run all new routing and full-route integration tests.
+10. Run the full test suite where supported.
 
-Do not report a test as passing unless it was actually executed successfully.
+Ensure the changes do not break existing simpler routes.
 
-Do not manually modify the initial switch position in an integration test simply to make the test pass.
+A Blue Line route from block 1 to block 15 should continue to operate without requiring any special scheduling logic.
 
-## 9. Final report
+Do not weaken test assertions or safety checks merely to make the new route pass.
 
-After making the changes, provide a detailed but organized report containing:
+---
 
-**A. Root cause**
+## 9. Implementation boundaries
 
-Explain exactly why automatic switch alignment previously failed, including the CTC, Track Controller, and Track Model responsibilities.
+This project has multiple team members working on different modules.
 
-**B. Changes made**
+Make only changes necessary for this routing integration.
 
-List the important files changed and what each modification accomplishes.
+Prefer changes in the CTC module, but modify the Track Controller and Track Model where necessary to correctly support route execution.
 
-**C. New switch-control sequence**
+Avoid changes to Train Model and Train Controller unless inspection demonstrates a direct routing-related blocker.
 
-Explain how the system now handles a movement request that requires a switch to change alignment.
+Preserve existing module boundaries and message contracts whenever possible.
 
-**D. Safety behavior**
+Do not hardcode Green Line topology into production code.
 
-Explain how occupancy, reservations, PLC interlocks, and physical feedback continue to prevent unsafe switch movements.
+Do not introduce unsafe shortcuts, manually force switches, bypass authorization, or generate simulated train movement in place of real physics.
 
-**E. Test results**
+Do not commit or push automatically.
 
-Provide the build results and actual tests executed, identifying failures or tests that could not be run.
+---
 
-**F. Remaining limitations**
+## 10. Final report
 
-Identify any unresolved limitations involving automatic switch operation, especially on Red and Green Lines.
+When finished, provide a report with the following sections.
 
-**G. Iteration 3 readiness**
+### A. Root causes
 
-Briefly assess whether this fix allows realistic routes requiring switches to operate, and distinguish that from the separately outstanding full Green Line routing and station-arrival work.
+Explain all reasons the previous implementation could not execute the full route to Edgebrook.
 
-## Important implementation instructions
+### B. Changes implemented
 
-This is an implementation task, not just a code review.
+List the important files modified and explain each change.
 
-Inspect the current repository, determine the best architectural approach, implement the changes, add the tests, and verify the results.
+### C. New routing algorithm
 
-Use the existing message contracts, runtime infrastructure, route data, and safety logic wherever possible.
+Explain how the planner handles one-way track, switches, and repeated blocks.
 
-Do not make speculative broad refactors.
+### D. Movement segmentation
 
-Do not introduce shortcuts that make the demonstration appear to work while weakening the correctness of the simulation.
+Explain how the system prevents conflicting switch demands and automatically advances movement authority across route segments.
 
-Do not commit or push changes automatically.
+### E. Full Green Line route
 
-**Primary success criterion: Starting with Blue Line switch 5 in Normal, the dispatcher can schedule Train 001 to Station C at block 15, and the system automatically changes the switch to Reverse, confirms the change, grants safe movement authority, and physically moves the train along the correct route without any manual switch intervention.**
+Provide the actual route generated from GREEN-63 to GREEN-9, highlighting the repeated blocks and switch positions.
+
+### F. Test results
+
+Report exactly which tests passed, failed, or could not be executed.
+
+### G. Remaining limitations
+
+Identify any functionality that still prevents a complete physical route traversal, separately from station stopping and arrival-time accuracy.
+
+### H. Manual verification
+
+Provide concise steps for testing the updated route in the actual WPF applications.
+
+---
+
+## Primary acceptance criterion
+
+**Using the CTC Schedule Builder, the dispatcher can schedule Train 001 from the Green Line yard (GREEN-63) to Edgebrook Station (GREEN-9).**
+
+The CTC automatically constructs the correct 117-visit route, the train physically moves through the complete route using all production modules, the necessary switches align safely during the first and second traversals, authority advances appropriately, and the CTC continues tracking the train until its front enters GREEN-9.
+
+No manual switch positioning, route editing, movement authorization, or artificial occupancy updates should be required.
+
+For this iteration of work, do not require precise 3:00 PM arrival or physical platform stopping. Those will be addressed separately.
+
+**Inspect the current repository, implement the required changes, and verify the results. Do not stop after producing a proposed design.**

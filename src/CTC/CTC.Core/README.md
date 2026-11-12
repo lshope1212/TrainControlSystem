@@ -31,10 +31,14 @@ WPF types) so the UI can refresh when messages arrive from other modules.
 - `Dispatching/` holds the routing, speed and authority rules:
   `TrainPerformance` (vehicle max speed), `SpeedPlanner` (schedule feasibility and
   suggested speed), `AuthorityManager` (fixed-block authority), `RouteManager`
-  (shortest path by block count over connected blocks, used when re-planning),
+  (the shortest legal route, used when re-planning; see `Routing/`),
   `MovementRequestPlanner` (the request a train should hold now) and
   `MovementRequestCoordinator` (the only code that sends, renews or cancels movement
   requests).
+- `Routing/` holds the line topology rules shared by every route CTC builds: `LineTopology`
+  (direction of travel, switch stem/legs, no reversing), `RoutePlanner` (shortest legal route over
+  routing states, so a route may revisit a block from a new approach) and `MovementSegmentation`
+  (bounded movement-authority segments for routes that revisit blocks or set a switch both ways).
 - `Services/TrackLayoutReconciler` applies a received layout line by line.
 
 A scheduled train is an ordered list of route blocks. The dispatcher times only some of
