@@ -27,6 +27,7 @@ public sealed partial class TrackControllerService
         ArgumentNullException.ThrowIfNull(message);
         lock (_gate)
         {
+            InvalidateEvaluation();
             if (string.IsNullOrWhiteSpace(message.TargetBlockId) || string.IsNullOrWhiteSpace(message.RequestId) || message.RequestId.Length > 128 || message.TrainId is null || message.TrainId.Length > 128 || message.PredecessorRequestId is { Length: 0 or > 128 })
             {
                 throw new ArgumentException("Provide a target block and request ID (up to 128 characters). The train label is optional.");
@@ -160,6 +161,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             var block = GetOwnedBlock(message.BlockId);
             ValidateSwitchCommand(block, message.RequestedPosition);
 
@@ -174,6 +176,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             var block = GetOwnedBlock(message.BlockId);
             if (!Enum.IsDefined(message.RequestedState))
             {
@@ -191,6 +194,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             if (!_maintenanceMode)
             {
                 throw new InvalidOperationException("Enable maintenance mode before sending manual commands.");

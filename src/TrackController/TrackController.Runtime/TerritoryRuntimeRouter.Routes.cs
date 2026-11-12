@@ -60,11 +60,14 @@ public sealed partial class TerritoryRuntimeRouter
 
     private void ObserveTransitions(IReadOnlyList<TrackModelBlockStateMessage> feedback)
     {
+        Dictionary<string, WaysideBlockStatus>? published = null;
         foreach (var measurement in feedback)
         {
             if (_feedbackTimes.TryGetValue(measurement.BlockId, out var previousTime) && measurement.ObservedAtUtc <= previousTime) continue;
             _feedbackTimes[measurement.BlockId] = measurement.ObservedAtUtc;
-            var before = LatestSnapshot.Blocks.FirstOrDefault(block => block.BlockId == measurement.BlockId);
+            // One lookup table per batch, not a scan of every published block per measurement (first match, as before).
+            published ??= LatestSnapshot.Blocks.GroupBy(block => block.BlockId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var before = published.GetValueOrDefault(measurement.BlockId);
             if (before is not { Occupancy: OccupancyState.Clear, IsFresh: true, Continuation: { } continuation }
                 || measurement.Occupancy != OccupancyState.Occupied || measurement.IsFaulted || measurement.IsClosed
                 || LatestSnapshot.ValidUntilUtc <= DateTimeOffset.UtcNow) continue;

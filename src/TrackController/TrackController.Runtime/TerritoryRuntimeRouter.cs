@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using TrackController.Core.Diagnostics;
 using TrackController.Contracts.Messages;
 using TrackController.Core.Models;
 using TrainControl.Common.Communication;
@@ -61,7 +63,10 @@ public sealed partial class TerritoryRuntimeRouter : IWaysideRuntime
     /// <summary>Handles an application message through the selected runtime and returns its result.</summary>
     public async Task<object> ReceiveAsync(MessageEnvelope message, CancellationToken cancellationToken = default)
     {
+        long waitStarted = Stopwatch.GetTimestamp();
         await _operations.WaitAsync(cancellationToken);
+        PerformanceMetrics.RouterLockWaits.RecordSince(waitStarted);
+        long started = Stopwatch.GetTimestamp();
         try
         {
             if (message.MessageType == "GetSnapshot")
@@ -83,7 +88,7 @@ public sealed partial class TerritoryRuntimeRouter : IWaysideRuntime
                     Owner(block.BlockId);
                 }
 
-                var replies = await Task.WhenAll(_entries.Select(entry => (entry.Runtime, Blocks: feedback.Where(feedback => entry.Observed.Contains(feedback.BlockId)).ToList())).Where(part => part.Blocks.Count > 0).Select(part => part.Runtime.ReceiveAsync(MessageSerializer.CreateEnvelope("TrackModelBlockStates", new { blocks = part.Blocks }), cancellationToken)));
+                var replies = await Task.WhenAll(DeliverFeedback(feedback, cancellationToken));
                 return Receipt(message.MessageType, replies);
             }
 
@@ -160,14 +165,25 @@ public sealed partial class TerritoryRuntimeRouter : IWaysideRuntime
                 // Acknowledge/publicize one complete evaluation, including Pi responses, never half a transaction.
                 await PollAllAsync(cancellationToken);
             }
-            finally { _operations.Release(); }
+            finally
+            {
+                _operations.Release();
+                (message.MessageType switch
+                {
+                    "TrackModelBlockStates" or nameof(TrackModelBlockStateMessage) or nameof(BlockStatusMessage) => PerformanceMetrics.RouterFeedback,
+                    nameof(MovementSuggestionMessage) => PerformanceMetrics.RouterMovements,
+                    _ => PerformanceMetrics.RouterOther
+                }).RecordSince(started);
+            }
         }
     }
 
     /// <summary>Refreshes runtime outputs so timeouts apply even when no new input arrives.</summary>
     public async Task<WaysideSnapshotMessage> PollAsync(CancellationToken cancellationToken = default)
     {
+        long waitStarted = Stopwatch.GetTimestamp();
         await _operations.WaitAsync(cancellationToken);
+        PerformanceMetrics.RouterLockWaits.RecordSince(waitStarted);
         try
         {
             return await PollAllAsync(cancellationToken);
@@ -180,14 +196,56 @@ public sealed partial class TerritoryRuntimeRouter : IWaysideRuntime
 
     private async Task<WaysideSnapshotMessage> PollAllAsync(CancellationToken cancellationToken)
     {
-        await Task.WhenAll(_entries.Select(entry => entry.Runtime.PollAsync(cancellationToken)));
-        // A slow/unavailable Pi must not consume the local territory's entire output lease.
-        foreach (var entry in _entries.Where(entry => entry.Execution == "Local"))
+        long started = Stopwatch.GetTimestamp();
+        try
         {
-            await entry.Runtime.PollAsync(cancellationToken);
-        }
+            // Every territory is evaluated once per poll. Pi territories first: a slow/unavailable Pi must not
+            // consume the local territories' output lease, so they are evaluated after the Pi answers (or times out).
+            await Task.WhenAll(_entries.Where(entry => entry.Execution != "Local").Select(entry => entry.Runtime.PollAsync(cancellationToken)));
+            foreach (var entry in _entries.Where(entry => entry.Execution == "Local"))
+            {
+                await entry.Runtime.PollAsync(cancellationToken);
+            }
 
-        return LatestSnapshot = Combine();
+            return LatestSnapshot = Combine();
+        }
+        finally
+        {
+            PerformanceMetrics.RouterPolls.RecordSince(started);
+        }
+    }
+
+    /// <summary>
+    /// Delivers each territory the part of a validated feedback batch it observes. An in-process territory
+    /// receives the measurements themselves (it copies each one); a Pi receives an envelope, built once for
+    /// every territory observing the same blocks (coordinated territories of one line observe all of them).
+    /// </summary>
+    private IEnumerable<Task<object>> DeliverFeedback(List<TrackModelBlockStateMessage> feedback, CancellationToken cancellationToken)
+    {
+        var envelopes = new Dictionary<string, MessageEnvelope>(StringComparer.Ordinal);
+        foreach (var entry in _entries)
+        {
+            var blocks = feedback.Count(measurement => entry.Observed.Contains(measurement.BlockId)) == feedback.Count
+                ? feedback : feedback.Where(measurement => entry.Observed.Contains(measurement.BlockId)).ToList();
+            if (blocks.Count == 0)
+            {
+                continue;
+            }
+
+            if (entry.Runtime is LocalWaysideRuntime local)
+            {
+                yield return local.ReceiveFeedbackAsync(blocks, cancellationToken);
+                continue;
+            }
+
+            string subset = ReferenceEquals(blocks, feedback) ? "" : string.Join(",", blocks.Select(measurement => measurement.BlockId));
+            if (!envelopes.TryGetValue(subset, out var envelope))
+            {
+                envelopes[subset] = envelope = MessageSerializer.CreateEnvelope("TrackModelBlockStates", new { blocks });
+            }
+
+            yield return entry.Runtime.ReceiveAsync(envelope, cancellationToken);
+        }
     }
 
     private int Owner(string id) => id is not null && _owners.TryGetValue(id, out int owner) ? owner : throw new ArgumentException($"Block '{id}' has no owner in this deployment.");

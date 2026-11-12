@@ -114,6 +114,28 @@ public sealed class LocalWaysideRuntime : IWaysideRuntime
         }
     }
 
+    /// <summary>
+    /// The <c>TrackModelBlockStates</c> input for measurements already read in this process, without another
+    /// JSON round trip; the controller validates and copies them exactly as for the envelope.
+    /// </summary>
+    public Task<object> ReceiveFeedbackAsync(IReadOnlyList<TrackModelBlockStateMessage> blocks, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            _controller.ApplyFeedback(blocks);
+            return Task.FromResult<object>(new WaysideAcknowledgementMessage(true, "Accepted.", "TrackModelBlockStates"));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return Task.FromResult<object>(new WaysideAcknowledgementMessage(false, ex.Message, "TrackModelBlockStates"));
+        }
+        finally
+        {
+            LatestSnapshot = _controller.GetSnapshot();
+        }
+    }
+
     /// <summary>Refreshes runtime outputs so timeouts apply even when no new input arrives.</summary>
     public Task<WaysideSnapshotMessage> PollAsync(CancellationToken cancellationToken = default)
     {

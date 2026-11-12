@@ -83,6 +83,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             _configuration.AutomaticOperation = true;
             _paused = _hardwareMode && _plc is null;
             _multiplier = 1;
@@ -96,6 +97,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             _paused = true;
             _requests.Clear();
             _staged.Clear();
@@ -112,11 +114,20 @@ public sealed partial class TrackControllerService
         }
     }
 
-    /// <summary>Reevaluates current inputs and returns outputs with a bounded validity interval.</summary>
+    /// <summary>
+    /// Reevaluates current inputs and returns outputs with a bounded validity interval. When nothing an
+    /// evaluation depends on has changed since the latest one (inputs, carried-over state, time thresholds),
+    /// that evaluation is returned re-stamped instead of being repeated; see TrackControllerService.EvaluationReuse.cs.
+    /// </summary>
     public WaysideSnapshotMessage GetSnapshot()
     {
         lock (_gate)
         {
+            if (TryReuseEvaluation(_clock.GetUtcNow(), out var reused))
+            {
+                return reused;
+            }
+
             Reevaluate();
             return _snapshot;
         }
@@ -128,6 +139,7 @@ public sealed partial class TrackControllerService
         var copy = WaysideConfiguration.ValidateAndCopy(configuration);
         lock (_gate)
         {
+            InvalidateEvaluation();
             if (_requests.Count > 0 || _staged.Count > 0 || _blocks.Values.Any(block => block.Maintenance != "Open" || (block.Feedback is not null && (!IsFresh(block) || block.Feedback.Occupancy != OccupancyState.Clear))))
             {
                 throw new InvalidOperationException("Cancel requests, confirm clear track, and reopen maintenance blocks before replacing the layout.");
@@ -154,6 +166,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             if (_configuration.AutomaticOperation && _plc is not null && !_maintenanceMode)
                 throw new InvalidOperationException("Enter maintenance mode before replacing the PLC.");
             _paused = true;
@@ -182,6 +195,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             if (_configuration.AutomaticOperation && _plc is not null && !_maintenanceMode)
                 throw new InvalidOperationException("Enter maintenance mode before changing controller logic.");
             _hardwareMode = hardware;
@@ -195,6 +209,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             _maintenanceMode = enabled;
             if (!enabled)
             {
@@ -219,6 +234,7 @@ public sealed partial class TrackControllerService
 
         lock (_gate)
         {
+            InvalidateEvaluation();
             if (_configuration.AutomaticOperation)
                 throw new InvalidOperationException("Simulation time and pause belong to CTC. Use maintenance mode for wayside servicing.");
             Reevaluate();
@@ -239,6 +255,7 @@ public sealed partial class TrackControllerService
         ArgumentNullException.ThrowIfNull(blocks);
         lock (_gate)
         {
+            InvalidateEvaluation();
             if (blocks.Count > _blocks.Count || blocks.Any(feedback => feedback is null) || blocks.Select(feedback => feedback.BlockId).Distinct().Count() != blocks.Count)
             {
                 throw new ArgumentException("Feedback must contain distinct owned or observed blocks.");
@@ -263,6 +280,8 @@ public sealed partial class TrackControllerService
             if (_staged.Count > 0)
             {
                 Reevaluate();
+                // That evaluation precedes this batch; it must never be reused once the batch is applied.
+                InvalidateEvaluation();
             }
 
             var grantsBefore = _lastResults.Where(result => result.AuthorizedAuthorityMeters > 0)
@@ -314,6 +333,7 @@ public sealed partial class TrackControllerService
     {
         lock (_gate)
         {
+            InvalidateEvaluation();
             _requests.Clear();
             _staged.Clear();
             _retiredRequests.Clear();
