@@ -9,6 +9,14 @@ public class PassengerExchangeMessage
 {
     public string TrainId { get; set; } = string.Empty;
 
+    /// <summary>Unique id for this exchange, set once by the Train Model when the exchange
+    /// occurs. Lets the Track Model reject duplicate or resent reports (idempotency key).</summary>
+    public System.Guid ExchangeId { get; set; }
+
+    /// <summary>The station (beacon name) this exchange happened at, so the Track Model can
+    /// reject a delayed report that arrives for the wrong station.</summary>
+    public string StationContext { get; set; } = string.Empty;
+
     public int Boarded { get; set; }
 
     public int Alighted { get; set; }

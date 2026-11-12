@@ -33,6 +33,10 @@ public interface ITrainSimulationService
     /// </summary>
     (int boarded, int alighted) ExchangePassengers(int waitingToBoard, int alighting);
 
+    /// <summary>True in the tick an AUTOMATIC station exchange fired; the caller reads it to
+    /// publish the exchange to the Track Model, then clears it. Set by Step() at a station stop.</summary>
+    bool StationExchangeOccurred { get; set; }
+
     /// <summary>Clear the emergency brake. Only the Train Controller may call this —
     /// a passenger request can set it but never reset it.</summary>
     void ClearEmergencyBrakeFromController();

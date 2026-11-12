@@ -187,7 +187,19 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             if (!_activeTrains.Contains(kv.Key)) continue;
             _fleet.ApplyInputs(kv.Key, kv.Value);
-            _fleet.GetTrain(kv.Key)?.Step(dt);
+            var sim = _fleet.GetTrain(kv.Key);
+            sim?.Step(dt);
+
+            // If the step triggered an automatic station exchange, report it to the Track Model
+            // once (passenger info is Train Model -> Track Model), then clear the one-shot flag.
+            if (sim is { StationExchangeOccurred: true })
+            {
+                _publisher.PublishPassengerExchange(sim.CurrentState);
+                sim.StationExchangeOccurred = false;
+                Log("INFO", "Passenger",
+                    $"{kv.Key} station exchange: {sim.CurrentState.LastBoarded} on / {sim.CurrentState.LastAlighted} off" +
+                    (sim.CurrentState.LastLeftBehind > 0 ? $" ({sim.CurrentState.LastLeftBehind} left — FULL)" : "") + ".");
+            }
         }
 
         // One-shot signals consumed after a step: passenger request latches to
@@ -653,6 +665,18 @@ public sealed class MainWindowViewModel : ViewModelBase
     private void ExchangePassengers()
     {
         if (SelectedPlant is not { } plant) { ExchangeResult = "No train selected."; return; }
+
+        // Guard: a passenger exchange may only happen while the train is stopped at a station
+        // (Derrick's point 4). "At a station" = effectively stopped and a station beacon is in
+        // effect. This also applies to the manual button so it can't change counts mid-transit.
+        bool stopped = plant.Train.VelocityMetersPerSecond < 0.05;
+        bool atStation = !string.IsNullOrEmpty(SelectedInputs?.Beacon?.StationName);
+        if (!stopped || !atStation)
+        {
+            ExchangeResult = "Exchange refused: train must be stopped at a station.";
+            return;
+        }
+
         int waiting = SelectedInputs?.PassengerDemand ?? 0;
         var (boarded, alighted) = plant.ExchangePassengers(waiting, _alightingCount);
         ExchangeResult = $"{SelectedTrainId}: {boarded} boarded / {alighted} alighted" +

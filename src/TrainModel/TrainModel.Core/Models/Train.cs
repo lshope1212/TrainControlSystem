@@ -36,6 +36,13 @@ public class Train
     // ---- Onboard / cabin state ----
     public PassengerState Passengers { get; set; } = new();
 
+    // --- Automatic station-exchange arm state ---
+    /// <summary>Absolute position (m) of the stop point the current beacon armed, or null if unarmed.</summary>
+    public double? StationStopTargetMeters { get; set; }
+    /// <summary>True once an exchange has fired for the currently-armed stop (prevents re-firing while
+    /// the train sits at the platform). Re-armed when a new beacon sets a new target.</summary>
+    public bool HasExchangedAtArmedStop { get; set; }
+
     public bool LeftDoorOpen { get; set; }
 
     public bool RightDoorOpen { get; set; }

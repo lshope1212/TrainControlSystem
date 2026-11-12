@@ -55,6 +55,8 @@ public sealed class TrainModelOutputPublisher
         _sender.Enqueue(_trackModelPipe, new PassengerExchangeMessage
         {
             TrainId = s.TrainId,
+            ExchangeId = s.LastExchangeId,
+            StationContext = s.LastExchangeStation,
             Boarded = s.LastBoarded,
             Alighted = s.LastAlighted,
             LeftBehind = s.LastLeftBehind,

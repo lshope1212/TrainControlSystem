@@ -12,6 +12,7 @@ public class TrainSimulationService : ITrainSimulationService
 {
     private readonly PhysicsService _physics = new();
     private TrainInputs _inputs = new();
+    private readonly Random _rng = new();
 
     public TrainSimulationService()
         : this(new Train { Id = "TRAIN-001" })
@@ -95,8 +96,54 @@ public class TrainSimulationService : ITrainSimulationService
         double tempError = _inputs.CabinSetpointCelsius - Train.CabinTemperatureCelsius;
         Train.CabinTemperatureCelsius += tempError * Math.Min(1.0, 0.05 * dt);
 
+        // ---- Automatic station passenger exchange ----
+        // The beacon (sent on a station approach) gives the distance from the beacon to the
+        // stop point. When we read a beacon with a positive distance, we ARM an absolute stop
+        // target = our position now + that distance. When the train later reaches that target
+        // AND is stopped, we exchange ONCE (random alighting bounded by onboard; boarding from
+        // the Track Model's platform demand). A new beacon re-arms a fresh target. The >0 filter
+        // ignores a post-station / departure beacon regardless of how the Track Model marks it.
+        UpdateStationExchange(stopped);
+
         CurrentState = BuildState();
     }
+
+    /// <summary>Arm the stop target from the current beacon and fire one exchange on arrival.</summary>
+    private void UpdateStationExchange(bool stopped)
+    {
+        double beaconDist = _inputs.Beacon?.DistanceToStopMeters ?? 0.0;
+
+        // Arm (or re-arm) when a beacon with a real forward distance names a NEW target.
+        if (beaconDist > 0.0)
+        {
+            double target = Train.PositionMeters + beaconDist;
+            // Treat it as a new beacon only if the target moved meaningfully (avoids re-arming
+            // every tick off the same standing beacon value).
+            if (Train.StationStopTargetMeters is not { } current || Math.Abs(current - target) > 0.5)
+            {
+                Train.StationStopTargetMeters = target;
+                Train.HasExchangedAtArmedStop = false;
+            }
+        }
+
+        // Fire once when we've reached the armed stop point and are stopped there.
+        if (Train.StationStopTargetMeters is { } stopTarget
+            && !Train.HasExchangedAtArmedStop
+            && stopped
+            && Train.PositionMeters >= stopTarget)
+        {
+            int onboard = Train.Passengers.PassengerCount;
+            int alighting = onboard > 0 ? _rng.Next(0, onboard + 1) : 0;   // [0, onboard]; all may leave
+            int waitingToBoard = Math.Max(0, _inputs.PassengerDemand);     // Track Model's platform demand
+
+            ExchangePassengers(waitingToBoard, alighting);                 // stamps id + station, bounds by capacity
+            Train.HasExchangedAtArmedStop = true;
+            StationExchangeOccurred = true;                                // signals the VM to publish this tick
+        }
+    }
+
+    /// <summary>Set true in the tick an automatic exchange fired; the VM reads and clears it to publish.</summary>
+    public bool StationExchangeOccurred { get; set; }
 
     public (int boarded, int alighted) ExchangePassengers(int waitingToBoard, int alighting)
     {
@@ -122,6 +169,11 @@ public class TrainSimulationService : ITrainSimulationService
         p.LastAlighted = actuallyAlighting;
         p.LastLeftBehind = leftBehind;
         p.WasAtCapacity = leftBehind > 0;
+
+        // Stamp a unique id + the station for this exchange so the Track Model can dedupe
+        // resends and reject a delayed report that arrives for the wrong station.
+        p.LastExchangeId = System.Guid.NewGuid();
+        p.LastExchangeStation = _inputs.Beacon?.StationName ?? string.Empty;
 
         CurrentState = BuildState();
         return (actuallyBoarding, actuallyAlighting);
@@ -191,6 +243,8 @@ public class TrainSimulationService : ITrainSimulationService
             LastBoarded = Train.Passengers.LastBoarded,
             LastAlighted = Train.Passengers.LastAlighted,
             LastLeftBehind = Train.Passengers.LastLeftBehind,
+            LastExchangeId = Train.Passengers.LastExchangeId,
+            LastExchangeStation = Train.Passengers.LastExchangeStation,
             WasAtCapacity = Train.Passengers.WasAtCapacity,
         };
     }
