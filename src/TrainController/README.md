@@ -358,7 +358,7 @@ current provisional behavior; all remain changeable in one place.
 | Switching into Manual clears the driver request (the train first follows the commanded speed); "Clear" returns to following it | accepted | `DriverInputState` |
 | The train is a point; all distances (station, authority, brake points) are measured from the train's front. Train length is expected to be reflected in the beacon / authority distances supplied by Track Model | provisional — confirm with Track Model / Train Model | `GuidanceBar`, `SoftwareTrainController`, `HardwareTrainController` |
 | Look-ahead of one control period (v·dt) in station/authority braking | provisional | discretization compensation, not a safety margin |
-| Overspeed has no tolerance band (none defined) | provisional | `OverspeedProtection` |
+| Overspeed brakes only above limit + 0.45 m/s (~1 mph) and keeps braking until back at the limit (hysteresis); `ControllerPolicy.OverspeedToleranceMetersPerSecond` | provisional | `OverspeedProtection`, Pi controller |
 | Announcement events and wording ("Next station: X. …" on new beacon, "Arrived at X." on arrival; driver text takes precedence) | provisional | `SoftwareTrainController` |
 
 **Startup gains: Kp = 100 000 W per (m/s), Ki = 10 000 W per (m/s·s)** (`EngineerSettings`).

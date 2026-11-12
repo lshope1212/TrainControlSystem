@@ -53,6 +53,7 @@ public sealed class SoftwareTrainController
     private readonly StationTracker _station = new StationTracker();
     private readonly AuthorityTracker _authority = new AuthorityTracker();
     private readonly FailureMonitor _failures = new FailureMonitor();
+    private bool _overspeedBraking;
     private TrainControllerOutput? _lastOutput;
 
     public SoftwareTrainController(string trainId)
@@ -114,6 +115,7 @@ public sealed class SoftwareTrainController
         _station.Reset();
         _authority.Reset();
         _failures.Reset();
+        _overspeedBraking = false;
         _lastOutput = null;
     }
 
@@ -299,7 +301,8 @@ public sealed class SoftwareTrainController
         }
 
         // 9. Overspeed.
-        var overspeed = OverspeedProtection.IsOverspeed(v, limit);
+        var overspeed = OverspeedProtection.IsOverspeed(v, limit, policy.OverspeedToleranceMetersPerSecond, _overspeedBraking);
+        _overspeedBraking = overspeed;
         if (overspeed && !signalRestricted)
         {
             alerts.Add("Overspeed: service brake applied.");

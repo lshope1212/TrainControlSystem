@@ -12,4 +12,13 @@ public static class OverspeedProtection
 {
     public static bool IsOverspeed(double actualSpeedMetersPerSecond, double speedLimitMetersPerSecond) =>
         actualSpeedMetersPerSecond > speedLimitMetersPerSecond;
+
+    /// <summary>
+    /// Overspeed with a tolerance band and hysteresis: starts braking above limit + tolerance,
+    /// keeps braking (wasBraking) until the speed is back at or below the limit.
+    /// </summary>
+    public static bool IsOverspeed(double actualSpeedMetersPerSecond, double speedLimitMetersPerSecond, double toleranceMetersPerSecond, bool wasBraking) =>
+        wasBraking
+            ? actualSpeedMetersPerSecond > speedLimitMetersPerSecond
+            : actualSpeedMetersPerSecond > speedLimitMetersPerSecond + Math.Max(0.0, toleranceMetersPerSecond);
 }
