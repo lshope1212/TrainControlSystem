@@ -8,8 +8,10 @@ using TrainControl.Contracts.Messages;
 namespace TrackModel.Wpf.Services;
 
 /// <summary>
-/// Sends each train the effective light state of its HEAD block (the block its front is in) using the
-/// existing Train Controller contract. A train spanning several blocks is one train with one light:
+/// Sends each train the effective light state of the NEXT traffic light AHEAD of it (its head block's
+/// light if that block has one, otherwise the first signalled block within <see cref="LookAheadMeters"/>
+/// in its direction of travel), using the existing Train Controller contract. Traffic lights stand at
+/// railway crossings, so a driver sees the light before reaching it instead of only while over it. A train spanning several blocks is one train with one light:
 /// its trailing blocks are never considered. Capture runs on the model's UI thread; sending has its own
 /// queue so an absent Train Controller cannot delay wayside feedback or train environments.
 /// </summary>
@@ -27,12 +29,9 @@ internal sealed class TrainControllerSignalPublisher(ITrackService track, string
     {
         var signals = track.Layout.Blocks
             .Where(block => block.IsOccupied && block.IsTrainHead && TrainIdConvention.TryNormalize(block.TrainId, out _))
-            .Select(block => new TrackModelSignalMessage
-            {
-                BlockId = block.Id,
-                TrainId = Normalize(block.TrainId),
-                Signal = block.EffectiveSignal
-            })
+            .Select(block => NextSignalAhead(block) is { } light
+                ? new TrackModelSignalMessage { BlockId = light.Id, TrainId = Normalize(block.TrainId), Signal = light.EffectiveSignal }
+                : new TrackModelSignalMessage { BlockId = block.Id, TrainId = Normalize(block.TrainId), Signal = SignalState.Unknown })
             .GroupBy(signal => signal.TrainId, StringComparer.Ordinal)
             .Select(group => group.Count() == 1 ? group.Single() : new TrackModelSignalMessage
             {
@@ -99,6 +98,36 @@ internal sealed class TrainControllerSignalPublisher(ITrackService track, string
         {
             return false;
         }
+    }
+
+    /// <summary>How far ahead a traffic light is shown to the train.</summary>
+    public const double LookAheadMeters = 500.0;
+
+    /// <summary>
+    /// First signalled block from the head block forward (direction = away from the block the train
+    /// entered from; at a switch, along its set leg), within <see cref="LookAheadMeters"/>; null if none.
+    /// </summary>
+    private TrackModel.Core.Models.TrackBlock? NextSignalAhead(TrackModel.Core.Models.TrackBlock head)
+    {
+        var current = head;
+        var cameFrom = head.TrainEntryBlockId;
+        double travelled = 0.0;
+        for (int i = 0; i < 50 && current is not null; i++)
+        {
+            if (current.HasSignal) return current;
+            travelled += current.LengthMeters;
+            if (travelled > LookAheadMeters) return null;
+
+            var ahead = current.ConnectedBlockIds.Where(id => id != cameFrom).ToList();
+            string? nextId = ahead.Count == 1 ? ahead[0]
+                : ahead.Contains(current.NextBlockId) ? current.NextBlockId
+                : null; // unknown direction (e.g. just placed mid-line): do not guess
+            if (nextId is null) return null;
+            cameFrom = current.Id;
+            current = track.FindBlock(nextId);
+        }
+
+        return null;
     }
 
     private static (string TrainId, string BlockId, SignalState Signal) Key(TrackModelSignalMessage signal) =>

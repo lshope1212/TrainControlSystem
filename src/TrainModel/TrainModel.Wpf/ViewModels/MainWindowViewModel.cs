@@ -54,6 +54,8 @@ public sealed class MainWindowViewModel : ViewModelBase
     // Train Controller with IsActive = true; a removed train is reported once with IsActive =
     // false so the controller stops controlling it.
     private readonly HashSet<string> _activeTrains = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _beaconSequence = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _lastBeaconRead = new(StringComparer.OrdinalIgnoreCase);
 
     // The Track Model dispatch each active train runs under (TrainActivationMessage). Its position
     // reports carry it, so the Track Model never applies one dispatch's telemetry to another.
@@ -187,7 +189,19 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             if (!_activeTrains.Contains(kv.Key)) continue;
             _fleet.ApplyInputs(kv.Key, kv.Value);
-            _fleet.GetTrain(kv.Key)?.Step(dt);
+            var sim = _fleet.GetTrain(kv.Key);
+            sim?.Step(dt);
+
+            // If the step triggered an automatic station exchange, report it to the Track Model
+            // once (passenger info is Train Model -> Track Model), then clear the one-shot flag.
+            if (sim is { StationExchangeOccurred: true })
+            {
+                _publisher.PublishPassengerExchange(sim.CurrentState);
+                sim.StationExchangeOccurred = false;
+                Log("INFO", "Passenger",
+                    $"{kv.Key} station exchange: {sim.CurrentState.LastBoarded} on / {sim.CurrentState.LastAlighted} off" +
+                    (sim.CurrentState.LastLeftBehind > 0 ? $" ({sim.CurrentState.LastLeftBehind} left — FULL)" : "") + ".");
+            }
         }
 
         // One-shot signals consumed after a step: passenger request latches to
@@ -207,7 +221,8 @@ public sealed class MainWindowViewModel : ViewModelBase
             // The pending/active passenger request from the train STATE (the input flag is a
             // one-shot cleared every step); it stays on until the controller's e-brake arrives.
             bool passengerRequested = state.PassengerEmergencyBrakePending || state.PassengerEmergencyBrakeActive;
-            _publisher.PublishToController(state, _stepCount, isActive: true, passengerRequested);
+            _publisher.PublishToController(state, _stepCount, isActive: true, passengerRequested,
+                _beaconSequence.GetValueOrDefault(plant.Train.Id));
             PublishPosition(plant);
         }
     }
@@ -579,9 +594,26 @@ public sealed class MainWindowViewModel : ViewModelBase
         RefreshAll();
     }
 
-    public void ApplyBeacon(string trainId, string station, double distanceMeters, string side, string announcement)
+    public void ApplyBeacon(string trainId, string station, double distanceMeters, string side, string announcement, long readSequence = 0)
     {
         var inp = EnsureTrain(trainId);
+        // A new beacon READ (new pass, or a changed beacon without a read id) bumps the sequence the
+        // Train Controller uses to recalibrate its station distance; resends of one read do not.
+        if (!string.IsNullOrEmpty(station))
+        {
+            var previous = inp.Beacon;
+            _lastBeaconRead.TryGetValue(trainId, out var lastRead);
+            bool isNewRead = readSequence > 0
+                ? readSequence != lastRead
+                : previous is null || previous.StationName != station || !previous.DistanceToStopMeters.Equals(distanceMeters);
+            if (isNewRead)
+            {
+                _beaconSequence[trainId] = _beaconSequence.GetValueOrDefault(trainId) + 1;
+            }
+
+            _lastBeaconRead[trainId] = readSequence;
+        }
+
         inp.Beacon = new TrainControl.Contracts.Messages.BeaconMessage
         {
             TrainId = trainId,
@@ -653,6 +685,18 @@ public sealed class MainWindowViewModel : ViewModelBase
     private void ExchangePassengers()
     {
         if (SelectedPlant is not { } plant) { ExchangeResult = "No train selected."; return; }
+
+        // Guard: a passenger exchange may only happen while the train is stopped at a station
+        // (Derrick's point 4). "At a station" = effectively stopped and a station beacon is in
+        // effect. This also applies to the manual button so it can't change counts mid-transit.
+        bool stopped = plant.Train.VelocityMetersPerSecond < 0.05;
+        bool atStation = !string.IsNullOrEmpty(SelectedInputs?.Beacon?.StationName);
+        if (!stopped || !atStation)
+        {
+            ExchangeResult = "Exchange refused: train must be stopped at a station.";
+            return;
+        }
+
         int waiting = SelectedInputs?.PassengerDemand ?? 0;
         var (boarded, alighted) = plant.ExchangePassengers(waiting, _alightingCount);
         ExchangeResult = $"{SelectedTrainId}: {boarded} boarded / {alighted} alighted" +

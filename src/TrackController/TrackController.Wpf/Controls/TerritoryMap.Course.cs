@@ -15,22 +15,26 @@ public sealed partial class TerritoryMap
 
     public string LineName { get => (string)GetValue(LineNameProperty); set => SetValue(LineNameProperty, value); }
 
-    private static readonly Brush HandoffInk = Frozen(Ink("#6D28D9"));
-    private static readonly Brush TrackInk = Frozen(Ink("#26374B"));
-    private static readonly Brush ClearInk = Frozen(Ink("#368653"));
-    private static readonly Brush OccupiedInk = Frozen(Ink("#C84036"));
-    private static readonly Brush UnknownInk = Frozen(Ink("#9BA8B8"));
-    private static readonly Brush SelectedInk = Frozen(Ink("#2563EB"));
-    private static readonly Brush MaintenanceInk = Frozen(Ink("#BB721F"));
-    private static readonly Pen ConnectionPen = Frozen(new Pen(Ink("#ACB8C5"), 2.5));
-    private static readonly Pen HandoffPen = Frozen(new Pen(HandoffInk, 2) { DashStyle = DashStyles.Dash });
-    private static readonly Pen YardPen = Frozen(new Pen(Ink("#8292A5"), 2) { DashStyle = DashStyles.Dash });
-    private static readonly Pen StationPen = Frozen(new Pen(Ink("#344256"), 2.5));
-    private static readonly Pen CrossingPen = Frozen(new Pen(HandoffInk, 2));
+    private static readonly Brush HandoffInk = Ink("#6D28D9");
+    private static readonly Brush TrackInk = Ink("#26374B");
+    private static readonly Brush ClearInk = Ink("#368653");
+    private static readonly Brush OccupiedInk = Ink("#C84036");
+    private static readonly Brush UnknownInk = Ink("#9BA8B8");
+    private static readonly Pen ConnectionPen = Stroke("#ACB8C5", 2.5);
+    private static readonly Pen HandoffPen = Stroke("#6D28D9", 2, dashed: true);
+    private static readonly Pen YardPen = Stroke("#8292A5", 2, dashed: true);
+    private static readonly Pen StationPen = Stroke("#344256", 2.5);
+    private static readonly Pen CrossingPen = Stroke("#6D28D9", 2);
+    private static readonly Pen SelectionOutline = CourseTrackPen(Ink("#2563EB"), 12, PenLineCap.Round);
+    private static readonly Pen SelectionGap = CourseTrackPen(Brushes.White, 9, PenLineCap.Round);
+    private static readonly Pen MaintenanceTrack = CourseTrackPen(Ink("#BB721F"), 8);
+    private static readonly Pen UnknownTrack = CourseTrackPen(UnknownInk, 4.5);
+    private static readonly Pen OccupiedTrack = CourseTrackPen(OccupiedInk, 4.5);
+    private static readonly Pen ClearTrack = CourseTrackPen(ClearInk, 4.5);
 
     private readonly Dictionary<string, TerritoryBlockPlacement> _courseTargets = [];
 
-    private bool DrawCourseMap(DrawingContext dc, WaysideBlockStatus[] blocks, IReadOnlyDictionary<string, WaysideBlockStatus> network)
+    private bool DrawCourseMap(DrawingContext dc, WaysideBlockStatus[] blocks, IReadOnlyDictionary<string, WaysideBlockStatus> network, double pixelsPerDip)
     {
         var layout = CourseMapLayout.Find(LineName);
         if (layout is null || blocks.Any(block => !layout.Blocks.TryGetValue(block.BlockId, out var entry) || !entry.Matches(block)))
@@ -120,12 +124,13 @@ public sealed partial class TerritoryMap
             geometry.Freeze();
             if (block.BlockId == SelectedBlockId)
             {
-                Stroke(SelectedInk, 12, PenLineCap.Round);
-                Stroke(Brushes.White, 9, PenLineCap.Round);
+                dc.DrawGeometry(null, SelectionOutline, geometry);
+                dc.DrawGeometry(null, SelectionGap, geometry);
             }
-            if (block.Maintenance != "Open") Stroke(MaintenanceInk, 8);
-            Stroke(!block.IsFresh || block.Occupancy == OccupancyState.Unknown ? UnknownInk
-                : block.IsFaulted || block.Occupancy == OccupancyState.Occupied ? OccupiedInk : ClearInk, 4.5);
+            if (block.Maintenance != "Open") dc.DrawGeometry(null, MaintenanceTrack, geometry);
+            var track = !block.IsFresh || block.Occupancy == OccupancyState.Unknown ? UnknownTrack
+                : block.IsFaulted || block.Occupancy == OccupancyState.Occupied ? OccupiedTrack : ClearTrack;
+            dc.DrawGeometry(null, track, geometry);
 
             Point point = placement.Midpoint;
             if (!string.IsNullOrWhiteSpace(block.StationName))
@@ -149,11 +154,8 @@ public sealed partial class TerritoryMap
                     SignalState.Red => OccupiedInk,
                     _ => UnknownInk
                 };
-                dc.DrawEllipse(signal, new Pen(Brushes.White, 1), placement.Start + placement.BadgeNormal * 6, 3, 3);
+                dc.DrawEllipse(signal, WhiteOutline, placement.Start + placement.BadgeNormal * 6, 3, 3);
             }
-
-            void Stroke(Brush brush, double width, PenLineCap cap = PenLineCap.Flat) =>
-                dc.DrawGeometry(null, new Pen(brush, width) { LineJoin = PenLineJoin.Round, StartLineCap = cap, EndLineCap = cap }, geometry);
         }
 
         foreach (var block in blocks.OrderByDescending(block => block.BlockId == SelectedBlockId))
@@ -183,7 +185,7 @@ public sealed partial class TerritoryMap
         void Label(string text, Point anchor, Vector normal, double offset, Brush brush, bool preferred = false)
         {
             var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                new Typeface("Segoe UI"), preferred ? 11 : 10, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                LabelFace, preferred ? 11 : 10, brush, pixelsPerDip);
             var half = new Vector(formatted.Width / 2 + 2, formatted.Height / 2);
             Vector tangent = new(-normal.Y, normal.X);
             double distance = Math.Max(offset, Math.Abs(normal.X) * half.X + Math.Abs(normal.Y) * half.Y + 7);
@@ -209,11 +211,8 @@ public sealed partial class TerritoryMap
             (first.End, second.Start), (first.End, second.End)
         }.MinBy(edge => (edge.From - edge.To).LengthSquared);
 
-    private static T Frozen<T>(T value) where T : Freezable
-    {
-        value.Freeze();
-        return value;
-    }
+    private static Pen CourseTrackPen(Brush brush, double width, PenLineCap cap = PenLineCap.Flat) =>
+        Freeze(new Pen(brush, width) { LineJoin = PenLineJoin.Round, StartLineCap = cap, EndLineCap = cap });
 
     private string? HitBlock(Point point, double radius)
     {

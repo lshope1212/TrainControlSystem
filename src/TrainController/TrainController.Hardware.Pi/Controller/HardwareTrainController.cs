@@ -27,6 +27,7 @@ public sealed class HardwareTrainController
     private EmergencyBrakeCause _latched;     // emergency-brake latch
     private bool _authorityKnown;
     private double _authorityLeft;            // remaining-authority estimate (m)
+    private bool _overspeedBraking;           // overspeed hysteresis: braking until back at the limit
     private StationTarget? _station;          // current next-station target, null = none
     private readonly FailureWatch _watch = new FailureWatch(); // failure latches + detection windows
     private TrainControllerOutput? _previous;
@@ -55,6 +56,7 @@ public sealed class HardwareTrainController
         _latched = EmergencyBrakeCause.None;
         _authorityKnown = false;
         _authorityLeft = 0.0;
+        _overspeedBraking = false;
         _station = null;
         _watch.Clear();
         _previous = null;
@@ -323,7 +325,11 @@ public sealed class HardwareTrainController
         }
 
         // ---- overspeed ----
-        var tooFast = speed > speedLimit;
+        // Tolerance band + hysteresis: brake above limit + tolerance, keep braking until <= limit.
+        var tooFast = _overspeedBraking
+            ? speed > speedLimit
+            : speed > speedLimit + Math.Max(0.0, cfg.OverspeedToleranceMetersPerSecond);
+        _overspeedBraking = tooFast;
         if (tooFast && !holdForSignal)
         {
             notes.Add("Overspeed: service brake applied.");

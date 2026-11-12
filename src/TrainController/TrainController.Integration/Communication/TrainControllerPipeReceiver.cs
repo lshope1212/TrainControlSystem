@@ -25,8 +25,8 @@ public sealed class TrainControllerPipeReceiver
     private readonly TrainControllerSubsystem _subsystem;
     private readonly string? _participantHostPipe;
     private readonly Func<string, object, CancellationToken, Task> _send;
-    private readonly Dictionary<string, (bool Known, double Authority, bool SignalValid, string Station, double Distance)> _seen =
-        new Dictionary<string, (bool, double, bool, string, double)>(StringComparer.Ordinal);
+    private readonly Dictionary<string, (bool Known, double Authority, bool SignalValid, string Station, double Distance, long BeaconSequence)> _seen =
+        new Dictionary<string, (bool, double, bool, string, double, long)>(StringComparer.Ordinal);
     /// <summary>
     /// A gap of more than this many steps is clamped. Gaps are normal when the controller skips
     /// stale states under load (latest-state mailbox), so the limit is generous: the Train Model
@@ -254,14 +254,19 @@ public sealed class TrainControllerPipeReceiver
             authorityUpdated = status.TrackSignalValid
                 && (!last.Known || !last.Authority.Equals(status.CommandedAuthorityMeters) || !last.SignalValid);
             var station = status.NextStationName ?? string.Empty;
+            // A new beacon READ: the Train Model's beacon sequence changed (each pass over a beacon,
+            // even of the same station). Without a sequence, fall back to a changed station/distance.
             beaconNew = status.BeaconValid && station.Length > 0
-                && (!string.Equals(station, last.Station, StringComparison.Ordinal) || !status.DistanceToNextStationMeters.Equals(last.Distance));
+                && (status.BeaconSequence > 0
+                    ? status.BeaconSequence != last.BeaconSequence
+                    : !string.Equals(station, last.Station, StringComparison.Ordinal) || !status.DistanceToNextStationMeters.Equals(last.Distance));
             _seen[status.TrainId] = (
                 last.Known || status.TrackSignalValid,
                 status.TrackSignalValid ? status.CommandedAuthorityMeters : last.Authority,
                 status.TrackSignalValid,
                 status.BeaconValid ? station : last.Station,
-                status.BeaconValid ? status.DistanceToNextStationMeters : last.Distance);
+                status.BeaconValid ? status.DistanceToNextStationMeters : last.Distance,
+                status.BeaconSequence > 0 ? status.BeaconSequence : last.BeaconSequence);
         }
 
         _subsystem.NormalModelInput.Submit(status, beaconNew, authorityUpdated);

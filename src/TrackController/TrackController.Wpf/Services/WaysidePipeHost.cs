@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using TrackController.Contracts.Messages;
+using TrackController.Core.Diagnostics;
 using TrackController.Core.Services;
 using TrackController.Runtime;
 using TrainControl.Common.Communication;
@@ -101,8 +102,28 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             PublishCtcAsync(_stop.Token),
             PublishAsync(Pipe.TrackModel, _stop.Token),
             PublishAsync(Pipe.Monitor, _stop.Token),
-            _dispatch.RunAsync(_stop.Token)
+            _dispatch.RunAsync(_stop.Token),
+            PerformanceMetrics.ReportingEnabled ? ReportPerformanceAsync(_stop.Token) : Task.CompletedTask
         ];
+    }
+
+    /// <summary>Development only (TRACKCONTROLLER_PERF=1): prints the evaluation diagnostics every 10 s.</summary>
+    private static async Task ReportPerformanceAsync(CancellationToken stop)
+    {
+        var elapsed = Stopwatch.StartNew();
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), stop).ConfigureAwait(false);
+                string report = $"{PerformanceMetrics.Report()}{Environment.NewLine}  after {elapsed.Elapsed.TotalSeconds:0} s";
+                Console.WriteLine(report);
+                Debug.WriteLine(report);
+            }
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+        }
     }
 
     private async Task HandleAsync(MessageEnvelope envelope)
@@ -156,7 +177,9 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         {
             while (!stop.IsCancellationRequested)
             {
-                var snapshot = await _runtime.PollAsync(stop).ConfigureAwait(false);
+                // Diagnostics reuse the latest published evaluation; only the outputs that act on the track
+                // (and CTC) drive evaluations, so the monitor never adds evaluation or router-lock work.
+                var snapshot = pipe == Pipe.Monitor ? _runtime.LatestSnapshot : await _runtime.PollAsync(stop).ConfigureAwait(false);
                 IEnumerable<object> messages = pipe == Pipe.TrackModel ? CreateTrackModelBatch(snapshot)
                     : _monitorResults.ToArray().Append(snapshot);
                 bool delivered = true;

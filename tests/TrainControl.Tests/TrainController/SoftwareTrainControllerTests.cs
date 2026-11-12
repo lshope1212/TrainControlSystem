@@ -587,6 +587,27 @@ public class SoftwareTrainControllerTests
     }
 
     [TestMethod]
+    public void Overspeed_HasAToleranceBand_AndHysteresis()
+    {
+        var c = NewController();
+        var tolerance = new ControllerPolicy().OverspeedToleranceMetersPerSecond;
+
+        // Within the band: no overspeed braking (normal regulation overshoot).
+        var within = Step(c, Input(Model(speed: 10.0 + tolerance * 0.5, commanded: 10.0), Automatic(), tick: 1));
+        Assert.IsFalse(within.Display.OverspeedProtectionActive);
+
+        // Beyond the band: brake...
+        var beyond = Step(c, Input(Model(speed: 10.0 + tolerance * 1.5, commanded: 10.0), Automatic(), tick: 2));
+        Assert.IsTrue(beyond.Display.OverspeedProtectionActive);
+
+        // ...and keep braking inside the band until back at the limit.
+        var stillAbove = Step(c, Input(Model(speed: 10.0 + tolerance * 0.5, commanded: 10.0), Automatic(), tick: 3));
+        Assert.IsTrue(stillAbove.Display.OverspeedProtectionActive, "Hysteresis: brakes until <= limit.");
+        var atLimit = Step(c, Input(Model(speed: 10.0, commanded: 10.0), Automatic(), tick: 4));
+        Assert.IsFalse(atLimit.Display.OverspeedProtectionActive);
+    }
+
+    [TestMethod]
     public void TargetSpeed_IsCappedByVehicleMaximum()
     {
         var c = NewController();

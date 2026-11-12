@@ -1,3 +1,4 @@
+using TrainControl.Contracts.Enums;
 using TrackModel.Core.Models;
 using TrainControl.Common.Identity;
 using TrainControl.Contracts.Messages;
@@ -70,18 +71,53 @@ public partial class TrackService
 
     /// <summary>Only send a typed beacon when its stopping distance is explicitly configured.
     /// Existing beacon text alone does not establish a stopping point or a platform side.</summary>
+    /// <summary>
+    /// Beacon read by the train whose HEAD is in <paramref name="blockId"/>, or null.
+    /// <list type="bullet">
+    /// <item>A block with an explicitly surveyed beacon (Beacon + BeaconDistanceToStopMeters) uses it,
+    ///       unless the train is coming FROM the target station (it is behind the train).</item>
+    /// <item>Otherwise the beacon is DERIVED from the layout: the block right before a station, in the
+    ///       train's direction of travel, announces that station. Direction comes from the block the
+    ///       train entered from (a station behind the train is never announced). The distance is to
+    ///       the middle of the station block (end of this block + half the station block), read on
+    ///       entry to this block; the platform side is the station's workbook "Station Side".</item>
+    /// </list>
+    /// The course layouts carry no surveyed beacons, so without the derived rule no train would ever
+    /// receive station information.
+    /// </summary>
     public BeaconMessage? CreateTrainBeacon(string blockId)
     {
         var block = RequireBlock(blockId);
-        if (!block.IsOccupied || !block.IsTrainHead || !block.HasBeacon || block.BeaconDistanceToStopMeters is not { } distance)
+        if (!block.IsOccupied || !block.IsTrainHead || block.StationName.Length > 0)
             return null;
-        var station = FindBlock(block.BeaconTargetBlockId);
+
+        if (block.HasBeacon && block.BeaconDistanceToStopMeters is { } surveyed
+            && block.BeaconTargetBlockId != block.TrainEntryBlockId)
+        {
+            var target = FindBlock(block.BeaconTargetBlockId);
+            return new()
+            {
+                TrainId = block.TrainId,
+                StationName = target?.StationName ?? block.Beacon,
+                DistanceToStopMeters = surveyed,
+                Side = block.BeaconPlatformSide != PlatformSide.None ? block.BeaconPlatformSide : target?.StationSide ?? PlatformSide.None,
+            };
+        }
+
+        var ahead = block.ConnectedBlockIds
+            .Where(id => id != block.TrainEntryBlockId)
+            .Select(FindBlock)
+            .Where(b => b is not null && b.StationName.Length > 0)
+            .ToList();
+        if (ahead.Count != 1 || ahead[0] is not { } station)
+            return null; // no station ahead, or ambiguous (e.g. just placed between two stations)
+
         return new()
         {
             TrainId = block.TrainId,
-            StationName = station?.StationName ?? block.Beacon,
-            DistanceToStopMeters = distance,
-            Side = block.BeaconPlatformSide,
+            StationName = station.StationName,
+            DistanceToStopMeters = block.LengthMeters + station.LengthMeters / 2.0,
+            Side = station.StationSide,
         };
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text.Json.Serialization;
@@ -7,9 +8,11 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using TrackController.Contracts.Messages;
+using TrackController.Core.Diagnostics;
 using TrackController.Core.Services;
 using TrackController.Runtime;
 using TrackController.Wpf.Commands;
+using TrackController.Wpf.Controls;
 using TrackController.Wpf.Services;
 using TrainControl.Common.Communication;
 using TrainControl.Contracts.Enums;
@@ -260,8 +263,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
     public string DataStatus => $"Track feedback: {Blocks.Count(block => block.IsFresh)}/{Blocks.Count} current · Logic: {(Snapshot.IsHardwareMode ? "PLC program" : "Software")} · {Snapshot.Authorizations.Count} movement request(s)";
 
+    /// <summary>
+    /// Shows the latest published snapshot. The grids and the map are replaced only when what they display
+    /// changed: replacing a DataGrid's items regenerates every row and a new block list redraws the whole map,
+    /// several times a second, although most refreshes show the same state.
+    /// </summary>
     private void Refresh()
     {
+        long started = Stopwatch.GetTimestamp();
+        var previousBlocks = _snapshot?.Blocks ?? [];
         _snapshot = _host.LatestSnapshot;
         _hardwareMode = _snapshot.IsHardwareMode;
         _maintenanceMode = _snapshot.IsMaintenanceMode;
@@ -270,9 +280,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         OnPropertyChanged(nameof(ControllerMode));
         OnPropertyChanged(nameof(IsMaintenanceMode));
 
+        var movements = _snapshot.Authorizations.Select(authorization => new MovementRow(authorization)).ToArray();
+        bool movementsChanged = movements.Length != _movements.Count || movements.Where((row, index) => !row.ShowsSameAs(_movements[index])).Any();
+        if (movementsChanged)
+        {
+            _movements = movements;
+        }
 
-        _movements = _snapshot.Authorizations.Select(authorization => new MovementRow(authorization)).ToArray();
-        _equipment = Blocks.SelectMany(blockStatus =>
+        var equipment = Blocks.SelectMany(blockStatus =>
         {
             var rows = new List<EquipmentRow>();
             string status = blockStatus.Status;
@@ -294,19 +309,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
 
             return rows;
         }).ToArray();
+        bool equipmentChanged = !_equipment.SequenceEqual(equipment);
+        if (equipmentChanged)
+        {
+            _equipment = equipment;
+        }
+
         foreach (string propertyName in new[]
         {
             nameof(Snapshot),
             nameof(LineAccentBrush),
             nameof(PlcSummary),
-            nameof(Blocks),
-            nameof(MapBlocks),
-            nameof(Movements),
-            nameof(Equipment),
-
-            nameof(TerritoryMovements),
-            nameof(TerritoryEquipment),
-
             nameof(DataStatus),
             nameof(Connection)
         }
@@ -314,6 +327,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         )
         {
             OnPropertyChanged(propertyName);
+        }
+
+        if (!TerritoryMap.ShowsSameState(previousBlocks, Blocks))
+        {
+            OnPropertyChanged(nameof(Blocks));
+            OnPropertyChanged(nameof(MapBlocks));
+        }
+
+        if (movementsChanged)
+        {
+            OnPropertyChanged(nameof(Movements));
+            OnPropertyChanged(nameof(TerritoryMovements));
+        }
+
+        if (equipmentChanged)
+        {
+            OnPropertyChanged(nameof(Equipment));
+            OnPropertyChanged(nameof(TerritoryEquipment));
         }
 
         // Keep selections during missing feedback, and replace the choice list only when the layout changes.
@@ -335,6 +366,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IAsyncDisposabl
         OnPropertyChanged(nameof(CanEditSetup));
         OnPropertyChanged(nameof(CanEditExecution));
         OnPropertyChanged(nameof(CanApplyExecution));
+        PerformanceMetrics.UiRefreshes.RecordSince(started);
     }
 
     private async Task SendAsync(object message, bool announce = true)

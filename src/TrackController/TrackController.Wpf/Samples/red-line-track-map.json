@@ -164,7 +164,7 @@
         "RED-10",
         "RED-12"
       ],
-      "hasSignal": false,
+      "hasSignal": true,
       "switchProtectionBlockIds": [],
       "hasCrossing": true,
       "crossingProtectionBlockIds": [
@@ -758,7 +758,7 @@
         "RED-46",
         "RED-48"
       ],
-      "hasSignal": false,
+      "hasSignal": true,
       "switchProtectionBlockIds": [],
       "hasCrossing": true,
       "crossingProtectionBlockIds": [

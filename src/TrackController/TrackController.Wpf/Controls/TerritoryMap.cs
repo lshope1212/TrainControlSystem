@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
@@ -30,7 +31,55 @@ public sealed partial class TerritoryMap : FrameworkElement
     private Point _mouseDown, _previousMouse;
     private bool _dragged;
     private WaysideBlockStatus[] Visible => Blocks?.Cast<WaysideBlockStatus>().ToArray() ?? [];
-    private static Brush Ink(string color) => (Brush)new BrushConverter().ConvertFromString(color)!;
+
+    // Rendering resources are immutable: created and frozen once, not on every redraw.
+    private static class DrawingResources
+    {
+        public static readonly ConcurrentDictionary<string, Brush> Brushes = new();
+        public static readonly ConcurrentDictionary<(string Color, double Thickness, bool Dashed), Pen> Pens = new();
+    }
+
+    private static readonly Typeface LabelFace = new("Segoe UI");
+    private static readonly Pen WhiteOutline = Freeze(new Pen(Brushes.White, 1));
+
+    private static Brush Ink(string color) => DrawingResources.Brushes.GetOrAdd(color,
+        static value => Freeze((Brush)new BrushConverter().ConvertFromString(value)!));
+
+    private static Pen Stroke(string color, double thickness, bool dashed = false) =>
+        DrawingResources.Pens.GetOrAdd((color, thickness, dashed), static key =>
+        {
+            var pen = new Pen(Ink(key.Color), key.Thickness);
+            if (key.Dashed) pen.DashStyle = DashStyles.Dash;
+            return Freeze(pen);
+        });
+
+    private static T Freeze<T>(T resource) where T : Freezable
+    {
+        resource.Freeze();
+        return resource;
+    }
+
+    /// <summary>
+    /// Whether two block lists draw the same map (and tooltips): the operator window then keeps its
+    /// current lists instead of redrawing the map for an unchanged state.
+    /// </summary>
+    public static bool ShowsSameState(IReadOnlyList<WaysideBlockStatus> before, IReadOnlyList<WaysideBlockStatus> after)
+    {
+        if (ReferenceEquals(before, after)) return true;
+        if (before.Count != after.Count) return false;
+        for (int i = 0; i < before.Count; i++)
+        {
+            var (a, b) = (before[i], after[i]);
+            if (ReferenceEquals(a, b)) continue;
+            if (a.BlockId != b.BlockId || a.MapX != b.MapX || a.MapY != b.MapY || a.IsFresh != b.IsFresh || a.Occupancy != b.Occupancy
+                || a.IsFaulted != b.IsFaulted || a.Maintenance != b.Maintenance || a.HasSwitch != b.HasSwitch || a.HasSignal != b.HasSignal
+                || a.HasCrossing != b.HasCrossing || a.StationName != b.StationName || a.ReportedSwitch != b.ReportedSwitch
+                || a.ReportedSignal != b.ReportedSignal || a.LengthMeters != b.LengthMeters || !a.NextBlockIds.SequenceEqual(b.NextBlockIds))
+                return false;
+        }
+
+        return true;
+    }
 
     public TerritoryMap()
     {
@@ -60,6 +109,7 @@ public sealed partial class TerritoryMap : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         dc.DrawRectangle(Brushes.White, null, new Rect(RenderSize));
         _targets.Clear();
         _courseTargets.Clear();
@@ -67,7 +117,7 @@ public sealed partial class TerritoryMap : FrameworkElement
         if (blocks.Length == 0 || ActualWidth < 1 || ActualHeight < 1) return;
         var owned = blocks.ToDictionary(block => block.BlockId);
         var network = (NetworkBlocks?.Cast<WaysideBlockStatus>() ?? blocks).ToDictionary(block => block.BlockId);
-        if (DrawCourseMap(dc, blocks, network)) return;
+        if (DrawCourseMap(dc, blocks, network, pixelsPerDip)) return;
 
         double minX = blocks.Min(block => block.MapX), maxX = blocks.Max(block => block.MapX);
         double minY = blocks.Min(block => block.MapY), maxY = blocks.Max(block => block.MapY);
@@ -90,7 +140,7 @@ public sealed partial class TerritoryMap : FrameworkElement
             var a = At(source); var b = At(destination);
             if (owned.ContainsKey(source.BlockId) && owned.ContainsKey(next))
             {
-                dc.DrawLine(new Pen(Ink("#B5C2CF"), 4), a, b);
+                dc.DrawLine(Stroke("#B5C2CF", 4), a, b);
                 if (!bidirectional && (b - a).Length > 24) Arrow(a + (b - a) * 0.58, b - a);
             }
             else
@@ -101,8 +151,7 @@ public sealed partial class TerritoryMap : FrameworkElement
                 if (direction.Length < 0.001) direction = new(1, 0);
                 direction.Normalize();
                 Point port = home + direction * 34;
-                var pen = new Pen(Ink("#7C3AED"), 2) { DashStyle = DashStyles.Dash };
-                dc.DrawLine(pen, home, port);
+                dc.DrawLine(Stroke("#7C3AED", 2, dashed: true), home, port);
                 Arrow(outgoing || bidirectional ? port : home + direction * 12, outgoing || bidirectional ? direction : -direction, "#7C3AED");
                 ports.Add((port + direction * 12, ShortId(outgoing ? next : source.BlockId)));
             }
@@ -114,8 +163,8 @@ public sealed partial class TerritoryMap : FrameworkElement
             Point point = At(block);
             Brush fill = !block.IsFresh || block.Occupancy == OccupancyState.Unknown ? Ink("#94A3B8")
                 : block.IsFaulted || block.Occupancy == OccupancyState.Occupied ? Ink("#DC4740") : Ink("#348463");
-            if (block.Maintenance != "Open") dc.DrawEllipse(null, new Pen(Ink("#BA7513"), 2), point, 10, 10);
-            if (block.BlockId == SelectedBlockId) dc.DrawEllipse(null, new Pen(Ink("#2563EB"), 3), point, 13, 13);
+            if (block.Maintenance != "Open") dc.DrawEllipse(null, Stroke("#BA7513", 2), point, 10, 10);
+            if (block.BlockId == SelectedBlockId) dc.DrawEllipse(null, Stroke("#2563EB", 3), point, 13, 13);
             if (block.HasSwitch)
             {
                 var shape = new StreamGeometry();
@@ -124,15 +173,16 @@ public sealed partial class TerritoryMap : FrameworkElement
                     context.BeginFigure(point + new Vector(0, -8), true, true);
                     context.PolyLineTo([point + new Vector(8, 0), point + new Vector(0, 8), point + new Vector(-8, 0)], true, false);
                 }
-                dc.DrawGeometry(fill, new Pen(Brushes.White, 1), shape);
+                shape.Freeze();
+                dc.DrawGeometry(fill, WhiteOutline, shape);
             }
-            else dc.DrawEllipse(fill, new Pen(Brushes.White, 1), point, 5, 5);
+            else dc.DrawEllipse(fill, WhiteOutline, point, 5, 5);
             if (block.HasCrossing)
             {
                 dc.DrawLine(CrossingPen, point + new Vector(-6, -6), point + new Vector(6, 6));
                 dc.DrawLine(CrossingPen, point + new Vector(-6, 6), point + new Vector(6, -6));
             }
-            if (!string.IsNullOrWhiteSpace(block.StationName)) dc.DrawEllipse(null, new Pen(Ink("#6D28D9"), 1.5), point, 8, 8);
+            if (!string.IsNullOrWhiteSpace(block.StationName)) dc.DrawEllipse(null, Stroke("#6D28D9", 1.5), point, 8, 8);
         }
         foreach (var block in blocks.OrderByDescending(block => block.BlockId == SelectedBlockId).ThenByDescending(block => block.HasSwitch))
             Label(ShortId(block.BlockId), At(block), Ink("#203047"), block.BlockId == SelectedBlockId);
@@ -142,13 +192,13 @@ public sealed partial class TerritoryMap : FrameworkElement
         {
             if (direction.Length < 0.001) return;
             direction.Normalize(); var perpendicular = new Vector(-direction.Y, direction.X);
-            dc.DrawLine(new Pen(Ink(color), 1.5), tip, tip - direction * 5 + perpendicular * 3);
-            dc.DrawLine(new Pen(Ink(color), 1.5), tip, tip - direction * 5 - perpendicular * 3);
+            dc.DrawLine(Stroke(color, 1.5), tip, tip - direction * 5 + perpendicular * 3);
+            dc.DrawLine(Stroke(color, 1.5), tip, tip - direction * 5 - perpendicular * 3);
         }
         void Label(string text, Point point, Brush color, bool force)
         {
             var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                new Typeface("Segoe UI"), 11, color, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                LabelFace, 11, color, pixelsPerDip);
             foreach (var offset in new[] { new Vector(-formatted.Width / 2, -24), new Vector(12, -7), new Vector(-formatted.Width - 12, -7), new Vector(-formatted.Width / 2, 12) })
             {
                 var rect = new Rect(point + offset, new Size(formatted.Width + 3, 16));

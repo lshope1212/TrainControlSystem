@@ -96,6 +96,7 @@ public static class TrainControllerInputValidator
         NonNegative(errors, policy.StationDistanceThresholdMeters, "Policy.StationDistanceThresholdMeters");
         NonNegative(errors, policy.StationBrakingMarginMeters, "Policy.StationBrakingMarginMeters");
         NonNegative(errors, policy.AuthorityBrakingMarginMeters, "Policy.AuthorityBrakingMarginMeters");
+        NonNegative(errors, policy.OverspeedToleranceMetersPerSecond, "Policy.OverspeedToleranceMetersPerSecond");
         NonNegative(errors, policy.StationDwellTimeSeconds, "Policy.StationDwellTimeSeconds");
 
         Positive(errors, policy.SignalPickupFailureLatchSeconds, "Policy.SignalPickupFailureLatchSeconds");

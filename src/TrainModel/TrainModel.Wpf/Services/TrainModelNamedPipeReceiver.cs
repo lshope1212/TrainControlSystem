@@ -70,7 +70,7 @@ public sealed class TrainModelNamedPipeReceiver
                 _vm.ApplyTrackCondition(m.TrainId, m.GradePercent)),
 
             nameof(BeaconMessage) => Bind<BeaconMessage>(envelope, m =>
-                _vm.ApplyBeacon(m.TrainId, m.StationName, m.DistanceToStopMeters, m.Side.ToString(), m.Announcement)),
+                _vm.ApplyBeacon(m.TrainId, m.StationName, m.DistanceToStopMeters, m.Side.ToString(), m.Announcement, m.ReadSequence)),
 
             nameof(StationPassengerMessage) => Bind<StationPassengerMessage>(envelope, m =>
                 _vm.ApplyPassengerDemand(m.TrainId, m.WaitingToBoard)),

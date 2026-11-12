@@ -1,542 +1,321 @@
-# Claude Code Prompt — Complete Green Line Routing for Iteration 3
+# Fix Simulation Stuttering and Track Controller Performance
+
+You are working in the `TrainControlSystem` C#/.NET/WPF repository.
+
+**Repository:** https://github.com/lshope1212/TrainControlSystem
+
+**Branch:** `Luke_CTC` — use the latest available changes.
 
 ## Objective
 
-Implement the remaining routing changes necessary for Train 001 to travel autonomously from the Green Line yard entry (GREEN-63) to Edgebrook Station (GREEN-9), using the existing fully integrated TrainControlSystem.
+Investigate and fix a performance regression that causes the entire TrainControlSystem simulation to stutter briefly while a train is moving.
 
-The recent automatic switch-alignment fix is already implemented. Do not replace or undo it.
+**Important: The Green Line Edgebrook use case is now working correctly. Preserve that functionality.**
 
-**Primary goal: The dispatcher should be able to schedule Train 001 from GREEN-63 to GREEN-9, and the system should construct and execute the physically valid route through the complete Green Line network, including its loops, repeated blocks, and switches.**
+The objective is to improve performance and responsiveness without changing the existing movement, routing, authorization, or safety behavior.
 
-The train must move using the real Train Model physics, Train Controller commands, Track Model occupancy, Track Controller authority, and CTC scheduling.
+## 1. Description of the problem
 
-This is a focused implementation task, not merely an investigation.
+We recently got the full Green Line use case working:
 
-### Important scope limitation
+- Train 001 dispatches from the Green Line yard at GREEN-63.
+- The CTC calculates the route to Edgebrook (GREEN-9).
+- The Track Controller coordinates all necessary waysides, grants authority, and automatically changes switches.
+- The Track Model and Train Model propagate the train's movement.
+- The train successfully reaches Edgebrook.
 
-We are currently concentrating ONLY on getting the train through the entire route.
+However, following recent changes to the Track Controller by a teammate, the simulation has become noticeably laggy.
 
-Do NOT attempt to fix or redesign:
+**Observed behavior:**
+- While the train is moving, the system periodically freezes for a fraction of a second.
+- The system clock displayed in the application also appears to momentarily freeze.
+- The train continues moving successfully, but the simulation feels choppy.
+- These small delays appear to accumulate, making the entire movement simulation take longer than expected.
+- The issue is particularly noticeable when a train is actively propagating through the system.
 
-- Physical station stopping and station beacon behavior.
-- The 45-second station dwell implementation.
-- Exact scheduled arrival-time accuracy.
-- Train Controller PID tuning or physics.
-- Passenger exchanges.
-- Automatic end-of-service train retirement.
-- Unrelated UI or module functionality.
+The system is functionally correct. This task is strictly focused on resolving performance problems.
 
-These are separate future tasks.
+## 2. Investigate likely performance bottlenecks
 
-For this task, success means the train physically travels the entire legal route and its front enters Edgebrook's block, GREEN-9, with the CTC correctly tracking its progress.
+The following concerns were identified during a preliminary repository review. Verify them rather than assuming they are all responsible.
 
-It does not yet need to demonstrate accurate stopping at the station platform.
+### A. Excessive Track Controller evaluations
 
----
+Inspect:
 
-## 1. Understand the existing Green Line topology
+`src/TrackController/TrackController.Core/Services/TrackControllerService.cs`
 
-Review the actual course layout in:
+Specifically, `GetSnapshot()` currently calls `Reevaluate()` on every invocation.
 
-`src/TrackModel/SampleLayouts/course-lines.json`
+Inspect:
 
-Also investigate:
+`src/TrackController/TrackController.Core/Services/TrackControllerService.Evaluation.cs`
 
-- `src/TrackModel/TrackModel.Core/Services/CourseTrackLayout.cs`
-- `src/TrackModel/TrackModel.Core/Services/TrackTopology.cs`
-- `src/TrackController/TrackController.Wpf/Samples/green-line-track-map.json`
-- `src/CTC/CTC.Core/Scheduling/RouteGeometry.cs`
-- `docs/integration/LIVE_INTEGRATION_GUIDE.md`
+Determine how expensive `Reevaluate()` is, particularly when all configured waysides must repeatedly:
 
-### The required route
+- Scan track-block feedback.
+- Compute switch alignment demands.
+- Evaluate movement requests.
+- Run the vital PLC program.
+- Check route safety and authorization.
+- Generate complete snapshots.
 
-The correct Green Line route is not the shortest undirected path.
+Investigate whether identical, unchanged inputs are causing the same expensive evaluation to be performed repeatedly.
 
-The train must leave the yard and initially proceed in the increasing block-number direction.
+Avoid unnecessary evaluation without sacrificing timely safety decisions, watchdog expirations, or authority revocations.
 
-The expected physical route is:
+### B. Duplicate polling across coordinated waysides
 
-1. GREEN-63 → GREEN-64 → ... → GREEN-77
-2. GREEN-77 → GREEN-78 → ... → GREEN-85
-3. GREEN-85 → GREEN-86 → ... → GREEN-100
-4. GREEN-100 → GREEN-85 → GREEN-84 → ... → GREEN-77
-5. GREEN-77 → GREEN-101 → GREEN-102 → ... → GREEN-150
-6. GREEN-150 → GREEN-28 → GREEN-27 → ... → GREEN-13
-7. GREEN-13 → GREEN-12 → ... → GREEN-9 (Edgebrook)
+Inspect:
 
-According to the current layout, this route contains 117 block visits, including repeated visits to GREEN-77 through GREEN-85.
+`src/TrackController/TrackController.Runtime/TerritoryRuntimeRouter.cs`
 
-Verify this route against the actual topology before implementing it.
+Pay particular attention to `PollAllAsync()`.
 
-The route must respect track direction and switch geometry.
+The current implementation calls `PollAsync()` on all territories and then performs a second polling pass over local territories.
 
-### Important junction behavior
+Since local runtime polling invokes `TrackControllerService.GetSnapshot()`, this appears to cause redundant evaluations.
 
-Switch 77:
+Also inspect `ReceiveAsync()`, which invokes `PollAllAsync()` in its `finally` block, including after operations that may already have updated the runtime snapshots.
 
-- First visit: GREEN-76 → GREEN-77 → GREEN-78, requiring Normal.
-- Second visit: GREEN-78 → GREEN-77 → GREEN-101, requiring Reverse.
+Determine:
 
-Switch 85:
+1. How many complete PLC evaluations occur per message and per second.
+2. Whether all 16 waysides really need reevaluation after every received message.
+3. Whether repeated polling can be eliminated while retaining the latest coherent snapshot and coordinated safety approvals.
+4. Whether the router's `_operations` semaphore is held unnecessarily long, delaying incoming messages and other publishers.
 
-- First visit: GREEN-84 → GREEN-85 → GREEN-86, requiring Normal.
-- Second visit: GREEN-100 → GREEN-85 → GREEN-84, requiring Reverse.
+Optimize this behavior where appropriate.
 
-Switch 28:
+Do not compromise the joint approval process between waysides.
 
-- GREEN-150 → GREEN-28 → GREEN-27, requiring Reverse.
+### C. Unnecessary evaluation during message processing
 
-Switch 13:
+Inspect:
 
-- GREEN-14 → GREEN-13 → GREEN-12, requiring Normal.
+`src/TrackController/TrackController.Runtime/LocalWaysideRuntime.cs`
 
-The system must be able to change these switches at the appropriate times, using the automatic switch-alignment functionality recently implemented.
+The runtime currently refreshes its snapshot in the `finally` block of `ReceiveAsync()`.
 
-**Do not hardcode these block IDs or switch positions into production routing logic.**
+Some controller operations already call `Reevaluate()` internally, so the additional snapshot request may repeat the evaluation.
 
-They are acceptance-test expectations for the current course layout.
+Find a safe way to avoid redundant work while maintaining up-to-date outputs.
 
----
+### D. Excessive publisher polling
 
-## 2. Fix the CTC route-planning algorithm
+Inspect:
 
-The current CTC uses shortest-path routing based primarily on connectivity.
+`src/TrackController/TrackController.Wpf/Services/WaysidePipeHost.cs`
 
-Investigate:
+The production host has separate publishers for:
 
-- `src/CTC/CTC.Core/Dispatching/RouteManager.cs`
-- `src/CTC/CTC.Core/Scheduling/ScheduleTemplateConverter.cs`
-- `src/CTC/CTC.Core/Scheduling/RouteGeometry.cs`
+- CTC status updates.
+- Track Model commands.
+- Monitor diagnostics.
 
-### Current problems
+These publisher loops can independently request full runtime polls, even when the evaluated state is unchanged.
 
-1. The route planner does not fully enforce the track's direction of travel.
-2. It does not properly consider the stem and branches of switches.
-3. It prevents revisiting any block.
-4. It can construct a physically invalid route that is later rejected by the Track Controller.
+Investigate whether they are multiplying the workload unnecessarily.
 
-### Required changes
+Possible improvements include:
 
-Implement a general-purpose topology-aware route planner.
+- Sharing safely evaluated immutable snapshots between publishers.
+- Avoiding duplicate evaluations when nothing has changed.
+- Coalescing redundant periodic work.
+- Separating diagnostic publication from safety-critical evaluation.
+- Reducing unnecessary allocations and serialization.
 
-The planner must:
+Maintain prompt delivery of changed or revoked movement authority. Do not introduce a delay in safety-critical commands just to reduce CPU usage.
 
-- Respect directed track travel.
-- Respect switch geometry.
-- Never route from one switch leg directly to another without passing through the stem.
-- Allow valid repeated block visits when the network requires them.
-- Avoid immediate reversals.
-- Prevent infinite loops.
-- Select a valid route to the destination.
-- Work for Blue, Red, and Green without line-specific hardcoding.
-- Support the CTC Schedule Builder and dispatcher rerouting.
+### E. WPF UI updates and rendering
 
-I recommend investigating a graph-search state that includes both the current block and the block from which the train entered.
+Inspect:
 
-For example:
+`src/TrackController/TrackController.Wpf/ViewModels/MainWindowViewModel.cs`
 
-`RoutingState(PreviousBlockId, CurrentBlockId)`
+and
 
-This allows a train to revisit a physical block from a different approach while preventing endless exploration of identical routing states.
+`src/TrackController/TrackController.Wpf/Controls/TerritoryMap.cs`
 
-Choose an appropriate shortest-valid-path algorithm, such as BFS over directed routing states, or another approach justified by the actual topology.
+The operator UI currently refreshes every 250 ms.
 
-Reuse existing track-direction and switch-geometry logic where possible so CTC and Track Controller agree on which connections are legal.
+Investigate whether every refresh unnecessarily:
 
-### Schedule Builder behavior
+- Rebuilds movement and equipment row collections.
+- Raises property change notifications for unchanged data.
+- Recomputes territory maps and block lists.
+- Triggers full WPF redraws.
+- Allocates brushes, pens, geometries, or formatted text.
 
-The dispatcher must be able to:
+Reduce unnecessary UI work and cache immutable rendering resources where useful.
 
-1. Select Green Line.
-2. Create a schedule for Train 001.
-3. Select GREEN-63 as the starting block.
-4. Enter an arrival time at Edgebrook, GREEN-9.
-5. Queue the schedule successfully.
+The UI should remain responsive during train movement, even when the underlying waysides are evaluating complex routes.
 
-The Schedule Builder must automatically fill in the valid route.
+Keep heavy evaluation off the UI thread.
 
-The dispatcher should NOT need to manually enter all 117 block visits or add arbitrary intermediate timed stops to force the correct route.
+### F. Shared simulation clock
 
-Preserve the ability to create schedules with multiple timed waypoints.
+Inspect:
 
----
+`src/Launcher/TrainControlSystem.Launcher.Wpf/Services/SimulationClockHost.cs`
 
-## 3. Support repeated blocks throughout CTC and Track Model
+Determine whether the authoritative simulation clock is genuinely experiencing delays or whether its displayed updates are being delayed by other processes.
 
-The full route revisits GREEN-77 through GREEN-85.
+Inspect the relevant Train Model and CTC clock consumers as necessary.
 
-A repeated physical block is not necessarily an invalid route. The distinction is that the train enters it from a different predecessor and at a different point in its journey.
+Do not replace or redesign the shared clock unless the investigation demonstrates a clock-specific defect.
 
-Review how route positions are represented in:
+The existing simulation timing semantics should be preserved, including the ability to run at 1x through 10x speed.
 
-- `DispatchedTrainState`
-- `ScheduledTrain`
-- `ScheduledRouteBlock`
-- `MovementPlanner`
-- `TrainLocationTracker`
-- `TrainDispatchCoordinator`
-- `TrackService.PositionTracking.cs`
-- `TrackTopology.cs`
+## 3. Measure the problem before implementing major changes
 
-### Required behavior
+Add lightweight, development-only performance diagnostics as needed.
 
-The train's progress must be represented by its current occurrence or index in the ordered route, not just a unique block ID.
+Use `Stopwatch` or another suitable low-overhead mechanism.
 
-For example, the first visit to GREEN-85 and the second visit to GREEN-85 must be distinguishable.
+At minimum, investigate:
 
-Verify that:
+- Duration of a complete Track Controller reevaluation.
+- Number of reevaluations per second, per wayside.
+- Duration of `TerritoryRuntimeRouter.PollAllAsync()`.
+- Duration of processing Track Model feedback and CTC movement messages.
+- Time spent waiting for the router's operation semaphore.
+- Duration and frequency of UI refreshes.
+- Actual delivery cadence of simulation clock updates.
 
-- Physical dispatch accepts the valid full route.
-- Track Model position tracking supports repeated blocks in the planned route.
-- Cumulative position remains continuous and does not reset when a block is revisited.
-- CTC location inference advances along the correct route occurrence.
-- An occupancy transition does not accidentally move the train to the wrong occurrence of a repeated block.
-- Route updates and movement-plan indices remain valid.
-- The train is not incorrectly marked as having completed its route on the first visit to a repeated block.
+Measure under the normal 16-wayside course deployment, preferably with an active Green Line train.
 
-Preserve the existing principle that the CTC infers train identity from anonymous block occupancy and known routes.
+Distinguish between:
+- CPU-bound computation.
+- Lock contention.
+- Named-pipe communication delays.
+- WPF rendering delays.
+- Actual shared-clock timing issues.
 
-Do not introduce train IDs into Track Controller block-occupancy reports just to simplify tracking.
+Identify the dominant bottlenecks and prioritize fixing those.
 
-When occupancy information is ambiguous, retain conservative behavior rather than guessing.
+Avoid adding noisy logging to every simulation tick in the final production configuration.
 
----
+## 4. Implement the necessary performance fixes
 
-## 4. Fix movement authority across repeated switches and route segments
+After determining the causes, implement targeted optimizations.
 
-**This is a critical part of the task. Do not stop after fixing route generation.**
+Prioritize changes in the Track Controller because the regression appeared after recent Track Controller changes.
 
-The Track Controller currently rejects a movement request that revisits the same block.
+In general:
 
-See:
+1. Eliminate genuinely redundant reevaluation and polling.
+2. Avoid repeating identical work across publishers.
+3. Reduce unnecessary synchronization and lock contention.
+4. Optimize expensive repeated PLC/route computations where measurements justify it.
+5. Improve UI refresh efficiency.
+6. Preserve correctness of all asynchronous and concurrent operations.
 
-`src/TrackController/TrackController.Core/Services/TrackControllerService.Requests.cs`
+Avoid using arbitrary delays, slowing the simulation clock, or increasing timeout values simply to hide the performance problem.
 
-The existing `SubmitMovement()` validation includes a distinct-block check.
+Do not blindly introduce `Task.Run()` everywhere. Address the actual expensive operations and contention first.
 
-This is reasonable for a single protected movement request, even though the train's entire journey can revisit blocks.
+### Critical safety requirements
 
-Additionally, the recently added automatic switch-alignment functionality derives switch demands from active movement requests.
+All existing behavior must be maintained:
 
-If one request includes both visits to switch 77 or switch 85, the system may demand two different positions from the same switch simultaneously.
+- Waysides continue independently evaluating their assigned safety responsibilities.
+- Cross-territory movement still requires coordinated approval.
+- The Track Controller still automatically aligns switches correctly.
+- Signal and crossing protection remains intact.
+- Occupancy and feedback freshness are enforced.
+- Stale feedback or communication failure causes authority to be withheld.
+- Movement authorization is never granted from an incomplete or stale assessment.
+- Previously issued authority is not increased unexpectedly.
+- Authority withdrawal reaches the Track Model promptly.
+- Request and feedback watchdogs continue functioning correctly.
+- Train identity and authority handoffs remain correct.
 
-### Required solution
+**Do not solve performance problems by removing safety checks or bypassing wayside coordination.**
 
-Design and implement a safe way to execute the full route using appropriate movement-authority segments.
+If caching evaluations or snapshots, ensure a safety-relevant change, timeout, or expiration invalidates the cached result immediately or before it could be used unsafely.
 
-**Preferred approach: Keep the full route as the train's planned journey, but issue bounded movement requests over appropriate portions of it.**
+## 5. Regression testing
 
-These requests should not contain repeated block IDs or simultaneous conflicting switch alignments.
+The most important existing test is:
 
-The system must automatically progress between these segments as the train advances.
+`tests/Integration.Tests/GreenLineFullRouteIntegrationTests.cs`
 
-Do not require the dispatcher to manually issue new movement requests at each junction.
+Specifically:
 
-### Requirements for segmentation
+`Train001_YardToEdgebrook_DrivesTheWholeLoopRouteOnRealPhysics`
 
-1. Each movement request covers a contiguous, physically valid portion of the train's route.
-2. Each request contains enough route context for the Track Controller to safely evaluate it.
-3. A request cannot demand two incompatible positions for the same switch.
-4. Switch positions must be commanded and confirmed before the train is authorized to traverse them.
-5. The CTC must automatically prepare or issue further movement requests as the train progresses.
-6. The train must eventually obtain authority through the entire route.
-7. Movement authority must never jump forward or extend implicitly just because a train enters another block.
+This test must continue to pass.
 
-### Preserve existing authority safety
+Also run relevant existing tests covering:
 
-The current system uses a fixed authority endpoint and block-to-block handoff mechanism.
+- Automatic switch alignment.
+- Cross-territory routing.
+- Authority continuity.
+- Three-line integration.
+- Track Controller vital PLC and safety logic.
+- Track Controller WPF behavior.
 
-Preserve its safety guarantees.
+Create focused new tests for any performance-related behavior that changes.
+
+In particular, verify that:
+
+- Repeated polling without state changes does not cause unnecessary full evaluations.
+- A genuine input or safety change still triggers appropriate reevaluation.
+- Expiring feedback and requests still cause timely withholding of authority.
+- Concurrent input and publication do not produce inconsistent snapshots.
+- Performance optimizations do not introduce authorization or switch handoff regressions.
+
+## 6. Performance validation
+
+Compare performance before and after the changes under comparable workloads.
+
+Use the normal course deployment with 16 waysides.
+
+For the Green Line Edgebrook test, check:
+
+- Total wall-clock execution time.
+- Number of evaluations performed.
+- Average and worst-case evaluation duration.
+- Average and worst-case router polling duration.
+- Clock-update latency and irregularity.
+- Whether repeated UI freezes remain visible.
+
+If feasible, test with both 1x and 10x simulation speed.
+
+The target is smooth and responsive train movement without noticeable periodic freezing. Do not treat arbitrary timing thresholds from a different machine as absolute proof of success.
+
+Make sure any improvements are real and measurable rather than merely changing how the delay appears.
+
+## 7. Scope restrictions
+
+Keep this focused on **performance and responsiveness**.
+
+Do not modify unrelated features or redesign existing architecture unnecessarily.
 
 In particular:
 
-- A renewal of an existing request must not extend its authority.
-- A staged successor must not exceed its predecessor's authorized endpoint or speed.
-- A new movement segment that extends beyond an earlier endpoint must use an explicit new request, with a new request ID and full Track Controller evaluation.
-- Do not bypass Track Controller approval.
-- Do not grant optimistic authority while a new segment is being prepared.
-- Do not allow stale or cancelled requests to regain authority.
-- Preserve safe braking behavior if new authority is delayed or withheld.
-- Avoid unnecessary zero-authority gaps when safe, without weakening the existing handoff rules.
+- Do not change the CTC's route-planning algorithm.
+- Do not alter the working Edgebrook route.
+- Do not reduce the deployment from 16 waysides simply to make it faster.
+- Do not change PLC safety decisions or authorization rules.
+- Do not modify train physics or acceleration behavior.
+- Do not change switch semantics.
+- Do not introduce a second simulation clock.
+- Avoid changing other teammates' modules unless a demonstrated performance issue requires it.
 
-Choose segment boundaries carefully, particularly near switch protection zones.
+Prefer a relatively small, well-justified set of modifications over a large architectural rewrite.
 
-A train should not be allowed to move into a switch protection zone and then become permanently unable to change the switch needed for its subsequent route.
+## 8. Final report
 
-The system should prepare the required alignment early enough to avoid this deadlock where safely possible.
+When finished, provide:
 
-### Specific Green Line scenario
+1. **Root cause:** What specifically caused the freezing, supported by measurements or concrete code evidence.
+2. **Changes made:** Files modified and explanation of each significant optimization.
+3. **Performance comparison:** Before-and-after measurements, including evaluation counts and latency where available.
+4. **Testing:** Which tests passed and whether the Edgebrook use case still works.
+5. **Remaining concerns:** Any bottlenecks that were observed but intentionally left unchanged.
 
-The train must successfully:
+Implement the fixes directly in the repository. Do not stop after producing a theoretical analysis.
 
-1. Cross switch 77 on its Normal branch.
-2. Cross switch 85 on its Normal branch.
-3. Travel around the loop to GREEN-100.
-4. Have switch 85 safely transition to Reverse for the second traversal.
-5. Continue back through GREEN-85 and GREEN-84.
-6. Have switch 77 safely transition to Reverse for the second traversal.
-7. Continue to GREEN-101 and onward.
-
-Pay special attention to reservation ownership, approach locking, and the occupancy protection zones around these switches.
-
-If the switch cannot safely move, the authority must remain restricted and the movement should resume automatically when conditions permit.
-
----
-
-## 5. Preserve the automatic switch-alignment fix
-
-The most recent repository change implemented automatic switch positioning and CTC route reservations.
-
-Investigate:
-
-`src/TrackController/TrackController.Core/Services/TrackControllerService.Switching.cs`
-
-And the existing automatic switch tests.
-
-Do not redesign this functionality unnecessarily.
-
-The new routing system must work with:
-
-- Automatic switch-position selection.
-- Track Model switch-position feedback.
-- Switch protection zones.
-- Occupancy-based interlocking.
-- CTC movement reservations.
-- PLC-based switch safety.
-- Approach locking.
-- Movement authority handoff.
-
-The Track Controller remains the final authority for movement.
-
-If supporting repeated routes requires coordination between CTC movement segmentation and switch alignment, implement that coordination through the existing architecture.
-
-Do not simply remove the Track Controller's repeated-block validation or ignore conflicting switch demands without replacing their safety guarantees.
-
----
-
-## 6. Ensure physical movement can continue through the entire journey
-
-The existing Green Line physical movement integration tests demonstrate only a short route near GREEN-63.
-
-Extend the integration so it works through the entire route.
-
-Examine the production communication pipeline:
-
-CTC → Track Controller → Track Model → Train Model → Train Controller
-
-And the return paths for:
-
-- Train commands.
-- Position telemetry.
-- Occupancy.
-- Movement-authority reports.
-- Switch feedback.
-
-Confirm that the train can continuously progress through the full route.
-
-Potential issues to investigate include:
-
-- CTC losing track of a train when it revisits a block.
-- Track Model rejecting valid repeated-block traversal.
-- Movement requests being rejected at route-segment boundaries.
-- Authority failing to transition to the next segment.
-- The Train Controller receiving zero authority unexpectedly.
-- A switch remaining locked by an old movement request.
-- A movement request attempting to align a switch that the train is already occupying.
-- The CTC incorrectly declaring arrival at an intermediate repeated block.
-- A valid next segment being blocked by stale reservation state.
-
-Address problems that directly prevent full-route traversal.
-
-Do not modify unrelated physics or station-control behavior.
-
----
-
-## 7. Required tests
-
-Add comprehensive tests using the repository's existing testing conventions.
-
-### Test A — Correct Green Line route generation
-
-Create a schedule for Train 001 starting at GREEN-63 with Edgebrook (GREEN-9) as its only destination.
-
-Assert that:
-
-- The schedule is accepted.
-- The route begins at GREEN-63.
-- The route ends at GREEN-9.
-- Every consecutive pair is connected.
-- Every step respects the permitted travel direction.
-- Every switch traversal follows valid stem/leg geometry.
-- The route includes both occurrences of switches 77 and 85.
-- No invalid immediate reversals occur.
-- The route does not contain unbounded looping.
-
-Verify the expected 117-block route against the actual current layout.
-
-### Test B — Repeated-block tracking
-
-Simulate valid occupancy transitions around GREEN-85 and GREEN-77.
-
-Verify that the CTC tracks the first and second visits as different route occurrences.
-
-The route index must advance correctly, without confusing one visit with another.
-
-### Test C — Movement segmentation
-
-Verify that the full route produces appropriately bounded movement requests.
-
-Each movement request must:
-
-- Be accepted by the Track Controller.
-- Contain no repeated block IDs.
-- Contain no incompatible demands for the same switch.
-- Respect the correct authority limits.
-- Use valid request IDs and cancellation/renewal semantics.
-
-Verify that subsequent segments are issued automatically.
-
-### Test D — Sequential switch alignment
-
-Verify that:
-
-- GREEN-77 is aligned Normal for the first traversal.
-- GREEN-85 is aligned Normal for the first traversal.
-- GREEN-85 is aligned Reverse for its second traversal.
-- GREEN-77 is aligned Reverse for its second traversal.
-- Subsequent switches are correctly aligned for the route toward Edgebrook.
-
-All alignments must be commanded through the Track Controller and confirmed by actual Track Model feedback.
-
-No test may manually preposition switches to the correct alignment as a workaround.
-
-### Test E — Safety at segment boundaries
-
-Test delayed, unavailable, or unsafe switch alignment and movement authorization.
-
-The train must not be granted movement through an unconfirmed or unsafe junction.
-
-Verify automatic recovery after the obstacle clears when recovery is safe.
-
-### Test F — Complete physical integration
-
-**This is the primary acceptance test.**
-
-Use the real integration infrastructure and production module implementations.
-
-1. Start the shared simulation clock and all five necessary modules.
-2. Load the complete three-line course layout and Track Controller deployment.
-3. Queue Train 001 on Green from GREEN-63 to Edgebrook, GREEN-9.
-4. Advance simulation time to dispatch.
-5. Confirm physical train placement and activation.
-6. Confirm the Train Controller commands traction.
-7. Observe the train's movement through real Train Model physics.
-8. Observe actual Track Model block occupancy.
-9. Confirm CTC tracking and movement authority remain consistent.
-10. Verify traversal of the loop, including both visits to GREEN-77 and GREEN-85.
-11. Verify the train proceeds through GREEN-101 and GREEN-150.
-12. Verify traversal through GREEN-28 and GREEN-13.
-13. Verify the train physically reaches GREEN-9.
-
-The integration test must not teleport the train or inject fake occupancy transitions to make it pass.
-
-It should exercise the real system under an appropriately accelerated simulation clock and use bounded assertions/timeouts.
-
-A separate fast unit test may simulate occupancy transitions to test routing logic, but that is not a substitute for the real physical integration test.
-
-If completing the full physical test is blocked by unrelated station-stopping functionality, report that distinction accurately. Do not silently bypass the missing functionality or mark the test as passed.
-
----
-
-## 8. Regression testing
-
-After implementing:
-
-1. Build the complete solution.
-2. Run CTC unit tests.
-3. Run Track Controller unit tests.
-4. Run Track Model unit tests.
-5. Run the existing Blue Line physical movement tests.
-6. Run the automatic switch-alignment tests.
-7. Run authority-continuity and block-handoff tests.
-8. Run existing Red and Green Line integration tests.
-9. Run all new routing and full-route integration tests.
-10. Run the full test suite where supported.
-
-Ensure the changes do not break existing simpler routes.
-
-A Blue Line route from block 1 to block 15 should continue to operate without requiring any special scheduling logic.
-
-Do not weaken test assertions or safety checks merely to make the new route pass.
-
----
-
-## 9. Implementation boundaries
-
-This project has multiple team members working on different modules.
-
-Make only changes necessary for this routing integration.
-
-Prefer changes in the CTC module, but modify the Track Controller and Track Model where necessary to correctly support route execution.
-
-Avoid changes to Train Model and Train Controller unless inspection demonstrates a direct routing-related blocker.
-
-Preserve existing module boundaries and message contracts whenever possible.
-
-Do not hardcode Green Line topology into production code.
-
-Do not introduce unsafe shortcuts, manually force switches, bypass authorization, or generate simulated train movement in place of real physics.
-
-Do not commit or push automatically.
-
----
-
-## 10. Final report
-
-When finished, provide a report with the following sections.
-
-### A. Root causes
-
-Explain all reasons the previous implementation could not execute the full route to Edgebrook.
-
-### B. Changes implemented
-
-List the important files modified and explain each change.
-
-### C. New routing algorithm
-
-Explain how the planner handles one-way track, switches, and repeated blocks.
-
-### D. Movement segmentation
-
-Explain how the system prevents conflicting switch demands and automatically advances movement authority across route segments.
-
-### E. Full Green Line route
-
-Provide the actual route generated from GREEN-63 to GREEN-9, highlighting the repeated blocks and switch positions.
-
-### F. Test results
-
-Report exactly which tests passed, failed, or could not be executed.
-
-### G. Remaining limitations
-
-Identify any functionality that still prevents a complete physical route traversal, separately from station stopping and arrival-time accuracy.
-
-### H. Manual verification
-
-Provide concise steps for testing the updated route in the actual WPF applications.
-
----
-
-## Primary acceptance criterion
-
-**Using the CTC Schedule Builder, the dispatcher can schedule Train 001 from the Green Line yard (GREEN-63) to Edgebrook Station (GREEN-9).**
-
-The CTC automatically constructs the correct 117-visit route, the train physically moves through the complete route using all production modules, the necessary switches align safely during the first and second traversals, authority advances appropriately, and the CTC continues tracking the train until its front enters GREEN-9.
-
-No manual switch positioning, route editing, movement authorization, or artificial occupancy updates should be required.
-
-For this iteration of work, do not require precise 3:00 PM arrival or physical platform stopping. Those will be addressed separately.
-
-**Inspect the current repository, implement the required changes, and verify the results. Do not stop after producing a proposed design.**
+**The priority is to make the currently working integrated train simulation run smoothly without breaking the behavior we have spent the last several iterations getting correct.**

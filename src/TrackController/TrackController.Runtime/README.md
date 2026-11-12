@@ -115,6 +115,16 @@ withholds the combined route and its continuation. A rejected partial delivery
 is cancelled at every participant. The router serializes inputs and polls all
 participants before publishing a completed transaction; a Pi lease cannot be
 extended by transport delay. Cross-line routes remain invalid.
+
+A poll asks every territory once (Pi territories first, then the local ones, so
+a slow Pi cannot consume a local lease). A controller whose inputs, carried-over
+state and time thresholds have not changed since its last evaluation answers a
+poll with that evaluation re-stamped instead of repeating it (see
+`TrackControllerService.EvaluationReuse.cs`), so polling territories that saw
+no change costs almost nothing. Local territories receive feedback batches as
+measurements, without another JSON round trip; a Pi still receives an envelope.
+Set `TRACKCONTROLLER_PERF=1` to have the operator host print evaluation, poll,
+lock-wait and message-handling statistics every 10 s.
 ## External test inputs and resets
 
 Input source is independent of placement. The separate `TrackController.TestUI.Wpf`

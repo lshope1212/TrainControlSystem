@@ -208,6 +208,10 @@ public sealed class TrackModelConnection
         var previousTrains = new HashSet<string>(StringComparer.Ordinal);
         var sentDemand = new Dictionary<string, (int Waiting, DateTimeOffset SentAt)>(StringComparer.Ordinal);
         var sentBeacons = new Dictionary<string, (string Payload, DateTimeOffset SentAt)>(StringComparer.Ordinal);
+        // One beacon READ per pass over a beacon block: a new read when the train was not over a
+        // beacon in the previous snapshot or the announced station changed.
+        var beaconReads = new Dictionary<string, (string Station, long Sequence)>(StringComparer.Ordinal);
+        var overBeacon = new HashSet<string>(StringComparer.Ordinal);
         try
         {
             await foreach (var snapshot in _trainPassengerPending.Reader.ReadAllAsync(token))
@@ -227,14 +231,22 @@ public sealed class TrackModelConnection
                     if (await TrySendAsync(_endpoints.TrainModel, passenger, token))
                         sentDemand[passenger.TrainId] = (passenger.WaitingToBoard, DateTimeOffset.UtcNow);
                 }
+                var nowOverBeacon = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var beacon in snapshot.Beacons)
                 {
+                    nowOverBeacon.Add(beacon.TrainId);
+                    beaconReads.TryGetValue(beacon.TrainId, out var read);
+                    if (!overBeacon.Contains(beacon.TrainId) || read.Station != beacon.StationName)
+                        read = (beacon.StationName, read.Sequence + 1);
+                    beaconReads[beacon.TrainId] = read;
+                    beacon.ReadSequence = read.Sequence;
                     var payload = MessageSerializer.Serialize(beacon);
                     if (sentBeacons.TryGetValue(beacon.TrainId, out var previous) && previous.Payload == payload
                         && DateTimeOffset.UtcNow - previous.SentAt < DefaultFeedbackHeartbeat) continue;
                     if (await TrySendAsync(_endpoints.TrainModel, beacon, token))
                         sentBeacons[beacon.TrainId] = (payload, DateTimeOffset.UtcNow);
                 }
+                overBeacon = nowOverBeacon;
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }

@@ -22,6 +22,12 @@ public class BeaconMessage
 
     /// <summary>Optional announcement text to display/play on approach.</summary>
     public string Announcement { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Identifies one beacon READ (the train passing over the beacon). Resends of the same read keep
+    /// the value; the next pass, even of the same station, gets a new one. 0 = not provided.
+    /// </summary>
+    public long ReadSequence { get; set; }
 }
 
 /// <summary>Which side of the train the station platform is on.</summary>

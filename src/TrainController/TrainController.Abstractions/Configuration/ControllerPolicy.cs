@@ -34,6 +34,14 @@ public sealed record ControllerPolicy
     /// </summary>
     public double AuthorityBrakingMarginMeters { get; init; }
 
+    /// <summary>
+    /// PROVISIONAL default 0.45 m/s (about 1 mph). Overspeed protection applies the service brake
+    /// only once the speed exceeds the limit by MORE than this, and keeps braking until the speed
+    /// is back at or below the limit (hysteresis). Without a band, the tiny overshoot of normal
+    /// speed regulation would brake and re-accelerate the train over and over. 0 = no band.
+    /// </summary>
+    public double OverspeedToleranceMetersPerSecond { get; init; } = 0.45;
+
     /// <summary>PROVISIONAL default (30 s). How long doors stay open at a station (both modes).</summary>
     public double StationDwellTimeSeconds { get; init; } = 30.0;
 
