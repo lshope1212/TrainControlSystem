@@ -206,31 +206,59 @@ public sealed class BlueLineTests
         Assert.AreEqual(SignalState.Green, fixture.Block("6").CommandedSignal);
     }
 
-    /// <summary>Verifies that a request through Station C needs the switch moved and reported reverse first.</summary>
+    /// <summary>
+    /// A request through Station C makes the controller command switch 5 Reverse by itself (no switch
+    /// request), and authority waits for the reported Reverse.
+    /// </summary>
     [TestMethod]
-    public void SubmitMovement_ToStationC_RequiresReverseSwitchFeedback()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_ToStationC_CommandsReverse_AndGrantsOnlyOnReverseFeedback(bool plc)
     {
-        var fixture = new Fixture();
-        StringAssert.Contains(fixture.Submit("1", ToStationC).MovementReason, "switch 5", StringComparison.OrdinalIgnoreCase);
+        var fixture = new Fixture(plc);
+        var withheld = fixture.Submit("1", ToStationC);
+        Assert.AreEqual(0d, withheld.AuthorizedAuthorityMeters);
+        StringAssert.Contains(withheld.MovementReason, "switch 5 commanded Reverse for this route");
+        Assert.AreEqual(SwitchPosition.Reverse, fixture.Block("5").CommandedSwitch, "The route sets the switch.");
+        Assert.AreEqual(SwitchPosition.Normal, fixture.Block("5").ReportedSwitch, "A command is not feedback.");
+
+        // A report that still says Normal grants nothing; the command stays Reverse.
+        fixture.Feedback();
         Assert.AreEqual(0d, fixture.Service.GetSnapshot().Authorizations.Last().AuthorizedAuthorityMeters);
-        fixture.Service.RequestSwitch(new() { BlockId = "5", RequestedPosition = SwitchPosition.Reverse });
+        Assert.AreEqual(SwitchPosition.Reverse, fixture.Block("5").CommandedSwitch);
+
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "5").Switch = SwitchPosition.Reverse);
         var authorization = fixture.Service.GetSnapshot().Authorizations.Last();
         Assert.AreEqual(450d, authorization.AuthorizedAuthorityMeters);
         Assert.AreEqual(SignalState.Green, fixture.Block("11").CommandedSignal);
         Assert.AreEqual(SignalState.Red, fixture.Block("6").CommandedSignal);
+        Assert.AreEqual(SwitchPosition.Reverse, fixture.Block("5").CommandedSwitch, "Held where the granted route needs it.");
     }
 
-    /// <summary>Verifies that the normal-branch route is withheld while the switch points to Station C.</summary>
+    /// <summary>
+    /// With the switch lying Reverse, a Station B route is withheld until the switch reports Normal,
+    /// which the controller commands by itself; it never grants over the branch to Station C.
+    /// </summary>
     [TestMethod]
-    public void SubmitMovement_ToStationBWithReverseSwitch_WithholdsMovement()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SubmitMovement_ToStationBWithReverseSwitch_CommandsNormal_AndWithholdsUntilReported(bool plc)
     {
-        var fixture = new Fixture();
+        var fixture = new Fixture(plc);
         fixture.Service.RequestSwitch(new() { BlockId = "5", RequestedPosition = SwitchPosition.Reverse });
         fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "5").Switch = SwitchPosition.Reverse);
         var authorization = fixture.Submit("1", ToStationB);
         Assert.AreEqual(0d, authorization.AuthorizedAuthorityMeters);
-        StringAssert.Contains(authorization.MovementReason, "connects to 11");
+        StringAssert.Contains(authorization.MovementReason, "switch 5 commanded Normal for this route");
+        Assert.AreEqual(SwitchPosition.Normal, fixture.Block("5").CommandedSwitch, "The route supersedes the earlier switch request.");
+
+        fixture.Feedback(rows => rows.Single(feedback => feedback.BlockId == "5").Switch = SwitchPosition.Reverse);
+        Assert.AreEqual(0d, fixture.Service.GetSnapshot().Authorizations.Last().AuthorizedAuthorityMeters, "Never over the branch the switch reports.");
+
+        fixture.Feedback();
+        Assert.AreEqual(450d, fixture.Service.GetSnapshot().Authorizations.Last().AuthorizedAuthorityMeters);
+        Assert.AreEqual(SignalState.Green, fixture.Block("6").CommandedSignal);
+        Assert.AreEqual(SignalState.Red, fixture.Block("11").CommandedSignal);
     }
 
     /// <summary>Verifies that the outbound-only map offers no route from one branch back through the junction to the other.</summary>

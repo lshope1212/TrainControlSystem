@@ -51,6 +51,9 @@ public sealed partial class TrackControllerService
                 {
                     GetBlock(message.TargetBlockId).Authority = null;
                     DiscardSuccessorsOf(message.RequestId);
+                    // A cancelled route never comes back: a delayed or repeated copy of it must not
+                    // replace the route CTC sent instead (and pull its switches back).
+                    _cancelledRequests[message.RequestId] = current.Value;
                 }
 
                 Reevaluate();
@@ -60,6 +63,17 @@ public sealed partial class TrackControllerService
             if (_retiredRequests.Contains(message.RequestId))
             {
                 throw new ArgumentException("This request's target block cleared. Submit a new request ID and current target block.");
+            }
+
+            if (_cancelledRequests.TryGetValue(message.RequestId, out var cancelled))
+            {
+                if (cancelled.TargetBlockId == message.TargetBlockId && cancelled.EntryBlockId == message.EntryBlockId && cancelled.PathBlockIds.SequenceEqual(message.PathBlockIds ?? []))
+                {
+                    throw new ArgumentException("This movement request was cancelled; a copy of it cannot restore its route. Submit the current route.");
+                }
+
+                // The ID is being reused for a different route: a new movement, evaluated from scratch.
+                _cancelledRequests.Remove(message.RequestId);
             }
 
             if (message.AuthorityReference != MovementSuggestionMessage.BlockEntryReference || !double.IsFinite(message.SuggestedSpeedMetersPerSecond) || message.SuggestedSpeedMetersPerSecond < 0 || !double.IsFinite(message.SuggestedAuthorityMeters) || message.SuggestedAuthorityMeters < 0 || message.PathBlockIds is null || message.PathBlockIds.Count > _blocks.Count)
@@ -128,7 +142,11 @@ public sealed partial class TrackControllerService
         }
     }
 
-    /// <summary>Accepts a switch request only when its complete protection zone permits movement.</summary>
+    /// <summary>
+    /// Accepts a switch request only when its complete protection zone permits movement. Every CTC
+    /// reservation in the zone locks it out, including a route that needs this switch: that route's
+    /// alignment is set automatically (see <see cref="ComputeSwitchDemands"/>) and supersedes this request.
+    /// </summary>
     public string RequestSwitch(SwitchPositionRequestMessage message)
     {
         lock (_gate)
@@ -233,7 +251,17 @@ public sealed partial class TrackControllerService
         }
     }
 
-    private string? GetSwitchProtectionReason(Block block)
+    /// <summary>
+    /// Why the switch may not move now; null when its whole protection zone permits it. Applied after
+    /// the PLC decision in both modes, to automatic route alignment and to explicit switch requests.
+    /// </summary>
+    /// <param name="requesterId">
+    /// The movement request whose route needs this switch moved: its own reservation of the zone does
+    /// not lock the switch. Null for a dispatcher's or maintainer's request, which every CTC
+    /// reservation in the zone locks out.
+    /// </param>
+    /// <param name="automatic">True for automatic route alignment, which also never moves a switch whose zone is closed or pending closure for maintenance.</param>
+    private string? GetSwitchProtectionReason(Block block, string? requesterId = null, bool automatic = false)
     {
         string prefix = $"Switch {block.Definition.BlockId} locked: ";
         foreach (string id in block.Definition.SwitchProtectionBlockIds)
@@ -254,14 +282,26 @@ public sealed partial class TrackControllerService
                 return $"{prefix}block {id} reports a fault or closure.";
             }
 
-            if (zone.Feedback.IsReservedByCtc != false)
+            if (automatic && zone.Maintenance != "Open")
             {
-                return $"{prefix}block {id} is {(zone.Feedback.IsReservedByCtc == true ? "reserved by CTC" : "missing CTC reservation feedback")}.";
+                return $"{prefix}block {id} is {zone.Maintenance.ToLowerInvariant()} for maintenance.";
+            }
+
+            if (ReservationHolder(zone, requesterId) is { } holder)
+            {
+                return $"{prefix}block {id} is reserved by CTC for {holder}.";
             }
         }
 
         var movement = _snapshot?.Authorizations.FirstOrDefault(authorization => authorization.AuthorizedAuthorityMeters > 0 && new[] { authorization.Request!.TargetBlockId }.Concat(authorization.Request!.PathBlockIds).Intersect(block.Definition.SwitchProtectionBlockIds).Any());
-        return movement is null ? null : $"{prefix}active movement from block {movement.Request!.TargetBlockId} uses its protection zone.";
+        if (movement is not null)
+        {
+            return $"{prefix}active movement from block {movement.Request!.TargetBlockId} uses its protection zone.";
+        }
+
+        return IsApproachLocked(block)
+            ? $"{prefix}approach locked for {SwitchApproachLockSeconds:0} s after an authority over its protection zone was withdrawn while its train may still be approaching."
+            : null;
     }
 
     private bool CrossingRequired(Block block) => block.Definition.CrossingProtectionBlockIds.Any(id =>

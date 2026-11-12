@@ -301,11 +301,50 @@ public sealed class WaysideSafetyTests
         StringAssert.Contains(exception.Message, "occupied");
     }
 
-    /// <summary>Verifies that unknown reservation blocks switch movement.</summary>
+    /// <summary>
+    /// CTC reservations are the controller's own accepted movement requests: one whose route covers the
+    /// zone locks the switch against a dispatcher's request, whatever the Track Model reports.
+    /// </summary>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void RequestSwitch_UnknownReservation_RejectsMovement(bool hardware)
+    public void RequestSwitch_ZoneReservedByCtcRoute_RejectsMovement(bool hardware)
+    {
+        var fixture = new Fixture(hardware);
+        fixture.Feedback(rows => rows.ForEach(feedback =>
+        {
+            feedback.Occupancy = feedback.BlockId == "3" ? OccupancyState.Occupied : OccupancyState.Clear;
+            feedback.IsReservedByCtc = null; // The Track Model does not know CTC routes.
+        }));
+        fixture.Service.SubmitMovement(fixture.Request("3", "4", "5", "6"));
+        var status = fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "5");
+        Assert.IsTrue(status.IsReservedByCtc, "The controller reports the reservation it holds.");
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
+        StringAssert.Contains(exception.Message, "reserved by CTC");
+        Assert.AreEqual(SwitchPosition.Normal, fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "6").CommandedSwitch);
+    }
+
+    /// <summary>A reservation the track feedback does report is honoured as an additional one.</summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestSwitch_ReservationReportedInFeedback_RejectsMovement(bool hardware)
+    {
+        var fixture = new Fixture(hardware);
+        fixture.Feedback(rows => rows.ForEach(feedback =>
+        {
+            feedback.Occupancy = OccupancyState.Clear;
+            feedback.IsReservedByCtc = feedback.BlockId == "10";
+        }));
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
+        StringAssert.Contains(exception.Message, "block 10 is reserved by CTC");
+    }
+
+    /// <summary>With no reservation, no occupancy and no authority in the zone, the dispatcher's switch request is commanded.</summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RequestSwitch_UnreservedClearZone_CommandsTheSwitch(bool hardware)
     {
         var fixture = new Fixture(hardware);
         fixture.Feedback(rows => rows.ForEach(feedback =>
@@ -313,8 +352,8 @@ public sealed class WaysideSafetyTests
             feedback.Occupancy = OccupancyState.Clear;
             feedback.IsReservedByCtc = null;
         }));
-        var exception = Assert.Throws<InvalidOperationException>(() => fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse }));
-        StringAssert.Contains(exception.Message, "reservation feedback");
+        fixture.Service.RequestSwitch(new() { BlockId = "6", RequestedPosition = SwitchPosition.Reverse });
+        Assert.AreEqual(SwitchPosition.Reverse, fixture.Service.GetSnapshot().Blocks.Single(block => block.BlockId == "6").CommandedSwitch);
     }
 
     /// <summary>Rejects a paused request explicitly rather than silently applying it after a later resume.</summary>
