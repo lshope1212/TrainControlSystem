@@ -9,6 +9,17 @@ public interface ITrackService
     TimeSpan SystemTime { get; }
     int LayoutRevision { get; }
     event EventHandler? StateChanged;
+    /// <summary>One atomic occupancy step of a train, raised while the layout shows exactly that step.</summary>
+    event EventHandler<TrackOccupancyTransitionEventArgs>? OccupancyTransition;
+    /// <summary>Placement, fault and retirement of trains tracked from position telemetry.</summary>
+    event EventHandler<TrainTrackingEventArgs>? TrainTrackingChanged;
+    IReadOnlyList<TrainTrackingSnapshot> TrackedTrains { get; }
+    TrainTrackingSnapshot? FindTrackedTrain(string trainId);
+    TrainPlacementResult RequestTrainPlacement(TrainDispatchRequestMessage request);
+    bool CancelPendingPlacement(string dispatchRequestId, string reason);
+    TrainPositionResult ApplyTrainPosition(TrainStateMessage message);
+    TrainPlacementResult UpdateTrainRoute(TrainRouteUpdateMessage update);
+    bool RetireTrain(string trainId, string reason);
     TrackBlock? FindBlock(string blockId);
     void LoadLayout(TrackLayout layout);
     void ApplyCommand(TrackModelCommandMessage message);

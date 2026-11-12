@@ -8,13 +8,16 @@
     the shared format (see TrainControl.Common/Communication/MessageSerializer) and disconnects.
     It hosts no pipe, so it never competes with the real CTC, Track Controller or any TestUI.
 
-    The Track Model applies the update exactly as it would from the Train Model: the train's
-    previous block clears, the new block becomes occupied, and the measured occupancy flows
-    Track Model -> Track Controller -> CTC.
+    The Track Model places or moves the train by block: the train's previous block clears, the new
+    block becomes occupied, and the measured occupancy flows Track Model -> Track Controller -> CTC.
+
+    This is a stand-in for testing without the Train Model. In the integrated system a train is
+    placed by CTC's dispatch and moved by the Train Model's position telemetry; the Track Model then
+    refuses block moves for that train (-Remove still retires it and clears its whole footprint).
 
 .PARAMETER TrainId
-    Train label. The Track Model demonstration starts with train "01" in block 1; CTC-dispatched
-    trains use the canonical three-digit IDs ("000", "001", ...).
+    Train ID. Use the canonical three-digit fleet IDs "001"-"010" that CTC dispatches; the
+    production Track Model starts with no trains.
 
 .PARAMETER Block
     Block the train is now in, as the Track Model names it: Blue Line "1"-"15", Red Line
@@ -31,16 +34,16 @@
     Track Model inbound pipe; the production name by default.
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 01 -Block 2
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 001 -Block 2
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 07 -Block RED-30
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 007 -Block RED-30
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 08 -Block GREEN-65
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 008 -Block GREEN-65
 
 .EXAMPLE
-    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 01 -Remove
+    .\tools\Send-TrackModelTrainUpdate.ps1 -TrainId 001 -Remove
 #>
 [CmdletBinding(DefaultParameterSetName = 'Move')]
 param(

@@ -179,7 +179,7 @@ public sealed class CourseNetworkDataTests
     public void TrackModelLayoutMessage_LoadsAllThreeLinesIntoCtc()
     {
         var track = new TrackService();
-        CourseTrackLayout.LoadDemonstration(track);
+        CourseTrackLayout.Load(track);
         var message = track.CreateLayoutMessage();
         CollectionAssert.AreEqual(new[] { "Blue Line", "Red Line", "Green Line" }, message.Lines.Select(line => line.Name).ToArray());
 

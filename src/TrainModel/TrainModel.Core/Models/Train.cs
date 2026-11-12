@@ -19,8 +19,9 @@ public class Train
     public TrainSpecs Specs { get; set; } = new();
 
     // ---- Kinematics (the plant's state vector) ----
-    /// <summary>Front-of-train position along the line, meters. Authority and
-    /// occupancy are both referenced from the front of the train.</summary>
+    /// <summary>Cumulative distance the FRONT of the train has travelled since it was activated
+    /// (dispatched), meters: 0 at activation, integrated from velocity. Not a block, not a map
+    /// coordinate, never reset at a block boundary; the Track Model maps it onto the route.</summary>
     public double PositionMeters { get; set; }
 
     /// <summary>Current speed, m/s. This is the headline output: actual speed.</summary>

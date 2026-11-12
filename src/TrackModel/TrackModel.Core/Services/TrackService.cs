@@ -1,6 +1,7 @@
 using TrackModel.Core.Interfaces;
 using TrackModel.Core.Models;
 using TrackModel.Core.Persistence;
+using TrainControl.Common.Identity;
 using TrainControl.Common.Utilities;
 using TrainControl.Contracts.Enums;
 using TrainControl.Contracts.Messages;
@@ -8,7 +9,14 @@ namespace TrackModel.Core.Services;
 
 /// <summary>Owns track state. The host serializes mutations. Train position comes
 /// from telemetry; this service does not simulate train physics.</summary>
-public class TrackService : ITrackService
+/// <remarks>
+/// A train is on the track either by block (<see cref="ApplyTrainUpdate"/>: the development harness and
+/// TestUIs place it in one block) or by position (<see cref="RequestTrainPlacement"/> then
+/// <see cref="ApplyTrainPosition"/>: a dispatched train whose footprint follows the Train Model's cumulative
+/// position and may span several blocks). Either way exactly one block per train is its head
+/// (<see cref="TrackBlock.IsTrainHead"/>), and only the head carries the train's environment.
+/// </remarks>
+public partial class TrackService : ITrackService
 {
     private readonly HashSet<(string TrainId, string ExchangeId)> _exchanges = [];
     private readonly Queue<(TimeSpan Time, string LineId, int Count)> _sales = [];
@@ -21,9 +29,11 @@ public class TrackService : ITrackService
     public void LoadLayout(TrackLayout layout)
     {
         TrackLayoutValidator.Validate(layout); // Validate before replacing live state.
+        // Tracked trains' routes and footprints refer to the old layout: they leave the track with it.
+        ForgetTrackedTrains("the track layout was replaced");
         foreach (var b in layout.Blocks)
         {
-            b.IsOccupied = b.IsClosed = false;
+            b.IsOccupied = b.IsClosed = b.IsTrainHead = false;
             b.TrainId = string.Empty;
             b.ActualSpeedMetersPerSecond = b.CommandedSpeedMetersPerSecond = b.AuthorityMeters = 0;
             b.MovementRequestId = b.AuthorityEntryBlockId = b.TrainEntryBlockId = string.Empty;
@@ -102,10 +112,18 @@ public class TrackService : ITrackService
         return expired;
     }
 
-    /// <summary>Where each train on the track is and the speed/authority code it receives now, by train ID.</summary>
+    /// <summary>
+    /// Where each train's FRONT is and the speed/authority code it receives now, by train ID: exactly one
+    /// entry per train, from its head block. A train spanning several blocks is still one train; its
+    /// trailing blocks are occupied but carry none of its codes.
+    /// </summary>
     public IReadOnlyDictionary<string, (string BlockId, double Speed, double Authority, string RequestId)> CaptureTrainCodes() =>
-        Layout.Blocks.Where(b => b.IsOccupied && b.TrainId.Length > 0)
-            .ToDictionary(b => b.TrainId, b => (b.Id, b.TrainCommandedSpeedMetersPerSecond, b.TrainAuthorityMeters, b.CodeAppliesToOccupant ? b.MovementRequestId : string.Empty), StringComparer.Ordinal);
+        Layout.Blocks.Where(b => b.IsOccupied && b.IsTrainHead && b.TrainId.Length > 0)
+            .GroupBy(b => b.TrainId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count() == 1
+                ? (g.Single().Id, g.Single().TrainCommandedSpeedMetersPerSecond, g.Single().TrainAuthorityMeters, g.Single().CodeAppliesToOccupant ? g.Single().MovementRequestId : string.Empty)
+                : (string.Empty, 0d, 0d, string.Empty), // never happens; two heads would be an internal error, so the train gets a stop code
+                StringComparer.Ordinal);
 
     /// <summary>Validates, then applies one command; true when the block's state changed.</summary>
     private bool ApplyCommandCore(TrackModelCommandMessage message, long sequence = 0, DateTimeOffset? expiresAt = null)
@@ -140,6 +158,16 @@ public class TrackService : ITrackService
         return changed;
     }
 
+    /// <summary>
+    /// Places, moves or removes a train by block (the development harness and the TestUIs), and applies a
+    /// passenger exchange at the train's current block. An empty CurrentBlockId removes the train.
+    /// </summary>
+    /// <remarks>
+    /// A train tracked from Train Model position telemetry is never moved by block: an update naming its
+    /// head block only applies the exchange, an empty block retires it (clearing its whole footprint), and
+    /// any other block is refused. A manual placement of a train whose dispatch is still waiting for its
+    /// initial report takes over from that pending placement.
+    /// </remarks>
     public void ApplyTrainUpdate(TrackModelTrainUpdateMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -151,9 +179,31 @@ public class TrackService : ITrackService
         var hasExchange = message.BoardingPassengers != 0 || message.DisembarkingPassengers != 0;
         var applyExchange = hasExchange && !_exchanges.Contains(exchangeKey);
         TrackBlock? destination = string.IsNullOrWhiteSpace(message.CurrentBlockId) ? null : RequireBlock(message.CurrentBlockId);
-        if (destination is not null && destination.IsOccupied && destination.TrainId != message.TrainId)
+
+        string trainId = message.TrainId;
+        TrackBlock? previous;
+        if (TrainIdConvention.TryNormalize(message.TrainId, out var canonical) && _trains.TryGetValue(canonical, out var tracked)
+            && tracked.Status != TrainTrackingStatus.PendingPlacement)
+        {
+            if (destination is null)
+            {
+                if (hasExchange) throw new ArgumentException("Passenger exchange requires a station block.");
+                RetireTrain(canonical, "removed from the track by a train update with no block");
+                return;
+            }
+
+            if (destination.Id != tracked.HeadBlockId)
+                throw new InvalidOperationException($"Train {canonical} is tracked from Train Model position telemetry (front in {tracked.HeadBlockId}); a block move to {destination.Id} is not accepted. Remove the train first.");
+            trainId = canonical;
+            previous = destination; // an exchange at its head block: no occupancy change
+        }
+        else
+        {
+            previous = Layout.Blocks.FirstOrDefault(b => b.TrainId == message.TrainId);
+        }
+
+        if (destination is not null && destination.IsOccupied && destination.TrainId != trainId)
             throw new InvalidOperationException($"Block {destination.Id} is occupied by train {destination.TrainId}.");
-        var previous = Layout.Blocks.FirstOrDefault(b => b.TrainId == message.TrainId);
         if (destination is not null && destination.IsClosed && previous != destination)
             throw new InvalidOperationException("A train cannot enter a block closed for maintenance.");
         if (hasExchange && string.IsNullOrWhiteSpace(message.ExchangeId))
@@ -171,17 +221,28 @@ public class TrackService : ITrackService
                 || message.DisembarkingPassengers > int.MaxValue - destination.DisembarkingPassengers)
                 throw new ArgumentException("Passenger totals are too large.");
         }
-        // Validation precedes mutation: a rejected move leaves occupancy intact.
-        if (previous is not null && previous != destination)
+
+        // A manual block placement of a train whose dispatch has not reached the track takes over from it.
+        if (TrainIdConvention.TryNormalize(message.TrainId, out var pendingId) && _trains.TryGetValue(pendingId, out var pending)
+            && pending.Status == TrainTrackingStatus.PendingPlacement)
         {
-            previous.TrainId = string.Empty; previous.IsOccupied = false; previous.ActualSpeedMetersPerSecond = 0;
-            previous.TrainEntryBlockId = string.Empty;
+            _trains.Remove(pendingId);
+            Raise(TrainTrackingEventKind.PlacementWithdrawn, pending, destination is null
+                ? "withdrawn by a train update with no block"
+                : $"superseded by a manual block placement at {destination.Id}");
+        }
+
+        // Validation precedes mutation: a rejected move leaves occupancy intact.
+        bool moved = previous != destination;
+        if (previous is not null && moved)
+        {
+            ClearBlock(previous);
         }
         if (destination is not null)
         {
             // The physical boundary the train crossed; a continuation code applies only across it.
-            if (previous != destination) destination.TrainEntryBlockId = previous?.Id ?? string.Empty;
-            destination.TrainId = message.TrainId; destination.IsOccupied = true;
+            if (moved) destination.TrainEntryBlockId = previous?.Id ?? string.Empty;
+            destination.TrainId = trainId; destination.IsOccupied = true; destination.IsTrainHead = true;
             destination.ActualSpeedMetersPerSecond = message.ActualSpeedMetersPerSecond;
             if (applyExchange)
             {
@@ -192,6 +253,11 @@ public class TrackService : ITrackService
                 if (message.BoardingPassengers > 0) _sales.Enqueue((SystemTime, destination.LineId, message.BoardingPassengers));
                 _exchanges.Add(exchangeKey);
             }
+        }
+        if (moved && (previous ?? destination) is { } changedBlock)
+        {
+            OccupancyTransition?.Invoke(this, new(trainId, changedBlock.LineId,
+                destination is null ? [] : [destination.Id], previous is null ? [] : [previous.Id], destination?.Id ?? string.Empty));
         }
         Changed();
     }
@@ -258,7 +324,8 @@ public class TrackService : ITrackService
                 // CTC plans speeds from the contract's km/h field; both describe the same civil limit.
                 SpeedLimitKilometersPerHour = UnitConversion.MetersPerSecondToKilometersPerHour(b.SpeedLimitMetersPerSecond),
                 HasHeater = b.HasHeater, Beacon = b.Beacon, BeaconTargetBlockId = b.BeaconTargetBlockId,
-                NormalNextBlockId = b.NormalNextBlockId, ReverseNextBlockId = b.ReverseNextBlockId
+                NormalNextBlockId = b.NormalNextBlockId, ReverseNextBlockId = b.ReverseNextBlockId,
+                IsYardEntry = b.IsYardEntry
             }).ToList()
         }).ToList()
     };
@@ -278,7 +345,9 @@ public class TrackService : ITrackService
         var b = RequireBlock(blockId);
         // An occupied block reports the code that applies to ITS train (zero for a continuation code
         // the train did not enter under); an unoccupied block reports its code as commanded.
-        return new() { BlockId = b.Id, TrainId = b.TrainId,
+        // A trailing (non-head) block reports its code without a train, so it is never picked up.
+        // Only the head block names its train: a train spanning several blocks receives ONE environment.
+        return new() { BlockId = b.Id, TrainId = b.IsTrainHead ? b.TrainId : string.Empty,
             CommandedSpeedMetersPerSecond = b.TrainCommandedSpeedMetersPerSecond, ActualSpeedMetersPerSecond = b.ActualSpeedMetersPerSecond,
             AuthorityMeters = b.TrainAuthorityMeters,
             MovementRequestId = !b.IsOccupied || b.CodeAppliesToOccupant ? b.MovementRequestId : string.Empty,

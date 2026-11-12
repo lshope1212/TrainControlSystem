@@ -31,6 +31,10 @@ public static class MessageDisplayNameFormatter
         ["TicketSalesMessage"] = "Ticket sales",
         ["TrackLayoutMessage"] = "Track layout",
         ["TrainStateMessage"] = "Train state",
+        ["TrainDispatchRequestMessage"] = "Train dispatch request",
+        ["TrainDispatchStatusMessage"] = "Train dispatch status",
+        ["TrainRouteUpdateMessage"] = "Train route update",
+        ["TrainActivationMessage"] = "Train activation",
     };
 
     // Boundaries inside PascalCase: "fooBar" -> "foo|Bar", "CTCStatus" -> "CTC|Status".

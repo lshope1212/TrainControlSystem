@@ -37,4 +37,12 @@ public class TrackBlockDefinition
 
     /// <summary>IDs of blocks this block connects to.</summary>
     public List<string> ConnectedBlockIds { get; set; } = new List<string>();
+
+    /// <summary>
+    /// True when a train leaving the yard enters the main line in this block, so CTC may dispatch
+    /// (start a route) here. Set only from explicit layout data; never inferred from block number,
+    /// switches or stations. A producer that does not send it (false everywhere) leaves the line
+    /// with no yard entries, and CTC then refuses to schedule on it.
+    /// </summary>
+    public bool IsYardEntry { get; set; }
 }

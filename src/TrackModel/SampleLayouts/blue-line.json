@@ -24,7 +24,8 @@
         "2"
       ],
       "normalNextBlockId": "",
-      "reverseNextBlockId": ""
+      "reverseNextBlockId": "",
+      "isYardEntry": true
     },
     {
       "id": "2",

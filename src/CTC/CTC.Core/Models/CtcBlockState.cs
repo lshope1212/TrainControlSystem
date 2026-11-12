@@ -35,9 +35,35 @@ public class CtcBlockState
 
     public IList<string> ConnectedBlockIds { get; } = new List<string>();
 
+    /// <summary>
+    /// The Track Model's layout marks this block as a yard entry: a train leaving the yard enters
+    /// the main line here, so it is a permitted route start (see <see cref="Scheduling.YardEntries"/>).
+    /// </summary>
+    public bool IsYardEntry { get; set; }
+
+    /// <summary>
+    /// "Forward" (toward increasing block numbers), "Reverse" (decreasing) or "Bidirectional", as the
+    /// Track Model's layout gives it. CTC's route planner does not use it; it is only used to warn the
+    /// dispatcher about a route the wayside will refuse (see <see cref="Scheduling.RouteGeometry"/>).
+    /// </summary>
+    public string TravelDirection { get; set; } = "Bidirectional";
+
+    /// <summary>For a switch block: the block its Normal position connects to; empty otherwise.</summary>
+    public string NormalNextBlockId { get; set; } = string.Empty;
+
+    /// <summary>For a switch block: the block its Reverse position connects to; empty otherwise.</summary>
+    public string ReverseNextBlockId { get; set; } = string.Empty;
+
     // Live wayside status (Track Controller).
 
     public OccupancyState Occupancy { get; set; } = OccupancyState.Unknown;
+
+    /// <summary>
+    /// The last DEFINITE occupancy (Clear or Occupied) reported for the block; null before any. A block
+    /// that went Unknown (stale reports, a track circuit failure) and comes back Occupied, having last
+    /// been Occupied, shows no new train entering it, so train tracking does not treat it as an entry.
+    /// </summary>
+    public OccupancyState? LastDefiniteOccupancy { get; set; }
 
     public SignalState Signal { get; set; } = SignalState.Unknown;
 

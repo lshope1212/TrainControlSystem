@@ -39,6 +39,9 @@ internal sealed class LiveSystem : IAsyncDisposable
     /// <summary>Where the Track Model sends train environments (the Train Model's inbound pipe).</summary>
     public string TrainModelPipe => _prefix + ".TrainModel";
 
+    /// <summary>The Train Controller's inbound pipe: the Track Model's lights and the Train Model's statuses go here.</summary>
+    public string TrainControllerPipe => TrackModelPipe + ".TrainController";
+
     public TrackService? Track { get; private set; }
 
     public WaysidePipeHost? Wayside { get; private set; }
@@ -86,11 +89,15 @@ internal sealed class LiveSystem : IAsyncDisposable
 
     /// <summary>
     /// Starts the production Track Model connection. With <paramref name="allLines"/> it loads
-    /// exactly what TrackModel.Wpf's App loads (the Blue, Red and Green course lines); otherwise the
-    /// Blue Line demonstration on its own, the single-line setup the Blue Line tests were written for.
-    /// Either way train 01 starts in block 1.
+    /// exactly what TrackModel.Wpf's App loads (the Blue, Red and Green course lines, no trains);
+    /// otherwise the Blue Line on its own, the single-line setup the Blue Line tests were written for.
     /// </summary>
-    public async Task StartTrackModelAsync(bool allLines = false)
+    /// <param name="demonstrationTrain">
+    /// Also seed the standalone demonstration's stopped train 001 in Blue block 1, for tests about
+    /// live occupancy. Off by default, as in production, where CTC allocates train 001 itself.
+    /// </param>
+    /// <param name="prepare">Adjusts the loaded Track Model before it starts communicating (its start-up state).</param>
+    public async Task StartTrackModelAsync(bool allLines = false, bool demonstrationTrain = false, Action<TrackService>? prepare = null)
     {
         _trackModelThread = new DispatcherThread("Track Model UI");
         _trackModelStop = new CancellationTokenSource();
@@ -98,15 +105,15 @@ internal sealed class LiveSystem : IAsyncDisposable
         Track = await _trackModelThread.GetAsync(() =>
         {
             var track = new TrackService();
-            if (allLines)
+            switch (allLines, demonstrationTrain)
             {
-                CourseTrackLayout.LoadDemonstration(track);
-            }
-            else
-            {
-                BlueLineTrackLayout.LoadDemonstration(track);
+                case (true, false): CourseTrackLayout.Load(track); break;
+                case (true, true): CourseTrackLayout.LoadDemonstration(track); break;
+                case (false, false): BlueLineTrackLayout.Load(track); break;
+                case (false, true): BlueLineTrackLayout.LoadDemonstration(track); break;
             }
 
+            prepare?.Invoke(track);
             return track;
         });
         var connection = await _trackModelThread.GetAsync(() => new TrackModelConnection(Track, _trackModelThread.Dispatcher, endpoints));

@@ -18,7 +18,8 @@
           "hasCrossing": false,
           "connectedBlockIds": [
             "A2"
-          ]
+          ],
+          "isYardEntry": true
         },
         {
           "blockId": "A2",
@@ -414,7 +415,8 @@
           "connectedBlockIds": [
             "RED-C8",
             "RED-D10"
-          ]
+          ],
+          "isYardEntry": true
         },
         {
           "blockId": "RED-D10",
@@ -2638,7 +2640,8 @@
           "connectedBlockIds": [
             "GREEN-J62",
             "GREEN-K64"
-          ]
+          ],
+          "isYardEntry": true
         },
         {
           "blockId": "GREEN-K64",

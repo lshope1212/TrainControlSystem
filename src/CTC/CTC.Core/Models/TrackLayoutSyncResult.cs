@@ -24,6 +24,13 @@ public sealed class TrackLayoutSyncResult
     /// <summary>Scheduled trains dropped because their route no longer exists in the new topology.</summary>
     public List<string> DroppedScheduledTrainIds { get; } = new List<string>();
 
+    /// <summary>
+    /// Scheduled trains not yet released that were dropped because their start block is no longer
+    /// one of the line's yard entries in the new layout (an obsolete start selection). They are
+    /// also listed in <see cref="DroppedScheduledTrainIds"/>.
+    /// </summary>
+    public List<string> InvalidStartTrainIds { get; } = new List<string>();
+
     /// <summary>True when any line was added, updated, replaced or removed.</summary>
     public bool Changed => AddedLineIds.Count + UpdatedLineIds.Count + ReplacedLineIds.Count + RemovedLineIds.Count > 0;
 
@@ -39,9 +46,15 @@ public sealed class TrackLayoutSyncResult
             Add(parts, "removed", RemovedLineIds);
             Add(parts, "unchanged", UnchangedLineIds);
             string summary = parts.Count == 0 ? "Track layout received; no lines." : $"Track layout: {string.Join("; ", parts)}.";
-            if (DroppedScheduledTrainIds.Count > 0)
+            var routeGone = DroppedScheduledTrainIds.Except(InvalidStartTrainIds).ToList();
+            if (routeGone.Count > 0)
             {
-                summary += $" Schedules dropped because their route no longer exists: {string.Join(", ", DroppedScheduledTrainIds.Select(TrainIds.DisplayName))}.";
+                summary += $" Schedules dropped because their route no longer exists: {string.Join(", ", routeGone.Select(TrainIds.DisplayName))}.";
+            }
+
+            if (InvalidStartTrainIds.Count > 0)
+            {
+                summary += $" Schedules dropped because their start block is no longer a yard entry: {string.Join(", ", InvalidStartTrainIds.Select(TrainIds.DisplayName))}; schedule them again from a current yard entry.";
             }
 
             if (RejectedChanges.Count > 0)

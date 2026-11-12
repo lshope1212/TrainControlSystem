@@ -79,8 +79,24 @@ public sealed partial class TrackControllerService
         return requested && IsFresh(block) && block.Feedback?.Occupancy == OccupancyState.Clear;
     }
 
-    private MovementResult EvaluateVital((MovementSuggestionMessage Value, DateTimeOffset Received) receivedRequest)
+    /// <summary>The authorization scan: every signal on the route must report a proceed aspect.</summary>
+    private MovementResult EvaluateVital((MovementSuggestionMessage Value, DateTimeOffset Received) receivedRequest) =>
+        ScanVital(receivedRequest, clearance: false, out _);
+
+    /// <summary>
+    /// The signal-clearance scan: the same PLC route scan with <c>signal_clearance</c> set, so a signal's
+    /// own reported aspect does not stop the scan while every other input still does. The result is only
+    /// a candidate for commanding the route's signals; it is never an authority.
+    /// </summary>
+    private (MovementResult Candidate, SignalState Aspect) EvaluateVitalClearance((MovementSuggestionMessage Value, DateTimeOffset Received) receivedRequest)
     {
+        var candidate = ScanVital(receivedRequest, clearance: true, out var aspect);
+        return (candidate, aspect);
+    }
+
+    private MovementResult ScanVital((MovementSuggestionMessage Value, DateTimeOffset Received) receivedRequest, bool clearance, out SignalState aspect)
+    {
+        aspect = SignalState.Red;
         var request = receivedRequest.Value;
         MovementResult output = (request, 0, 0, "Withheld", "");
         if (_plc is null)
@@ -100,6 +116,7 @@ public sealed partial class TrackControllerService
             inputs["speed_in"] = inputs["suggested_speed"];
             inputs["remaining_in"] = inputs["suggested_authority"];
             inputs["scan_live"] = [true];
+            inputs["signal_clearance"] = [clearance];
             string reason = "PLC protected the requested route.";
             for (int i = 0; i < path.Length; i++)
             {
@@ -147,12 +164,14 @@ public sealed partial class TrackControllerService
                 return Stop(output, "Independent safety check rejected contradictory PLC movement outputs.");
             }
             // Only PLC bits choose the normal aspect. Manual red remains an independent veto.
-            foreach (string id in GetCoveredBlocks(output))
+            aspect = !final["signal_clear"][0] ? SignalState.Red : final["signal_yellow"][0] ? SignalState.Yellow : SignalState.Green;
+            // A clearance candidate commands nothing here; PrepareSignals checks it independently first.
+            foreach (string id in clearance ? Enumerable.Empty<string>() : GetCoveredBlocks(output))
             {
                 var block = GetBlock(id);
                 if (block.Definition.HasSignal && !block.ManualRed)
                 {
-                    block.CommandedSignal = !final["signal_clear"][0] ? SignalState.Red : final["signal_yellow"][0] ? SignalState.Yellow : SignalState.Green;
+                    block.CommandedSignal = aspect;
                 }
             }
             // Session/lease checks are independent vetoes, never a source of positive commands.
@@ -167,6 +186,13 @@ public sealed partial class TrackControllerService
             return Stop(output, $"PLC input/output rejected: {ex.Message}");
         }
     }
+
+    /// <summary>Distinguishes "commanded, report pending" from "held red" for the operator; explanation only.</summary>
+    private static string SignalWaitDetail(Block block) =>
+        block.ManualRed ? " (held Red manually)"
+        : block.CommandedSignal is SignalState.Green or SignalState.SuperGreen or SignalState.Yellow
+            ? $" (commanded {block.CommandedSignal}; Track Model reports {block.Feedback?.Signal ?? SignalState.Unknown})"
+            : " (held Red: the route is not safe to clear)";
 
     private static string PlcRestrictionText(IReadOnlyDictionary<string, bool[]> inputs, Block block, IReadOnlyDictionary<string, bool[]> outputs, string? nextBlock)
     {
@@ -209,7 +235,7 @@ public sealed partial class TrackControllerService
         }
         if (inputs["has_signal"][0] && (!inputs["signal_proceed"][0] || inputs["manual_red"][0]))
         {
-            return $"Waiting for proceed signal feedback at block {block.Definition.BlockId}.";
+            return $"Waiting for proceed signal feedback at block {block.Definition.BlockId}{SignalWaitDetail(block)}.";
         }
         if (inputs["has_crossing"][0] && !inputs["crossing_closed"][0])
         {

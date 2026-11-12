@@ -52,9 +52,8 @@ try
 {
     await Send(new TrackModelSnapshotRequestMessage());
     await Check("full layout (15-block Blue Line, 76 Red, 150 Green) received on private TestUI endpoint",()=>Get<TrackLayoutMessage>("layout")?.Lines.Select(l=>l.Blocks.Count).SequenceEqual(new[]{15,76,150})==true&&received.Any(m=>m.Pipe==NamedPipeNames.TrackModelTestUi&&m.Type==nameof(TrackLayoutMessage)));
-    await Check("clean Blue Line profile (click Restore course lines before running)",()=>Env("1")?.TrainId=="01"&&Env("10")?.TrainId==""&&Env("10")?.TicketsSold==0);
-    // Replace the legacy demonstration label with the existing canonical wire ID.
-    await Send(new TrackModelTrainUpdateMessage{TrainId="01",CurrentBlockId=""});
+    await Check("clean Blue Line profile with no trains (click Restore course lines before running)",()=>Env("1")?.TrainId==""&&Env("10")?.TrainId==""&&Env("10")?.TicketsSold==0);
+    // Production start-up seeds no train; place one with its canonical wire ID.
     await Send(new TrackModelTrainUpdateMessage{TrainId="001",CurrentBlockId="1"});
     await Check("beacons on 9 and 14, no station beacon on 10",()=>Env("9")?.Beacon=="Station B"&&Env("14")?.Beacon=="Station C"&&Env("10")?.Beacon=="");
     await Send(new TrackModelCommandMessage{BlockId="5",CommandedSpeedMetersPerSecond=20*0.44704,AuthorityMeters=600*0.3048,Switch=SwitchPosition.Reverse});

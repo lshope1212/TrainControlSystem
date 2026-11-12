@@ -65,7 +65,7 @@ public class TestUiWorkflowTests
 
             // A captured model snapshot must also update the selector, not just user edits.
             _connection.Model.ApplyTrainUpdate(new TrackModelTrainUpdateMessage
-                { TrainId = "01", CurrentBlockId = "104", ActualSpeedMetersPerSecond = 0 });
+                { TrainId = "001", CurrentBlockId = "104", ActualSpeedMetersPerSecond = 0 });
             await _vm.RefreshAsync(); Render();
             Assert.IsTrue(_vm.TrainPresent);
             Assert.IsTrue(Descendants(selector).OfType<TextBlock>().Any(text => text.Text == "Yes"));
@@ -145,7 +145,7 @@ public class TestUiWorkflowTests
     public void StableStartingState_IsCapturedFromModel()
     {
         Assert.AreEqual("OCCUPIED", _vm.SelectedOutput!.Occupancy);
-        Assert.AreEqual("01", _vm.SelectedOutput.Train);
+        Assert.AreEqual("001", _vm.SelectedOutput.Train);
         Assert.AreEqual("22 mph", _vm.SelectedOutput.ActualSpeed);
         Assert.AreEqual("NORMAL", _vm.SelectedOutput.BrokenRail);
         Assert.AreEqual("NORMAL", _vm.SelectedOutput.TrackCircuit);
@@ -162,7 +162,7 @@ public class TestUiWorkflowTests
             await _vm.RefreshAsync();
             Assert.AreEqual(speed + " mph", _vm.SelectedOutput!.Speed);
             Assert.AreEqual("22 mph", _vm.SelectedOutput.ActualSpeed);
-            Assert.AreEqual("01", _vm.SelectedOutput.Train);
+            Assert.AreEqual("001", _vm.SelectedOutput.Train);
         }
     }
 
@@ -210,7 +210,7 @@ public class TestUiWorkflowTests
     {
         _vm.CurrentBlock = "105"; await _vm.RefreshAsync();
         Assert.AreEqual("105", _vm.SelectedOutput!.Id);
-        Assert.AreEqual("01", Output("105").Train);
+        Assert.AreEqual("001", Output("105").Train);
         Assert.AreEqual("22 mph", Output("105").ActualSpeed);
         Assert.AreEqual("CLEAR", Output("104").Occupancy);
         _vm.TrainPresent = false; await _vm.RefreshAsync();
@@ -219,7 +219,7 @@ public class TestUiWorkflowTests
         Assert.IsFalse(_vm.TrainPresent);
         _vm.CurrentBlock = "104"; _vm.ActualSpeed = "22"; _vm.TrainPresent = true;
         await _vm.RefreshAsync();
-        Assert.AreEqual("01", Output("104").Train);
+        Assert.AreEqual("001", Output("104").Train);
     }
 
     [TestMethod]
@@ -258,7 +258,7 @@ public class TestUiWorkflowTests
             Assert.AreEqual(circuit ? "FAILURE" : "NORMAL",o.TrackCircuit);
             Assert.AreEqual(power ? "FAILURE" : "NORMAL",o.Power);
             Assert.AreEqual(circuit || power ? "UNKNOWN" : "OCCUPIED",o.Occupancy);
-            Assert.AreEqual("01",o.Train); Assert.AreEqual("22 mph",o.ActualSpeed);
+            Assert.AreEqual("001",o.Train); Assert.AreEqual("22 mph",o.ActualSpeed);
             Assert.IsTrue(_vm.TrainPresent);
             Assert.AreEqual("30 mph",o.Speed); Assert.AreEqual("600 ft",o.Authority);
         }
@@ -321,7 +321,7 @@ public class TestUiWorkflowTests
     {
         _vm.SelectedOutput=Output("105"); await _vm.RefreshAsync();
         Assert.AreEqual("105",_vm.SelectedOutput!.Id); Assert.AreEqual("CLEAR",_vm.SelectedOutput.Occupancy);
-        Assert.AreEqual("104",_vm.CurrentBlock); Assert.AreEqual("01",Output("104").Train);
+        Assert.AreEqual("104",_vm.CurrentBlock); Assert.AreEqual("001",Output("104").Train);
     }
 
     [TestMethod]
@@ -448,7 +448,7 @@ public class TestUiWorkflowTests
         Assert.AreEqual("No beacon",Output("10").Beacon);
         _vm.Power=true; await _vm.RefreshAsync();
         Assert.AreEqual("UNKNOWN",Output("1").Occupancy);
-        Assert.AreEqual("01",Output("1").Train);
+        Assert.AreEqual("001",Output("1").Train);
     }
 
     private sealed class ModelConnection : IExternalModuleConnection

@@ -58,7 +58,7 @@ public class CtcSpeedAndAuthorityTests
         // 50 m in 4 s = 12.5 m/s = 45 km/h, under the 50 km/h limit.
         var service = BlueLine.CreateService();
 
-        service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 4)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 4)]);
 
         Assert.HasCount(1, service.State.DispatchQueue);
     }
@@ -72,10 +72,10 @@ public class CtcSpeedAndAuthorityTests
         service.StateChanged += (_, e) => changes.Add(e.Kind);
 
         var ex = Assert.ThrowsExactly<ArgumentException>(
-            () => service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 3)]));
+            () => service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 3)]));
 
         Assert.AreEqual(
-            "Train 000 cannot travel from A1 to A2 in the scheduled time. Required: 60.0 km/h. Maximum allowed: 50.0 km/h.",
+            "Train 001 cannot travel from A1 to A2 in the scheduled time. Required: 60.0 km/h. Maximum allowed: 50.0 km/h.",
             ex.Message);
         Assert.IsEmpty(service.State.ScheduledTrains);
         Assert.IsEmpty(service.State.DispatchQueue);
@@ -86,12 +86,12 @@ public class CtcSpeedAndAuthorityTests
     public void QueueSchedule_OneTooFastSegment_NamesThatSegment()
     {
         var service = BlueLine.CreateService();
-        var train = BlueLine.Train("001", Noon, secondsPerBlock: 4);
+        var train = BlueLine.Train("002", Noon, secondsPerBlock: 4);
         train.Route[3].ArrivalTime = train.Route[2].ArrivalTime + TimeSpan.FromSeconds(3);
 
         var ex = Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([train]));
 
-        Assert.StartsWith("Train 001 cannot travel from A3 to A4 in the scheduled time.", ex.Message);
+        Assert.StartsWith("Train 002 cannot travel from A3 to A4 in the scheduled time.", ex.Message);
     }
 
     [TestMethod]
@@ -101,10 +101,10 @@ public class CtcSpeedAndAuthorityTests
         var service = BlueLine.CreateService(speedLimitKph: 100);
 
         var ex = Assert.ThrowsExactly<ArgumentException>(
-            () => service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 2)]));
+            () => service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 2)]));
 
         Assert.AreEqual(
-            "Train 000 cannot travel from A1 to A2 in the scheduled time. Required: 90.0 km/h. Maximum allowed: 70.0 km/h.",
+            "Train 001 cannot travel from A1 to A2 in the scheduled time. Required: 90.0 km/h. Maximum allowed: 70.0 km/h.",
             ex.Message);
     }
 
@@ -114,7 +114,7 @@ public class CtcSpeedAndAuthorityTests
         // 50 m in 3 s = 60 km/h: over the Blue limit but fine on 100 km/h track with a 70 km/h vehicle.
         var service = BlueLine.CreateService(speedLimitKph: 100);
 
-        service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 3)]);
+        service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 3)]);
 
         Assert.HasCount(1, service.State.DispatchQueue);
     }
@@ -123,12 +123,12 @@ public class CtcSpeedAndAuthorityTests
     public void QueueSchedule_NonIncreasingTimes_IsRejected()
     {
         var service = BlueLine.CreateService();
-        var train = BlueLine.Train("000", Noon);
+        var train = BlueLine.Train("001", Noon);
         train.Route[1].ArrivalTime = Noon;
 
         var ex = Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([train]));
 
-        Assert.AreEqual("Train 000 must enter A2 later than it enters A1.", ex.Message);
+        Assert.AreEqual("Train 001 must enter A2 later than it enters A1.", ex.Message);
     }
 
     [TestMethod]
@@ -137,7 +137,7 @@ public class CtcSpeedAndAuthorityTests
         // A1 -> B10 timed only at the ends: 9 blocks x 50 m = 450 m in 36 s = 12.5 m/s = 45 km/h.
         var service = BlueLine.CreateService();
 
-        service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 4, timedBlocks: ["A1", "B10"])]);
+        service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 4, timedBlocks: ["A1", "B10"])]);
 
         Assert.HasCount(1, service.State.DispatchQueue);
     }
@@ -149,10 +149,10 @@ public class CtcSpeedAndAuthorityTests
         var service = BlueLine.CreateService();
 
         var ex = Assert.ThrowsExactly<ArgumentException>(
-            () => service.QueueSchedule([BlueLine.Train("000", Noon, secondsPerBlock: 3, timedBlocks: ["A1", "B10"])]));
+            () => service.QueueSchedule([BlueLine.Train("001", Noon, secondsPerBlock: 3, timedBlocks: ["A1", "B10"])]));
 
         Assert.AreEqual(
-            "Train 000 cannot travel from A1 to B10 in the scheduled time. Required: 60.0 km/h. Maximum allowed: 50.0 km/h.",
+            "Train 001 cannot travel from A1 to B10 in the scheduled time. Required: 60.0 km/h. Maximum allowed: 50.0 km/h.",
             ex.Message);
     }
 
@@ -170,7 +170,7 @@ public class CtcSpeedAndAuthorityTests
     {
         var service = BlueLine.CreateService(speedLimitKph: 0);
 
-        var ex = Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([BlueLine.Train("000", Noon)]));
+        var ex = Assert.ThrowsExactly<ArgumentException>(() => service.QueueSchedule([BlueLine.Train("001", Noon)]));
 
         Assert.Contains("the track layout gives it no speed limit", ex.Message);
     }
@@ -181,7 +181,7 @@ public class CtcSpeedAndAuthorityTests
     public void InitialSpeed_FourSecondBlueSegmentAtDeparture_Is12Point5MetersPerSecond()
     {
         var service = BlueLine.CreateService();
-        var train = BlueLine.Train("000", Noon, secondsPerBlock: 4);
+        var train = BlueLine.Train("001", Noon, secondsPerBlock: 4);
 
         var speed = SpeedPlanner.CalculateInitialSpeed(train, BlueRoute(service.State, train), Noon);
 
@@ -195,7 +195,7 @@ public class CtcSpeedAndAuthorityTests
     {
         // Next timed block is A5: 4 blocks x 50 m = 200 m in 20 s = 10 m/s.
         var service = BlueLine.CreateService();
-        var train = BlueLine.Train("000", Noon, secondsPerBlock: 5, timedBlocks: ["A1", "A5", "B10"]);
+        var train = BlueLine.Train("001", Noon, secondsPerBlock: 5, timedBlocks: ["A1", "A5", "B10"]);
 
         var speed = SpeedPlanner.CalculateInitialSpeed(train, BlueRoute(service.State, train), Noon);
 
@@ -209,7 +209,7 @@ public class CtcSpeedAndAuthorityTests
     {
         // Next block due 10 s after departure; released 2 s late -> 50 m in 8 s.
         var service = BlueLine.CreateService();
-        var train = BlueLine.Train("000", Noon, secondsPerBlock: 10);
+        var train = BlueLine.Train("001", Noon, secondsPerBlock: 10);
 
         var speed = SpeedPlanner.CalculateInitialSpeed(train, BlueRoute(service.State, train), Noon + TimeSpan.FromSeconds(2));
 
@@ -222,7 +222,7 @@ public class CtcSpeedAndAuthorityTests
     {
         // 4 s schedule, released 1 s late -> 50 m in 3 s would need 60 km/h.
         var service = BlueLine.CreateService();
-        var train = BlueLine.Train("000", Noon, secondsPerBlock: 4);
+        var train = BlueLine.Train("001", Noon, secondsPerBlock: 4);
 
         var speed = SpeedPlanner.CalculateInitialSpeed(train, BlueRoute(service.State, train), Noon + TimeSpan.FromSeconds(1));
 
@@ -234,7 +234,7 @@ public class CtcSpeedAndAuthorityTests
     public void InitialSpeed_PastNextBlockTime_IsPermittedMaximumAndLate()
     {
         var service = BlueLine.CreateService();
-        var train = BlueLine.Train("000", Noon, secondsPerBlock: 4);
+        var train = BlueLine.Train("001", Noon, secondsPerBlock: 4);
 
         var speed = SpeedPlanner.CalculateInitialSpeed(train, BlueRoute(service.State, train), Noon + TimeSpan.FromSeconds(4));
 

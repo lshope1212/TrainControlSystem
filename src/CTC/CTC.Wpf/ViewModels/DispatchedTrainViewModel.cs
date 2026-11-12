@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CTC.Core.Dispatching;
 using CTC.Core.Models;
 using CTC.Core.Scheduling;
 using TrainControl.Common.Utilities;
@@ -56,12 +57,25 @@ public class DispatchedTrainViewModel : ViewModelBase
         : DescribePhase(_train.Phase);
 
     /// <summary>
-    /// Whether the released train has been seen on the track. CTC never shows it as physically
-    /// released: no module confirms that yet, and occupancy only lets CTC infer it.
+    /// Whether the released train has been seen on the track, and how far its physical dispatch got.
+    /// The dispatch's stages (delivered, forwarded, activation requested, placed, rejected) are shown as
+    /// such; the train is shown on the track only once its start block reports occupied.
     /// </summary>
-    public string ReleaseStatus => _train.ReleaseStatus == TrainReleaseStatus.AwaitingPlacement
-        ? $"Awaiting placement at {(_train.ActiveRouteBlockIds.Count > 0 ? _train.ActiveRouteBlockIds[0] : _train.CurrentBlockId)}"
-        : "Detected on track (inferred)";
+    public string ReleaseStatus
+    {
+        get
+        {
+            if (_train.ReleaseStatus == TrainReleaseStatus.DetectedOnTrack)
+            {
+                return _train.TrackingStatus.Length > 0 ? $"Detected on track (inferred) · Track Model: {_train.TrackingStatus}" : "Detected on track (inferred)";
+            }
+
+            string start = _train.ActiveRouteBlockIds.Count > 0 ? _train.ActiveRouteBlockIds[0] : _train.CurrentBlockId;
+            return _train.DispatchRequest is { } dispatch
+                ? $"Awaiting placement at {start}: dispatch {TrainDispatchCoordinator.DescribeStage(dispatch)}"
+                : $"Awaiting placement at {start}";
+        }
+    }
 
     /// <summary>
     /// The train's movement request as the Track Controller handled it, kept apart from delivery:

@@ -13,7 +13,9 @@ public sealed class VitalPlcProgram
         "manual_red", "has_crossing", "crossing_closed", "has_switch", "switch_known", "switch_confirmed",
         "has_next", "has_stem", "entry_stem", "exit_stem", "entry_normal", "entry_reverse", "exit_normal", "exit_reverse",
         "reported_normal", "reported_reverse", "requested_normal", "switch_request_known", "zone_ok_in", "reserved_known", "reserved",
-        "movement_locked", "crossing_needed_in", "active_route", "manual_crossing_close"
+        "movement_locked", "crossing_needed_in", "active_route", "manual_crossing_close",
+        // True only on the signal-clearance scan (never on the authorization scan); see TrackControllerService.PrepareSignals.
+        "signal_clearance"
     ];
     public static readonly string[] WordInputs = ["suggested_speed", "suggested_authority", "distance_in", "remaining_in", "speed_in", "block_length", "track_limit"];
     private static readonly string[] BooleanOutputs =

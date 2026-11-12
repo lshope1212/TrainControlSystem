@@ -508,6 +508,7 @@ public class MainWindowViewModel : ViewModelBase
                 // Lines or blocks may have been added, rebuilt or removed, so the adapters are rebuilt.
                 RebuildTerritory();
                 RebuildDestinationBlocks();
+                ScheduleBuilder.OnTrackLayoutChanged();
                 MarkTerritoryUpdated();
                 break;
 
@@ -551,11 +552,12 @@ public class MainWindowViewModel : ViewModelBase
             case CtcStateChangeKind.TrainDispatched:
                 RebuildDispatchQueue();
                 RebuildDispatchedTrains();
-                CommunicationStatus = $"{TrainIds.DisplayName(e.TrainId ?? string.Empty)} released at {SystemTimeDisplay}; awaiting placement on the track. No module confirms a physical release yet, so CTC sends its first movement request when its start block reports occupied."
+                CommunicationStatus = $"{TrainIds.DisplayName(e.TrainId ?? string.Empty)} released at {SystemTimeDisplay}; its dispatch goes to the Track Controller. CTC sends its first movement request when its start block reports occupied."
                     + (e.Message is null ? string.Empty : $" Warning: {e.Message}");
                 break;
 
             case CtcStateChangeKind.TrainDetectedOnTrack:
+            case CtcStateChangeKind.TrainDispatchRequestUpdated:
             case CtcStateChangeKind.MovementRequestUpdated:
                 RefreshDispatchedTrain(e.TrainId, reloadEdits: false);
                 if (e.Message is not null)

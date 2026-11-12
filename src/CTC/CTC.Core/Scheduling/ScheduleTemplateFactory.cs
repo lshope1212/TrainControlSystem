@@ -4,33 +4,68 @@ namespace CTC.Core.Scheduling;
 
 /// <summary>
 /// Builds blank <see cref="ScheduleTemplate"/>s from a line's track layout, so the
-/// layout received from the Track Model stays the single source of block data.
+/// layout received from the Track Model stays the single source of block data, including which
+/// blocks are yard entries (the only permitted starting blocks; see <see cref="YardEntries"/>).
 /// </summary>
 public static class ScheduleTemplateFactory
 {
     /// <summary>
     /// Creates a template with one row per block of <paramref name="line"/> and
     /// <paramref name="trainCount"/> blank train columns, with consecutive train IDs starting
-    /// at <paramref name="firstTrainNumber"/> (see <see cref="TrainIds.NextAvailableNumber"/>).
+    /// at <paramref name="firstTrainNumber"/> ("001" by default). The Schedule Builder uses
+    /// <see cref="Create(CtcLineState, IReadOnlyList{string})"/> with
+    /// <see cref="TrainIds.Allocate"/> instead, which also skips IDs CTC already uses.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The train IDs would go past <see cref="TrainIds.MaxNumber"/>.</exception>
-    public static ScheduleTemplate Create(CtcLineState line, int trainCount, int firstTrainNumber = 0)
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="firstTrainNumber"/> is below <see cref="TrainIds.FirstNumber"/>.</exception>
+    /// <exception cref="InvalidOperationException">The train IDs would go past <see cref="TrainIds.LastNumber"/>.</exception>
+    public static ScheduleTemplate Create(CtcLineState line, int trainCount, int firstTrainNumber = TrainIds.FirstNumber)
     {
-        //Check if any of the arguments are null or out of range
         ArgumentNullException.ThrowIfNull(line);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(trainCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(firstTrainNumber);
+        ArgumentOutOfRangeException.ThrowIfLessThan(firstTrainNumber, TrainIds.FirstNumber);
 
-        //Check if there are any train IDs available 
-        int available = TrainIds.MaxNumber + 1 - firstTrainNumber;
-        if (trainCount > available)
+        // Only the supported fleet can be scheduled, so the IDs end at "010".
+        var trainIds = SupportedIdsFrom(firstTrainNumber);
+        if (trainCount > trainIds.Count)
         {
-            throw new InvalidOperationException($"Only {Math.Max(0, available)} more train ID(s) are available; train IDs end at {TrainIds.Format(TrainIds.MaxNumber)}.");
+            throw new InvalidOperationException(
+                $"Only {trainIds.Count} more train ID(s) are available; supported train IDs end at {TrainIds.Format(TrainIds.LastNumber)}.");
         }
 
-        //Generate the train IDs and format them using the utility class method
-        var trainIds = Enumerable.Range(firstTrainNumber, trainCount).Select(TrainIds.Format);
-        var startBlock = GetRouteStartBlock(line);
+        return Create(line, trainIds.Take(trainCount).ToArray());
+    }
+
+    /// <summary>
+    /// Creates a template with one row per block of <paramref name="line"/> and one blank train
+    /// column per entry of <paramref name="trainIds"/> (normally from <see cref="TrainIds.Allocate"/>).
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="trainIds"/> is empty, repeats an ID, or contains an ID outside the
+    /// supported fleet ("001" to "010"). The message is dispatcher-readable (no parameter name).
+    /// </exception>
+    public static ScheduleTemplate Create(CtcLineState line, IReadOnlyList<string> trainIds)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        ArgumentNullException.ThrowIfNull(trainIds);
+
+        // No parameter names below, so the messages stay dispatcher-readable as they are.
+        if (trainIds.Count == 0)
+        {
+            throw new ArgumentException("A schedule template needs at least one train.");
+        }
+
+        var unsupported = trainIds.FirstOrDefault(id => !TrainIds.IsSupported(id));
+        if (unsupported is not null || trainIds.Any(id => id is null))
+        {
+            throw new ArgumentException(TrainIds.UnsupportedMessage(unsupported));
+        }
+
+        if (trainIds.Distinct(StringComparer.Ordinal).Count() != trainIds.Count)
+        {
+            throw new ArgumentException("A schedule template cannot use the same train ID twice.");
+        }
+
+        int trainCount = trainIds.Count;
 
         var rows = line.Blocks.Select(block => new ScheduleTemplateRow(trainCount)
         {
@@ -43,24 +78,31 @@ public static class ScheduleTemplateFactory
             LengthMeters = block.LengthMeters,
             SpeedLimitKilometersPerHour = block.SpeedLimitKilometersPerHour,
             ConnectedBlockIds = block.ConnectedBlockIds.ToList(),
-            IsRouteStart = block == startBlock,
             DefaultDwellTime = DwellTimePolicy.GetDefaultDwellTime(block),
         });
 
-        return new ScheduleTemplate(line.LineId, trainIds, rows);
+        var yardEntries = YardEntries.For(line).Select(block => block.BlockId).ToList();
+        var template = new ScheduleTemplate(line.LineId, trainIds, rows, yardEntries, line.Name);
+
+        // Each train chooses its own starting block. With a single yard entry there is no choice to
+        // make, so it is preselected; with several, the dispatcher must pick one per train; with none,
+        // the template can be viewed but not converted (YardEntries.NoneConfiguredMessage).
+        if (yardEntries.Count == 1)
+        {
+            for (int column = 0; column < trainCount; column++)
+            {
+                template.InitializeStartBlock(column, yardEntries[0]);
+            }
+        }
+
+        return template;
     }
 
-    /// <summary>
-    /// The block every train on <paramref name="line"/> starts its route from.
-    /// ASSUMPTION: the lowest-numbered block. Replace this once routing/yard logic
-    /// exists; nothing else should rely on that rule.
-    /// </summary>
-    public static CtcBlockState? GetRouteStartBlock(CtcLineState line)
-    {
-        ArgumentNullException.ThrowIfNull(line);
-
-        return line.Blocks.MinBy(block => block.BlockNumber);
-    }
+    /// <summary>Supported train IDs from <paramref name="firstTrainNumber"/> to "010", in order.</summary>
+    internal static IReadOnlyList<string> SupportedIdsFrom(int firstTrainNumber) =>
+        firstTrainNumber > TrainIds.LastNumber
+            ? []
+            : Enumerable.Range(firstTrainNumber, TrainIds.LastNumber - firstTrainNumber + 1).Select(TrainIds.Format).ToArray();
 
     /// <summary>Readable summary of a block's features, e.g. "Station B; Signal".</summary>
     public static string DescribeInfrastructure(CtcBlockState block)
@@ -76,6 +118,11 @@ public static class ScheduleTemplateFactory
         if (block.HasSwitch)
         {
             parts.Add("Switch");
+        }
+
+        if (block.IsYardEntry)
+        {
+            parts.Add("Yard Entry");
         }
 
         if (block.HasSignal)

@@ -34,8 +34,12 @@ public sealed class WaysidePipeHost : IAsyncDisposable
     private Task[]? _workers;
     private readonly Dictionary<string, SwitchPosition> _trackModelSwitches = [];
     private readonly ConcurrentQueue<object> _monitorResults = new();
-    private readonly ConcurrentQueue<RequestAcknowledgementMessage> _ctcAcknowledgements = new();
+    // CTC's ordered outbox: request acknowledgements and dispatch statuses, sent ahead of status batches.
+    private readonly ConcurrentQueue<object> _ctcAcknowledgements = new();
     private readonly SemaphoreSlim _ctcAcknowledgementQueued = new(0);
+
+    // Physical dispatch coordination (CTC <-> Track Model); never part of PLC evaluation.
+    private readonly TrainDispatchRelay _dispatch;
 
     // Wakes the Track Model publisher as soon as an input changes what is commanded for movement,
     // so a revocation (or a handoff) never waits for the next periodic batch. It stays one
@@ -66,6 +70,7 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         _runtime = runtime;
         if (pipeNames is { Length: not 4 }) throw new ArgumentException("Provide one name for each pipe role.", nameof(pipeNames));
         _pipes = pipeNames is null ? CreatePipeNames() : [.. pipeNames];
+        _dispatch = new TrainDispatchRelay(() => _runtime.LatestSnapshot, _pipes[(int)Pipe.TrackModel], EnqueueForCtc, text => InputReceived?.Invoke(text));
     }
 
     /// <summary>Builds addresses in Pipe enum order; tests can request an isolated set.</summary>
@@ -90,12 +95,20 @@ public sealed class WaysidePipeHost : IAsyncDisposable
             NamedPipeTransport.ListenAsync(_pipes[(int)Pipe.Input], HandleAsync, ex => InputReceived?.Invoke($"Input connection: {ex.Message}"), _stop.Token),
             PublishCtcAsync(_stop.Token),
             PublishAsync(Pipe.TrackModel, _stop.Token),
-            PublishAsync(Pipe.Monitor, _stop.Token)
+            PublishAsync(Pipe.Monitor, _stop.Token),
+            _dispatch.RunAsync(_stop.Token)
         ];
     }
 
     private async Task HandleAsync(MessageEnvelope envelope)
     {
+        // Dispatch coordination is relayed at this integration layer; it never reaches the runtime or PLC.
+        if (TrainDispatchRelay.Handles(envelope.MessageType))
+        {
+            _dispatch.Receive(envelope);
+            return;
+        }
+
         object result = await _runtime.ReceiveAsync(envelope, _stop.Token).ConfigureAwait(false);
         if (result is WaysideAcknowledgementMessage receipt)
         {
@@ -114,15 +127,21 @@ public sealed class WaysidePipeHost : IAsyncDisposable
         // receive loop, so a busy CTC can never stall the controller's input pipe.
         if (CreateCtcAcknowledgement(envelope, result) is { } acknowledgement)
         {
-            _ctcAcknowledgements.Enqueue(acknowledgement);
-            while (_ctcAcknowledgements.Count > 100) _ctcAcknowledgements.TryDequeue(out _);
-            _ctcAcknowledgementQueued.Release();
+            EnqueueForCtc(acknowledgement);
         }
 
         // Receipts and requested snapshots are diagnostics, not Track Model commands.
         _monitorResults.Enqueue(result);
         // Diagnostics are optional; retain recent receipts without growing indefinitely while the test UI is closed.
         while (_monitorResults.Count > 100) _monitorResults.TryDequeue(out _);
+    }
+
+    /// <summary>Queues an answer for CTC on its ordered publisher (bounded: CTC may be offline).</summary>
+    private void EnqueueForCtc(object message)
+    {
+        _ctcAcknowledgements.Enqueue(message);
+        while (_ctcAcknowledgements.Count > 100) _ctcAcknowledgements.TryDequeue(out _);
+        _ctcAcknowledgementQueued.Release();
     }
 
     private async Task PublishAsync(Pipe pipe, CancellationToken stop)
@@ -352,14 +371,17 @@ public sealed class WaysidePipeHost : IAsyncDisposable
 
     /// <summary>
     /// Wakes the Track Model publisher when what is commanded for movement changed: grants, their
-    /// request IDs, limits and decisions, and prepared handoffs.
+    /// request IDs, limits and decisions, prepared handoffs, and signal aspects.
     /// </summary>
     private void SignalIfMovementOutputChanged(WaysideSnapshotMessage snapshot)
     {
         string signature = string.Join(";", snapshot.Blocks
             .Where(block => block.Request is not null || block.Continuation is not null)
             .Select(block => $"{block.BlockId}|{block.Request?.RequestId}|{block.MovementStatus}|{block.AuthorizedSpeedMetersPerSecond:R}|{block.AuthorizedAuthorityMeters:R}|{block.Continuation}"))
-            + $"|{snapshot.IsPaused}|{snapshot.IsMaintenanceMode}";
+            + $"|{snapshot.IsPaused}|{snapshot.IsMaintenanceMode}"
+            // Signal commands too: a prepared route's proceed aspect (whose report the grant waits for)
+            // and a restrictive aspect after a revocation reach the Track Model without the periodic wait.
+            + "|" + string.Join(",", snapshot.Blocks.Where(block => block.HasSignal).Select(block => $"{block.BlockId}:{block.CommandedSignal}"));
         lock (_connectionGate)
         {
             if (signature == _lastMovementSignature)

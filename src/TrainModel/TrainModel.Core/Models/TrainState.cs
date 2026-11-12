@@ -17,7 +17,7 @@ public class TrainState
 
     public double AccelerationMetersPerSecondSquared { get; set; }
 
-    // ---- Occupancy (derived from position + length) ----
+    // ---- Footprint inputs: the Track Model derives occupancy from the front position and the length ----
     public double FrontPositionMeters { get; set; }
 
     public double TrainLengthMeters { get; set; }

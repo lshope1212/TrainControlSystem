@@ -47,7 +47,9 @@ public sealed class TrackFileRepository : ITrackRepository
                 HasSwitch = B("HasSwitch"), HasSignal = B("HasSignal"), HasCrossing = B("HasCrossing"), HasHeater = B("HasHeater"),
                 TravelDirection = S("TravelDirection", "Bidirectional"),
                 ConnectedBlockIds = S("ConnectedBlockIds").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
-                NormalNextBlockId = S("NormalNextBlockId"), ReverseNextBlockId = S("ReverseNextBlockId") });
+                NormalNextBlockId = S("NormalNextBlockId"), ReverseNextBlockId = S("ReverseNextBlockId"),
+                // Optional column; a CSV without it states no yard entries, and none are invented.
+                IsYardEntry = B("IsYardEntry") });
         }
         return layout;
     }

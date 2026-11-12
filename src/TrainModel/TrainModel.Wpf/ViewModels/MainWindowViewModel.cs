@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Threading;
+using TrainControl.Common.Identity;
 using TrainControl.Common.Utilities;
 using TrainControl.Contracts.Messages;
 using TrainModel.Core.Interfaces;
@@ -29,9 +30,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     // so the Train Controller can correlate its command (tick N) with the resulting state.
     private readonly Dictionary<string, long> _lastControllerTickByTrain = new(StringComparer.OrdinalIgnoreCase);
     private DateTime _lastFrameUtc;
-    private readonly TrainModelOutputPublisher _publisher = new();
-    private DateTime _lastPublishUtc = DateTime.MinValue;
-    private static readonly TimeSpan PublishInterval = TimeSpan.FromMilliseconds(250);
+    private readonly TrainModelOutputPublisher _publisher;
 
     // ---- Timing (state-driven link to the Train Controller) ----
     // Every 0.1 s physics step is numbered (_stepCount = the TickId on the controller status).
@@ -56,14 +55,20 @@ public sealed class MainWindowViewModel : ViewModelBase
     // false so the controller stops controlling it.
     private readonly HashSet<string> _activeTrains = new(StringComparer.OrdinalIgnoreCase);
 
+    // The Track Model dispatch each active train runs under (TrainActivationMessage). Its position
+    // reports carry it, so the Track Model never applies one dispatch's telemetry to another.
+    private readonly Dictionary<string, string> _dispatchRequestByTrain = new(StringComparer.OrdinalIgnoreCase);
+
     public MainWindowViewModel()
         : this(new TrainFleetService())
     {
     }
 
-    public MainWindowViewModel(ITrainFleetService fleet)
+    /// <param name="publisher">Output endpoints; the production pipes unless a test isolates them.</param>
+    public MainWindowViewModel(ITrainFleetService fleet, TrainModelOutputPublisher? publisher = null)
     {
         _fleet = fleet ?? throw new ArgumentNullException(nameof(fleet));
+        _publisher = publisher ?? new TrainModelOutputPublisher();
         _clock = new SimulationClock(dtSeconds: 0.1);
 
         BuildInterfaceRows();
@@ -161,7 +166,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         if (steps > 0)
         {
-            PublishOutputsThrottled();
             _refreshDirty = true;
         }
 
@@ -171,7 +175,10 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>One 0.1 s physics step for every train, then one status per train to the controller.</summary>
+    /// <summary>
+    /// One 0.1 s physics step for every train, then per train: one status to the controller and one
+    /// position report (cumulative distance since dispatch, speed, length) to the Track Model.
+    /// </summary>
     private void StepOnce()
     {
         // Only dispatched (active) trains move.
@@ -201,8 +208,14 @@ public sealed class MainWindowViewModel : ViewModelBase
             // one-shot cleared every step); it stays on until the controller's e-brake arrives.
             bool passengerRequested = state.PassengerEmergencyBrakePending || state.PassengerEmergencyBrakeActive;
             _publisher.PublishToController(state, _stepCount, isActive: true, passengerRequested);
+            PublishPosition(plant);
         }
     }
+
+    /// <summary>The train's position report to the Track Model, tagged with the current physics tick.</summary>
+    private void PublishPosition(ITrainSimulationService plant) =>
+        _publisher.PublishPosition(plant.CurrentState, _stepCount,
+            _dispatchRequestByTrain.TryGetValue(plant.Train.Id, out var dispatch) ? dispatch : string.Empty);
 
     /// <summary>Shared system clock update (Launcher/CTC or the TestUI test clock).</summary>
     public void ApplySystemTime(SystemTimeMessage message)
@@ -230,20 +243,6 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
 
         _refreshDirty = true;
-    }
-
-    private void PublishOutputsThrottled()
-    {
-        var now = DateTime.UtcNow;
-        if (now - _lastPublishUtc < PublishInterval) return;
-        _lastPublishUtc = now;
-
-        // Track-side messages stay throttled; the controller status goes out every step.
-        foreach (var plant in _fleet.Trains)
-        {
-            if (!_activeTrains.Contains(plant.Train.Id)) continue;
-            _publisher.PublishTrackSide(plant.CurrentState);
-        }
     }
 
     private void TogglePlayPause()
@@ -367,6 +366,14 @@ public sealed class MainWindowViewModel : ViewModelBase
         _inputsByTrain[trainId] = inputs;
         Roster.Add(new TrainRosterItemViewModel(trainId));
         Log("INFO", "Dispatch", $"{trainId} known (first message received); it runs once dispatched.");
+        if (!TrainControl.Common.Identity.TrainIdConvention.TryNormalize(trainId, out var canonical)
+            || !TrainControl.Common.Identity.TrainIdConvention.IsDispatchable(canonical))
+        {
+            // Diagnostic only: the train is still simulated, but no Train Controller drives it.
+            Log("WARN", "Dispatch",
+                $"{trainId} is not a supported fleet train ID ({TrainControl.Common.Identity.TrainIdConvention.DispatchableRangeText}); the Train Controller will ignore it.");
+        }
+
         return inputs;
     }
 
@@ -412,6 +419,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         trainId = trainId.Trim();
         if (string.IsNullOrWhiteSpace(currentBlockId))
         {
+            _dispatchRequestByTrain.Remove(trainId);
             if (_activeTrains.Remove(trainId) && _fleet.GetTrain(trainId) is { } removed)
             {
                 _publisher.PublishToController(removed.CurrentState, _stepCount, isActive: false, passengerRequested: false);
@@ -434,6 +442,96 @@ public sealed class MainWindowViewModel : ViewModelBase
             RefreshAll();
         }
     }
+
+    /// <summary>
+    /// TrainActivationMessage from the Track Model (physical dispatch). Activate: the train is created
+    /// if it does not exist, put at cumulative position 0 and at rest (its TrainSpecs, including its
+    /// length, are kept), assigned its line for the roster, marked active, and its initial position report
+    /// is published at once, even while the clock is paused, so the Track Model can occupy the start block.
+    /// The Train Model never derives a track position from the start block.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent: repeating the activation of an active train with the same dispatch only re-publishes
+    /// its current position. A different dispatch of an active train is adopted only while the train is
+    /// still at its origin; a train that has moved is never reset by a retry. Activate = false retires it.
+    /// </remarks>
+    public void ApplyTrainActivation(TrainActivationMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        if (!TrainIdConvention.TryNormalize(message.TrainId, out var canonical))
+        {
+            Log("WARN", "Dispatch", $"Activation for '{message.TrainId}' ignored: not a canonical train ID.");
+            return;
+        }
+
+        // The roster may know the train under its fleet label ("TRAIN-001"); translated here, never guessed.
+        string trainId = _inputsByTrain.Keys.FirstOrDefault(key => TrainIdConvention.TryNormalize(key, out var known) && known == canonical) ?? canonical;
+        string line = LineDisplayName(message.LineId);
+
+        if (!message.Activate)
+        {
+            _dispatchRequestByTrain.Remove(trainId);
+            if (_activeTrains.Remove(trainId) && _fleet.GetTrain(trainId) is { } retired)
+            {
+                _publisher.PublishToController(retired.CurrentState, _stepCount, isActive: false, passengerRequested: false);
+                Log("INFO", "Dispatch", $"{trainId} retired by the Track Model ({(string.IsNullOrWhiteSpace(message.Reason) ? "no reason given" : message.Reason)}).");
+                RefreshAll();
+            }
+
+            return;
+        }
+
+        if (_activeTrains.Contains(trainId) && _fleet.GetTrain(trainId) is { } active)
+        {
+            _dispatchRequestByTrain.TryGetValue(trainId, out var current);
+            if (current == message.DispatchRequestId)
+            {
+                // A retry: nothing is reset; the current position is reported again.
+                PublishPosition(active);
+                return;
+            }
+
+            bool atOrigin = active.Train.PositionMeters == 0 && active.Train.VelocityMetersPerSecond == 0;
+            if (!atOrigin)
+            {
+                Log("WARN", "Dispatch", $"{trainId}: activation for dispatch {message.DispatchRequestId} ignored: the train is operating under dispatch '{current}' and has travelled {active.Train.PositionMeters:0.0} m; a retry never resets an operating train.");
+                return;
+            }
+
+            _dispatchRequestByTrain[trainId] = message.DispatchRequestId;
+            active.Train.LineName = line;
+            active.PlaceAtDispatchOrigin();
+            Log("INFO", "Dispatch", $"{trainId} (still at its origin) now runs under dispatch {message.DispatchRequestId} at {message.StartBlockId}.");
+            PublishPosition(active);
+            RefreshAll();
+            return;
+        }
+
+        var inputs = EnsureTrain(trainId, line);
+        var plant = _fleet.GetTrain(trainId)!;
+        plant.Train.LineName = line;
+        plant.Train.OperatingStatus = TrainOperatingStatus.Operating;
+        plant.PlaceAtDispatchOrigin();
+
+        // No movement until the track codes it: a code or command left from an earlier run must not move the train.
+        inputs.CommandedSpeedMetersPerSecond = 0;
+        inputs.CommandedAuthorityMeters = 0;
+        inputs.PowerCommandWatts = 0;
+
+        _activeTrains.Add(trainId);
+        _dispatchRequestByTrain[trainId] = message.DispatchRequestId;
+        Log("INFO", "Dispatch", $"{trainId} activated by the Track Model at {message.StartBlockId} on the {line}: position 0 m, length {plant.Train.Specs.LengthMeters:0.0} m.");
+
+        // The initial report: published now, not on the next step, so occupancy appears while paused.
+        PublishPosition(plant);
+        _publisher.PublishToController(plant.CurrentState, _stepCount, isActive: true, passengerRequested: false);
+        RefreshAll();
+    }
+
+    /// <summary>"Green" -> "Green Line" for the roster (display only).</summary>
+    private static string LineDisplayName(string lineId) =>
+        string.IsNullOrWhiteSpace(lineId) ? "Unknown Line"
+        : lineId.Trim().EndsWith(" Line", StringComparison.OrdinalIgnoreCase) ? lineId.Trim() : lineId.Trim() + " Line";
 
     public void ApplyCommandedSpeed(string trainId, double metersPerSecond)
     {
@@ -560,6 +658,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         ExchangeResult = $"{SelectedTrainId}: {boarded} boarded / {alighted} alighted" +
             (plant.Train.Passengers.WasAtCapacity ? $" ({plant.Train.Passengers.LastLeftBehind} left — FULL)" : "");
         Log("INFO", "Passenger", $"{SelectedTrainId} exchange: {boarded} on / {alighted} off.");
+        // Reported to the Track Model once per exchange (passenger information is Train Model -> Track Model).
+        _publisher.PublishPassengerExchange(plant.CurrentState);
         OnPropertyChanged(nameof(BoardedAlightedDisplay));
         OnPropertyChanged(nameof(OnboardLoadDisplay));
     }

@@ -31,9 +31,10 @@ public sealed class ScheduleConversionResult
 /// invalid schedule is never partially converted.
 /// </summary>
 /// <remarks>
-/// A train's time in a block row is the time it ENTERS that block; the route-start row's
-/// time is therefore its departure time. The dispatcher only times the blocks that matter
-/// (e.g. stations); the timed blocks are taken in time order and CTC routes the train
+/// A train's time in a block row is the time it ENTERS that block, except in the train's own
+/// starting block (one of the line's yard entries, chosen per train), where it is the departure
+/// time. The route always begins at that starting block; no block before it is ever added. The
+/// dispatcher only times the blocks that matter (e.g. stations); the timed blocks are taken in time order and CTC routes the train
 /// between them through the connected blank blocks. Blank blocks not on that path are not
 /// used, so on a branching line timing any block on a branch selects that branch. Physical
 /// feasibility (speed) is checked later by CTC when the schedule is queued, because it
@@ -54,16 +55,19 @@ public static class ScheduleTemplateConverter
             return ScheduleConversionResult.Failure("The schedule has no trains.");
         }
 
-        var startRow = template.Rows.FirstOrDefault(row => row.IsRouteStart);
-        if (startRow is null)
+        if (template.YardEntryBlockIds.Count == 0)
         {
-            return ScheduleConversionResult.Failure("The schedule has no route start block.");
+            return ScheduleConversionResult.Failure(
+                $"{template.LineName} has no yard-entry blocks in its track layout, so CTC cannot start a train's route on it. "
+                + "The Track Model's layout must mark the block(s) where trains leave the yard before trains can be scheduled on this line.");
         }
 
         var trains = new List<ScheduledTrain>();
         for (int column = 0; column < template.TrainIds.Count; column++)
         {
-            string? error = TryConvertTrain(template, startRow, column, out var train);
+            ScheduledTrain? train = null;
+            string? error = TryGetStartRow(template, column, out var startRow)
+                ?? TryConvertTrain(template, startRow!, column, out train);
             if (error is not null)
             {
                 return ScheduleConversionResult.Failure(error);
@@ -73,6 +77,32 @@ public static class ScheduleTemplateConverter
         }
 
         return ScheduleConversionResult.Success(trains);
+    }
+
+    /// <summary>The train's selected starting block, which must be one of the template's yard entries.</summary>
+    private static string? TryGetStartRow(ScheduleTemplate template, int column, out ScheduleTemplateRow? startRow)
+    {
+        string trainName = TrainIds.DisplayName(template.TrainIds[column]);
+        string startId = template.GetStartBlockId(column);
+        startRow = template.GetStartRow(column);
+
+        if (startId.Length == 0 || startRow is null)
+        {
+            return $"{trainName} has no starting block. Choose one of {template.LineName}'s yard entries: {template.DescribeYardEntries()}.";
+        }
+
+        if (!template.YardEntryBlockIds.Contains(startId))
+        {
+            return $"{trainName} cannot start at {ScheduleTemplate.Label(startRow)}: it is not a yard entry. Trains enter {template.LineName} from the yard only at {template.DescribeYardEntries()}.";
+        }
+
+        if (template.IsDepartureUnconfirmed(column))
+        {
+            return $"{trainName}'s time at its starting block {ScheduleTemplate.Label(startRow)} was entered as an arrival time before that block became its start. "
+                + "Re-enter it to confirm it as the departure time.";
+        }
+
+        return null;
     }
 
     /// <summary>Parses one schedule time cell. Blank text is not a valid time.</summary>
@@ -86,16 +116,17 @@ public static class ScheduleTemplateConverter
         string trainId = template.TrainIds[column];
         string trainName = TrainIds.DisplayName(trainId);
 
-        // DepartureTime is not entered separately: it is the train's time at the route-start block.
+        // DepartureTime is not entered separately: it is the train's time at its own starting block.
+        string startLabel = ScheduleTemplate.Label(startRow);
         string startText = startRow.TrainTimes[column];
         if (string.IsNullOrWhiteSpace(startText))
         {
-            return $"{trainName} is missing a route start time.";
+            return $"{trainName} is missing its departure time at its starting block {startLabel}.";
         }
 
         if (!TryParseTime(startText, out _))
         {
-            return $"{trainName} has an invalid route start time '{startText.Trim()}'. Use {TimeFormat}.";
+            return $"{trainName} has an invalid departure time '{startText.Trim()}' at its starting block {startLabel}. Use {TimeFormat}.";
         }
 
         // Every nonblank cell is a timed waypoint. Blank cells are either blocks the train
@@ -114,7 +145,7 @@ public static class ScheduleTemplateConverter
                 return $"{trainName} has an invalid time '{text.Trim()}' at {row.BlockId}. Use {TimeFormat}.";
             }
 
-            string? dwellError = TryGetDwellTime(row, column, out var dwell);
+            string? dwellError = TryGetDwellTime(row, column, row == startRow, out var dwell);
             if (dwellError is not null)
             {
                 return $"{trainName} at {row.BlockId}: {dwellError}";
@@ -127,7 +158,7 @@ public static class ScheduleTemplateConverter
         var stops = waypoints.Where(waypoint => waypoint.Row != startRow).OrderBy(waypoint => waypoint.Time).ToList();
         if (stops.Count == 0)
         {
-            return $"{trainName} has only a route start time. Enter the time it enters at least one more block.";
+            return $"{trainName} has only a departure time. Enter the time it enters at least one more block after {startLabel}.";
         }
 
         // Rows are in layout order, not travel order; travel order is time order.
@@ -184,6 +215,12 @@ public static class ScheduleTemplateConverter
             used.Add(stop.Row.BlockId);
         }
 
+        // The route is built from the selected start, so this only guards that construction.
+        if (route[0].BlockId != startRow.BlockId)
+        {
+            return $"{trainName}'s route does not begin at its starting block {startLabel}.";
+        }
+
         var scheduledTrain = new ScheduledTrain
         {
             TrainId = trainId,
@@ -202,16 +239,16 @@ public static class ScheduleTemplateConverter
     /// <summary>
     /// The dwell for one timed cell: blank means the block's default (45 s at a station,
     /// otherwise 0 s; see <see cref="DwellTimePolicy"/>), so schedules without dwell times keep
-    /// working. The route start block never dwells. Returns an error message, or null.
+    /// working. The train's starting block never dwells. Returns an error message, or null.
     /// </summary>
-    private static string? TryGetDwellTime(ScheduleTemplateRow row, int column, out TimeSpan dwell)
+    private static string? TryGetDwellTime(ScheduleTemplateRow row, int column, bool isStart, out TimeSpan dwell)
     {
         dwell = TimeSpan.Zero;
         string text = row.TrainDwellTimes[column];
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            dwell = row.IsRouteStart ? TimeSpan.Zero : row.DefaultDwellTime;
+            dwell = isStart ? TimeSpan.Zero : row.DefaultDwellTime;
             return null;
         }
 
@@ -221,9 +258,9 @@ public static class ScheduleTemplateConverter
             return error;
         }
 
-        if (row.IsRouteStart && dwell > TimeSpan.Zero)
+        if (isStart && dwell > TimeSpan.Zero)
         {
-            return "the route start block has no dwell time; trains depart it at their departure time.";
+            return "the starting block has no dwell time; trains depart it at their departure time.";
         }
 
         return null;

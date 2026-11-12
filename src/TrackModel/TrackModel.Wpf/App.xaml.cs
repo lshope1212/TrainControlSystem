@@ -12,8 +12,9 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var track = new TrackService();
-        // Production default: the Blue, Red and Green course lines together.
-        CourseTrackLayout.LoadDemonstration(track);
+        // Production default: the Blue, Red and Green course lines together, with no trains. A train
+        // appears only when the Train Model reports it; no demonstration train holds a fleet ID.
+        CourseTrackLayout.Load(track);
         var vm = new MainWindowViewModel(track);
         _connection = new TrackModelConnection(track, Dispatcher);
         _connection.StatusReported += (_, status) => vm.Status = status;

@@ -107,11 +107,25 @@ public class DispatchedTrainState
     public TimeSpan TargetDwellTime => CurrentStop?.DwellTime ?? TimeSpan.Zero;
 
     /// <summary>
-    /// Whether the train has been seen on the track since CTC released it. No module confirms a
-    /// physical release yet (Train Model integration), so CTC only knows the train is there once
-    /// its start block reports occupied (<see cref="CurrentBlockOccupancyObserved"/>).
+    /// Whether the train has been seen on the track since CTC released it. CTC sends a physical dispatch
+    /// (<see cref="DispatchRequest"/>) through the Track Controller to the Track Model, but a delivered or
+    /// accepted dispatch is not a placement: CTC knows the train is there only once its start block
+    /// reports occupied (<see cref="CurrentBlockOccupancyObserved"/>), inferred from anonymous occupancy.
     /// </summary>
     public TrainReleaseStatus ReleaseStatus => CurrentBlockOccupancyObserved ? TrainReleaseStatus.DetectedOnTrack : TrainReleaseStatus.AwaitingPlacement;
+
+    /// <summary>
+    /// The physical dispatch CTC sent for this train (see <see cref="Dispatching.TrainDispatchCoordinator"/>):
+    /// its delivery and the stages reported back. Kept after the train is detected, so later lifecycle
+    /// reports (a tracking fault, retirement) can still be matched to it. Null before the first pass.
+    /// </summary>
+    public TrainDispatchRequestState? DispatchRequest { get; set; }
+
+    /// <summary>The latest route update sent for this train after it was placed (a dispatcher re-plan); null when none.</summary>
+    public TrainDispatchRequestState? RouteUpdate { get; set; }
+
+    /// <summary>The Track Model's latest lifecycle report for the placed train (tracking fault, retirement); empty when none.</summary>
+    public string TrackingStatus { get; set; } = string.Empty;
 
     /// <summary>
     /// The block the train was in before <see cref="CurrentBlockId"/>, empty at its start block.
@@ -154,15 +168,14 @@ public class DispatchedTrainState
 public enum TrainReleaseStatus
 {
     /// <summary>
-    /// CTC released the train (its departure time came and its start block was safe), but nothing
-    /// has placed it on the track yet: no module receives release requests until the Train Model
-    /// integration exists. CTC sends no movement request for it.
+    /// CTC released the train (its departure time came and its start block was safe) and sends its
+    /// physical dispatch, but has not yet seen it on the track. CTC sends no movement request for it.
     /// </summary>
     AwaitingPlacement = 0,
 
     /// <summary>
     /// The train's start block reported occupied after release and CTC attributes that occupancy to
-    /// it (inferred from anonymous occupancy, not confirmed by the Train Model).
+    /// it (inferred from anonymous occupancy; the block status never names a train).
     /// </summary>
     DetectedOnTrack,
 }

@@ -41,10 +41,11 @@ public static class SampleTrackLayout
         service.LoadLayout(Create());
         foreach (var b in service.Layout.Blocks)
             service.ApplyCommand(new TrackModelCommandMessage { BlockId = b.Id, CommandedSpeedMetersPerSecond = 11.176, AuthorityMeters = 365.76 });
-        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "104",
+        // Sample trains use canonical three-digit IDs (TrainIdConvention), as every real train does.
+        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "104",
             BoardingPassengers = 12, DisembarkingPassengers = 8, ExchangeId = "demo" });
-        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "104", ActualSpeedMetersPerSecond = 9.83488 });
-        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "02", CurrentBlockId = "116", ActualSpeedMetersPerSecond = 9.83488 });
+        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "001", CurrentBlockId = "104", ActualSpeedMetersPerSecond = 9.83488 });
+        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "002", CurrentBlockId = "116", ActualSpeedMetersPerSecond = 9.83488 });
         service.ApplyFailures(new TrackModelFailureCommandMessage { BlockId = "119", TrackCircuitFailure = true });
     }
 

@@ -25,7 +25,8 @@ public partial class App : Application
         // Stand in for both so we can capture those outputs. (Do not run alongside
         // the real neighbour processes — one owner per pipe.)
         var trainControllerListener = new FakeNeighbourReceiver(NamedPipeNames.TrainController, Dispatcher);
-        var trackControllerListener = new FakeNeighbourReceiver(NamedPipeNames.TrackController, Dispatcher);
+        // Position telemetry and passenger exchanges go to the Track Model's pipe (it maps position to blocks).
+        var trackControllerListener = new FakeNeighbourReceiver(NamedPipeNames.TrackModel, Dispatcher);
 
         // Messages the Train Model sends to the Train Controller vs. the Track Model
         // are captured on their respective pipes and routed to destination-specific
@@ -42,12 +43,12 @@ public partial class App : Application
         // TestUI would take its pipe and the neighbour would stop receiving the Train Model's
         // outputs. (Start the real neighbours first, or restart the TestUI after starting them.)
         bool realTrainController = IsRunning("TrainController.Wpf");
-        bool realTrackController = IsRunning("TrackController.Wpf");
+        bool realTrackController = IsRunning("TrackModel.Wpf");
         if (!realTrainController) _ = trainControllerListener.RunAsync(_shutdown.Token);
         if (!realTrackController) _ = trackControllerListener.RunAsync(_shutdown.Token);
         viewModel.Communication.NeighbourListenerStatus =
             $"Capturing: Train Controller pipe {(realTrainController ? "OFF (real Train Controller running)" : "ON")}, " +
-            $"Track pipe {(realTrackController ? "OFF (real Track Controller running)" : "ON")}";
+            $"Track Model pipe {(realTrackController ? "OFF (real Track Model running)" : "ON")}";
 
         MainWindow = window;
         window.Show();

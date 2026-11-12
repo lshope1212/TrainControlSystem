@@ -149,7 +149,7 @@ public class MainWindowViewModelTerritoryTests
     public void ChangingLine_StillScopesScheduleBuilderAndDispatchQueue()
     {
         var (service, viewModel) = CreateWithSampleLayout();
-        var train = new ScheduledTrain { TrainId = "000", LineId = "BLUE" };
+        var train = new ScheduledTrain { TrainId = "001", LineId = "BLUE" };
         train.Route.Add(new ScheduledRouteBlock { BlockId = "A1", ArrivalTime = new TimeSpan(12, 0, 0) });
         foreach (var blockId in new[] { "A2", "A3", "A4", "A5", "B6", "B7", "B8", "B9" })
         {

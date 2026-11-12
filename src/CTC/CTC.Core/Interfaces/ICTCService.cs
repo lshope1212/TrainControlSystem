@@ -49,16 +49,23 @@ public interface ICTCService
     void ApplyRequestAcknowledgement(RequestAcknowledgementMessage message);
 
     /// <summary>
+    /// Records a stage of one of CTC's physical dispatches or route updates, relayed by the Track
+    /// Controller. Stale stages are ignored; none of them moves or identifies a train.
+    /// </summary>
+    void ApplyTrainDispatchStatus(TrainDispatchStatusMessage message);
+
+    /// <summary>
     /// Treats every live block status not refreshed within the freshness window as Unknown (and
     /// unsafe for authority). Call periodically on wall time. Returns how many blocks went stale.
     /// </summary>
     int RefreshBlockStatusFreshness();
 
     /// <summary>
-    /// Brings every released train's movement request at the Track Controller in line with its plan
-    /// and tracked location: issues, replaces (cancelling the old request first) or cancels requests,
-    /// and renews still-valid ones on wall time so the Track Controller's request watchdog keeps them
-    /// alive. Renewal never changes a request's limits. Failures are reported, not thrown.
+    /// Sends every due physical dispatch (and resends unsettled ones), then brings every released
+    /// train's movement request at the Track Controller in line with its plan and tracked location:
+    /// issues, replaces (cancelling the old request first) or cancels requests, and renews still-valid
+    /// ones on wall time so the Track Controller's request watchdog keeps them alive. Renewal never
+    /// changes a request's limits. Failures are reported, not thrown.
     /// </summary>
     Task SynchronizeMovementRequestsAsync(CancellationToken cancellationToken = default);
 
@@ -67,8 +74,8 @@ public interface ICTCService
     /// <summary>
     /// Records the time reported by the external system clock, then releases every queued
     /// train whose departure time has been reached and whose start block is safe: the train leaves
-    /// the queue awaiting placement (no module confirms physical release yet) and its first
-    /// movement request is issued once its start block reports occupied. Also starts the next
+    /// the queue awaiting placement, its physical dispatch is sent to the Track Controller, and its
+    /// first movement request is issued once its start block reports occupied. Also starts the next
     /// movement of trains whose dwell ended.
     /// Dispatch failures are reported through <see cref="StateChanged"/>, not thrown.
     /// </summary>
@@ -80,7 +87,9 @@ public interface ICTCService
     /// Replaces the schedule for every line in <paramref name="scheduledTrains"/> and
     /// rebuilds the pending dispatch queue from it, ordered by departure time. Trains that
     /// have already been dispatched are never queued again. Does not dispatch by itself.
-    /// A schedule that needs more than the permitted speed on any segment is rejected.
+    /// A schedule that needs more than the permitted speed on any segment is rejected, as is
+    /// one with a train ID outside the supported fleet ("001" to "010") or an ID another line
+    /// already uses: train IDs are unique across the whole system.
     /// </summary>
     void QueueSchedule(IEnumerable<ScheduledTrain> scheduledTrains);
 

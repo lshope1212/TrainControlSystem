@@ -34,14 +34,26 @@ public static class CourseTrackLayout
     }
 
     /// <summary>
-    /// The production start-up state: all three lines, simulation time 09:00, and the Blue Line
-    /// demonstration train 01 in block 1 exactly as <see cref="BlueLineTrackLayout.LoadDemonstration"/>
-    /// places it. Red and Green start clear.
+    /// The production start-up state: all three lines, simulation time 09:00 and no trains.
+    /// Every line starts clear; a train appears only when the Train Model reports it, so no fleet
+    /// ID (001-010) is occupied before CTC has scheduled and dispatched that train.
     /// </summary>
-    public static void LoadDemonstration(TrackService service)
+    public static void Load(TrackService service)
     {
         service.SetSystemTime(new TimeSpan(9, 0, 0));
         service.LoadLayout(Create());
-        service.ApplyTrainUpdate(new TrackModelTrainUpdateMessage { TrainId = "01", CurrentBlockId = "1" });
+    }
+
+    /// <summary>
+    /// Standalone demonstration/test start-up only: <see cref="Load"/>, then the stopped sample
+    /// train <see cref="BlueLineTrackLayout.DemonstrationTrainId"/> ("001") in Blue block 1,
+    /// exactly as <see cref="BlueLineTrackLayout.LoadDemonstration"/> places it. Red and Green
+    /// start clear. Not used by the production Track Model: in the integrated system CTC
+    /// allocates train 001 itself.
+    /// </summary>
+    public static void LoadDemonstration(TrackService service)
+    {
+        Load(service);
+        BlueLineTrackLayout.SeedDemonstrationTrain(service);
     }
 }

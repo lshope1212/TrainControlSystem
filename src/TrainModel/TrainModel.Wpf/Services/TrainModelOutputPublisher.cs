@@ -6,58 +6,73 @@ namespace TrainModel.Wpf.Services;
 
 /// <summary>
 /// Publishes each train's outputs to its neighbours over named pipes:
-///   - to the Track Model: actual speed, occupancy, passenger exchange;
+///   - to the Track Model: cumulative position, speed and train length after every physics tick
+///     (<see cref="TrainStateMessage"/>), and passenger exchanges;
 ///   - to the Train Controller: actual speed + the passed-through track data and statuses.
 ///
-/// Sends are best-effort and fire-and-forget: if a neighbour (or the TestUI standing
-/// in for it) is not listening, the send simply fails and is ignored. All values are
-/// metric on the wire. Publishing is throttled by the caller to avoid flooding.
+/// Sends are ordered per destination and bounded: when a neighbour (or the TestUI standing in for it)
+/// is slow or absent, only the newest state per train is kept instead of a backlog, so neither the UI
+/// nor the simulation ever waits on a pipe. All values are metric on the wire.
 /// </summary>
 public sealed class TrainModelOutputPublisher
 {
-    /// <summary>
-    /// Publish one train's current state to both neighbour endpoints.
-    /// <paramref name="tickId"/> is the controller tick this state answers (echoed back for
-    /// correlation); <paramref name="isActive"/> is true while the train is dispatched and in
-    /// service; <paramref name="passengerRequested"/> is the raw passenger emergency-brake
-    /// request (the controller decides whether to command the brake — the Train Model does not).
-    /// </summary>
     private readonly OrderedPipeSender _sender = new();
+    private readonly string _trackModelPipe;
+    private readonly string _trainControllerPipe;
 
-    /// <summary>To the Track Model side (throttled by the caller): position, speed, passengers.</summary>
-    public void PublishTrackSide(TrainState s)
+    /// <param name="trackModelPipe">The Track Model's inbound pipe; <see cref="NamedPipeNames.TrackModel"/> unless a test isolates it.</param>
+    /// <param name="trainControllerPipe">The Train Controller's inbound pipe; <see cref="NamedPipeNames.TrainController"/> unless a test isolates it.</param>
+    public TrainModelOutputPublisher(string? trackModelPipe = null, string? trainControllerPipe = null)
     {
-        // Raw position + actual speed (the Track Model resolves occupancy from position).
-        _sender.Enqueue(NamedPipeNames.TrackController, new TrainStateMessage
+        _trackModelPipe = string.IsNullOrWhiteSpace(trackModelPipe) ? NamedPipeNames.TrackModel : trackModelPipe;
+        _trainControllerPipe = string.IsNullOrWhiteSpace(trainControllerPipe) ? NamedPipeNames.TrainController : trainControllerPipe;
+    }
+
+    /// <summary>
+    /// The train's position report to the Track Model, after every 0.1 s physics tick and once at
+    /// activation. <paramref name="sequence"/> is the physics tick count. Only the newest report per train
+    /// is queued: the position is cumulative, so the Track Model reconstructs every boundary between two
+    /// reports even if intermediate ones were coalesced. No block or map coordinate is ever sent.
+    /// </summary>
+    public void PublishPosition(TrainState s, long sequence, string dispatchRequestId)
+    {
+        _sender.EnqueueLatest(_trackModelPipe, s.TrainId, new TrainStateMessage
         {
             TrainId = s.TrainId,
             PositionMeters = s.PositionMeters,
             SpeedMetersPerSecond = s.VelocityMetersPerSecond,
             AccelerationMetersPerSecondSquared = s.AccelerationMetersPerSecondSquared,
+            // From the train's own specification (TrainSpecs), never a separate constant.
+            TrainLengthMeters = s.TrainLengthMeters,
+            Sequence = sequence,
+            DispatchRequestId = dispatchRequestId ?? string.Empty,
+            PassengerCount = s.PassengerCount,
         });
-        if (s.LastBoarded != 0 || s.LastAlighted != 0 || s.LastLeftBehind != 0)
-        {
-            _sender.Enqueue(NamedPipeNames.TrackController, new PassengerExchangeMessage
-            {
-                TrainId = s.TrainId,
-                Boarded = s.LastBoarded,
-                Alighted = s.LastAlighted,
-                LeftBehind = s.LastLeftBehind,
-            });
-        }
     }
+
+    /// <summary>One passenger exchange, sent once when it happens (to the Track Model).</summary>
+    public void PublishPassengerExchange(TrainState s) =>
+        _sender.Enqueue(_trackModelPipe, new PassengerExchangeMessage
+        {
+            TrainId = s.TrainId,
+            Boarded = s.LastBoarded,
+            Alighted = s.LastAlighted,
+            LeftBehind = s.LastLeftBehind,
+        });
 
     /// <summary>
     /// To the Train Controller, after EVERY 0.1 s step (state-driven timing): one consolidated
     /// status tagged with this Train Model's step count. The controller answers with commands
     /// carrying the same TickId; this model never waits for them and simply uses the latest
     /// commands it has at each step. Door/light states are not sent (they follow the commands);
-    /// the commanded (not remaining) authority is relayed.
+    /// the commanded (not remaining) authority is relayed. <paramref name="isActive"/> is true while
+    /// the train is dispatched and in service; <paramref name="passengerRequested"/> is the raw passenger
+    /// emergency-brake request (the controller decides whether to command the brake).
     /// </summary>
     public void PublishToController(TrainState s, long tickId, bool isActive, bool passengerRequested)
     {
         // Latest state per train only: a slow controller gets fresh states, never a backlog.
-        _sender.EnqueueLatest(NamedPipeNames.TrainController, s.TrainId, new TrainModelStatusMessage
+        _sender.EnqueueLatest(_trainControllerPipe, s.TrainId, new TrainModelStatusMessage
         {
             TrainId = s.TrainId,
             TickId = tickId,
@@ -78,7 +93,7 @@ public sealed class TrainModelOutputPublisher
 
     /// <summary>Tells the Train Controller that this model was reset, so it clears its state too.</summary>
     public void PublishReset(long resetId) =>
-        _sender.Enqueue(NamedPipeNames.TrainController, new ResetMessage { ResetId = resetId });
+        _sender.Enqueue(_trainControllerPipe, new ResetMessage { ResetId = resetId });
 
     private static TrainControl.Contracts.Enums.PlatformSide ParsePlatformSide(string side) =>
         side switch
