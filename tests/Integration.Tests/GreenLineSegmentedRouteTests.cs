@@ -302,6 +302,11 @@ public sealed class GreenLineSegmentedRouteTests
                     _track[block.BlockId] = track = track with { Switch = block.CommandedSwitch };
                 }
 
+                if (block.HasSignal && block.CommandedSignal != SignalState.Unknown)
+                {
+                    _track[block.BlockId] = track = track with { Signal = block.CommandedSignal };
+                }
+
                 if (block.HasCrossing && block.CommandedCrossing is CrossingState.Open or CrossingState.Closed)
                 {
                     _track[block.BlockId] = track with { Crossing = block.CommandedCrossing };
